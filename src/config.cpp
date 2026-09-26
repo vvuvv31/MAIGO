@@ -1,9 +1,12 @@
 #include "carbon/transport_config.hpp"
+#include "carbon/source_parameters.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/electron_transport.hpp"
 #include "carbon/min_json.hpp"
 #include "carbon/schneider_rate_table.hpp"
+#include "carbon/schneider_stopping_table.hpp"
+#include "carbon/delta_moments_data.hpp"
 #include "carbon/schneider_delta_tail.hpp"
 #include "carbon/secondary_rate_table.hpp"
 #include "carbon/straggling.hpp"
@@ -181,6 +184,7 @@ std::filesystem::path resolve_input_path_from_config(
 
 const std::unordered_set<std::string>& ion_physics_manifest_keys() {
     static const std::unordered_set<std::string> keys{
+        "primary_particle",
         "primary_atomic_number",
         "primary_mass_number",
         "primary_rest_mass_MeV",
@@ -236,8 +240,6 @@ std::filesystem::path merge_ion_physics_manifest(
         values.add(key, std::move(imported), manifest.line_number(key));
     }
     for (const char* required : {
-             "primary_atomic_number",
-             "primary_mass_number",
              "energy_straggling_model",
              "use_particle_specific_stopping_power",
              "primary_stopping_power_file",
@@ -250,6 +252,9 @@ std::filesystem::path merge_ion_physics_manifest(
                 std::string(required) + "': " + manifest_path.string());
         }
     }
+    if (!manifest.contains("primary_particle") &&
+        (!manifest.contains("primary_atomic_number") || !manifest.contains("primary_mass_number")))
+        throw std::invalid_argument("Ion physics manifest requires primary_particle or both primary_atomic_number/primary_mass_number");
     return manifest_path;
 }
 
@@ -350,6 +355,71 @@ bool parse_bool(const ConfigValues& values,
         return false;
     }
     throw std::runtime_error("Invalid boolean for '" + key + "': " + iterator->second);
+}
+
+PrimarySourceParameters parse_primary_source_parameters(const ConfigValues& values) {
+    PrimarySourceParameters out;
+    int z = 6, a = 12;
+    const bool has_z = values.contains("primary_atomic_number");
+    const bool has_a = values.contains("primary_mass_number");
+    if (has_z != has_a)
+        throw std::invalid_argument("Specify both primary_atomic_number and primary_mass_number");
+    if (has_z) {
+        z = parse_number(values, "primary_atomic_number", z);
+        a = parse_number(values, "primary_mass_number", a);
+    }
+    if (const auto it = values.find("primary_particle"); it != values.end()) {
+        auto name = it->second;
+        if (name.size() >= 2 && ((name.front() == '"' && name.back() == '"') ||
+                                (name.front() == '\'' && name.back() == '\'')))
+            name = name.substr(1, name.size() - 2);
+        std::transform(name.begin(), name.end(), name.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        int named_z = 0, named_a = 0;
+        if (name == "proton") { named_z = 1; named_a = 1; }
+        else if (name == "deuteron") { named_z = 1; named_a = 2; }
+        else if (name == "triton") { named_z = 1; named_a = 3; }
+        else if (name == "he3") { named_z = 2; named_a = 3; }
+        else if (name == "alpha" || name == "he4") { named_z = 2; named_a = 4; }
+        else if (name == "c12" || name == "carbon12") { named_z = 6; named_a = 12; }
+        else if (name == "ion") {
+            if (!has_z) throw std::invalid_argument("primary_particle: ion requires explicit Z and A");
+        } else throw std::invalid_argument("Unknown primary_particle: " + name);
+        if (named_z > 0) {
+            if (has_z && (z != named_z || a != named_a))
+                throw std::invalid_argument("primary_particle conflicts with primary_atomic_number/primary_mass_number");
+            z = named_z; a = named_a;
+        }
+    }
+    out.configured_rest_mass_MeV = parse_number(values, "primary_rest_mass_MeV", 0.0);
+    out.ion = make_primary_ion_definition(z, a, out.configured_rest_mass_MeV);
+    if (values.contains("initial_energy_MeV") && values.contains("initial_energy_MeVu"))
+        throw std::invalid_argument("Specify only one of initial_energy_MeV (total) and initial_energy_MeVu");
+    out.initial_energy_MeVu = values.contains("initial_energy_MeV")
+        ? parse_number(values, "initial_energy_MeV", 0.0) / a
+        : parse_number(values, "initial_energy_MeVu", out.initial_energy_MeVu);
+    if (!std::isfinite(out.initial_energy_MeVu) || !(out.initial_energy_MeVu > 0) ||
+        !std::isfinite(out.initial_total_energy_MeV()))
+        throw std::invalid_argument("Primary source energy must be finite and positive");
+    if (values.contains("beam_energy_spread_percent") && values.contains("beam_energy_spread"))
+        throw std::invalid_argument("Specify only one of beam_energy_spread_percent and beam_energy_spread (relative RMS)");
+    out.beam_energy_spread = values.contains("beam_energy_spread_percent")
+        ? parse_number(values, "beam_energy_spread_percent", 0.0) / 100.0
+        : parse_number(values, "beam_energy_spread", 0.0);
+    if (!std::isfinite(out.beam_energy_spread) || out.beam_energy_spread < 0 || out.beam_energy_spread > 0.2)
+        throw std::invalid_argument("Beam energy spread must be finite and in [0,20] percent RMS");
+    return out;
+}
+
+void normalize_config_alias(ConfigValues& values, const char* old_key, const char* new_key) {
+    const auto old = values.find(old_key);
+    if (old == values.end()) return;
+    if (values.contains(new_key))
+        throw std::invalid_argument(std::string("Do not specify both ") + old_key + " and " + new_key);
+    const auto value = old->second;
+    const auto line = values.line_number(old_key);
+    values.erase(old_key);
+    values.add(new_key, value, line);
 }
 
 void reject_unknown_config_keys(const ConfigValues& values,
@@ -578,6 +648,21 @@ void TransportConfig::validate() const {
             "primary ion must satisfy primary_atomic_number > 0 and "
             "primary_mass_number >= primary_atomic_number");
     }
+    (void)primary_ion(); // validate the complete source definition, including mass
+    validate_primary_urban_reference_identity();
+    if (primary_rest_mass_MeV > 0.0 && enable_minibeam && minibeam_copper_mcs_model == "urban")
+        throw std::invalid_argument("Explicit primary mass requires urban_v2 or another mass-aware MCS model; legacy copper urban is deprecated");
+    for (double cut : {minibeam_copper_production_cut_mm, minibeam_water_production_cut_mm})
+        if (!std::isfinite(cut) || !(cut > 0.0))
+            throw std::invalid_argument("Minibeam production cuts must be finite and positive");
+    // Non-C12 primaries use the package-driven GPU route. Legacy carbon
+    // diagnostics remain explicitly scoped to their reference projectile.
+    if (primary_atomic_number != 6 || primary_mass_number != 12) {
+        if (em_model != "g4_material_joint_v1" || device != "cuda")
+            throw std::invalid_argument("Non-C12 primary requires CUDA unified EM and matching packages");
+        if (ct_elastic_diagnostic || uses_packaged_fluctuation())
+            throw std::invalid_argument("Non-C12 primary cannot use legacy carbon elastic/fluctuation diagnostics");
+    }
     if (!std::isfinite(primary_rest_mass_MeV) || primary_rest_mass_MeV < 0.0) {
         throw std::invalid_argument(
             "primary_rest_mass_MeV must be zero or finite and positive");
@@ -618,9 +703,11 @@ void TransportConfig::validate() const {
         if (em_package_file.empty() || em_package_sha256.size()!=64)
             throw std::invalid_argument("Unified EM requires one em_package_file and its SHA256");
         if (run_mode == RunMode::production &&
-            (em_package_sha256 != "8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855" ||
-             !enable_energy_straggling || !enable_secondary_energy_straggling))
-            throw std::invalid_argument("Production unified EM requires the authorized package and primary/secondary fluctuations");
+            (!enable_energy_straggling || !enable_secondary_energy_straggling))
+            throw std::invalid_argument("Production unified EM requires primary/secondary fluctuations");
+        if (em_delta_moments_sha256.size() != 64 ||
+            em_delta_moments_source_sha256 != em_package_sha256)
+            throw std::invalid_argument("Delta moments require a SHA256 pin and source SHA matching em_package_sha256");
         if ((!enable_ct_grid && !is_water_mode()) || !slab_layers.empty() || enable_hetero_insert || enable_let_scoring)
             throw std::invalid_argument("Unified EM requires unified water or a Schneider CT grid, with LET off");
         if (!ct_secondary_exact_faces || straggling_scale!=1.0 || !straggling_scale_energies_MeVu.empty() || !straggling_scale_values.empty())
@@ -741,11 +828,11 @@ void TransportConfig::validate() const {
     if (unified_water_nuclear_transport) {
         if (!is_water_mode() || enable_ct_grid ||
             !ct_grid_file.empty() || enable_layered_phantom || enable_hetero_insert ||
-            !enable_voxel_scoring || primary_atomic_number != 6 || primary_mass_number != 12 ||
+            !enable_voxel_scoring ||
             nuclear_model != "geant4" || enable_nuclear_elastic ||
             initial_energy_MeVu > 430.0 ||
             maximum_step_mm > 1.0 || maximum_relative_energy_loss > 0.005 + 1.e-6)
-            throw std::invalid_argument("Unified water requires C12 native homogeneous water, 3D scoring, geant4 selector and CT step limits; legacy water routing is retired");
+            throw std::invalid_argument("Unified water requires native homogeneous water, 3D scoring, geant4 selector and CT step limits; legacy water routing is retired");
         if (!primary_inelastic_package_v2_file.empty() || !primary_inelastic_rate_v2_file.empty() ||
             !water_cinel_package_file.empty() || !water_reaction_rate_file.empty() || !ct_cinel02_rate_file.empty())
             throw std::invalid_argument("Unified water forbids CINEL02/water event and rate fallback keys");
@@ -753,7 +840,7 @@ void TransportConfig::validate() const {
             !ct_schneider_delta_longitudinal_file.empty() || enable_electron_transport)
             throw std::invalid_argument("Unified water has no validated pure-water electron response; CT response cannot substitute");
         if (ct_schneider_physics_bundle_file.empty() || ct_schneider_primary_rate_file.empty() ||
-            ct_schneider_secondary_rate_file.empty() || ct_schneider_c12_cinel03_file.empty() ||
+            ct_schneider_secondary_rate_file.empty() || ct_schneider_primary_cinel03_file.empty() ||
             ct_schneider_secondary_cinel03_file.empty() || ct_schneider_stopping_power_file.empty() ||
             unified_water_material_file.empty() || unified_water_material_sha256 !=
                 "60be17929880fe18f1758edc02350b3fa7140b817ab0d21cb75bd87dbc891f31")
@@ -909,7 +996,7 @@ void TransportConfig::validate() const {
                 "fallback to water or four-class XS is forbidden.");
         }
         if ((!ct_schneider_cross_section_file.empty() || v3_bundle_mode) && nuclear_model != "none") {
-            if (primary_atomic_number != 6 || primary_mass_number != 12) {
+            if (!v3_bundle_mode && (primary_atomic_number != 6 || primary_mass_number != 12)) {
                 throw std::invalid_argument(
                     "Schneider primary cross section is validated for C12 (Z=6, A=12) primaries only, got Z=" +
                     std::to_string(primary_atomic_number) + ", A=" + std::to_string(primary_mass_number));
@@ -1088,9 +1175,59 @@ void TransportConfig::validate() const {
         }
     }
     if (multiple_scattering_model != "highland" &&
-        multiple_scattering_model != "fermi_eyges") {
+        multiple_scattering_model != "fermi_eyges" &&
+        multiple_scattering_model != "urban_v2") {
         throw std::invalid_argument(
-            "multiple_scattering_model must be highland or fermi_eyges");
+            "multiple_scattering_model must be highland, fermi_eyges or urban_v2");
+    }
+    if (minibeam_water_proton_helium_mcs_model != "inherit" &&
+        minibeam_water_proton_helium_mcs_model != "urban_v2") {
+        throw std::invalid_argument(
+            "minibeam_water_proton_helium_mcs_model must be inherit or urban_v2");
+    }
+    if (minibeam_water_proton_helium_mcs_model == "urban_v2") {
+        if (run_mode != RunMode::research || device != "cuda" ||
+            !enable_minibeam || enable_ct_grid || enable_hetero_insert ||
+            !slab_layers.empty() || !enable_voxel_scoring ||
+            !enable_secondary_transport || !enable_multiple_scattering ||
+            multiple_scattering_model == "urban_v2" ||
+            multiple_scattering_scale != 1.0 ||
+            minibeam_water_fragment_low_energy_mcs_scale != 1.0 ||
+            em_model != "g4_material_joint_v1" || !enable_secondary_unified_em) {
+            throw std::invalid_argument(
+                "Minibeam proton/helium Urban requires research CUDA water, "
+                "voxel scoring, unscaled MCS and secondary unified EM");
+        }
+        if (urban_mcs_package_file.empty() || urban_mcs_package_sha256.size() != 64 ||
+            energy_cutoff_MeV < 0.05 ||
+            effective_secondary_local_deposit_cutoff_MeV() < 0.05 ||
+            !(urban_water_half_width_mm > 0) || !std::isfinite(urban_water_half_width_mm)) {
+            throw std::invalid_argument(
+                "Minibeam proton/helium Urban requires a SHA-pinned package, "
+                "cutoffs >= 0.05 MeV and the physical water half width");
+        }
+        const double roi_half_width = 0.5 * std::max(
+            voxel_bins_x * voxel_size_x_mm, voxel_bins_y * voxel_size_y_mm);
+        if (urban_water_half_width_mm < roi_half_width) {
+            throw std::invalid_argument("Urban physical water box must contain the scored ROI");
+        }
+    }
+    if(multiple_scattering_model=="urban_v2") {
+        if(device!="cuda")
+            throw std::invalid_argument("Global urban_v2 currently requires the CUDA SYCL transport path");
+        if(urban_mcs_package_file.empty() || urban_mcs_package_sha256.size()!=64)
+            throw std::invalid_argument("Global urban_v2 requires a validated urban_mcs_package_file and SHA256");
+        if(!enable_multiple_scattering || multiple_scattering_scale!=1.0 ||
+           em_model!="g4_material_joint_v1" || !enable_secondary_unified_em ||
+           ct_secondary_mcs_off_diagnostic || enable_hetero_insert ||
+           !slab_layers.empty())
+            throw std::invalid_argument("Global urban_v2 requires unscaled MCS, unified EM, and ordinary water or Schneider CT");
+        if(enable_ct_grid && (!is_schneider_ct_mode() || !ct_secondary_exact_faces))
+            throw std::invalid_argument("Global urban_v2 requires Schneider CT and exact secondary faces");
+        if(energy_cutoff_MeV<0.05 || effective_secondary_local_deposit_cutoff_MeV()<0.05)
+            throw std::invalid_argument("Global urban_v2 reference currently requires transport cutoffs >= 0.05 MeV");
+        if(!enable_ct_grid && (!(urban_water_half_width_mm>0) || !std::isfinite(urban_water_half_width_mm)))
+            throw std::invalid_argument("Global water urban_v2 requires the TOPAS physical urban_water_half_width_mm");
     }
     if (fermi_eyges_species != "c12" &&
         fermi_eyges_species != "c12_he4" &&
@@ -1111,11 +1248,10 @@ void TransportConfig::validate() const {
             "fermi_eyges_max_segment_mm must be finite and positive");
     }
     if (multiple_scattering_model == "fermi_eyges" &&
-        (primary_atomic_number != 6 || primary_mass_number != 12)) {
+        (primary_atomic_number != 6 || primary_mass_number != 12) &&
+        fermi_eyges_parameter_set != "species_water") {
         throw std::invalid_argument(
-            "multiple_scattering_model=fermi_eyges currently supports only "
-            "a C12 primary; secondary ion routing is controlled separately "
-            "by fermi_eyges_species");
+            "Non-C12 primary FE requires species_water parameters; shared_c12 is a carbon reference");
     }
 
     if (!std::isfinite(multiple_scattering_scale) ||
@@ -1191,10 +1327,10 @@ void TransportConfig::validate() const {
             "enable_minibeam_energy_band_roi_scoring requires minibeam, "
             "voxel/component scoring and charged_origin_voxel_mhd_output_prefix");
     }
-    if (enable_minibeam_primary_c12_roi_scoring &&
+    if (enable_minibeam_primary_roi_scoring &&
         (!enable_minibeam || !enable_voxel_scoring)) {
         throw std::invalid_argument(
-            "enable_minibeam_primary_c12_roi_scoring requires minibeam and "
+            "enable_minibeam_primary_roi_scoring requires minibeam and "
             "enable_voxel_scoring");
     }
     if (!charged_origin_voxel_mhd_output_prefix.empty() &&
@@ -1396,10 +1532,18 @@ void TransportConfig::validate() const {
             throw std::invalid_argument(
                 "minibeam=true currently requires a SYCL device");
         }
-        if (primary_atomic_number != 6 || primary_mass_number != 12) {
+        if ((primary_atomic_number != 6 || primary_mass_number != 12) &&
+            (multiple_scattering_model != "urban_v2" ||
+             minibeam_copper_mcs_model != "urban_v2" ||
+             minibeam_transport_mode != "copper_em")) {
             throw std::invalid_argument(
-                "minibeam=true is currently calibrated only for a C-12 primary; "
-                "disable minibeam for other configured ions");
+                "Non-C12 minibeam requires global urban_v2, copper urban_v2 "
+                "and matching primary copper physics packages");
+        }
+        if (multiple_scattering_model == "urban_v2" &&
+            minibeam_water_primary_mcs_model == "urban_v2") {
+            throw std::invalid_argument(
+                "Global Urban already transports the water primary; disable the legacy water primary selector");
         }
         if (!minibeam_water_entry_secondary_replay_file.empty()) {
             if (!enable_secondary_transport) {
@@ -1494,6 +1638,7 @@ void TransportConfig::validate() const {
                     "minibeam copper_em requires minibeam_copper_elastic_file");
             }
             if (minibeam_copper_mcs_model == "urban_v2" &&
+                multiple_scattering_model != "urban_v2" &&
                 minibeam_copper_loss_range_file.empty()) {
                 throw std::invalid_argument(
                     "minibeam urban_v2 requires "
@@ -1908,9 +2053,19 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
     if (minjson::require_uint(bundle.at("schema_version"), "schema_version") != 1) {
         throw std::runtime_error("Schneider CT startup failed: unsupported bundle schema_version");
     }
+    if (bundle.contains("source_energy_scope_MeV")) {
+        const auto& scope = bundle.at("source_energy_scope_MeV");
+        if (scope.type != minjson::Value::Type::Array || scope.arr.size() != 2)
+            throw std::runtime_error("Invalid primary bundle source energy scope");
+        const double lo = minjson::require_number(scope.arr[0], "source energy min");
+        const double hi = minjson::require_number(scope.arr[1], "source energy max");
+        if (!std::isfinite(lo) || !std::isfinite(hi) || lo <= 0 || hi < lo ||
+            config.initial_total_energy_MeV() < lo || config.initial_total_energy_MeV() > hi)
+            throw std::runtime_error("Primary source energy is outside the physics bundle extraction scope");
+    }
 
     const std::filesystem::path c12_cinel =
-        config.ct_schneider_c12_cinel03_file;
+        config.ct_schneider_primary_cinel03_file;
     const std::filesystem::path sec_cinel =
         config.ct_schneider_secondary_cinel03_file;
     const std::filesystem::path stopping =
@@ -1953,6 +2108,13 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
     // construction (separate from the transport loads that follow).
     const SecondaryRateTable sec_table = SecondaryRateTable::from_binary(secondary_rate);
     const SchneiderRateTable pri_table = SchneiderRateTable::from_binary(primary_rate);
+    if (pri_table.projectile_z() != config.primary_atomic_number ||
+        pri_table.projectile_a() != config.primary_mass_number)
+        throw std::runtime_error("Primary rate projectile does not match YAML source Z/A; new packages require projectile metadata");
+    const auto primary_stopping = SchneiderStoppingTable::from_binary(stopping);
+    if (primary_stopping.projectile_z() != config.primary_atomic_number ||
+        primary_stopping.projectile_a() != config.primary_mass_number)
+        throw std::runtime_error("Primary stopping projectile does not match YAML source Z/A");
 
     // Registry: bundle order == rate keys (order-sensitive, no aliasing).
     const minjson::Value& registry = bundle.at("projectile_registry");
@@ -2027,6 +2189,7 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
     }
     const minjson::Value pri_side = read_sidecar(c12_cinel, bundle.at("primary_package"), "pri");
     {
+        std::array<bool, kSchneiderNumTargets> seen_targets{};
         if (pri_side.at("channels").arr.size() != 13) {
             throw std::runtime_error(
                 "Schneider CT startup failed: primary package must have 13 channels");
@@ -2034,18 +2197,34 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
         for (const auto& c : pri_side.at("channels").arr) {
             const int pz = static_cast<int>(minjson::require_uint(c.at("projectile_z"), "ch.pz"));
             const int pa = static_cast<int>(minjson::require_uint(c.at("projectile_a"), "ch.pa"));
-            if (pz != 6 || pa != 12) {
+            if (pz != config.primary_atomic_number || pa != config.primary_mass_number) {
                 throw std::runtime_error(
-                    "Schneider CT startup failed: primary package is C12-only");
+                    "Schneider CT startup failed: primary package projectile does not match the YAML source");
             }
             const int tz = static_cast<int>(minjson::require_uint(c.at("target_element_z"), "ch.tz"));
             const double lo = minjson::require_number(c.at("energy_min_MeV_per_u"), "ch.lo");
             const double hi = minjson::require_number(c.at("energy_max_MeV_per_u"), "ch.hi");
             const std::size_t ti = SchneiderRateTable::target_index_from_z(tz);
+            if (seen_targets[ti])
+                throw std::runtime_error("Duplicate primary package target channel");
+            seen_targets[ti] = true;
             const auto& dom = pri_table.channel_domain(ti);
-            if (!dom.has_support || dom.energy_min_mevu != lo || dom.energy_max_mevu != hi) {
+            if (c.contains("has_support") &&
+                c.at("has_support").type != minjson::Value::Type::Boolean)
+                throw std::runtime_error("Primary channel has_support must be boolean");
+            const bool has_support = !c.contains("has_support") || c.at("has_support").boolean;
+            if (static_cast<bool>(dom.has_support) != has_support ||
+                dom.energy_min_mevu != lo || dom.energy_max_mevu != hi) {
                 throw std::runtime_error(
                     "Schneider CT startup failed: primary rate/package domain mismatch");
+            }
+            // An explicitly empty channel is allowed only when every stored
+            // partial rate is zero. For example, p+H below pion threshold.
+            if (!has_support) {
+                for (std::size_t section = 0; section < kSchneiderNumSections; ++section)
+                    for (std::size_t energy = 0; energy < pri_table.num_energies(); ++energy)
+                        if (pri_table.mass_partial_rate(section, ti, energy) != 0.0)
+                            throw std::runtime_error("Unsupported primary channel has nonzero rates");
             }
         }
     }
@@ -2105,7 +2284,7 @@ void validate_schneider_ct_startup(const TransportConfig& config) {
 
     // When secondary transport is active or in production mode, verify secondary rate and CINEL03 packages
     if (config.enable_secondary_transport || config.run_mode == RunMode::production) {
-        std::filesystem::path c12_cinel = config.ct_schneider_c12_cinel03_file;
+        std::filesystem::path c12_cinel = config.ct_schneider_primary_cinel03_file;
         std::filesystem::path sec_rate = config.ct_schneider_secondary_rate_file;
         std::filesystem::path sec_cinel = config.ct_schneider_secondary_cinel03_file;
         std::filesystem::path stopping_table = !config.ct_schneider_stopping_power_file.empty()
@@ -2115,7 +2294,7 @@ void validate_schneider_ct_startup(const TransportConfig& config) {
         const std::vector<std::pair<std::string, std::filesystem::path>> required = {
             {"Schneider primary rate table", primary_source},
             {"Schneider stopping power table", stopping_table},
-            {"Schneider C12 CINEL03 package", c12_cinel},
+            {"Schneider primary CINEL03 package", c12_cinel},
             {"Schneider secondary rate table", sec_rate},
             {"Schneider secondary CINEL03 package", sec_cinel},
         };
@@ -2169,9 +2348,17 @@ void validate_schneider_ct_startup(const TransportConfig& config) {
     }
 }
 
+PrimarySourceParameters load_primary_source_parameters(const std::filesystem::path& path) {
+    auto values = read_key_values(path);
+    merge_ion_physics_manifest(path, values);
+    return parse_primary_source_parameters(values);
+}
+
 TransportConfig load_config(const std::filesystem::path& path) {
     auto values = read_key_values(path);
     const auto ion_physics_file = merge_ion_physics_manifest(path, values);
+    normalize_config_alias(values, "ct_schneider_c12_cinel03_file", "ct_schneider_primary_cinel03_file");
+    normalize_config_alias(values, "enable_minibeam_primary_c12_roi_scoring", "enable_minibeam_primary_roi_scoring");
     TransportConfig config;
     config.config_schema_version = parse_number(
         values, "config_schema_version", config.config_schema_version);
@@ -2235,15 +2422,20 @@ TransportConfig load_config(const std::filesystem::path& path) {
         }
     }
     config.number_of_histories = parse_number(values, "number_of_histories", config.number_of_histories);
-    config.initial_energy_MeVu = parse_number(values, "initial_energy_MeVu", config.initial_energy_MeVu);
-    config.beam_energy_spread =
-        parse_number(values, "beam_energy_spread", config.beam_energy_spread);
-    config.primary_atomic_number = static_cast<int>(parse_number(
-        values, "primary_atomic_number", config.primary_atomic_number));
-    config.primary_mass_number = static_cast<int>(parse_number(
-        values, "primary_mass_number", config.primary_mass_number));
-    config.primary_rest_mass_MeV = parse_number(
-        values, "primary_rest_mass_MeV", config.primary_rest_mass_MeV);
+    const auto source = parse_primary_source_parameters(values);
+    config.initial_energy_MeVu = source.initial_energy_MeVu;
+    config.beam_energy_spread = source.beam_energy_spread;
+    config.primary_atomic_number = source.ion.atomic_number;
+    config.primary_mass_number = source.ion.mass_number;
+    config.primary_rest_mass_MeV = source.configured_rest_mass_MeV;
+    if (const auto it = values.find("primary_urban_reference_particle"); it != values.end())
+        config.primary_urban_reference_particle = it->second;
+    if (const auto it = values.find("primary_urban_ionisation_process"); it != values.end())
+        config.primary_urban_ionisation_process = it->second;
+    config.minibeam_copper_production_cut_mm = parse_number(values,
+        "minibeam_copper_production_cut_mm", config.minibeam_copper_production_cut_mm);
+    config.minibeam_water_production_cut_mm = parse_number(values,
+        "minibeam_water_production_cut_mm", config.minibeam_water_production_cut_mm);
     config.phantom_length_mm = parse_number(values, "phantom_length_mm", config.phantom_length_mm);
     config.depth_bin_width_mm = parse_number(values, "depth_bin_width_mm", config.depth_bin_width_mm);
     if (const auto it = values.find("em_model"); it != values.end()) config.em_model=it->second;
@@ -2254,6 +2446,10 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.em_package_file=resolve_input_path_from_config(config.em_package_file,path);
     if (const auto it = values.find("em_package_sha256"); it != values.end()) config.em_package_sha256=it->second;
     config.em_delta_moments_file=parse_path(values,"em_delta_moments_file",config.em_delta_moments_file);
+    if (const auto it=values.find("em_delta_moments_sha256"); it!=values.end())
+        config.em_delta_moments_sha256=it->second;
+    if (const auto it=values.find("em_delta_moments_source_sha256"); it!=values.end())
+        config.em_delta_moments_source_sha256=it->second;
     if(!config.em_delta_moments_file.empty())
         config.em_delta_moments_file=resolve_input_path_from_config(config.em_delta_moments_file,path);
     if (const auto it = values.find("primary_em_model"); it != values.end())
@@ -2422,11 +2618,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if (config.water_reaction_rate_file.empty()) {
         config.water_reaction_rate_file = config.primary_inelastic_rate_v2_file;
     }
-    config.ct_schneider_c12_cinel03_file = parse_path(
-        values, "ct_schneider_c12_cinel03_file", config.ct_schneider_c12_cinel03_file);
-    if (!config.ct_schneider_c12_cinel03_file.empty()) {
-        config.ct_schneider_c12_cinel03_file = resolve_input_path_from_config(
-            config.ct_schneider_c12_cinel03_file, path);
+    config.ct_schneider_primary_cinel03_file = parse_path(
+        values, "ct_schneider_primary_cinel03_file", config.ct_schneider_primary_cinel03_file);
+    if (!config.ct_schneider_primary_cinel03_file.empty()) {
+        config.ct_schneider_primary_cinel03_file = resolve_input_path_from_config(
+            config.ct_schneider_primary_cinel03_file, path);
     }
     config.ct_schneider_secondary_cinel03_file = parse_path(
         values, "ct_schneider_secondary_cinel03_file", config.ct_schneider_secondary_cinel03_file);
@@ -2601,9 +2797,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.enable_minibeam_energy_band_roi_scoring = parse_bool(
         values, "enable_minibeam_energy_band_roi_scoring",
         config.enable_minibeam_energy_band_roi_scoring);
-    config.enable_minibeam_primary_c12_roi_scoring = parse_bool(
-        values, "enable_minibeam_primary_c12_roi_scoring",
-        config.enable_minibeam_primary_c12_roi_scoring);
+    config.enable_minibeam_primary_roi_scoring = parse_bool(
+        values, "enable_minibeam_primary_roi_scoring",
+        config.enable_minibeam_primary_roi_scoring);
     config.voxel_scorer_clamps_transport = parse_bool(
         values, "voxel_scorer_clamps_transport",
         config.voxel_scorer_clamps_transport);
@@ -2821,6 +3017,13 @@ TransportConfig load_config(const std::filesystem::path& path) {
             config.multiple_scattering_model = "fermi_eyges";
         }
     }
+    if (const auto it=values.find("minibeam_water_proton_helium_mcs_model"); it!=values.end())
+        config.minibeam_water_proton_helium_mcs_model=it->second;
+    if(const auto it=values.find("urban_mcs_package_file");it!=values.end())
+        config.urban_mcs_package_file=it->second;
+    if(const auto it=values.find("urban_mcs_package_sha256");it!=values.end())
+        config.urban_mcs_package_sha256=it->second;
+    config.urban_water_half_width_mm=parse_number(values,"urban_water_half_width_mm",config.urban_water_half_width_mm);
     if (const auto it = values.find("fermi_eyges_species");
         it != values.end()) {
         config.fermi_eyges_species = it->second;
@@ -3729,8 +3932,7 @@ TransportConfig load_config(const std::filesystem::path& path) {
             config.electron_transport_data_file, path);
     }
     if(!config.all_ion_elastic_file.empty()) {
-        if(config.primary_atomic_number!=6||config.primary_mass_number!=12||
-           !config.enable_inelastic||!config.enable_secondary_transport||config.enable_let_scoring||
+        if(!config.enable_inelastic||!config.enable_secondary_transport||config.enable_let_scoring||
            (!config.enable_ct_grid&&!config.unified_water_nuclear_transport))
             throw std::invalid_argument("All-ion elastic requires Schneider CT/unified-water nuclear transport, secondary transport and LET off");
         if(config.enable_ct_grid && (!config.ct_secondary_exact_faces||config.ct_schneider_stopping_power_file.empty()))
@@ -3756,6 +3958,13 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.canonical_config_text = canonicalize_config(
         values, config.config_schema_version);
     config.validate();
+    if (config.minibeam_copper_mcs_model == "urban") {
+        std::cerr
+            << "[deprecated-mcs] minibeam_copper_mcs_model=urban is deprecated; "
+               "it is retained only for historical reproduction. Use urban_v2 "
+               "with its required validated loss-range table for new copper "
+               "comparisons. The selected model has not been changed.\n";
+    }
     return config;
 }
 

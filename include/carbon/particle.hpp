@@ -4,10 +4,36 @@
 #include <cstdint>
 #include <cmath>
 #include <stdexcept>
+#include <limits>
+#include <string>
 
 namespace carbon {
 
 inline constexpr double ion_nucleon_rest_mass_MeV = 931.49410242;
+
+// Nuclear rest masses in MeV (not A times the atomic mass unit). Legacy C12
+// zero-mass input retains its old value; an explicit YAML mass overrides it.
+inline double default_primary_rest_mass_MeV(int z, int a) noexcept {
+    if (z == 1 && a == 1) return 938.27208816;
+    if (z == 1 && a == 2) return 1875.61294257;
+    if (z == 1 && a == 3) return 2808.92113298;
+    if (z == 2 && a == 3) return 2808.39160743;
+    if (z == 2 && a == 4) return 3727.3794066;
+    if (z == 6 && a == 12) return 12.0 * ion_nucleon_rest_mass_MeV;
+    return std::numeric_limits<double>::quiet_NaN();
+}
+
+inline std::string primary_component_label(int z, int a) {
+    if (z == 6 && a == 12) return "primary_c12"; // existing file consumers
+    if (z == 1 && a == 1) return "primary_proton";
+    return "primary_z" + std::to_string(z) + "_a" + std::to_string(a);
+}
+
+inline constexpr std::size_t primary_energy_band(float kinetic_MeV, int a) noexcept {
+    if (a <= 0) return 3; // invalid/sentinel, never divide by zero
+    const float energy_per_u = kinetic_MeV / static_cast<float>(a);
+    return energy_per_u < 50.0F ? 0U : (energy_per_u <= 300.0F ? 1U : 2U);
+}
 
 struct PrimaryIonDefinition {
     int atomic_number{6};
@@ -22,18 +48,28 @@ inline PrimaryIonDefinition make_primary_ion_definition(
     const int mass_number,
     const double configured_rest_mass_MeV = 0.0) {
     if (atomic_number <= 0 || mass_number < atomic_number ||
-        configured_rest_mass_MeV < 0.0) {
+        !std::isfinite(configured_rest_mass_MeV) || configured_rest_mass_MeV < 0.0) {
         throw std::invalid_argument("Invalid primary ion definition");
+    }
+    const double mass = configured_rest_mass_MeV > 0.0
+        ? configured_rest_mass_MeV
+        : default_primary_rest_mass_MeV(atomic_number, mass_number);
+    if (!(mass > 0.0) || !std::isfinite(mass)) {
+        throw std::invalid_argument("This primary ion requires an explicit primary_rest_mass_MeV");
     }
     return PrimaryIonDefinition{
         atomic_number,
         mass_number,
-        configured_rest_mass_MeV > 0.0
-            ? configured_rest_mass_MeV
-            : static_cast<double>(mass_number) * ion_nucleon_rest_mass_MeV,
+        mass,
         1.0 / static_cast<double>(mass_number),
         std::pow(static_cast<double>(atomic_number), -2.0 / 3.0),
     };
+}
+
+// First staged minibeam extension: proton only (not d/t), and every
+// transported helium isotope. Unsupported Urban package records fail closed.
+constexpr bool minibeam_urban_proton_or_helium(int z, int a) noexcept {
+    return (z == 1 && a == 1) || (z == 2 && a >= 2);
 }
 
 inline constexpr std::size_t charged_origin_category_count = 8;
@@ -46,17 +82,19 @@ inline constexpr std::uint8_t minibeam_birth_region_water = 2;
 inline constexpr std::size_t minibeam_component_species_count = 8;
 inline constexpr std::size_t minibeam_component_category_count =
     1 + 2 * minibeam_component_species_count;
-inline constexpr std::size_t minibeam_primary_c12_component_category = 0;
+inline constexpr std::size_t minibeam_primary_component_category = 0;
+// Source compatibility for existing C12 analysis code.
+inline constexpr std::size_t minibeam_primary_c12_component_category = minibeam_primary_component_category;
 inline constexpr std::size_t minibeam_energy_band_species_count = 4;
 inline constexpr std::size_t minibeam_energy_band_count = 3;
 inline constexpr std::size_t minibeam_fixed_region_count = 3;
-inline constexpr std::size_t minibeam_c12_roi_kind_count = 6;
-inline constexpr std::size_t minibeam_c12_roi_local_total_deposit = 0;
-inline constexpr std::size_t minibeam_c12_roi_continuous_sampled = 1;
-inline constexpr std::size_t minibeam_c12_roi_delta_sampled = 2;
-inline constexpr std::size_t minibeam_c12_roi_continuous_after_scale = 3;
-inline constexpr std::size_t minibeam_c12_roi_delta_after_scale = 4;
-inline constexpr std::size_t minibeam_c12_roi_fluence = 5;
+inline constexpr std::size_t minibeam_primary_roi_kind_count = 6;
+inline constexpr std::size_t minibeam_primary_roi_local_total_deposit = 0;
+inline constexpr std::size_t minibeam_primary_roi_continuous_sampled = 1;
+inline constexpr std::size_t minibeam_primary_roi_delta_sampled = 2;
+inline constexpr std::size_t minibeam_primary_roi_continuous_after_scale = 3;
+inline constexpr std::size_t minibeam_primary_roi_delta_after_scale = 4;
+inline constexpr std::size_t minibeam_primary_roi_fluence = 5;
 inline constexpr std::size_t minibeam_spatial_audit_slot_count = 8;
 
 // Diagnostic order: p, d, t, He-4. The sentinel count means unsupported.
@@ -70,7 +108,7 @@ constexpr std::size_t minibeam_energy_band_species_category(
 }
 
 // Secondary component order: C12, p, d, t, He3, He4, heavier (Z>=3),
-// and all remaining charged ions. Category zero is reserved for primary C12;
+// and all remaining charged ions. Category zero is reserved for the primary;
 // Copper-born and water-born copies of these eight classes follow.
 constexpr std::size_t minibeam_component_species_category(
     const int z, const int a) noexcept {

@@ -1546,9 +1546,10 @@ void write_dense_charged_origin_voxel_dose_mhd(
             throw std::invalid_argument(
                 "Minibeam component voxel result size mismatch");
         }
-        constexpr std::array<const char*, minibeam_component_category_count>
+        const auto primary_label = primary_component_label(config.primary_atomic_number, config.primary_mass_number);
+        const std::array<const char*, minibeam_component_category_count>
             component_labels{
-                "primary_c12",
+                primary_label.c_str(),
                 "copper_secondary_c12", "copper_p", "copper_d", "copper_t",
                 "copper_he3", "copper_he4", "copper_heavy", "copper_other",
                 "water_secondary_c12", "water_p", "water_d", "water_t",
@@ -1691,14 +1692,14 @@ void write_dense_charged_origin_voxel_dose_mhd(
             }
         }
     }
-    if (!result.minibeam_c12_roi_values.empty()) {
-        const auto expected = minibeam_c12_roi_kind_count *
+    if (!result.minibeam_primary_roi_values.empty()) {
+        const auto expected = minibeam_primary_roi_kind_count *
             minibeam_energy_band_count * minibeam_fixed_region_count * nz;
-        if (result.minibeam_c12_roi_values.size() != expected) {
+        if (result.minibeam_primary_roi_values.size() != expected) {
             throw std::invalid_argument(
-                "Minibeam primary-C12 ROI result size mismatch");
+                "Minibeam primary ROI result size mismatch");
         }
-        constexpr std::array<const char*, minibeam_c12_roi_kind_count>
+        constexpr std::array<const char*, minibeam_primary_roi_kind_count>
             kind_labels{"local_total_deposit_MeV", "continuous_sampled_MeV",
                         "delta_sampled_MeV", "continuous_after_scale_MeV",
                         "delta_after_scale_MeV", "fluence_mm"};
@@ -1707,16 +1708,17 @@ void write_dense_charged_origin_voxel_dose_mhd(
         constexpr std::array<const char*, minibeam_fixed_region_count>
             region_labels{"peak", "shoulder", "valley"};
         const auto csv_path = base.parent_path() /
-            (base.filename().string() + "_primary_c12_roi.csv");
+            (base.filename().string() + "_" + primary_component_label(
+                config.primary_atomic_number, config.primary_mass_number) + "_roi.csv");
         std::ofstream output(csv_path);
         if (!output) {
             throw std::runtime_error(
-                "Cannot create minibeam primary-C12 ROI output: " +
+                "Cannot create minibeam primary ROI output: " +
                 csv_path.string());
         }
         output << "depth_mm,kind,energy_band_MeV_per_u,region,value\n";
         output << std::setprecision(12);
-        for (std::size_t kind = 0; kind < minibeam_c12_roi_kind_count; ++kind) {
+        for (std::size_t kind = 0; kind < minibeam_primary_roi_kind_count; ++kind) {
             for (std::size_t energy = 0; energy < minibeam_energy_band_count;
                  ++energy) {
                 for (std::size_t region = 0;
@@ -1731,7 +1733,7 @@ void write_dense_charged_origin_voxel_dose_mhd(
                                << ',' << kind_labels[kind] << ','
                                << energy_labels[energy] << ','
                                << region_labels[region] << ','
-                               << result.minibeam_c12_roi_values[index]
+                               << result.minibeam_primary_roi_values[index]
                                << '\n';
                     }
                 }
@@ -1813,7 +1815,8 @@ namespace {
 // JSON provenance object for one Schneider rate binary: path, SHA, magic,
 // version, projectile registry, grid, and channel-domain-block SHA. Returns
 // {"present": false} when the file does not exist.
-std::string schneider_rate_provenance_json(const std::filesystem::path& path) {
+std::string schneider_rate_provenance_json(const std::filesystem::path& path,
+                                         int primary_z, int primary_a) {
     std::ostringstream out;
     out << std::setprecision(12);
     if (path.empty() || !std::filesystem::exists(path)) {
@@ -1879,7 +1882,8 @@ std::string schneider_rate_provenance_json(const std::filesystem::path& path) {
             out << "{\"z\": " << keys[2 * i] << ", \"a\": " << keys[2 * i + 1] << "}";
         }
     } else {
-        out << "{\"z\": 6, \"a\": 12, \"note\": \"C12-only, no projectile axis\"}";
+        out << "{\"z\": " << primary_z << ", \"a\": " << primary_a
+            << ", \"note\": \"single primary, identity checked against source\"}";
     }
     out << "], \"energy_grid\": {\"emin\": " << emin << ", \"emax\": " << emax
         << ", \"step\": " << estep << ", \"count\": " << ne
@@ -1912,12 +1916,12 @@ void write_schneider_physics_provenance(std::ofstream& output, const TransportCo
     const std::filesystem::path secondary_rate =
         config.ct_schneider_secondary_rate_file;
     const std::filesystem::path primary_pkg =
-        config.ct_schneider_c12_cinel03_file;
+        config.ct_schneider_primary_cinel03_file;
     const std::filesystem::path secondary_pkg =
         config.ct_schneider_secondary_cinel03_file;
     output << "  \"schneider_physics_provenance\": {\n"
-           << "    \"primary_rate\": " << schneider_rate_provenance_json(primary_rate) << ",\n"
-           << "    \"secondary_rate\": " << schneider_rate_provenance_json(secondary_rate) << ",\n"
+           << "    \"primary_rate\": " << schneider_rate_provenance_json(primary_rate, config.primary_atomic_number, config.primary_mass_number) << ",\n"
+           << "    \"secondary_rate\": " << schneider_rate_provenance_json(secondary_rate, config.primary_atomic_number, config.primary_mass_number) << ",\n"
            << "    \"primary_package\": " << schneider_package_provenance_json(primary_pkg) << ",\n"
            << "    \"secondary_package\": " << schneider_package_provenance_json(secondary_pkg)
            << "\n  },\n";
@@ -2092,7 +2096,7 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"upstream_air_mcs_file\": \"" << config.spots_upstream_air_mcs_file.string() << "\",\n"
            << "  \"upstream_air_mcs_sha256\": \"" << config.spots_upstream_air_mcs_sha256 << "\",\n"
            << "  \"ct_schneider_primary_rate_file\": \"" << config.ct_schneider_primary_rate_file.string() << "\",\n"
-           << "  \"ct_schneider_c12_cinel03_file\": \"" << config.ct_schneider_c12_cinel03_file.string() << "\",\n"
+           << "  \"ct_schneider_primary_cinel03_file\": \"" << config.ct_schneider_primary_cinel03_file.string() << "\",\n"
            << "  \"ct_schneider_secondary_rate_file\": \"" << config.ct_schneider_secondary_rate_file.string() << "\",\n"
            << "  \"ct_schneider_secondary_cinel03_file\": \"" << config.ct_schneider_secondary_cinel03_file.string() << "\",\n"
            << "  \"ct_schneider_stopping_power_file\": \"" << config.ct_schneider_stopping_power_file.string() << "\",\n"

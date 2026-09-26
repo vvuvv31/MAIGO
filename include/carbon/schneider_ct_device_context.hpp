@@ -57,14 +57,14 @@ struct SchneiderCtDeviceContext {
     SchneiderTargetSamplerDeviceTable elastic_sampler{};
 
     // Primary C12 CINEL03 Package
-    const Cinel03EnergyNode* c12_energy_nodes{nullptr};
-    const std::uint32_t* c12_event_offsets{nullptr};
-    const std::uint32_t* c12_event_indices{nullptr};
-    const Cinel03DeviceInteraction* c12_interactions{nullptr};
-    const Cinel03DeviceProduct* c12_products{nullptr};
-    std::uint32_t c12_node_count{0};
-    std::uint32_t c12_total_events{0};
-    std::uint32_t c12_total_products{0};
+    const Cinel03EnergyNode* primary_energy_nodes{nullptr};
+    const std::uint32_t* primary_event_offsets{nullptr};
+    const std::uint32_t* primary_event_indices{nullptr};
+    const Cinel03DeviceInteraction* primary_interactions{nullptr};
+    const Cinel03DeviceProduct* primary_products{nullptr};
+    std::uint32_t primary_node_count{0};
+    std::uint32_t primary_total_events{0};
+    std::uint32_t primary_total_products{0};
 
     // Secondary Rates
     const float* sec_total_rates{nullptr};

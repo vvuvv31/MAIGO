@@ -50,6 +50,7 @@ add_library(carbon_core
     src/water_electron_response.cpp
     src/energy_loss_fluctuation.cpp
     src/unified_em_package.cpp
+    src/urban_mcs_package.cpp
     src/delta_moments_data.cpp
     src/inelastic_package_v2.cpp
     src/inelastic_package_v3.cpp
@@ -579,4 +580,40 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmark/carbonminibea
     set_tests_properties(urban_localize PROPERTIES
         TIMEOUT 900
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+endif()
+
+# Global Urban contracts require a validated, SHA-pinned reference package.
+if(BUILD_TESTING AND CARBON_ENABLE_SYCL)
+    add_executable(urban_global_contract benchmark/carbonminibeam/test_urban_global.cpp)
+    target_include_directories(urban_global_contract PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(urban_global_contract PRIVATE carbon_core)
+    target_compile_options(urban_global_contract PRIVATE -fsycl)
+    if(CARBON_SYCL_TARGETS)
+        target_compile_options(urban_global_contract PRIVATE -fsycl-targets=${CARBON_SYCL_TARGETS})
+    endif()
+endif()
+
+if(BUILD_TESTING AND CARBON_ENABLE_SYCL)
+    add_executable(minibeam_proton_helium_urban_contract
+        benchmark/carbonminibeam/test_minibeam_proton_helium_urban.cpp)
+    target_include_directories(minibeam_proton_helium_urban_contract PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    target_link_libraries(minibeam_proton_helium_urban_contract PRIVATE carbon_core)
+    target_compile_options(minibeam_proton_helium_urban_contract PRIVATE -fsycl)
+    if(CARBON_SYCL_TARGETS)
+        target_compile_options(minibeam_proton_helium_urban_contract PRIVATE -fsycl-targets=${CARBON_SYCL_TARGETS})
+    endif()
+endif()
+
+# Source parsing/contracts do not require MC data or a GPU.
+if(BUILD_TESTING)
+    add_executable(primary_source_parameters benchmark/carbonminibeam/test_primary_source_parameters.cpp)
+    target_link_libraries(primary_source_parameters PRIVATE carbon_core)
+    target_include_directories(primary_source_parameters PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    if(CARBON_ENABLE_SYCL)
+        target_compile_options(primary_source_parameters PRIVATE -fsycl)
+        if(CARBON_SYCL_TARGETS)
+            target_compile_options(primary_source_parameters PRIVATE -fsycl-targets=${CARBON_SYCL_TARGETS})
+        endif()
+    endif()
+    add_test(NAME primary_source_parameters COMMAND primary_source_parameters ${CMAKE_CURRENT_SOURCE_DIR})
 endif()

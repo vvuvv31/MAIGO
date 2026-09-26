@@ -2,6 +2,7 @@
 
 #include "carbon/slab_phantom.hpp"
 #include "carbon/particle.hpp"
+#include "carbon/delta_moments_data.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -131,11 +132,18 @@ struct TransportConfig {
     // Relative RMS beam energy spread (TOPAS BeamEnergySpread percent / 100).
     // 0.01 = 1% → sample E ~ N(E0, (0.01*E0)^2) at primary birth.
     double beam_energy_spread{0.0};
-    // Primary ion identity. Kinetic energies remain expressed per nucleon.
+    // Source identity; kinetic energies are per nucleon. Non-minibeam unified
+    // GPU transport selects and checks package records using this Z/A.
     int primary_atomic_number{6};
     int primary_mass_number{12};
-    // Zero preserves the historical A * nucleon-mass approximation.
+    // Zero selects the particle default (legacy C12 preserved); other ions require a mass.
     double primary_rest_mass_MeV{0.0};
+    // Empty: conventional reference metadata for the selected primary.
+    // Override only to match the identity emitted by a new reference exporter.
+    std::string primary_urban_reference_particle{};
+    std::string primary_urban_ionisation_process{};
+    double minibeam_copper_production_cut_mm{0.05};
+    double minibeam_water_production_cut_mm{0.05};
     // Legacy water-phantom names for the transport/scorer z extent. In a CT
     // run load_config() derives both from voxel_bins_z/voxel_size_z_mm, which
     // in turn default to the native patient CT header.
@@ -147,6 +155,8 @@ struct TransportConfig {
     std::string em_package_sha256{};
     // Empty selects unified_em_delta_moments_v2.bin next to em_package_file.
     std::filesystem::path em_delta_moments_file{};
+    std::string em_delta_moments_sha256{delta_moments_sha256};
+    std::string em_delta_moments_source_sha256{delta_moments_source_sha256};
     // Research-only step extension, applied away from stopping/cut-onset regions.
     double em_primary_step_scale{1.0};
     double em_secondary_step_scale{1.0};
@@ -225,7 +235,7 @@ struct TransportConfig {
     std::filesystem::path unified_water_material_file{};
     std::string unified_water_material_sha256{};
     std::filesystem::path water_reaction_rate_file{};
-    std::filesystem::path ct_schneider_c12_cinel03_file{};
+    std::filesystem::path ct_schneider_primary_cinel03_file{};
     std::filesystem::path ct_schneider_secondary_cinel03_file{};
     std::filesystem::path ct_schneider_primary_rate_file{};
     std::filesystem::path ct_schneider_secondary_rate_file{};
@@ -342,7 +352,7 @@ struct TransportConfig {
     // Independent primary-C12 ROI diagnostic: local ion deposit, condensed
     // electron landing/cross-ROI/escape, and track-length fluence. Off by
     // default and must not change production dose.
-    bool enable_minibeam_primary_c12_roi_scoring{false};
+    bool enable_minibeam_primary_roi_scoring{false};
     // Historical mode stops every physics step at lateral scorer faces.
     // Disable to keep scoring resolution from changing MCS/transport; energy
     // is then assigned to the voxel containing the step start.
@@ -428,6 +438,14 @@ struct TransportConfig {
     // `fermi_eyges` (YAML alias `fe`) adds correlated lateral displacement
     // and a path-length Poisson tail for the selected ion groups.
     std::string multiple_scattering_model{"highland"};
+    // Global Urban v2: exact material/cut couples, every transported charged ion.
+    std::filesystem::path urban_mcs_package_file{};
+    std::string urban_mcs_package_sha256{};
+    // Physical water box outside the scored ROI (required in global water mode).
+    double urban_water_half_width_mm{0.0};
+    // Opt-in, water-only minibeam proton/helium Urban transport. "inherit"
+    // preserves the existing MCS selection, including the dedicated C12 path.
+    std::string minibeam_water_proton_helium_mcs_model{"inherit"};
     // Staged selector: c12, c12_he4, c12_he4_pdt, or all_charged.
     // Non-C12 parameters currently reuse the generic charge/momentum scaling
     // and remain explicitly provisional until species-isolated validation.
@@ -919,7 +937,43 @@ struct TransportConfig {
     [[nodiscard]] double resolved_primary_rest_mass_MeV() const noexcept {
         return primary_rest_mass_MeV > 0.0
                    ? primary_rest_mass_MeV
-                   : static_cast<double>(primary_mass_number) * 931.49410242;
+                   : default_primary_rest_mass_MeV(primary_atomic_number, primary_mass_number);
+    }
+    // Preserve the legacy C12 MCS reference when mass was not specified.
+    // All new particles and explicit YAML masses use the same primary mass.
+    [[nodiscard]] double primary_mcs_mass_override_MeV() const noexcept {
+        return primary_rest_mass_MeV > 0.0 || primary_atomic_number != 6 || primary_mass_number != 12
+            ? resolved_primary_rest_mass_MeV() : 0.0;
+    }
+    void require_primary_reference_mass(double reference_mass_MeV, const char* package) const {
+        // Old C12 inputs leave mass selection to their established references.
+        if (primary_rest_mass_MeV == 0.0 && primary_atomic_number == 6 && primary_mass_number == 12) return;
+        const auto expected = resolved_primary_rest_mass_MeV();
+        if (!std::isfinite(reference_mass_MeV) || !(reference_mass_MeV > 0.0) ||
+            std::abs(reference_mass_MeV - expected) > 2.0e-6 * expected)
+            throw std::invalid_argument(std::string(package) + " primary mass disagrees with YAML source mass");
+    }
+    void validate_primary_urban_reference_identity() const {
+        const bool proton = primary_atomic_number == 1 && primary_mass_number == 1;
+        const auto suffix = "_Z" + std::to_string(primary_atomic_number) + "_A" +
+            std::to_string(primary_mass_number) + "_charge" + std::to_string(primary_atomic_number);
+        if (!primary_urban_reference_particle.empty() &&
+            !(proton && primary_urban_reference_particle == "proton") &&
+            !primary_urban_reference_particle.ends_with(suffix))
+            throw std::invalid_argument("primary_urban_reference_particle conflicts with source Z/A/charge");
+        const auto expected_process = proton ? "hIoni" : "ionIoni";
+        if (!primary_urban_ionisation_process.empty() && primary_urban_ionisation_process != expected_process)
+            throw std::invalid_argument("primary_urban_ionisation_process conflicts with source particle");
+    }
+    [[nodiscard]] std::string resolved_primary_urban_reference_particle() const {
+        if (!primary_urban_reference_particle.empty()) return primary_urban_reference_particle;
+        if (primary_atomic_number == 1 && primary_mass_number == 1) return "proton";
+        if (primary_atomic_number == 6 && primary_mass_number == 12) return "C12_Z6_A12_charge6";
+        return {}; // require explicit exporter identity for other ions
+    }
+    [[nodiscard]] std::string resolved_primary_urban_ionisation_process() const {
+        if (!primary_urban_ionisation_process.empty()) return primary_urban_ionisation_process;
+        return primary_atomic_number == 1 && primary_mass_number == 1 ? "hIoni" : "ionIoni";
     }
     [[nodiscard]] PrimaryIonDefinition primary_ion() const {
         return make_primary_ion_definition(

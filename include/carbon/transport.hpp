@@ -767,7 +767,7 @@ struct TransportResult {
     std::vector<double> minibeam_energy_band_roi_deposited_energy_MeV;
     // Diagnostic primary-C12 ROI tallies: kind x energy-band x region x depth.
     // Fluence kind is track length in mm; other kinds are MeV.
-    std::vector<double> minibeam_c12_roi_values;
+    std::vector<double> minibeam_primary_roi_values;
     std::array<std::uint64_t, minibeam_spatial_audit_slot_count>
         minibeam_spatial_audit_counts{};
     std::vector<double> be_isotope_origin_voxel_deposited_energy_MeV;

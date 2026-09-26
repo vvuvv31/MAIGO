@@ -90,7 +90,11 @@ inline float uniform01(std::uint64_t seed,
     // Use the leading 24 bits so every returned float is strictly inside (0, 1).
     constexpr float inverse_two_to_24 = 5.9604644775390625e-8f;
     const auto bits = random_u32(seed, history_id, interaction_index, random_dimension) >> 8U;
-    return (static_cast<float>(bits) + 0.5f) * inverse_two_to_24;
+    const float value = (static_cast<float>(bits) + 0.5f) * inverse_two_to_24;
+    // The largest 24-bit midpoint rounds to 1 in FP32. Keep the open
+    // interval promised above, so -log(u) cannot create a zero flight.
+    // All other draws retain their existing value and counter identity.
+    return value < 1.0f ? value : 0x1.fffffep-1f;
 }
 
 // MSC-dedicated domain draw (fix C2, versioned, research path).

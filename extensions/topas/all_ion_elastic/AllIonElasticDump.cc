@@ -178,7 +178,9 @@ void AllIonElasticDump::DumpCrossSections() {
     energies.push_back(6000.11);
     std::vector<const G4Material*> mats;
     for(auto s:kSectionProbes){auto* m=G4Material::GetMaterial(MaterialNameFromHU(s.rep_hu),false);if(!m)throw std::runtime_error("Missing Schneider material");mats.push_back(m);}
-    mats.push_back(G4NistManager::Instance()->FindOrBuildMaterial("G4_WATER"));
+    // The stopping bank must use the same water reference as unified EM.
+    // Frozen historical sources remain available for exact old-package replay.
+    mats.push_back(GetMaterial("Water_75eV"));
     std::array<G4Material*,13> pure{};
     for(int t=0;t<13;++t){G4Element* el=nullptr;for(auto* m:mats)for(auto* e:*m->GetElementVector())if(int(e->GetZ())==kCanonicalZ[t])el=const_cast<G4Element*>(e);
       if(!el)throw std::runtime_error("Missing target element");

@@ -26,6 +26,7 @@
 #include <map>
 #include <memory>
 #include <optional>
+#include <numeric>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -291,7 +292,7 @@ int main(int argc, char* argv[]) {
                   << "; rest mass=" << primary_ion.rest_mass_MeV << " MeV"
                   << (config.primary_rest_mass_MeV > 0.0
                           ? " (configured)\n"
-                          : " (A * nucleon mass)\n");
+                          : " (particle default; legacy C12 preserved)\n");
 
         const auto stopping_power = carbon::StoppingPowerTable::from_csv(config.primary_stopping_power_file);
         std::optional<carbon::StoppingPowerTable> upstream_air_stopping_power;

@@ -9,8 +9,10 @@
 #include <string>
 namespace carbon {
 std::vector<float> load_delta_moments(const std::filesystem::path& file,
-                                    std::string_view source_sha256,std::size_t nodes){
-    if(source_sha256!=delta_moments_source_sha256)
+                                    std::string_view source_sha256,std::size_t nodes,
+                                    std::string_view moments_sha256,
+                                    std::string_view moments_source_sha256){
+    if(source_sha256.size()!=64 || source_sha256!=moments_source_sha256)
         throw std::runtime_error("Delta moments source-package SHA mismatch");
     if(!std::filesystem::exists(file))
         throw std::runtime_error("Missing delta moments table: "+file.string()+
@@ -20,7 +22,7 @@ std::vector<float> load_delta_moments(const std::filesystem::path& file,
     if(nodes==0 || nodes>std::numeric_limits<std::uint32_t>::max() ||
        std::filesystem::file_size(file)!=16+std::uint64_t{8}*nodes)
         throw std::runtime_error("Delta moments size/node-count mismatch");
-    if(!file_sha256_matches(file,delta_moments_sha256))
+    if(moments_sha256.size()!=64 || !file_sha256_matches(file,std::string(moments_sha256)))
         throw std::runtime_error("Delta moments SHA256 mismatch");
     std::ifstream in(file,std::ios::binary);char magic[8]{};std::uint32_t header[2]{};
     in.read(magic,8);in.read(reinterpret_cast<char*>(header),8);

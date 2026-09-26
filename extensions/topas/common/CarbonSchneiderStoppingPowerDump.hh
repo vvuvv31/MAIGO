@@ -30,6 +30,8 @@ public:
     void AbsorbResultsFromWorkerScorer(TsVScorer*) override {}
 
 private:
+    G4int projectile_z_{6};
+    G4int projectile_a_{12};
     G4double min_energy_mevu_{0.01};
     G4double max_energy_mevu_{430.11};
     G4double energy_step_mevu_{0.1};

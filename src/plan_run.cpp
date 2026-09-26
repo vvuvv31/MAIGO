@@ -58,8 +58,8 @@ void accumulate_transport_result(carbon::TransportResult& total,
     add_vector_in_place(
         total.minibeam_energy_band_roi_deposited_energy_MeV,
         part.minibeam_energy_band_roi_deposited_energy_MeV);
-    add_vector_in_place(total.minibeam_c12_roi_values,
-                        part.minibeam_c12_roi_values);
+    add_vector_in_place(total.minibeam_primary_roi_values,
+                        part.minibeam_primary_roi_values);
     for (std::size_t i = 0; i < carbon::minibeam_spatial_audit_slot_count; ++i) {
         total.minibeam_spatial_audit_counts[i] +=
             part.minibeam_spatial_audit_counts[i];

@@ -186,6 +186,15 @@ SchneiderRateTable SchneiderRateTable::from_binary(
         {
             minjson::Parser parser(meta_content);
             const minjson::Value meta = parser.parse();
+            if (meta.contains("projectile")) {
+                const auto& projectile = meta.at("projectile");
+                const auto z = minjson::require_uint(projectile.at("z"), "projectile.z");
+                const auto a = minjson::require_uint(projectile.at("a"), "projectile.a");
+                if (z == 0 || a < z || a > 255)
+                    throw std::runtime_error("SchneiderRateTable: invalid projectile Z/A");
+                table.projectile_z_ = static_cast<int>(z);
+                table.projectile_a_ = static_cast<int>(a);
+            }
             const std::string data_filename =
                 minjson::require_string(meta.at("data_filename"), "data_filename");
             if (data_filename != binary_path.filename().string()) {

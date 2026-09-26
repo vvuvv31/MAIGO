@@ -85,7 +85,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     report.mode = config.run_mode;
     if(config.em_model=="g4_material_joint_v1")
         report.approximations.push_back({"condensed_delta_partition_v1",
-            "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no discrete delta clock; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",1.,0.});
+            "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",1.,0.});
     if(config.em_primary_step_scale!=1.0)
         report.approximations.push_back({"em_primary_step_extension",
             "Research EM step multiplier; only E/A >=20 MeV, both node ranges >=5 mm and density >=0.2 g/cm3; accuracy gate pending",config.em_primary_step_scale,1.0});
@@ -115,7 +115,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     }
     if (config.enable_minibeam && config.minibeam_transport_mode == "copper_em") {
         report.approximations.push_back({"minibeam_copper_candidate",
-            "Copper primary EM, MCS, general-ion elastic and C12 INCLXX are active; charged INCLXX products use charge-scaled C12 stopping in the remaining Copper, while neutral products are an explicit beamline energy sink. The 3 cm TOPAS comparison is an initial research validation, not a production neutral-dose model",1.,0.});
+            "Copper primary transport uses the configured source ZA, elastic bank and nuclear event package; charged nuclear products use the available species stopping tables with source-charge-scaled fallback in Copper. Copper secondary MCS retains the Highland model. Neutral products are an explicit beamline energy sink. This remains a research comparison, not a validated neutral-dose model",1.,0.});
     }
 
     if(!config.material_electron_response_index_file.empty()) {

@@ -476,8 +476,8 @@ SchneiderStoppingTable SchneiderStoppingTable::from_binary(
     if (!root.has("format") || root["format"].str_val != "binary") {
         throw std::runtime_error("Metadata format must be 'binary', got: " + (root.has("format") ? root["format"].str_val : "none"));
     }
-    if (!root.has("data_filename") || root["data_filename"].str_val != "schneider_stopping_v1.bin") {
-        throw std::runtime_error("Metadata data_filename must be 'schneider_stopping_v1.bin'");
+    if (!root.has("data_filename") || root["data_filename"].str_val != binary_path.filename().string()) {
+        throw std::runtime_error("Metadata data_filename must match the stopping binary basename");
     }
 
     // 2. Binary SHA256 match
@@ -486,15 +486,17 @@ SchneiderStoppingTable SchneiderStoppingTable::from_binary(
         throw std::runtime_error("Schneider stopping binary SHA256 mismatch");
     }
 
-    // 3. Projectile validation: GenericIon(6,12)
+    // 3. Projectile identity belongs to the package, not the file format.
     if (!root.has("projectile") || root["projectile"].type != JsonVal::Object) {
         throw std::runtime_error("Missing projectile object in metadata");
     }
     const auto& proj = root["projectile"];
-    if (!proj.has("z") || get_strict_int(proj["z"], "projectile.z") != 6 ||
-        !proj.has("a") || get_strict_int(proj["a"], "projectile.a") != 12) {
-        throw std::runtime_error("Metadata projectile must have z=6, a=12");
-    }
+    if (!proj.has("z") || !proj.has("a"))
+        throw std::runtime_error("Metadata projectile requires z and a");
+    table.projectile_z_ = get_strict_int(proj["z"], "projectile.z");
+    table.projectile_a_ = get_strict_int(proj["a"], "projectile.a");
+    if (table.projectile_z_ <= 0 || table.projectile_a_ < table.projectile_z_)
+        throw std::runtime_error("Invalid stopping metadata projectile Z/A");
 
     // 4. Dimensions
     if (!root.has("sections_count") || get_strict_uint(root["sections_count"], "sections_count") != kSchneiderStoppingNumSections) {

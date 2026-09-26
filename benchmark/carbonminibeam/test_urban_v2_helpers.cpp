@@ -250,6 +250,29 @@ void test_loss_table_and_limiter() {
 }
 
 void test_water_xsec_table() {
+    // Independent active Geant4 11.3.2 Water_75eV C12 reference nodes.
+    // Package SHA256: 493015506d0168efc16afae6b81441010d7937e899d3e88196c45a5b8c511eb9.
+    // Adjacent representable energies straddle the 10 MeV equivalent-electron
+    // cross-section branch. Rounded transformed energy selected the wrong
+    // branch at the upper node before the precision correction.
+    constexpr float reference[][2] = {
+        {9.999999974752427e-7F, 3.2110414327490844e-9F},
+        {0.09997471421957016F, 0.005160980392247438F},
+        {5.244307994842529F, 7.92413330078125F},
+        {5.2443084716796875F, 281.5273132324219F},
+        {8.188054084777832F, 593.8652954101562F},
+        {120.03355407714844F, 115693.515625F},
+        {3000.6240234375F, 58427856.0F}
+    };
+    for (const auto& node : reference) {
+        const float got = urban_water_transport_mfp_mm(node[0], 6, 12);
+        const double relative = std::fabs(double(got) / node[1] - 1.0);
+        char label[192];
+        std::snprintf(label, sizeof(label),
+                      "water MFP active reference: E=%.10g rel=%.3g",
+                      double(node[0]), relative);
+        check(std::isfinite(relative) && relative < 5.0e-5, label, got, node[1]);
+    }
     // Prints GPU H/O cross sections + Bragg mfp at fixed energies for
     // diffing against urban_water_xsec_oracle.py (independent port).
     // Asserts positivity + H-extrapolation/O-interpolation branch sanity.
@@ -396,7 +419,7 @@ void test_water_material() {
     mat.radlen_mm = static_cast<float>(host.radlen_mm());
     mat.projectile_z = 6;
     mat.projectile_a = 12;
-    mat.mass_mev = 12.0F * 931.49410242F;
+    mat.mass_mev = kUrbanWaterC12MassMeV;
     mat.density_g_per_cm3 = 1.0F;
     mat.mfp_kind = 1;
     const Direction3F dir{0.0F, 0.0F, 1.0F};
@@ -448,7 +471,7 @@ void test_water_urban_segment_scaling() {
     mat.radlen_mm = static_cast<float>(host.radlen_mm());
     mat.projectile_z = 6;
     mat.projectile_a = 12;
-    mat.mass_mev = 12.0F * 931.49410242F;
+    mat.mass_mev = kUrbanWaterC12MassMeV;
     mat.density_g_per_cm3 = 1.0F;
     mat.mfp_kind = 1;
     UrbanV2SafetyCtx box{};
@@ -462,6 +485,19 @@ void test_water_urban_segment_scaling() {
     const Direction3F dir{0.0F, 0.0F, 1.0F};
     constexpr std::uint64_t kSeed = 777001ULL;
     constexpr int kSamples = 100000;
+    // atan2(|u cross v|, u dot v) retains small angles carried by the
+    // transverse FP32 components even when the stored cosine rounds to 1.
+    const auto theta2 = [](const Direction3F& u, const Direction3F& v) {
+        const double cx = double(u.y)*v.z-double(u.z)*v.y;
+        const double cy = double(u.z)*v.x-double(u.x)*v.z;
+        const double cz = double(u.x)*v.y-double(u.y)*v.x;
+        const double dot = double(u.x)*v.x+double(u.y)*v.y+double(u.z)*v.z;
+        const double angle = std::atan2(std::sqrt(cx*cx+cy*cy+cz*cz),dot);
+        return angle*angle;
+    };
+    const Direction3F tiny{float(std::sin(1.e-4)),0.0F,float(std::cos(1.e-4))};
+    check(std::fabs(theta2(dir,tiny)/1.e-8-1.0)<1.e-5,
+          "water scaling: angle diagnostic retains 0.1 mrad",theta2(dir,tiny),1.e-8);
     double sum_single = 0.0, sum_pair = 0.0;
     long n_single = 0, n_pair = 0;
     for (int i = 0; i < kSamples; ++i) {
@@ -471,7 +507,7 @@ void test_water_urban_segment_scaling() {
             dir, 3000.0F, 0.05F, 0.05F, 0.0F, 0.0F, 40.0F, 0.0F, 0.0F, 1.0F,
             box, true, st, mat, 1.0F, kSeed, h, 0ULL, 0U, 70U);
         if (s.proposal_valid) {
-            sum_single += 2.0 * (1.0 - double(s.direction.z));
+            sum_single += theta2(dir, s.direction);
             ++n_single;
         }
         UrbanV2TrackState st2{};
@@ -484,12 +520,7 @@ void test_water_urban_segment_scaling() {
             1.0F, kSeed, h, 0ULL, 1U, 70U);
         if (a.proposal_valid && b.proposal_valid) {
             // Per-segment deflections about their own entry axes.
-            const double t1 = 2.0 * (1.0 - double(a.direction.z));
-            const double cosb =
-                double(a.direction.x * b.direction.x +
-                       a.direction.y * b.direction.y +
-                       a.direction.z * b.direction.z);
-            sum_pair += t1 + 2.0 * (1.0 - cosb);
+            sum_pair += theta2(dir, a.direction) + theta2(a.direction, b.direction);
             ++n_pair;
         }
     }
@@ -502,14 +533,13 @@ void test_water_urban_segment_scaling() {
     check(n_single == kSamples && n_pair == kSamples,
           "water scaling: all proposals valid", double(n_pair),
           double(kSamples));
-    // Measured 0.284 on 2026-09-22 (FP32, deterministic streams): far below
-    // the Highland-like ~0.94 because Urban theta0 carries the
-    // (coeffth1 + coeffth2*ln(t/X0)) correction, which is steep at
-    // t/X0 ~ 1e-4. Band pins the behavior for regression; the exact value
-    // still awaits a Geant4 two-step-limit reference (TOPAS MaxStepSize
-    // 0.05 vs 0.025), so 0.05mm must stay matched to the TOPAS setting.
-    check(ratio > 0.20 && ratio < 0.38, "water scaling: subdivided total < whole",
-          ratio, 0.284);
+    // The former [0.20,0.38] assertion pinned FP32 cosine cancellation,
+    // not a physical scattering moment. The same sampled vectors give
+    // about 0.93 using the stable diagnostic. Report this finite-sample
+    // sensitivity; an independent active Geant4 oracle is still required
+    // before imposing a physical ratio bound.
+    check(std::isfinite(m1) && std::isfinite(m2) && m1 > 0.0 && m2 > 0.0,
+          "water scaling: finite positive stable angle moments", m2, m1);
 }
 
 void test_water_urban_low_energy_proposal() {
@@ -539,7 +569,7 @@ void test_water_urban_low_energy_proposal() {
     mat.radlen_mm = static_cast<float>(host.radlen_mm());
     mat.projectile_z = 6;
     mat.projectile_a = 12;
-    mat.mass_mev = 12.0F * 931.49410242F;
+    mat.mass_mev = kUrbanWaterC12MassMeV;
     mat.density_g_per_cm3 = 1.0F;
     mat.mfp_kind = 1;
     UrbanV2SafetyCtx box{};
@@ -591,7 +621,7 @@ void test_water_urban_subdivision_robustness() {
     mat.radlen_mm = static_cast<float>(host.radlen_mm());
     mat.projectile_z = 6;
     mat.projectile_a = 12;
-    mat.mass_mev = 12.0F * 931.49410242F;
+    mat.mass_mev = kUrbanWaterC12MassMeV;
     mat.density_g_per_cm3 = 1.0F;
     mat.mfp_kind = 1;
     UrbanV2SafetyCtx box{};
@@ -604,7 +634,21 @@ void test_water_urban_subdivision_robustness() {
     box.box_z1 = 250.0F;
     const Direction3F dir{0.0F, 0.0F, 1.0F};
     bool all_ok = true;
-    for (const float epre : {0.05F, 0.1F, 1.0F, 12.0F, 120.0F, 3000.0F}) {
+    // The active CSV starts at 0.12 MeV total. The production helper must
+    // reject energies outside its loss-table domain; they are not valid
+    // progression tests. Keep explicit fail-closed checks for the old 0.05
+    // and 0.1 MeV probes, and exercise the first supported table energy.
+    for (const float epre : {0.05F, 0.1F, e.front(), 1.0F, 12.0F, 120.0F, 3000.0F}) {
+        if (epre < e.front() || epre > e.back()) {
+            UrbanV2TrackState st{};
+            const auto s = urban_v2_propose_and_sample(
+                dir, epre, 0.05F, 0.05F, 0.0F, 0.0F, 40.0F,
+                dir.x, dir.y, dir.z, box, true, st, mat, 1.0F,
+                555ULL, 0ULL, 0ULL, 0U, 70U);
+            check(!s.proposal_valid && s.final_geom_path_mm == 0.0F,
+                  "water subdiv: out-of-table energy rejected", epre, e.front());
+            continue;
+        }
         int worst_segs = 0, zero_runs = 0;
         for (int h = 0; h < 200; ++h) {
             UrbanV2TrackState st{};

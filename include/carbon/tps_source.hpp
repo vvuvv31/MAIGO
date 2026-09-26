@@ -81,7 +81,8 @@ struct TpsSourcePlan {
 
     [[nodiscard]] static TpsSourcePlan from_config(const TransportConfig& config);
     [[nodiscard]] static TpsSourcePlan from_csv(const std::filesystem::path& path);
-    void apply_beam_model(const std::filesystem::path& path);
+    void apply_beam_model(const std::filesystem::path& path,
+                          int primary_mass_number);
     [[nodiscard]] TpsSourcePose pose_for_spot(const TransportConfig& config,
                                               const TpsSpot& spot) const;
     [[nodiscard]] std::vector<std::size_t> allocate_histories(

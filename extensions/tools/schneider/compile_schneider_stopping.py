@@ -80,7 +80,16 @@ def main():
     parser.add_argument("--raw-csv", required=True)
     parser.add_argument("--raw-json", required=True)
     parser.add_argument("--output-dir", default=str(REPO_ROOT / "data/schneider"))
+    parser.add_argument("--projectile-z", type=int, default=6)
+    parser.add_argument("--projectile-a", type=int, default=12)
+    parser.add_argument("--prefix", default="", help="Prefix for a new species package; old names retained by default")
     args = parser.parse_args()
+    if args.projectile_z <= 0 or args.projectile_a < args.projectile_z:
+        parser.error("Require positive Z and A >= Z")
+    if (args.projectile_z, args.projectile_a) != (6, 12) and not args.prefix:
+        parser.error("Non-C12 extraction requires --prefix to protect historical outputs")
+    binary_name = args.prefix + "schneider_stopping_v1.bin"
+    csv_name = args.prefix + "schneider_stopping_power.csv" if args.prefix else "c12_schneider_stopping_power.csv"
 
     raw_csv_path = Path(args.raw_csv)
     raw_json_path = Path(args.raw_json)
@@ -102,6 +111,7 @@ def main():
     csda_range = [[0.0] * EXPECTED_ENERGIES for _ in range(EXPECTED_SECTIONS)]
     densities = [0.0] * EXPECTED_SECTIONS
     material_names = [""] * EXPECTED_SECTIONS
+    seen = set()
 
     with open(raw_csv_path, 'r', encoding='utf-8') as f:
         reader = csv.reader(f)
@@ -122,6 +132,9 @@ def main():
             if not (0 <= s < EXPECTED_SECTIONS):
                 raise ValueError(f"Section out of range: {s}")
 
+            if (s, e_idx) in seen or abs(e - (ENERGY_MIN + e_idx * ENERGY_STEP)) > 1e-6:
+                raise ValueError(f"Duplicate or off-grid stopping sample: {s}, {e}")
+            seen.add((s, e_idx))
             # Check Section Identity against canonical probe
             expected_name = mat_name_from_hu(CANONICAL_PROBES[s][1])
             if mat != expected_name:
@@ -171,8 +184,8 @@ def main():
         raise ValueError("Raw JSON energy_step_mevu mismatch")
 
     proj = raw_json_data.get("projectile", {})
-    if proj.get("z") != 6 or proj.get("a") != 12:
-        raise ValueError(f"Raw JSON projectile is not C12: {proj}")
+    if (proj.get("z"), proj.get("a")) != (args.projectile_z, args.projectile_a):
+        raise ValueError(f"Raw JSON projectile does not match requested Z/A: {proj}")
 
     raw_sections = raw_json_data.get("sections", [])
     if len(raw_sections) != EXPECTED_SECTIONS:
@@ -197,9 +210,9 @@ def main():
     print(f"Data validation PASSED for {EXPECTED_SECTIONS} sections across {EXPECTED_ENERGIES} energies (0.01 to {ENERGY_MAX} MeV/u).")
 
     # 4. Canonical CSV Output
-    canon_csv_path = out_dir / "c12_schneider_stopping_power.csv"
+    canon_csv_path = out_dir / csv_name
     with open(canon_csv_path, 'w', encoding='utf-8') as f:
-        f.write("# Canonical Geant4/TOPAS C12 Stopping Power Table for 25 Schneider Sections\n")
+        f.write("# Canonical Geant4/TOPAS Stopping Power Table for 25 Schneider Sections\n")
         f.write("energy_mevu,section_id,material_name,density_g_cm3,mass_stopping_power_mev_mm_per_g_cm3,linear_stopping_power_mev_per_mm,csda_range_mm\n")
         for i in range(EXPECTED_ENERGIES):
             e = ENERGY_MIN + i * ENERGY_STEP
@@ -208,7 +221,7 @@ def main():
     print(f"Wrote canonical CSV: {canon_csv_path}")
 
     # 5. Binary Output: schneider_stopping_v1.bin
-    bin_path = out_dir / "schneider_stopping_v1.bin"
+    bin_path = out_dir / binary_name
     with open(bin_path, 'wb') as f:
         f.write(b"SCHNSTOP")
         header = struct.pack("<IIIddd", 1, EXPECTED_SECTIONS, EXPECTED_ENERGIES, ENERGY_MIN, ENERGY_MAX, ENERGY_STEP)
@@ -246,7 +259,8 @@ def main():
         "topas_version": "4.2.p3",
         "geant4_version": "geant4-11-03-patch-02 [MT]",
         "em_physics_module": "g4em-standard_opt4",
-        "projectile": {"name": "GenericIon(6,12)", "z": 6, "a": 12},
+        "projectile": proj,
+        "raw_inputs": {str(raw_csv_path.resolve()): sha256_file(raw_csv_path), str(raw_json_path.resolve()): sha256_file(raw_json_path)},
         "schneider_source_path": "data/HUtoMaterialSchneider.txt",
         "schneider_source_sha256": schneider_sha,
         "sections_count": EXPECTED_SECTIONS,
@@ -275,7 +289,7 @@ def main():
 
     # Binary sidecar metadata
     bin_meta = dict(common_meta)
-    bin_meta["data_filename"] = "schneider_stopping_v1.bin"
+    bin_meta["data_filename"] = binary_name
     bin_meta["data_sha256"] = bin_sha
     bin_meta["format"] = "binary"
     bin_meta["binary_magic"] = "SCHNSTOP"
@@ -283,12 +297,12 @@ def main():
 
     # CSV sidecar metadata
     csv_meta = dict(common_meta)
-    csv_meta["data_filename"] = "c12_schneider_stopping_power.csv"
+    csv_meta["data_filename"] = csv_name
     csv_meta["data_sha256"] = csv_sha
     csv_meta["format"] = "csv"
 
-    bin_meta_path = out_dir / "schneider_stopping_v1.metadata.json"
-    csv_meta_path = out_dir / "c12_schneider_stopping_power.metadata.json"
+    bin_meta_path = (out_dir / binary_name).with_suffix(".metadata.json")
+    csv_meta_path = (out_dir / csv_name).with_suffix(".metadata.json")
     with open(bin_meta_path, 'w') as f:
         json.dump(bin_meta, f, indent=2)
     with open(csv_meta_path, 'w') as f:

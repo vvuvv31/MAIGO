@@ -754,21 +754,28 @@ double UrbanLossRangeTable::production_cut_mm() const noexcept {
     return production_cut_mm_;
 }
 
-bool UrbanLossRangeTable::is_active_c12_reference(
+bool UrbanLossRangeTable::is_active_reference(
+    const std::string& expected_particle, const std::string& expected_loss_process,
     const std::string& expected_material, const double expected_cut_mm) const noexcept {
     constexpr double cut_tolerance_mm = 1.0e-9;
-    return oracle_status_ == "VALID_ACTIVE_C12_STEP_CONTEXT" &&
+    const bool legacy_c12 = expected_particle == "C12_Z6_A12_charge6" &&
+                           expected_loss_process == "ionIoni";
+    return !expected_particle.empty() && !expected_loss_process.empty() &&
+           (oracle_status_ == "VALID_ACTIVE_STEP_CONTEXT" ||
+            (legacy_c12 && oracle_status_ == "VALID_ACTIVE_C12_STEP_CONTEXT")) &&
            physics_list_ == "G4EmStandardPhysics_option4" &&
-           particle_ == "C12_Z6_A12_charge6" &&
-           material_ == expected_material &&
-           range_source_ ==
-               "active_UrbanMsc_GetRange_bound_ionIoni_GetRange" &&
-           inverse_source_ ==
-               "active_UrbanMsc_GetEnergy_and_ionIoni_GetKineticEnergy" &&
-           dedx_source_ ==
-               "active_UrbanMsc_GetDEDX_bound_ionIoni_GetDEDX_restricted" &&
+           particle_ == expected_particle && material_ == expected_material &&
+           range_source_ == "active_UrbanMsc_GetRange_bound_" + expected_loss_process + "_GetRange" &&
+           inverse_source_ == "active_UrbanMsc_GetEnergy_and_" + expected_loss_process + "_GetKineticEnergy" &&
+           dedx_source_ == "active_UrbanMsc_GetDEDX_bound_" + expected_loss_process + "_GetDEDX_restricted" &&
+           std::isfinite(expected_cut_mm) && expected_cut_mm > 0.0 &&
            std::isfinite(production_cut_mm_) &&
            std::fabs(production_cut_mm_ - expected_cut_mm) <= cut_tolerance_mm;
+}
+
+bool UrbanLossRangeTable::is_active_c12_reference(
+    const std::string& expected_material, const double expected_cut_mm) const noexcept {
+    return is_active_reference("C12_Z6_A12_charge6", "ionIoni", expected_material, expected_cut_mm);
 }
 
 }  // namespace carbon

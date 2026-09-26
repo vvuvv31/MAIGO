@@ -59,6 +59,8 @@ public:
         std::uint32_t expected_version = 3);
 
     [[nodiscard]] double energy_min_mevu() const noexcept { return energy_min_mevu_; }
+    [[nodiscard]] int projectile_z() const noexcept { return projectile_z_; }
+    [[nodiscard]] int projectile_a() const noexcept { return projectile_a_; }
     [[nodiscard]] double energy_max_mevu() const noexcept { return energy_max_mevu_; }
     [[nodiscard]] double energy_step_mevu() const noexcept { return energy_step_mevu_; }
     [[nodiscard]] std::size_t num_energies() const noexcept { return num_energies_; }
@@ -105,6 +107,9 @@ public:
     }
 
 private:
+    // Original SCHNRATE sidecars omitted projectile identity and describe C12.
+    int projectile_z_{6};
+    int projectile_a_{12};
     std::uint32_t binary_version_{1};
     std::size_t num_energies_{kSchneiderNumEnergies};
     double energy_min_mevu_{0.5};

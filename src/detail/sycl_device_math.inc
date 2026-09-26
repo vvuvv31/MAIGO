@@ -94,7 +94,11 @@ float highland_projected_rms_angle_device(const float kinetic_energy_MeV,
                                           const float density_g_per_cm3,
                                           const float radiation_length_g_per_cm2 =
                                               static_cast<float>(
-                                                  water_radiation_length_g_per_cm2)) noexcept {
+                                                  water_radiation_length_g_per_cm2),
+    const float rest_mass_override_MeV = 0.0F) noexcept {
+    const float mass_per_u = rest_mass_override_MeV > 0.0F && mass_number > 0
+        ? rest_mass_override_MeV / static_cast<float>(mass_number)
+        : static_cast<float>(nucleon_rest_mass_MeV);
     if (kinetic_energy_MeV <= 0.0F || atomic_number <= 0 || mass_number <= 0 ||
         path_length_mm <= 0.0F || density_g_per_cm3 <= 0.0F ||
         radiation_length_g_per_cm2 <= 0.0F) {
@@ -102,10 +106,10 @@ float highland_projected_rms_angle_device(const float kinetic_energy_MeV,
     }
     const auto energy_MeV_per_u = kinetic_energy_MeV / static_cast<float>(mass_number);
     const auto total_energy_MeV_per_u =
-        energy_MeV_per_u + static_cast<float>(nucleon_rest_mass_MeV);
+        energy_MeV_per_u + mass_per_u;
     const auto momentum_MeV_per_c_per_u = sycl::sqrt(
         energy_MeV_per_u *
-        (energy_MeV_per_u + 2.0F * static_cast<float>(nucleon_rest_mass_MeV)));
+        (energy_MeV_per_u + 2.0F * mass_per_u));
     const auto beta = momentum_MeV_per_c_per_u / total_energy_MeV_per_u;
     const auto momentum_MeV_per_c =
         static_cast<float>(mass_number) * momentum_MeV_per_c_per_u;
@@ -549,7 +553,11 @@ CorrelatedScatteringStep copper_fermi_eyges_tail_step(
     const float density_g_per_cm3, const float radiation_length_g_per_cm2,
     const float amplitude_scale, const std::uint64_t seed,
     const std::uint64_t history_id, const std::uint64_t step_index,
-    const std::uint32_t random_dimension) noexcept {
+    const std::uint32_t random_dimension,
+    const float rest_mass_override_MeV = 0.0F) noexcept {
+    const float mass_per_u = rest_mass_override_MeV > 0.0F && mass_number > 0
+        ? rest_mass_override_MeV / static_cast<float>(mass_number)
+        : static_cast<float>(nucleon_rest_mass_MeV);
     CorrelatedScatteringStep result{direction, Direction3F{0.0F, 0.0F, 0.0F}};
     if (kinetic_energy_MeV <= 0.0F || atomic_number <= 0 || mass_number <= 0 ||
         path_length_mm <= 0.0F || density_g_per_cm3 <= 0.0F ||
@@ -559,10 +567,10 @@ CorrelatedScatteringStep copper_fermi_eyges_tail_step(
 
     const auto energy_per_u = kinetic_energy_MeV / static_cast<float>(mass_number);
     const auto total_energy_per_u =
-        energy_per_u + static_cast<float>(nucleon_rest_mass_MeV);
+        energy_per_u + mass_per_u;
     const auto momentum_per_u = sycl::sqrt(
         energy_per_u *
-        (energy_per_u + 2.0F * static_cast<float>(nucleon_rest_mass_MeV)));
+        (energy_per_u + 2.0F * mass_per_u));
     const auto beta = momentum_per_u / total_energy_per_u;
     const auto momentum = static_cast<float>(mass_number) * momentum_per_u;
     const auto radiation_length_mm =
@@ -692,7 +700,7 @@ CorrelatedScatteringStep copper_fermi_eyges_tail_step(
 
 inline float copper_urban_cross_section_per_atom_cm2(
     const float kin_energy_MeV, const int projectile_charge,
-    const int mass_number) noexcept {
+    const int mass_number, const float rest_mass_override_MeV = 0.0F) noexcept {
     constexpr float electron_mass_MeV = 0.51099895F;
     constexpr float nucleon_mass_MeV = 931.49410242F;
     constexpr float bohr_radius_cm = 5.29177210903e-9F;
@@ -706,7 +714,8 @@ inline float copper_urban_cross_section_per_atom_cm2(
     }
 
     const auto charge = static_cast<float>(projectile_charge);
-    const auto mass = static_cast<float>(mass_number) * nucleon_mass_MeV;
+    const auto mass = rest_mass_override_MeV > 0.0F ? rest_mass_override_MeV
+        : static_cast<float>(mass_number) * nucleon_mass_MeV;
 
     // electron-equivalent kinetic energy of a heavy ion
     const auto tau_ion = kin_energy_MeV / mass;
@@ -786,12 +795,12 @@ inline float copper_urban_cross_section_per_atom_cm2(
 
 inline float copper_urban_transport_mfp_mm(
     const float kin_energy_MeV, const int projectile_charge,
-    const int mass_number, const float density_g_per_cm3) noexcept {
+    const int mass_number, const float density_g_per_cm3, const float rest_mass_override_MeV = 0.0F) noexcept {
     if (!(density_g_per_cm3 > 0.0F)) {
         return 0.0F;
     }
     const auto sigma = copper_urban_cross_section_per_atom_cm2(
-        kin_energy_MeV, projectile_charge, mass_number);
+        kin_energy_MeV, projectile_charge, mass_number, rest_mass_override_MeV);
     if (!(sigma > 0.0F)) {
         return 0.0F;
     }
@@ -1098,6 +1107,7 @@ struct UrbanV2LossTable {
     const float* range_mm{nullptr};
     const float* dedx_mev_per_mm{nullptr};
     int count{0};
+    UrbanMcsContext active_context{};
 };
 
 inline int urban_v2_loss_locate(const float* xs, const int n, const float x) noexcept {
@@ -1115,6 +1125,7 @@ inline int urban_v2_loss_locate(const float* xs, const int n, const float x) noe
 
 inline float urban_v2_loss_range(const UrbanV2LossTable& table,
                                  const float e_total_mev) noexcept {
+    if(table.active_context.record)return table.active_context.range(e_total_mev);
     const int i = urban_v2_loss_locate(table.e_total_mev, table.count, e_total_mev);
     if (i < 0) return 0.0F;
     const float e0 = table.e_total_mev[i], e1 = table.e_total_mev[i + 1];
@@ -1125,6 +1136,7 @@ inline float urban_v2_loss_range(const UrbanV2LossTable& table,
 
 inline float urban_v2_loss_energy(const UrbanV2LossTable& table,
                                   const float range_mm) noexcept {
+    if(table.active_context.record)return table.active_context.energy(range_mm);
     const int i = urban_v2_loss_locate(table.range_mm, table.count, range_mm);
     if (i < 0) return 0.0F;
     const float r0 = table.range_mm[i], r1 = table.range_mm[i + 1];
@@ -1135,6 +1147,7 @@ inline float urban_v2_loss_energy(const UrbanV2LossTable& table,
 
 inline float urban_v2_loss_dedx(const UrbanV2LossTable& table,
                                 const float e_total_mev) noexcept {
+    if(table.active_context.record)return table.active_context.dedx(e_total_mev);
     const int i = urban_v2_loss_locate(table.e_total_mev, table.count, e_total_mev);
     if (i < 0) return 0.0F;
     const float e0 = table.e_total_mev[i], e1 = table.e_total_mev[i + 1];
@@ -1154,9 +1167,13 @@ inline float urban_v2_loss_dedx(const UrbanV2LossTable& table,
 
 // Full Zdat/sig0/hecorr/cpositron/celectron tables from
 // G4UrbanMscModel::ComputeCrossSectionPerAtom (verbatim values).
+// Active Geant4 11.3.2 C12 nuclear mass (FP32 representation), verified
+// against urban_mcs package 493015506d0168efc16afae6b81441010d7937e899d3e88196c45a5b8c511eb9.
+inline constexpr float kUrbanWaterC12MassMeV = 11174.86328125F;
 inline float urban_cross_section_per_atom_cm2(
     const float kin_energy_MeV, const int projectile_charge,
-    const int mass_number, const float target_z) noexcept {
+    const int mass_number, const float target_z,
+    const float rest_mass_override_MeV = 0.0F) noexcept {
     constexpr float electron_mass_MeV = 0.51099895F;
     constexpr float nucleon_mass_MeV = 931.49410242F;
     constexpr float bohr_radius_cm = 5.29177210903e-9F;
@@ -1169,12 +1186,18 @@ inline float urban_cross_section_per_atom_cm2(
         return 0.0F;
     }
     const auto charge = static_cast<float>(projectile_charge);
-    const auto mass = static_cast<float>(mass_number) * nucleon_mass_MeV;
+    const auto mass = rest_mass_override_MeV > 0.0F ? rest_mass_override_MeV
+        : projectile_charge == 6 && mass_number == 12
+        ? kUrbanWaterC12MassMeV
+        : static_cast<float>(mass_number) * nucleon_mass_MeV;
     const auto tau_ion = kin_energy_MeV / mass;
     const auto c_ion = mass * tau_ion * (tau_ion + 2.0F) /
                        (electron_mass_MeV * (tau_ion + 1.0F));
     const auto w = c_ion - 2.0F;
-    const auto tau_e = 0.5F * (w + sycl::sqrt(w * w + 4.0F * c_ion));
+    const auto root = sycl::sqrt(w * w + 4.0F * c_ion);
+    // Stable positive quadratic root when w<0; avoid cancellation at low E.
+    const auto tau_e = w < 0.0F ? 2.0F * c_ion / (root - w)
+                               : 0.5F * (w + root);
     const auto ekin = electron_mass_MeV * tau_e;
     const auto etot = ekin + electron_mass_MeV;
     const auto beta2 = ekin * (etot + electron_mass_MeV) / (etot * etot);
@@ -1217,7 +1240,18 @@ inline float urban_cross_section_per_atom_cm2(
     constexpr float sigma_factor =
         6.2831853071795864769F * classic_electron_radius_cm *
         classic_electron_radius_cm;
-    if (ekin <= t_lim) {
+    bool low_energy_branch = ekin <= t_lim;
+    // The active reference has a discontinuity at equivalent-electron E=10 MeV.
+    // Compare p*beta directly near that boundary: rounding the transformed
+    // energy to exactly 10 MeV must not select the opposite branch. This
+    // bounded scalar refinement changes no dose-scoring precision.
+    if (sycl::fabs(ekin - t_lim) < 32.0F * 1.1920928955078125e-7F * t_lim) {
+        const double e = kin_energy_MeV, m = mass;
+        constexpr double me = 0.51099895, tl = 10.0;
+        low_energy_branch = e * (e + 2.0 * m) / (e + m) <=
+                            tl * (tl + 2.0 * me) / (tl + me);
+    }
+    if (low_energy_branch) {
         constexpr float t_dat[22] = {
             1.0e-4F, 2.0e-4F, 4.0e-4F, 7.0e-4F, 1.0e-3F, 2.0e-3F, 4.0e-3F,
             7.0e-3F, 1.0e-2F, 2.0e-2F, 4.0e-2F, 7.0e-2F, 1.0e-1F, 2.0e-1F,
@@ -1286,19 +1320,19 @@ inline float urban_cross_section_per_atom_cm2(
 
 // Water_75eV transport MFP by Bragg additivity over H/O (reference
 // CrossSectionPerVolume compound sum). Composition from the TOPAS material
-// definition (H 0.111894 / O 0.888106 by mass, density 1.0 g/cm3).
+// definition (H:O atom ratio 2:1; molar masses 1.00794/15.9994, rho=1).
 inline float urban_water_transport_mfp_mm(
     const float kin_energy_MeV, const int projectile_charge,
-    const int mass_number) noexcept {
+    const int mass_number, const float rest_mass_override_MeV = 0.0F) noexcept {
     constexpr float avogadro = 6.02214076e23F;
     constexpr float density = 1.0F;
     // per cm^3; lambda_mm = 10/(n*sigma) with sigma in cm^2.
-    constexpr float n_h = avogadro * density * 0.111894F / 1.008F;
-    constexpr float n_o = avogadro * density * 0.888106F / 16.00F;
+    constexpr float n_h = avogadro * density * 2.0F / (2.0F * 1.00794F + 15.9994F);
+    constexpr float n_o = avogadro * density / (2.0F * 1.00794F + 15.9994F);
     const auto s_h = urban_cross_section_per_atom_cm2(
-        kin_energy_MeV, projectile_charge, mass_number, 1.0F);
+        kin_energy_MeV, projectile_charge, mass_number, 1.0F, rest_mass_override_MeV);
     const auto s_o = urban_cross_section_per_atom_cm2(
-        kin_energy_MeV, projectile_charge, mass_number, 8.0F);
+        kin_energy_MeV, projectile_charge, mass_number, 8.0F, rest_mass_override_MeV);
     const auto rate = n_h * s_h + n_o * s_o;  // per cm
     return rate > 0.0F ? 10.0F / rate : 0.0F;
 }
@@ -1337,13 +1371,14 @@ inline UrbanV2MaterialCache urban_v2_material_cache(const float zeff) noexcept {
 
 inline float urban_v2_transport_mfp(const UrbanV2Material& mat,
                                     const float kin_energy_MeV) noexcept {
+    if(mat.mfp_kind==2)return mat.table.active_context.lambda(kin_energy_MeV);
     if (mat.mfp_kind == 1) {
         return urban_water_transport_mfp_mm(kin_energy_MeV, mat.projectile_z,
-                                            mat.projectile_a);
+                                            mat.projectile_a, mat.mass_mev);
     }
     return copper_urban_transport_mfp_mm(kin_energy_MeV, mat.projectile_z,
                                          mat.projectile_a,
-                                         mat.density_g_per_cm3);
+                                         mat.density_g_per_cm3, mat.mass_mev);
 }
 
 struct UrbanV2GeomCtx {
@@ -1372,6 +1407,8 @@ struct UrbanV2SafetyCtx {
     float box_z1{0.0F};
     // Physical voxel face distance, negative for legacy whole-box/Cu contexts.
     float box_boundary_path_mm{-1.0F};
+    // kind 2: water surrounding a full-depth rectangular daughter ROI.
+    float inner_x0{},inner_x1{},inner_y0{},inner_y1{};
 };
 
 
@@ -1476,14 +1513,22 @@ inline float urban_v2_box_safety(const float x_mm, const float y_mm,
 inline float urban_v2_safety_at(const float x_mm, const float y_mm,
                                 const float z_mm,
                                 const UrbanV2SafetyCtx& ctx) noexcept {
-    if (ctx.kind == 1) {
-        return urban_v2_box_safety(x_mm, y_mm, z_mm, ctx);
+    if (ctx.kind == 1 || ctx.kind == 2) {
+        const float outer=urban_v2_box_safety(x_mm, y_mm, z_mm, ctx);
+        if(ctx.kind==1)return outer;
+        const float dx=sycl::fmax(0.f,sycl::fmax(ctx.inner_x0-x_mm,x_mm-ctx.inner_x1));
+        const float dy=sycl::fmax(0.f,sycl::fmax(ctx.inner_y0-y_mm,y_mm-ctx.inner_y1));
+        return sycl::fmin(outer,sycl::sqrt(dx*dx+dy*dy));
     }
+#if defined(CARBON_ENABLE_MINIBEAM)
     return minibeam_isotropic_safety_at_point(
         x_mm, y_mm, z_mm, ctx.cu.cos_a, ctx.cu.sin_a, ctx.cu.radius_mm,
         ctx.cu.slit_count, ctx.cu.slit_width_mm, ctx.cu.slit_pitch_mm,
         ctx.cu.slit_half_len_mm, ctx.cu.slit_offset_mm,
         ctx.cu.block_entrance_z_mm, ctx.cu.block_exit_z_mm);
+#else
+    return 0.0F; // Copper collimator geometry is unavailable in this build.
+#endif
 }
 
 // Persistent per-track fMinimal state (Phase 2). Only the active branch's
@@ -1577,7 +1622,7 @@ inline double urban_v2_const_lambda_delta_mm(const double td,
 }
 
 // Stable delta for the Geant4 range branch. The branch condition guarantees
-// u=t/R >= 0.05. For small a, expand only exp(a*log1p(-u)) in a; this is the
+// u=t/R >= approximately 0.05. For small a, expand exp(a*log1p(-u)) in a; this is the
 // same range-law function and avoids subtracting two O(a*u) terms to recover
 // the O(a*u^2) delta. It does not switch to the constant-lambda law.
 inline double urban_v2_range_branch_delta_mm(const double range_mm,
@@ -1593,7 +1638,11 @@ inline double urban_v2_range_branch_delta_mm(const double range_mm,
     }
     const double a = range_mm / lambda0_mm;
     const double u = t_mm / range_mm;
-    if (!(u >= 0.05) || !(u < 1.0) || !(a > 0.0) || !sycl::isfinite(a)) {
+    // The caller selects this branch using float(t) >= float(0.05*R).
+    // Rounding that product can leave the exact double ratio just below
+    // 0.05. The same analytic range law is valid throughout 0 < u < 1;
+    // rejecting that representable boundary incorrectly creates NaN steps.
+    if (!(u > 0.0) || !(u < 1.0) || !(a > 0.0) || !sycl::isfinite(a)) {
         return std::numeric_limits<double>::quiet_NaN();
     }
     const double q = 1.0 - u;
@@ -1829,6 +1878,13 @@ inline float urban_v2_current_range_mm(const UrbanV2Material& mat,
                                        const float epre_mev,
                                        bool& supported) noexcept {
     supported = false;
+    if(mat.table.active_context.record) {
+        const auto& c=mat.table.active_context;
+        if(!c.valid())return 0;
+        const float range=c.range(epre_mev);
+        supported=range>0 && sycl::isfinite(range);
+        return supported?range:0;
+    }
     if (!(epre_mev > 0.0F) || !sycl::isfinite(epre_mev) ||
         mat.table.count < 2 || mat.table.e_total_mev == nullptr ||
         epre_mev < mat.table.e_total_mev[0] ||
@@ -2536,17 +2592,18 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
     // Fix C2: same address-proof guard as the limiter (see above); invalid
     // proposals carry proposal_valid=false with NO draws consumed.
     if (!(segment_index < 1024U) || !(outer_step < (1ULL << 22))) {
-        return result;
+        result.limit_reason = -101; return result;
     }
     const std::uint64_t step_index = outer_step * 1024U + segment_index;
     if (!(epre_mev > 0.0F) || !(user_ceiling_mm > 0.0F) ||
-        !(boundary_path_mm > 0.0F) || mat.table.count < 2 ||
-        mat.table.e_total_mev == nullptr) {
-        return result;
+        !(boundary_path_mm > 0.0F) ||
+        (!mat.table.active_context.record &&
+         (mat.table.count < 2 || mat.table.e_total_mev == nullptr))) {
+        result.limit_reason = -102; return result;
     }
     const float lambda0_now = urban_v2_transport_mfp(mat, epre_mev);
     if (!(lambda0_now > 0.0F)) {
-        return result;
+        result.limit_reason = -103; return result;
     }
     // Step-start safety for the limiter presafety (full isotropic, uncapped).
     const float safety_start =
@@ -2556,16 +2613,17 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
     bool range_supported = false;
     const float pre_step_range =
         urban_v2_current_range_mm(mat, epre_mev, range_supported);
-    if (!range_supported) return result;
-    const float t_ext =
+    if (!range_supported) { result.limit_reason = -104; return result; }
+    // Packaged contexts use the same true-path GPIL contract as global Urban.
+    // The legacy CSV caller retains its historical geometric ceiling.
+    const float t_ext = mat.table.active_context.record ? user_ceiling_mm :
         copper_urban_v2_true_path_and_delta(user_ceiling_mm, lambda0_now,
-                                            pre_step_range)
-            .true_path_mm;
+                                            pre_step_range).true_path_mm;
     auto limit = copper_urban_v2_limit_step_with_range(
         t_ext, epre_mev, mat, safety_start, at_boundary, state,
         pre_step_range, seed, history_id, outer_step, segment_index);
     if (!limit.valid) {
-        return result;
+        result.limit_reason = -105; return result;
     }
     const float g_prop = limit.g_msc_mm;
     const float g_final =
@@ -2672,17 +2730,19 @@ inline CorrelatedScatteringStep copper_urban_v2_propose_and_sample(
     const float amplitude_scale, const std::uint64_t seed,
     const std::uint64_t history_id, const std::uint64_t outer_step,
     const std::uint32_t segment_index,
-    const std::uint32_t random_dimension) noexcept {
+    const std::uint32_t random_dimension,
+    const float rest_mass_override_MeV = 0.0F) noexcept {
     UrbanV2Material mat{};
     mat.table = table;
     mat.zeff = kUrbanV2CopperZeff;
     mat.radlen_mm = 10.0F * radiation_length_g_per_cm2 / density_g_per_cm3;
     mat.projectile_z = atomic_number;
     mat.projectile_a = mass_number;
-    mat.mass_mev = static_cast<float>(mass_number) *
+    mat.mass_mev = rest_mass_override_MeV > 0.0F ? rest_mass_override_MeV
+        : static_cast<float>(mass_number) *
         static_cast<float>(nucleon_rest_mass_MeV);
     mat.density_g_per_cm3 = density_g_per_cm3;
-    mat.mfp_kind = 0;
+    mat.mfp_kind = table.active_context.record ? 2 : 0;
     UrbanV2SafetyCtx safety{};
     safety.kind = 0;
     safety.cu = geom;
@@ -2710,15 +2770,18 @@ inline CorrelatedScatteringStep water_urban_v2_propose_and_sample(
     const std::uint64_t history_id, const std::uint64_t outer_step,
     const std::uint32_t segment_index,
     const std::uint32_t random_dimension,
-    const float physical_face_distance_mm = -1.0F) noexcept {
+    const float physical_face_distance_mm = -1.0F,
+    const float rest_mass_override_MeV = 0.0F) noexcept {
     UrbanV2Material mat{};
     mat.table = table;
     mat.zeff = zeff;
     mat.radlen_mm = radlen_mm;
     mat.projectile_z = atomic_number;
     mat.projectile_a = mass_number;
-    mat.mass_mev = static_cast<float>(mass_number) *
-        static_cast<float>(nucleon_rest_mass_MeV);
+    mat.mass_mev = rest_mass_override_MeV > 0.0F ? rest_mass_override_MeV
+        : atomic_number == 6 && mass_number == 12
+        ? kUrbanWaterC12MassMeV
+        : static_cast<float>(mass_number) * static_cast<float>(nucleon_rest_mass_MeV);
     mat.density_g_per_cm3 = 1.0F;  // unused by the Bragg-sum mfp branch
     mat.mfp_kind = 1;
     UrbanV2SafetyCtx safety{};
@@ -3096,7 +3159,11 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
     const std::uint64_t history_id, const std::uint64_t step_index,
     const std::uint32_t random_dimension,
     const float observation_fraction = -1.0F,
-    const bool use_species_water_parameters = true) noexcept {
+    const bool use_species_water_parameters = true,
+    const float rest_mass_override_MeV = 0.0F) noexcept {
+    const float mass_per_u = rest_mass_override_MeV > 0.0F && mass_number > 0
+        ? rest_mass_override_MeV / static_cast<float>(mass_number)
+        : static_cast<float>(nucleon_rest_mass_MeV);
     CorrelatedScatteringStep result{direction, Direction3F{0.0F, 0.0F, 0.0F}};
     if (kinetic_energy_MeV <= 0.0F || atomic_number <= 0 || mass_number <= 0 ||
         path_length_mm <= 0.0F ||
@@ -3106,10 +3173,10 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
 
     const auto energy_per_u = kinetic_energy_MeV / static_cast<float>(mass_number);
     const auto total_energy_per_u =
-        energy_per_u + static_cast<float>(nucleon_rest_mass_MeV);
+        energy_per_u + mass_per_u;
     const auto momentum_per_u = sycl::sqrt(
         energy_per_u *
-        (energy_per_u + 2.0F * static_cast<float>(nucleon_rest_mass_MeV)));
+        (energy_per_u + 2.0F * mass_per_u));
     const auto beta = momentum_per_u / total_energy_per_u;
     const auto momentum = static_cast<float>(mass_number) * momentum_per_u;
     const auto radiation_length_mm =
@@ -3353,7 +3420,8 @@ CorrelatedScatteringStep ion_fermi_eyges_transport_step(
     const std::uint64_t history_id, const std::uint64_t transport_step_index,
     const std::uint32_t random_dimension,
     const float observation_path_mm = -1.0F,
-    const bool use_species_water_parameters = true) noexcept {
+    const bool use_species_water_parameters = true,
+    const float rest_mass_override_MeV = 0.0F) noexcept {
     CorrelatedScatteringStep result{
         direction, Direction3F{0.0F, 0.0F, 0.0F}};
     if (!(path_length_mm > 0.0F && max_segment_mm > 0.0F)) return result;
@@ -3385,7 +3453,7 @@ CorrelatedScatteringStep ion_fermi_eyges_transport_step(
             density_g_per_cm3, radiation_length_g_per_cm2, seed, history_id,
             transport_step_index * 1024U + segment_index,
             random_dimension, observation_fraction,
-            use_species_water_parameters);
+            use_species_water_parameters, rest_mass_override_MeV);
         if (segment.observation_valid) {
             const auto local_path = observation_fraction * segment_mm;
             observation_total_offset.x =

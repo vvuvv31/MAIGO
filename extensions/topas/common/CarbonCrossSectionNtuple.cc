@@ -64,8 +64,8 @@ G4bool CarbonCrossSectionNtuple::ProcessHits(G4Step* step, G4TouchableHistory*) 
     const G4double* atom_densities = material->GetVecNbOfAtomsPerVolume();
     G4HadronicProcessStore* store = G4HadronicProcessStore::Instance();
 
-    for (G4int energy_index = 1; energy_index <= 400; ++energy_index) {
-        const G4double energy_per_u = static_cast<G4double>(energy_index) * MeV;
+    for (G4int energy_index = -8; energy_index <= 400; ++energy_index) {
+        const G4double energy_per_u = (energy_index <= 0 ? 0.1 * (energy_index + 9) : static_cast<G4double>(energy_index)) * MeV;
         const G4double total_energy = static_cast<G4double>(mass_number) * energy_per_u;
         G4double sigma_h = 0.0;
         G4double sigma_o = 0.0;

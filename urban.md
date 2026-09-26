@@ -1,5 +1,19 @@
 # Geant4 Urban MSC port for the primary Copper collimator
 
+> **2026-09-23 status:** the legacy `minibeam_copper_mcs_model: urban`
+> selector is **deprecated**. It remains available, with a runtime warning,
+> only to reproduce historical results. New minibeam copper comparisons should
+> use `urban_v2` with its required validated loss-range table. No automatic
+> substitution is performed. The studies and status statements below are
+> historical; the active-branch differences are documented in
+> [Urban v2 diagnosis](docs/urban_v2_diagnosis.md).
+>
+> Scope: the existing minibeam copper/water C12 paths remain available.
+> A new research global `multiple_scattering_model: urban_v2` path covers
+> all 52 transported ions in water and the exact b1–b4 Schneider couples;
+> see [global Urban setup and limits](docs/urban_global.md).
+> Shared Urban helpers remain required by v2 and its numerical tests.
+
 ## Goal
 
 Replace the analytic `copper_fermi_eyges_tail_step` model for the primary C12

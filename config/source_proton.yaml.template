@@ -1,0 +1,22 @@
+# Source fragment for a future proton physics configuration.
+# Merge with a non-minibeam CUDA unified-EM configuration and matching
+# primary/secondary physics packages; see proton_source_gpu.yaml.template.
+# Merge these keys with the geometry and matching physics-data YAML.
+primary_particle: proton
+initial_energy_MeV: 150
+beam_energy_spread_percent: 0.5
+number_of_histories: 1000000
+
+# Optional override; the named proton default is already 938.27208816 MeV.
+# primary_rest_mass_MeV: 938.27208816
+
+enable_emittance_source: true
+emittance_sigma_x_mm: 1.0
+emittance_sigma_y_mm: 1.0
+emittance_sigma_x_prime: 0.0
+emittance_sigma_y_prime: 0.0
+emittance_correlation_x: 0.0
+emittance_correlation_y: 0.0
+source_origin_x_mm: 0.0
+source_origin_y_mm: 0.0
+source_origin_z_mm: 0.0

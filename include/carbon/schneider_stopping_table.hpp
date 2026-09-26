@@ -45,6 +45,8 @@ public:
         const std::filesystem::path& csv_path);
 
     [[nodiscard]] double energy_min_mevu() const noexcept { return energy_min_mevu_; }
+    [[nodiscard]] int projectile_z() const noexcept { return projectile_z_; }
+    [[nodiscard]] int projectile_a() const noexcept { return projectile_a_; }
     [[nodiscard]] double energy_max_mevu() const noexcept { return energy_max_mevu_; }
     [[nodiscard]] double energy_step_mevu() const noexcept { return energy_step_mevu_; }
     [[nodiscard]] std::size_t num_sections() const noexcept { return kSchneiderStoppingNumSections; }
@@ -63,6 +65,9 @@ public:
     [[nodiscard]] std::vector<float> to_flat_mass_stopping_float() const;
 
 private:
+    // Legacy CSV tables describe C12; binary tables read identity from metadata.
+    int projectile_z_{6};
+    int projectile_a_{12};
     double energy_min_mevu_{kSchneiderStoppingEnergyMin};
     double energy_max_mevu_{kSchneiderStoppingEnergyMax};
     double energy_step_mevu_{kSchneiderStoppingEnergyStep};

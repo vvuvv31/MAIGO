@@ -16,6 +16,18 @@ developed in the separate MAIGO_review_fix_20260923 worktree.
   scoring. The principal comparison retains local electron deposition.
 - Enable content-hash checks by default. GPU dose scoring remains FP32.
 
+## MCS selection and deprecation
+
+The legacy copper selector `minibeam_copper_mcs_model: urban` is deprecated
+and emits a warning. It remains available for historical reproduction; it is
+not silently redirected to `urban_v2`. The current field baseline uses
+`urban_v2` for copper and primary C12 in homogeneous water.
+
+The global `multiple_scattering_model` selector accepts `highland`,
+`fermi_eyges`, and `urban_v2`. Urban requires the corresponding validated
+material/cut reference package; see the global Urban extension below. Setting
+a minibeam-only key in a non-minibeam case does not activate that model.
+
 ## Completed field comparison
 
 Both engines used 12.8 million original source histories (4 independent batches
@@ -67,3 +79,12 @@ data dependencies. To reproduce elsewhere, first supply the pinned physics
 packages and TOPAS extension, then rebase paths in copied configurations/scripts;
 do not edit inputs of an active run. Manifests record the reference inputs,
 random seeds, executable hashes and original raw-dose hashes.
+
+## Global Urban extension
+
+The CUDA research path now accepts `multiple_scattering_model: urban_v2`
+for primary and all 52 transported charged ion species in the exact b1–b4
+water/Schneider couples. It requires a validated SHA-pinned reference
+package. See [setup, validation and material limits](docs/urban_global.md).
+This extension is separate from the existing minibeam selector and its
+frozen 64M-history comparison executable.

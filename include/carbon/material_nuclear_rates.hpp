@@ -48,7 +48,8 @@ public:
     // Explicit TOPAS-pinned water composition required. Rounded Schneider
     // parser atomic masses must not silently stand in for exact G4_WATER.
     static MaterialNuclearRates water_primary(const SchneiderRateTable&,
-        const SchneiderMaterialTable&, double hydrogen_mass_fraction);
+        const SchneiderMaterialTable&, double hydrogen_mass_fraction,
+        int projectile_z, int projectile_a);
     static MaterialNuclearRates water_secondary(const SecondaryRateTable&,
         const SchneiderMaterialTable&, double hydrogen_mass_fraction);
     MaterialNuclearRateView view() const noexcept {

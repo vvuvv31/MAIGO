@@ -1,4 +1,5 @@
 #pragma once
+#include "carbon/urban_mcs_package.hpp"
 
 #include <filesystem>
 #include <cstdint>
@@ -112,6 +113,9 @@ public:
     [[nodiscard]] const std::string& inverse_source() const noexcept;
     [[nodiscard]] const std::string& dedx_source() const noexcept;
     [[nodiscard]] double production_cut_mm() const noexcept;
+    [[nodiscard]] bool is_active_reference(const std::string& expected_particle,
+        const std::string& expected_loss_process, const std::string& expected_material,
+        double expected_cut_mm) const noexcept;
     [[nodiscard]] bool is_active_c12_reference(const std::string& expected_material,
                                                double expected_cut_mm) const noexcept;
 

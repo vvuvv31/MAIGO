@@ -624,6 +624,8 @@ void CarbonInelasticEventWriter::WriteCampaignContract() const {
            << "  \"capture_scope\": {\n"
            << "    \"primary_only\": "
            << JsonQuote(Environment("CARBON_CINEL02_PRIMARY_ONLY")) << "\n"
+           << "    ,\"final_state_only_xs_factor\": "
+           << JsonQuote(Environment("MAIGO_CINEL_FINAL_STATE_XS_FACTOR")) << "\n"
            << "  },\n"
            << "  \"campaign\": {\n"
            << "    \"uuid\": " << JsonQuote(campaign_uuid_) << ",\n"

@@ -85,6 +85,13 @@ CarbonSchneiderStoppingPowerDump::CarbonSchneiderStoppingPowerDump(
     : TsVScorer(parameter_manager, material_manager, geometry_manager,
                 scoring_manager, extension_manager, scorer_name, quantity,
                 output_file, is_sub_scorer) {
+    if (fPm->ParameterExists(GetFullParmName("ProjectileZ")))
+        projectile_z_ = fPm->GetIntegerParameter(GetFullParmName("ProjectileZ"));
+    if (fPm->ParameterExists(GetFullParmName("ProjectileA")))
+        projectile_a_ = fPm->GetIntegerParameter(GetFullParmName("ProjectileA"));
+    if (projectile_z_ <= 0 || projectile_a_ < projectile_z_)
+        G4Exception("CarbonSchneiderStoppingPowerDump", "InvalidProjectile", FatalException,
+                    "Require positive Z and A >= Z");
     if (fPm->ParameterExists(GetFullParmName("MinEnergyMeVu"))) {
         min_energy_mevu_ = fPm->GetDoubleParameter(GetFullParmName("MinEnergyMeVu"), "Energy") / MeV;
     }
@@ -115,13 +122,15 @@ G4bool CarbonSchneiderStoppingPowerDump::ProcessHits(G4Step*, G4TouchableHistory
         return false;
     }
 
-    std::cout << "[CarbonSchneiderStoppingPowerDump] Starting C12 stopping-power extraction..." << std::endl;
+    std::cout << "[CarbonSchneiderStoppingPowerDump] Starting stopping-power extraction..." << std::endl;
 
-    // 1. Get C12 projectile
-    G4ParticleDefinition* projectile = G4IonTable::GetIonTable()->GetIon(6, 12, 0.0);
+    // 1. Resolve the requested projectile
+    G4ParticleDefinition* projectile = (projectile_z_ == 1 && projectile_a_ == 1)
+        ? G4ParticleTable::GetParticleTable()->FindParticle("proton")
+        : G4IonTable::GetIonTable()->GetIon(projectile_z_, projectile_a_, 0.0);
     if (!projectile) {
         G4Exception("CarbonSchneiderStoppingPowerDump", "MissingProjectile", FatalException,
-                    "Failed to find C12 ion definition!");
+                    "Failed to find requested projectile definition!");
     }
 
     // 2. Build energy grid matching MAIGO transport grid
@@ -182,7 +191,7 @@ G4bool CarbonSchneiderStoppingPowerDump::ProcessHits(G4Step*, G4TouchableHistory
 
         for (std::size_t i = 0; i < num_energies; ++i) {
             const double e_mevu = energies[i];
-            const G4double total_energy = 12.0 * e_mevu * MeV;
+            const G4double total_energy = static_cast<double>(projectile_a_) * e_mevu * MeV;
 
             const G4double total_dedx = em_calc.ComputeTotalDEDX(total_energy, projectile, mat);
             const double linear_sp = total_dedx / (MeV / mm);
@@ -193,9 +202,9 @@ G4bool CarbonSchneiderStoppingPowerDump::ProcessHits(G4Step*, G4TouchableHistory
         }
 
         // Integrate CSDA range in mm:
-        // R(E) = \int_0^E 12.0 * dE' / S_linear(E')
+        // R(E) = \int_0^E static_cast<double>(projectile_a_) * dE' / S_linear(E')
         // Initial bin: linear extrapolation to zero energy
-        sd.csda_range_mm[0] = (12.0 * energies[0]) / sd.linear_sp_MeV_per_mm[0];
+        sd.csda_range_mm[0] = (static_cast<double>(projectile_a_) * energies[0]) / sd.linear_sp_MeV_per_mm[0];
         for (std::size_t i = 1; i < num_energies; ++i) {
             const double e_prev = energies[i - 1];
             const double e_curr = energies[i];
@@ -204,9 +213,9 @@ G4bool CarbonSchneiderStoppingPowerDump::ProcessHits(G4Step*, G4TouchableHistory
 
             double delta_r = 0.0;
             if (std::abs(s_curr - s_prev) > 1e-9) {
-                delta_r = 12.0 * ((e_curr - e_prev) / (s_curr - s_prev)) * std::log(s_curr / s_prev);
+                delta_r = static_cast<double>(projectile_a_) * ((e_curr - e_prev) / (s_curr - s_prev)) * std::log(s_curr / s_prev);
             } else {
-                delta_r = 12.0 * (e_curr - e_prev) / s_prev;
+                delta_r = static_cast<double>(projectile_a_) * (e_curr - e_prev) / s_prev;
             }
             sd.csda_range_mm[i] = sd.csda_range_mm[i - 1] + delta_r;
         }
@@ -257,7 +266,7 @@ G4bool CarbonSchneiderStoppingPowerDump::ProcessHits(G4Step*, G4TouchableHistory
 
         for (size_t ei = 0; ei < num_audit_energies; ++ei) {
             const double e_mevu = audit_energies_mevu[ei];
-            const G4double total_energy = 12.0 * e_mevu * MeV;
+            const G4double total_energy = static_cast<double>(projectile_a_) * e_mevu * MeV;
 
             const double s_nom_mass = em_calc.ComputeTotalDEDX(total_energy, projectile, mat_rep) / (MeV/mm) / rho_rep;
             const double s_low_mass = em_calc.ComputeTotalDEDX(total_energy, projectile, mat_low) / (MeV/mm) / rho_low;
@@ -286,7 +295,7 @@ G4bool CarbonSchneiderStoppingPowerDump::ProcessHits(G4Step*, G4TouchableHistory
         std::filesystem::create_directories(csv_path.parent_path());
         std::ofstream csv(csv_path);
         csv << std::setprecision(10);
-        csv << "# Geant4/TOPAS C12 Stopping Power Table for 25 Schneider Sections\n";
+        csv << "# Geant4/TOPAS Stopping Power Table for 25 Schneider Sections\n";
         csv << "energy_mevu,section_id,material_name,density_g_cm3,mass_stopping_power_mev_mm_per_g_cm3,linear_stopping_power_mev_per_mm,csda_range_mm\n";
         for (std::size_t i = 0; i < num_energies; ++i) {
             for (std::size_t s = 0; s < 25; ++s) {
@@ -313,7 +322,8 @@ G4bool CarbonSchneiderStoppingPowerDump::ProcessHits(G4Step*, G4TouchableHistory
         jout << "  \"schema_version\": 1,\n";
         jout << "  \"task\": \"Step 14 Schneider Stopping Power Extraction\",\n";
         jout << "  \"extractor\": \"CarbonSchneiderStoppingPowerDump\",\n";
-        jout << "  \"projectile\": {\"name\": \"GenericIon(6,12)\", \"z\": 6, \"a\": 12},\n";
+        jout << "  \"projectile\": {\"name\": \"" << projectile->GetParticleName()
+             << "\", \"z\": " << projectile_z_ << ", \"a\": " << projectile_a_ << "},\n";
         jout << "  \"num_sections\": 25,\n";
         jout << "  \"num_energies\": " << num_energies << ",\n";
         jout << "  \"energy_min_mevu\": " << energies.front() << ",\n";

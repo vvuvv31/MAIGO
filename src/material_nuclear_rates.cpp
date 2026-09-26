@@ -97,9 +97,12 @@ MaterialNuclearRates MaterialNuclearRates::build(const SchneiderMaterialTable& m
     return out;
 }
 MaterialNuclearRates MaterialNuclearRates::water_primary(const SchneiderRateTable& src,
-    const SchneiderMaterialTable& materials,double h) {
+    const SchneiderMaterialTable& materials,double h,int projectile_z,int projectile_a) {
+    if(projectile_z<=0 || projectile_a<projectile_z) throw std::invalid_argument("Invalid primary projectile for water rates");
+    if(src.projectile_z()!=projectile_z || src.projectile_a()!=projectile_a)
+        throw std::invalid_argument("Water primary rate projectile does not match source Z/A");
     if(src.binary_version()!=3 || !src.has_channel_domains()) throw std::invalid_argument("Water requires v3 primary domains");
-    return build(materials,h,{{6,12}},src.num_energies(),src.energy_min_mevu(),src.energy_step_mevu(),
+    return build(materials,h,{{projectile_z,projectile_a}},src.num_energies(),src.energy_min_mevu(),src.energy_step_mevu(),
         [&](auto,auto s,auto t,auto e){return src.mass_partial_rate(s,t,e);},
         [&](auto,auto t){return src.channel_domain(t);});
 }

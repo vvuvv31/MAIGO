@@ -212,3 +212,28 @@ does not download or commit multi-hundred-megabyte physics binaries.
 The kit is package extraction infrastructure, not a claim that every optional
 research package is enabled in production. In particular, General Ion Elastic
 remains a separately selectable research input in current MAIGO configurations.
+
+## Non-minibeam proton primary (2026-09-26)
+
+The 0.1–250 MeV proton source workflow is under `tools/primary_source/`.
+See [package contents, extraction provenance and limitations](../docs/proton_fullphysics_packages.md).
+The common Schneider stopping exporter now accepts `ProjectileZ`/`ProjectileA`;
+legacy defaults remain C12. The current elastic/recoil exporter uses
+`Water_75eV`; historical `frozen_production` sources remain unchanged.
+
+Conditional low-energy final-state extraction can explicitly set
+`MAIGO_CINEL_FINAL_STATE_XS_FACTOR` with primary-only capture. This changes
+interaction frequency **only for final-state sampling**. Never use its exposure
+as a physical rate or dose reference. Raw contracts record the factor; physical
+rates are extracted independently with the variable unset.
+
+### Explicit Urban reference physics
+
+`topas/common/AllChargedUrbanPhysics.{cc,hh}` provides the TOPAS physics module
+`AllChargedUrbanPhysics`. Place it **after** `g4em-standard_opt4` in the module
+list. It replaces each hadron multiple-scattering process with a fresh
+`G4hMultipleScattering` using `G4UrbanMscModel` up to 10 GeV, matching
+`tools/urban/extract_active_urban.cc`. Other EM processes, including electron
+transport and discrete Coulomb scattering, retain the opt4 configuration.
+The module does not activate unless explicitly named in the TOPAS input.
+See `../evidence/proton_urban_em_20260926/` for the proton EM-only comparison.

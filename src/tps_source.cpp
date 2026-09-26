@@ -507,7 +507,8 @@ TpsSourcePlan TpsSourcePlan::from_config(const TransportConfig& config) {
     if (!config.tps_spots_file.empty()) {
         auto plan = from_csv(config.tps_spots_file);
         if (!config.tps_beam_model_file.empty()) {
-            plan.apply_beam_model(config.tps_beam_model_file);
+            plan.apply_beam_model(config.tps_beam_model_file,
+                                  config.primary_mass_number);
         }
         return plan;
     }
@@ -521,7 +522,11 @@ TpsSourcePlan TpsSourcePlan::from_config(const TransportConfig& config) {
     return plan;
 }
 
-void TpsSourcePlan::apply_beam_model(const std::filesystem::path& path) {
+void TpsSourcePlan::apply_beam_model(const std::filesystem::path& path,
+                                      const int primary_mass_number) {
+    if (primary_mass_number <= 0) {
+        throw std::invalid_argument("TPS beam model requires a positive primary mass number");
+    }
     std::ifstream input(path);
     if (!input) {
         throw std::runtime_error("Cannot open TPS beam model: " + path.string());
@@ -620,7 +625,7 @@ void TpsSourcePlan::apply_beam_model(const std::filesystem::path& path) {
     for (auto& spot : spots) {
         const auto energy = std::isfinite(spot.energy_total_MeV)
                                 ? spot.energy_total_MeV
-                                : spot.energy_MeVu * 12.0;
+                                : spot.energy_MeVu * static_cast<double>(primary_mass_number);
         const auto optics = interpolate(energy);
         if (!std::isfinite(spot.sigma_x_mm)) {
             spot.sigma_x_mm = optics.sigma_x_mm;

@@ -8,8 +8,15 @@ Dose Recalculation* 所述方法。**仅用于研究，不用于临床治疗计�
 GPU 不在运行时调用 Geant4。当前水生产入口使用共享 CINEL03 框架和统一 EM 包。
 CT 包含 H/O 靶通道，不等于已经替代水中所有 stopping、XS、MCS 和 fluctuation 数据。
 
-当前开发与提交目标为 `master` / `origin/master`（原 `fred` 开发线）；
-迁移前的 `master` 保留为 `legacy`。历史归档中的分支名不代表现行工作流。
+非 minibeam 的统一 EM GPU 路径通过 YAML 的 `primary_particle` 或 Z/A、
+质量和匹配物理包选择入射粒子。主粒子核反应、stopping、EM 与弹性包检查源身份，
+新 EM 包及其 δ 矩表可在 YAML 指定路径和哈希。已完成质子水模体及 170 MeV
+铜准直器 minibeam 的 GPU/TOPAS 研究对照，局部剂量偏差仍待排查；旧 C12 数据
+不会作为质子主束数据替代。详见 [束源参数与数据契约](docs/primary_source_parameters.md)
+和 [proton minibeam](docs/proton_minibeam.md)。
+
+本工作树当前开发与提交目标为 `minibeam` / `origin/minibeam`。
+历史归档中的分支名不代表现行工作流。
 commit / push 仍需用户明确授权，详见 [AGENTS](AGENTS.md)。
 
 ## 文档入口
@@ -165,3 +172,15 @@ Global 1%/1mm 为 96.74–98.79%，Global 3%/0mm 为 94.27–99.97%；
 [GPL-3.0-or-later](LICENSE)。
 
 旧 FRED 功能及解析碎裂代码的移除范围、通用模块替代和验证结果见[清理报告](docs/fred_cleanup.md)。
+
+
+通用束源 YAML 参数、C12 兼容规则和 proton 接入边界见 [primary_source_parameters.md](docs/primary_source_parameters.md)。
+
+## Proton 主束数据（非 minibeam）
+
+已提取并组装 0.1–250 MeV 的质子主束包：
+[配置入口](config/proton_water_fullphysics.yaml) · [包清单、来源与限制](docs/proton_fullphysics_packages.md)。
+包含核非弹性、核弹性、反冲 stopping 及共享 EM/次级包；已开展质子 GPU/TOPAS 剂量对照，尚未达到所有局部区域的精度验收。
+
+质子纯水另提供 [Urban v2 配置](config/proton_water_fullphysics_urban_v2.yaml)：
+使用包含 proton 的全离子参考包，详见 [接入范围与状态](docs/proton_urban_v2.md)。

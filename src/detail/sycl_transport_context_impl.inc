@@ -10,8 +10,8 @@ struct SchneiderHostCache {
     std::string signature;
     std::shared_ptr<SchneiderRateTable> primary_rate;
     std::shared_ptr<SchneiderTargetSampler> primary_sampler;
-    std::shared_ptr<InelasticPackageV3Table> c12_package;
-    std::shared_ptr<Cinel03DeviceTables> c12_device_tables;
+    std::shared_ptr<InelasticPackageV3Table> primary_package;
+    std::shared_ptr<Cinel03DeviceTables> primary_device_tables;
     std::shared_ptr<SecondaryRateTable> secondary_rate;
     std::shared_ptr<InelasticPackageV3Table> secondary_cinel03;
     std::shared_ptr<Cinel03DeviceTables> secondary_cinel03_device_tables;

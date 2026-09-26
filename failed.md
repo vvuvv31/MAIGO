@@ -246,3 +246,36 @@ GPU15M / TOPAS16M independent batches: 100 mm valley +1.838%, approximate 95% CI
 ### 2026-09-23 Claiming 1% convergence by halving only the GPU Cu step
 
 Both engines respond when Cu/slit ceilings go 0.05 -> 0.025 mm. At 100 mm their 10 mm-window valleys both drop about 3.1 pp relative to the original reference. The finer matched single-layer result remains +3.63% at 80 mm and +1.99% at 120 mm with broad three-batch intervals. Do not compare finer GPU to unchanged TOPAS or select one favorable depth as a convergence proof. More independent statistics and a common-phase-space / boundary-step study are needed. Evidence: evidence/percent1_20260923/cu_step025/RESULTS.md.
+
+
+## 2026-09-24: remove scoring-voxel safety from global Urban (rejected inference)
+
+Hypothesis: TOPAS parallel-world dose voxels do not participate in the
+Urban safety calculation, so GPU voxel safety should be removed. Rejected
+before changing that physics: Geant4 11.3.2 G4ParallelWorldProcess starts
+G4PathFinder parallel navigation; G4SafetyHelper::ComputeSafety then calls
+G4PathFinder::ComputeSafety across the active navigators, including scoring
+voxels. Mass-volume identity alone does not establish the safety used by MSC.
+Retry only with a native navigation oracle demonstrating a specific safety
+or step-status discrepancy for the exact TOPAS geometry. Parallel-world
+safety radius capping and material-boundary status remain separate questions.
+The validated ionization-clock repair does not alter this geometry handling.
+Evidence: benchmark20260924StepFix; Geant4 v11.3.2 G4SafetyHelper.cc,
+G4PathFinder.cc and G4ParallelWorldProcess.cc.
+
+## 高统计量正确性记录：FP32 随机数上端点（2026-09-26）
+
+- 失败路径：`rng::uniform01` 的 24-bit midpoint 直接返回；最大 midpoint 在 FP32 舍入到 1，违反 `(0,1)` 契约。
+- 证据：proton Urban full physics 170 MeV、seed=926501702、1,000,000 histories，history 142400 的首次核过程随机数（step=0, dim=8）为 1，`-log(u)=-0`；Urban 审计 reason=81 拒绝整批剂量。
+- 处理：只把返回值 1 限制为最大的小于 1 的 FP32 数，其余返回值和 counter 不变。禁止通过更换随机种子或跳过失败 history 接受该批结果。
+- 重试条件及结果：修复上端点后，同一 seed/history 数的 GPU 批次通过，Unified EM failures=0、queue overflow=0；本轮全部 GPU 批次统一重跑。证据：`evidence/proton_urban_full_5m_20260926/rng_endpoint_fix/`。此记录为正确性故障，不是性能候选。
+
+## 2026-09-26 proton copper minibeam correctness rejects
+
+- Rejected unchanged C12 copper route for a proton source: primary copper fluctuation used Z=6/A=12, elastic kinematics used 11174.86323534 MeV, and fallback secondary stopping divided by 36 even when its reference table was proton. Retry requires configured source ZA/mass, explicit proton copper tables, and the recorded GPU/TOPAS benchmark.
+- Rejected implicit TOPAS extraction beam rotation: initial 20k E251 extraction yielded zero elastic events because the inherited orientation pointed out of the copper. The failed runs remain under `/mnt/sda/wuwei/proton_copper_20260926/attempt_default_rotation`; accepted retries explicitly set `BeamPosition/RotX=0` and place the source at z=-100.001 mm.
+- Rejected an elastic bank compiled from pre-step minus post-step energy: it includes continuous EM loss, and filtering on transported recoil products biases away recoils below the production cut. Use direct `G4HadronicInteraction::ApplyYourself` sampling with actual target nuclear masses and unbiased macroscopic rates (`PrimaryMaterialDump`) instead.
+- Rejected the legacy CSV pointer prerequisite when a validated active Urban context is supplied; initial GPU 10k smoke rejected 8535 copper proposals. Accept a package context via its own range/MFP validity checks; never bypass invalid proposal rejection.
+- Rejected copper nuclear competition on geometric path while decrementing optical depth on Urban true path. Proton 170 MeV, seed 926617001, 1M batch rejected 11 proposals. The same seed with 10k histories reproduces history 1313, copper step 272, diagnostic reason 102 (zero external candidate). Repair must compete on the accepted true path, preserve geometry shortening and rerun the original seed/batches; do not seed-hop or accept the failed partial dose. Evidence: `evidence/proton_minibeam_170_20260926/copper_step_fix/`, raw `diagnostic_b1/gpu.log` and `b1/rejected_copper_proposal/gpu.log`.
+
+The true-path competition retry passed the original 10k reproducer and all five original 1M seeds. Urban fatal/cap/guard/subulp and queue overflows were zero in all final batches. The final comparison still has 51 below-domain copper secondary cascade queries out of 19,589 and a missing 205–230 mm post-range dose tail; these are retained model limitations, not evidence of complete physics agreement. Final report: `evidence/proton_minibeam_170_20260926/report_zh.md`.

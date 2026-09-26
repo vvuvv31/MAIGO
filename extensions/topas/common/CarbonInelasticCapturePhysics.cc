@@ -3,6 +3,9 @@
 #include "CarbonInelasticCapturePhysics.hh"
 
 #include "CarbonInelasticCaptureProcess.hh"
+#include "G4HadronicProcess.hh"
+#include <cmath>
+#include <cstring>
 
 #include "G4BuilderType.hh"
 #include "G4Exception.hh"
@@ -107,6 +110,27 @@ void CarbonInelasticCapturePhysics::ConstructProcess() {
                                   std::to_string(candidates.size()));
         }
         auto* original = candidates.front();
+        // Conditional final-state extraction only. Never enable this for XS
+        // dumps, exposure-derived rates, or dose calculations. Geant4 still
+        // selects the target isotope and executes the unchanged final-state
+        // model; the multiplier changes only the chance of reaching it before
+        // the primary stops. Secondary nuclear processes are gated by the
+        // primary-only capture wrapper.
+        const char* factor_text = std::getenv("MAIGO_CINEL_FINAL_STATE_XS_FACTOR");
+        if (factor_text && particle->GetParticleName() == "proton") {
+            char* end = nullptr;
+            const double factor = std::strtod(factor_text, &end);
+            const char* primary_only = std::getenv("CARBON_CINEL02_PRIMARY_ONLY");
+            if (!std::isfinite(factor) || factor < 1.0 || end == factor_text || *end ||
+                !primary_only || std::strcmp(primary_only, "true") != 0) {
+                FatalProcessSetup(*particle, "invalid conditional extraction factor or primary-only scope");
+            }
+            auto* hadronic = dynamic_cast<G4HadronicProcess*>(original);
+            if (!hadronic) FatalProcessSetup(*particle, "conditional extraction requires unwrapped hadronic process");
+            hadronic->MultiplyCrossSectionBy(factor);
+            G4cout << "FINAL_STATE_EXTRACTION_ONLY proton XS multiplier=" << factor
+                   << "; not a rate or dose reference" << G4endl;
+        }
         if (dynamic_cast<CarbonInelasticCaptureProcess*>(original) != nullptr) {
             continue;
         }
