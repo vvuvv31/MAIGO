@@ -1,15 +1,15 @@
+#include <initializer_list>
 #include "carbon/transport_config.hpp"
 #include "carbon/source_parameters.hpp"
 #include "carbon/cross_section.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/electron_transport.hpp"
 #include "carbon/min_json.hpp"
+#include "carbon/neutron_package.hpp"
 #include "carbon/schneider_rate_table.hpp"
-#include "carbon/schneider_stopping_table.hpp"
 #include "carbon/delta_moments_data.hpp"
 #include "carbon/schneider_delta_tail.hpp"
 #include "carbon/secondary_rate_table.hpp"
-#include "carbon/straggling.hpp"
 #include "carbon/sha256.hpp"
 
 #include <algorithm>
@@ -238,19 +238,6 @@ std::filesystem::path merge_ion_physics_manifest(
                            .string();
         }
         values.add(key, std::move(imported), manifest.line_number(key));
-    }
-    for (const char* required : {
-             "energy_straggling_model",
-             "use_particle_specific_stopping_power",
-             "primary_stopping_power_file",
-             "particle_stopping_power_file",
-         }) {
-        const auto entry = manifest.find(required);
-        if (entry == manifest.end() || entry->second.empty()) {
-            throw std::invalid_argument(
-                "Ion physics manifest is missing required key '" +
-                std::string(required) + "': " + manifest_path.string());
-        }
     }
     if (!manifest.contains("primary_particle") &&
         (!manifest.contains("primary_atomic_number") || !manifest.contains("primary_mass_number")))
@@ -603,6 +590,29 @@ bool TransportConfig::validation_scorers() const noexcept {
 }
 
 void TransportConfig::validate() const {
+    if (!neutron_proton_birth_output_file.empty() &&
+        (!enable_neutron_transport || neutron_proton_birth_capacity==0 ||
+         neutron_proton_birth_capacity>std::numeric_limits<std::uint32_t>::max()))
+        throw std::invalid_argument("neutron_proton_birth_output_file requires neutron transport and capacity in [1, UINT32_MAX]");
+    if ((enable_neutron_transport || !neutron_birth_output_file.empty()) &&
+        (neutron_birth_capacity == 0 || neutron_birth_capacity > std::numeric_limits<std::uint32_t>::max()))
+        throw std::invalid_argument("neutron_birth_capacity must be in [1, UINT32_MAX]");
+    if ((enable_neutron_transport || !neutron_birth_output_file.empty()) &&
+        (!enable_minibeam || enable_ct_grid || enable_layered_phantom || device == "serial"))
+        throw std::invalid_argument("neutron_birth_output_file currently requires SYCL minibeam with homogeneous water");
+    if (enable_neutron_transport) {
+        if (neutron_package_file.empty())
+            throw std::invalid_argument("enable_neutron_transport requires neutron_package_file");
+        if (run_mode != RunMode::research)
+            throw std::invalid_argument("Experimental neutron transport requires run_mode: research");
+        const auto package=NeutronPackage::load(neutron_package_file,false);
+        if(package.macroscopic_rates.empty())
+            throw std::invalid_argument("Experimental neutron transport requires a v2 independent-rate package");
+        if(!std::isfinite(neutron_world_half_width_mm) || neutron_world_half_width_mm<=urban_water_half_width_mm ||
+           neutron_world_half_width_mm<=phantom_length_mm || urban_water_half_width_mm<=0 || neutron_max_collisions==0)
+            throw std::invalid_argument("Invalid experimental neutron world or collision limit");
+    }
+
     if (nuclear_model == "cinel02") {
         throw std::invalid_argument("nuclear_model cinel02 is retired; use the current shared CINEL03 bundle with geant4 selector");
     }
@@ -623,13 +633,6 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "production run_mode requires queue-overflow, NaN/Inf, "
             "voxel-over-total and grid-closure rejection");
-    }
-    if (enable_csda_range_energy_loss &&
-        (enable_ct_grid || enable_layered_phantom || enable_hetero_insert ||
-         enable_minibeam || use_particle_specific_stopping_power)) {
-        throw std::invalid_argument(
-            "enable_csda_range_energy_loss requires homogeneous water primary "
-            "transport without CT, layered, insert, minibeam, or particle-specific materials");
     }
     if (number_of_histories == 0) {
         throw std::invalid_argument("number_of_histories must be greater than zero");
@@ -660,8 +663,8 @@ void TransportConfig::validate() const {
     if (primary_atomic_number != 6 || primary_mass_number != 12) {
         if (em_model != "g4_material_joint_v1" || device != "cuda")
             throw std::invalid_argument("Non-C12 primary requires CUDA unified EM and matching packages");
-        if (ct_elastic_diagnostic || uses_packaged_fluctuation())
-            throw std::invalid_argument("Non-C12 primary cannot use legacy carbon elastic/fluctuation diagnostics");
+        if (ct_elastic_diagnostic)
+            throw std::invalid_argument("Non-C12 primary cannot use C12 elastic diagnostics");
     }
     if (!std::isfinite(primary_rest_mass_MeV) || primary_rest_mass_MeV < 0.0) {
         throw std::invalid_argument(
@@ -680,6 +683,11 @@ void TransportConfig::validate() const {
     if (phantom_length_mm <= 0.0 || depth_bin_width_mm <= 0.0 || maximum_step_mm <= 0.0) {
         throw std::invalid_argument("phantom and step lengths must be positive");
     }
+    if (!std::isfinite(broadbeam_maximum_mean_loss_fraction) ||
+        broadbeam_maximum_mean_loss_fraction < 0.01 || broadbeam_maximum_mean_loss_fraction > 0.05 ||
+        (broadbeam_maximum_mean_loss_fraction != 0.01 &&
+         (transport_profile != "broadbeam_fast" || run_mode != RunMode::research)))
+        throw std::invalid_argument("broadbeam_maximum_mean_loss_fraction requires research broadbeam_fast and [0.01,0.05]");
     for(double scale : {em_primary_step_scale,em_secondary_step_scale})
         if(!std::isfinite(scale) || scale<1.0 || scale>1.5)
             throw std::invalid_argument("Unified EM step scales must be finite in [1,1.5]");
@@ -687,19 +695,14 @@ void TransportConfig::validate() const {
        (em_model!="g4_material_joint_v1" || run_mode!=RunMode::research))
         throw std::invalid_argument("EM step extension requires research unified EM");
     if (secondary_step_chunking &&
-        (em_model != "g4_material_joint_v1" || !enable_secondary_unified_em ||
+        (em_model != "g4_material_joint_v1" ||
          !enable_secondary_transport || !enable_inelastic))
         throw std::invalid_argument("secondary_step_chunking requires unified secondary EM and inelastic secondary transport");
-    if (em_model != "legacy" && em_model != "g4_material_joint_v1")
-        throw std::invalid_argument("Unknown em_model: " + em_model);
-    if (em_model == "legacy" &&
-        (device == "cuda" || device == "nvidia" || device == "gpu" || device == "default"))
-        throw std::invalid_argument("Legacy EM removed on GPU; use em_model g4_material_joint_v1 (serial/cpu backends retain legacy routing)");
-    if (em_model == "legacy" && (!em_package_file.empty() || !em_package_sha256.empty() || !em_delta_moments_file.empty()))
-        throw std::invalid_argument("em_package_file requires g4_material_joint_v1");
-    if (em_model == "g4_material_joint_v1") {
-        if (primary_em_model != "legacy")
-            throw std::invalid_argument("Unified EM must not be stacked with the old water model");
+    if (em_model != "g4_material_joint_v1")
+        throw std::invalid_argument("Water/CT legacy EM has been removed; use em_model: g4_material_joint_v1");
+    if (device == "serial")
+        throw std::invalid_argument("The serial legacy EM backend has been removed; use a SYCL device");
+    {
         if (em_package_file.empty() || em_package_sha256.size()!=64)
             throw std::invalid_argument("Unified EM requires one em_package_file and its SHA256");
         if (run_mode == RunMode::production &&
@@ -710,15 +713,22 @@ void TransportConfig::validate() const {
             throw std::invalid_argument("Delta moments require a SHA256 pin and source SHA matching em_package_sha256");
         if ((!enable_ct_grid && !is_water_mode()) || !slab_layers.empty() || enable_hetero_insert || enable_let_scoring)
             throw std::invalid_argument("Unified EM requires unified water or a Schneider CT grid, with LET off");
-        if (!ct_secondary_exact_faces || straggling_scale!=1.0 || !straggling_scale_energies_MeVu.empty() || !straggling_scale_values.empty())
+        if (!ct_secondary_exact_faces)
             throw std::invalid_argument("Unified EM requires exact CT faces and native unscaled fluctuations");
-        if (!material_electron_response_index_file.empty() || !water_electron_response_diagnostic_file.empty() ||
-            !ct_schneider_delta_tail_file.empty() || !ct_schneider_delta_longitudinal_file.empty() ||
-            !ct_electron_joint_response_diagnostic_file.empty() || enable_electron_transport)
-            throw std::invalid_argument("Unified EM uses local delta deposition; electron response stacking is forbidden");
+        const bool ct_material_response = !material_electron_response_index_file.empty() &&
+            run_mode==RunMode::research && enable_ct_grid;
+        // The pinned joint response replaces local primary deposition. Its
+        // required transverse table is not applied when joint replay is active.
+        // Detailed C12/CT, package, and patient opt-in checks follow below.
+        const bool ct_joint_response = run_mode==RunMode::research && enable_ct_grid &&
+            ct_electron_joint_patient_experiment && ct_electron_joint_allow_research &&
+            !ct_electron_joint_response_diagnostic_file.empty() &&
+            material_electron_response_index_file.empty();
+        if ((!material_electron_response_index_file.empty() && !ct_material_response) || !water_electron_response_diagnostic_file.empty() ||
+            (!ct_schneider_delta_tail_file.empty() && !ct_joint_response) || !ct_schneider_delta_longitudinal_file.empty() ||
+            (!ct_electron_joint_response_diagnostic_file.empty() && !ct_joint_response) || enable_electron_transport)
+            throw std::invalid_argument("Unified EM permits only exclusive research CT primary-ionization material or joint response; other electron response stacking is forbidden");
     }
-    if (primary_em_model != "legacy")
-        throw std::invalid_argument("Unknown primary_em_model: " + primary_em_model);
     if (maximum_primary_steps == 0) {
         throw std::invalid_argument("maximum_primary_steps must be greater than zero");
     }
@@ -799,6 +809,19 @@ void TransportConfig::validate() const {
             "enable_hetero_insert and enable_layered_phantom cannot both be true "
             "(use one heterogeneity model per run)");
     }
+    if(ct_electron_joint_execution_mode!="inline" && ct_electron_joint_execution_mode!="queued")
+        throw std::invalid_argument("ct_electron_joint_execution_mode must be inline or queued");
+    if(ct_electron_joint_execution_mode=="queued" &&
+       (transport_profile!="broadbeam_fast" || run_mode!=RunMode::research ||
+        !enable_ct_grid || !enable_voxel_scoring || enable_let_scoring ||
+        enable_charged_origin_voxel_scoring || ct_electron_joint_response_diagnostic_file.empty()))
+        throw std::invalid_argument("Queued FE joint response requires active research broadbeam CT voxel dose without LET/component scoring");
+    if (!std::isfinite(ct_electron_joint_sample_probability) ||
+        ct_electron_joint_sample_probability < 0.05 || ct_electron_joint_sample_probability > 1.0 ||
+        (ct_electron_joint_sample_probability != 1.0 &&
+         (transport_profile != "broadbeam_fast" || run_mode != RunMode::research ||
+          ct_electron_joint_response_diagnostic_file.empty())))
+        throw std::invalid_argument("ct_electron_joint_sample_probability requires active research FE joint response and [0.05,1]");
     if (!ct_electron_joint_response_diagnostic_file.empty() &&
         ((run_mode!=RunMode::smoke && !(run_mode==RunMode::research && ct_electron_joint_allow_research)) || !enable_ct_grid || !enable_voxel_scoring ||
          (!ct_electron_joint_patient_experiment && (enable_inelastic || enable_secondary_transport || initial_energy_MeVu!=175)) ||
@@ -841,7 +864,7 @@ void TransportConfig::validate() const {
             throw std::invalid_argument("Unified water has no validated pure-water electron response; CT response cannot substitute");
         if (ct_schneider_physics_bundle_file.empty() || ct_schneider_primary_rate_file.empty() ||
             ct_schneider_secondary_rate_file.empty() || ct_schneider_primary_cinel03_file.empty() ||
-            ct_schneider_secondary_cinel03_file.empty() || ct_schneider_stopping_power_file.empty() ||
+            ct_schneider_secondary_cinel03_file.empty() ||
             unified_water_material_file.empty() || unified_water_material_sha256 !=
                 "60be17929880fe18f1758edc02350b3fa7140b817ab0d21cb75bd87dbc891f31")
             throw std::invalid_argument("Unified water requires explicit v2.1 bundle paths and pinned G4_WATER material");
@@ -858,17 +881,40 @@ void TransportConfig::validate() const {
        (material_electron_short_range_mm>0 && (run_mode!=RunMode::research || !enable_ct_grid ||
         material_electron_response_index_file.empty() || enable_let_scoring)))
         throw std::invalid_argument("Short-range electron candidate requires CT material response research, threshold 0..0.25 mm, no LET");
+    if((material_electron_retain_bank || material_electron_execution_mode=="queue") &&
+       (device=="serial" || !enable_ct_grid || material_electron_response_index_file.empty() || run_mode!=RunMode::research))
+        throw std::invalid_argument("Electron queue/cache requires SYCL research CT material response");
+    if(material_electron_execution_mode!="inline" && material_electron_execution_mode!="queue")
+        throw std::invalid_argument("material_electron_execution_mode must be inline or queue");
+    if(material_electron_queue_budget_MiB<1 || material_electron_queue_budget_MiB>4096 ||
+       material_electron_queue_chunk<1 || material_electron_queue_chunk>65536 ||
+       material_electron_queue_lanes<1 || material_electron_queue_lanes>65536 ||
+       material_electron_group_size<1 || material_electron_group_size>32 ||
+       (material_electron_group_size & (material_electron_group_size-1)))
+        throw std::invalid_argument("Invalid electron queue budget/chunk/lanes/group size");
+    if(material_electron_group_size>1 && material_electron_execution_mode!="queue")
+        throw std::invalid_argument("Electron grouping requires queue execution");
+    if(material_electron_response_cache_policy!="strict" && material_electron_response_cache_policy!="tiered" &&
+       material_electron_response_cache_policy!="tiered_indices")
+        throw std::invalid_argument("Material response cache policy must be strict, tiered or tiered_indices");
+    if((material_electron_response_cache_policy=="tiered" || material_electron_response_cache_policy=="tiered_indices") &&
+       (material_electron_response_index_file.empty() || material_electron_response_memory_mode!="host_mapped" ||
+        material_electron_response_hot_device_budget_MiB<64))
+        throw std::invalid_argument("Tiered material response requires a bank, host_mapped mode and hot budget >=64 MiB");
     if(!material_electron_response_index_file.empty()) {
         if(material_electron_response_memory_mode!="device" && material_electron_response_memory_mode!="host_mapped")
             throw std::invalid_argument("Material response memory mode must be device or host_mapped");
+        if(material_electron_response_hot_device_budget_MiB>10240 ||
+           (material_electron_response_hot_device_budget_MiB>0 && material_electron_response_memory_mode!="host_mapped"))
+            throw std::invalid_argument("Material response hot budget requires host_mapped mode and at most 10 GiB");
         if(material_electron_response_host_budget_MiB==0 || material_electron_response_host_budget_MiB>98304)
             throw std::invalid_argument("Material response mapped bank budget must be within 96 GiB (reserve build/runtime headroom)");
         if(material_electron_response_index_sha256.size()!=64 ||
-           material_electron_response_device_budget_MiB==0 || material_electron_response_device_budget_MiB>10240 ||
-           primary_atomic_number!=6 || primary_mass_number!=12 || !enable_voxel_scoring || enable_let_scoring ||
+            material_electron_response_device_budget_MiB==0 || material_electron_response_device_budget_MiB>10240 ||
+            !enable_voxel_scoring || enable_let_scoring ||
            !water_electron_response_diagnostic_file.empty() || !ct_electron_joint_response_diagnostic_file.empty() ||
            !ct_schneider_delta_longitudinal_file.empty() || !ct_schneider_delta_tail_file.empty() || enable_electron_transport)
-            throw std::invalid_argument("Material electron response requires pinned C12 voxel scope and exclusive response selection");
+            throw std::invalid_argument("Material electron response requires pinned projectile-matched voxel scope and exclusive response selection");
         if((!enable_ct_grid || ct_grid_file.empty()) && !unified_water_nuclear_transport)
             throw std::invalid_argument("Material electron response requires Schneider CT or explicit unified water");
         const auto covered=[](double e,double s){return std::isfinite(e) && e>0 && std::isfinite(s) && s>=0 && e*(1+8*s)<=450;};
@@ -921,9 +967,7 @@ void TransportConfig::validate() const {
                 "enable_ct_grid cannot combine with layered phantom or hetero insert");
         }
         if (!is_primary_attenuation_only_mode()) {
-            if (!ct_air_stopping_power_file.empty() || !ct_lung_stopping_power_file.empty() ||
-                !ct_water_stopping_power_file.empty() || !ct_bone_stopping_power_file.empty() ||
-                !ct_air_cross_section_file.empty() || !ct_lung_cross_section_file.empty() ||
+            if (!ct_air_cross_section_file.empty() || !ct_lung_cross_section_file.empty() ||
                 !ct_water_cross_section_file.empty() || !ct_bone_cross_section_file.empty()) {
                 throw std::invalid_argument(
                     "Four-class material tables (air/lung/water/bone) are strictly forbidden in production Schneider CT path");
@@ -1046,12 +1090,6 @@ void TransportConfig::validate() const {
         if (beam_energy_spread != 0.0) {
             throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires beam_energy_spread = 0.0");
         }
-        if (ct_schneider_stopping_power_file.empty() && !ct_use_density_mass_spr) {
-            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires ct_use_density_mass_spr = true when exact stopping table is not set");
-        }
-        if (std::abs(ct_stopping_power_scale - 1.0) > 1e-6) {
-            throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires ct_stopping_power_scale = 1.0");
-        }
         if (initial_energy_MeVu > 430.0 + 1e-5) {
             throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' requires initial_energy_MeVu <= 430.0 MeV/u, got " +
                                         std::to_string(initial_energy_MeVu));
@@ -1064,46 +1102,9 @@ void TransportConfig::validate() const {
             throw std::invalid_argument("ct_validation_mode 'primary-attenuation-only' forbids CINEL package / final-state replay");
         }
     }
-    if (!std::isfinite(straggling_scale) || straggling_scale < 0.0) {
-        throw std::invalid_argument("straggling_scale must be finite and nonnegative");
-    }
-    if (!std::isfinite(straggling_sampling_length_mm) ||
-        straggling_sampling_length_mm < 0.0) {
-        throw std::invalid_argument(
-            "straggling_sampling_length_mm must be finite and nonnegative");
-    }
-    if (enable_step_stable_straggling && straggling_sampling_length_mm <= 0.0) {
-        throw std::invalid_argument(
-            "enable_step_stable_straggling requires straggling_sampling_length_mm > 0");
-    }
-    if (energy_straggling_model != "gaussian_clamped" &&
-        energy_straggling_model != "legacy_calibrated" &&
-        energy_straggling_model != "moment_matched" &&
-        energy_straggling_model != "vavilov_landau" &&
-        energy_straggling_model != "packaged_fluctuation" &&
-        energy_straggling_model != "packaged_fluctuation_fraction" &&
-        energy_straggling_model != "packaged_fluctuation_fraction_hybrid") {
-        throw std::invalid_argument(
-            "energy_straggling_model must be gaussian_clamped, "
-            "legacy_calibrated, moment_matched, vavilov_landau, packaged_fluctuation, packaged_fluctuation_fraction, or packaged_fluctuation_fraction_hybrid");
-    }
-    if (uses_packaged_fluctuation() && energy_straggling_package_file.empty()) {
-        throw std::invalid_argument(
-            "packaged_fluctuation requires energy_straggling_package_file");
-    }
     if (enable_primary_loss_query_audit && run_mode != RunMode::smoke) {
         throw std::invalid_argument("enable_primary_loss_query_audit requires smoke mode");
     }
-    if ((energy_straggling_model == "packaged_fluctuation_fraction" ||
-         energy_straggling_model == "packaged_fluctuation_fraction_hybrid") &&
-        (run_mode != RunMode::smoke || enable_ct_grid ||
-         primary_atomic_number != 6 || primary_mass_number != 12 ||
-         enable_secondary_energy_straggling || enable_step_stable_straggling ||
-         straggling_scale != 1.0 || !straggling_scale_energies_MeVu.empty())) {
-        throw std::invalid_argument("Fraction-axis fluctuation is a smoke-only C12 water candidate; unit scale and primary-only straggling required");
-    }
-    if (energy_straggling_model == "packaged_fluctuation_fraction_hybrid" && !enable_primary_loss_query_audit)
-        throw std::invalid_argument("Fraction hybrid requires enable_primary_loss_query_audit to report its thin-step scope");
     if (nuclear_model != "geant4" &&
         nuclear_model != "cinel02" && nuclear_model != "none") {
         throw std::invalid_argument(
@@ -1128,52 +1129,32 @@ void TransportConfig::validate() const {
         throw std::invalid_argument(
             "enable_nuclear_elastic is retired; use the all-ion elastic configuration");
     }
-    if (uses_moment_matched_straggling() &&
-        std::abs(straggling_scale - 1.0) > 1.0e-12) {
-        throw std::invalid_argument(
-            "uncalibrated straggling models require straggling_scale: 1.0");
+    if(transport_profile!="reference" && transport_profile!="broadbeam_fast" && transport_profile!="minibeam_detailed")
+        throw std::invalid_argument("transport_profile must be reference, broadbeam_fast or minibeam_detailed");
+    if(transport_profile=="minibeam_detailed" && !enable_minibeam)
+        throw std::invalid_argument("minibeam_detailed requires minibeam: true");
+    if(transport_profile=="broadbeam_fast") {
+        if(enable_minibeam || device=="serial" || run_mode!=RunMode::research ||
+           em_model!="g4_material_joint_v1" ||
+           multiple_scattering_model!="fermi_eyges" ||
+           fermi_eyges_species!="all_charged" || fermi_eyges_parameter_set!="species_water" ||
+           !enable_multiple_scattering || multiple_scattering_scale!=1.0 ||
+           enable_neutron_transport || enable_electron_transport ||
+           !urban_mcs_package_file.empty() || !material_electron_response_index_file.empty() ||
+           !water_electron_response_diagnostic_file.empty() ||
+           !neutron_package_file.empty() || material_electron_execution_mode!="inline" ||
+           (!ct_schneider_delta_tail_file.empty() && ct_electron_joint_response_diagnostic_file.empty()) || !ct_schneider_delta_longitudinal_file.empty() ||
+           (enable_ct_grid && (!enable_ct_material_mcs || ct_secondary_mcs_off_diagnostic)))
+            throw std::invalid_argument("broadbeam_fast requires research unified EM, FE for all charged species, CT material MCS, no beamline/neutron transport; only pinned research C12 CT joint electron response is supported");
     }
-    if (uses_moment_matched_straggling() &&
-        enable_step_stable_straggling) {
-        throw std::invalid_argument(
-            "uncalibrated straggling models cannot use the legacy fixed-block sampler");
-    }
-    if (uses_moment_matched_straggling() &&
-        !straggling_scale_energies_MeVu.empty()) {
-        throw std::invalid_argument(
-            "uncalibrated straggling models reject energy-dependent "
-            "straggling_scale tables; use a scalar straggling_scale of 1");
-    }
-    if (straggling_scale_energies_MeVu.size() != straggling_scale_values.size()) {
-        throw std::invalid_argument(
-            "straggling scale energy and value tables must have the same length");
-    }
-    if (!straggling_scale_energies_MeVu.empty()) {
-        if (straggling_scale_energies_MeVu.size() < 2) {
-            throw std::invalid_argument(
-                "straggling scale table requires at least two points");
-        }
-        if (straggling_scale_energies_MeVu.size() > max_straggling_scale_points) {
-            throw std::invalid_argument(
-                "straggling scale table has too many points (maximum is 16)");
-        }
-        for (std::size_t index = 0; index < straggling_scale_energies_MeVu.size(); ++index) {
-            const auto energy = straggling_scale_energies_MeVu[index];
-            const auto scale = straggling_scale_values[index];
-            if (!std::isfinite(energy) || energy < 0.0) {
-                throw std::invalid_argument(
-                    "straggling scale table energies must be finite and nonnegative");
-            }
-            if (!std::isfinite(scale) || scale < 0.0) {
-                throw std::invalid_argument(
-                    "straggling scale table values must be finite and nonnegative");
-            }
-            if (index > 0 && energy <= straggling_scale_energies_MeVu[index - 1]) {
-                throw std::invalid_argument(
-                    "straggling scale table energies must be strictly increasing");
-            }
-        }
-    }
+    if (fermi_eyges_sampling != "segmented" && fermi_eyges_sampling != "moments")
+        throw std::invalid_argument("fermi_eyges_sampling must be segmented or moments");
+    if (fermi_eyges_sampling == "moments" &&
+        (!fermi_eyges_gaussian_only || enable_minibeam || run_mode != RunMode::research || device == "serial"))
+        throw std::invalid_argument("FE moments requires research SYCL Gaussian FE without minibeam");
+    if(fermi_eyges_gaussian_only && (multiple_scattering_model!="fermi_eyges" ||
+                                   run_mode!=RunMode::research || device=="serial"))
+        throw std::invalid_argument("fermi_eyges_gaussian_only requires research SYCL fermi_eyges MCS");
     if (multiple_scattering_model != "highland" &&
         multiple_scattering_model != "fermi_eyges" &&
         multiple_scattering_model != "urban_v2") {
@@ -1193,7 +1174,7 @@ void TransportConfig::validate() const {
             multiple_scattering_model == "urban_v2" ||
             multiple_scattering_scale != 1.0 ||
             minibeam_water_fragment_low_energy_mcs_scale != 1.0 ||
-            em_model != "g4_material_joint_v1" || !enable_secondary_unified_em) {
+            em_model != "g4_material_joint_v1") {
             throw std::invalid_argument(
                 "Minibeam proton/helium Urban requires research CUDA water, "
                 "voxel scoring, unscaled MCS and secondary unified EM");
@@ -1212,13 +1193,16 @@ void TransportConfig::validate() const {
             throw std::invalid_argument("Urban physical water box must contain the scored ROI");
         }
     }
+    if(urban_ct_density_scaling && (run_mode!=RunMode::research ||
+       !enable_ct_grid || multiple_scattering_model!="urban_v2"))
+        throw std::invalid_argument("urban_ct_density_scaling requires research Schneider CT with global Urban");
     if(multiple_scattering_model=="urban_v2") {
         if(device!="cuda")
             throw std::invalid_argument("Global urban_v2 currently requires the CUDA SYCL transport path");
         if(urban_mcs_package_file.empty() || urban_mcs_package_sha256.size()!=64)
             throw std::invalid_argument("Global urban_v2 requires a validated urban_mcs_package_file and SHA256");
         if(!enable_multiple_scattering || multiple_scattering_scale!=1.0 ||
-           em_model!="g4_material_joint_v1" || !enable_secondary_unified_em ||
+           em_model!="g4_material_joint_v1" ||
            ct_secondary_mcs_off_diagnostic || enable_hetero_insert ||
            !slab_layers.empty())
             throw std::invalid_argument("Global urban_v2 requires unscaled MCS, unified EM, and ordinary water or Schneider CT");
@@ -1275,10 +1259,6 @@ void TransportConfig::validate() const {
         spots_emittance_prime_scale < 0.5 || spots_emittance_prime_scale > 1.5) {
         throw std::invalid_argument(
             "spots_emittance_prime_scale must be in [0.5, 1.5]");
-    }
-    if (ct_stopping_power_scale <= 0.0 || ct_stopping_power_scale > 2.0) {
-        throw std::invalid_argument(
-            "ct_stopping_power_scale must be in (0, 2]");
     }
     if (restrict_fragment_species_energy_deposit) {
         if (restrict_fragment_species_z_min < 1 ||
@@ -1522,6 +1502,10 @@ void TransportConfig::validate() const {
                 "inside the water phantom");
         }
     }
+    if (minibeam_water_delta_response_model != "local" &&
+        (!enable_minibeam || minibeam_copper_stopping_power_file.empty())) {
+        throw std::invalid_argument("Minibeam electron response requires the copper transport route");
+    }
     if (enable_minibeam) {
 #if !defined(CARBON_ENABLE_MINIBEAM)
         throw std::invalid_argument(
@@ -1632,6 +1616,26 @@ void TransportConfig::validate() const {
                 throw std::invalid_argument(
                     "minibeam Copper INCLXX requires minibeam_copper_inclxx_file");
             }
+            if (minibeam_copper_primary_native_mean_loss &&
+                (run_mode == RunMode::production || primary_atomic_number != 1 ||
+                 primary_mass_number != 1 || multiple_scattering_model != "urban_v2" ||
+                 minibeam_copper_mcs_model != "urban_v2" || !minibeam_copper_enable_mcs ||
+                 !minibeam_copper_enable_energy_straggling ||
+                 minibeam_copper_proton_straggling_model != "g4_universal_delta" ||
+                 minibeam_copper_survivor_energy_loss_scale != 1.0 ||
+                 !minibeam_copper_survivor_energy_loss_energies_MeVu.empty()))
+                throw std::invalid_argument("Native Cu primary mean requires research proton Urban v2, finite-cut fluctuations and no stopping calibration");
+            if (minibeam_copper_proton_straggling_model != "legacy_clipped_gaussian" &&
+                minibeam_copper_proton_straggling_model != "g4_universal_total" &&
+                minibeam_copper_proton_straggling_model != "g4_universal_delta")
+                throw std::invalid_argument("Unknown copper proton straggling model");
+            if (minibeam_copper_proton_straggling_model == "g4_universal_delta" &&
+                std::abs(minibeam_copper_density_g_per_cm3 - 8.96) > 1e-5)
+                throw std::invalid_argument("Native copper proton cut is pinned to G4_Cu at 8.96 g/cm3");
+            if (minibeam_copper_proton_straggling_model != "legacy_clipped_gaussian" &&
+                (run_mode == RunMode::production || minibeam_copper_straggling_scale != 1.0 ||
+                 minibeam_copper_fragment_straggling_scale != 1.0))
+                throw std::invalid_argument("Native copper proton fluctuation requires research/smoke and unit straggling scales");
             if (minibeam_copper_enable_elastic &&
                 minibeam_copper_elastic_file.empty()) {
                 throw std::invalid_argument(
@@ -1738,10 +1742,11 @@ void TransportConfig::validate() const {
                     "minibeam_water_urban_loss_range_file");
             }
             if (minibeam_water_delta_response_model != "local" &&
-                minibeam_water_delta_response_model != "water_response_v1") {
+                minibeam_water_delta_response_model != "water_response_v1" &&
+                minibeam_water_delta_response_model != "water_response_v2") {
                 throw std::invalid_argument(
                     "minibeam_water_delta_response_model must be "
-                    "local or water_response_v1");
+                    "local, water_response_v1 or water_response_v2");
             }
             if (minibeam_water_delta_response_model == "water_response_v1") {
                 // Research-only Unified-water spatial response. Every
@@ -1761,6 +1766,22 @@ void TransportConfig::validate() const {
                         "g4_material_joint_v1, C12, unit water density, voxel "
                         "scoring, LET off, nuclear off, response table file "
                         "and 64-char sha pins");
+                }
+            }
+            if (minibeam_water_delta_response_model == "water_response_v2") {
+                // Species-pinned primary EM response in full-physics research.
+                // Nuclear losses and charged fragments are never folded into
+                // the primary's electron packet or renormalized into its table.
+                if (run_mode != RunMode::research || em_model != "g4_material_joint_v1" ||
+                    water_density_g_per_cm3 != 1.0 || !enable_voxel_scoring ||
+                    enable_let_scoring || enable_ct_grid || enable_layered_phantom ||
+                    enable_hetero_insert || !slab_layers.empty() ||
+                    minibeam_water_delta_response_table_file.empty() ||
+                    water_electron_response_sha256.size() != 64 ||
+                    water_electron_response_metadata_sha256.size() != 64) {
+                    throw std::invalid_argument(
+                        "water_response_v2 requires research Unified EM, homogeneous unit-density "
+                        "water, voxel scoring, LET off, and a source-specific SHA-pinned response");
                 }
             }
             if (minibeam_water_secondary_c12_mcs_model != "legacy_highland" &&
@@ -1929,15 +1950,6 @@ void TransportConfig::validate() const {
     if (ct_secondary_mcs_off_diagnostic &&
         (run_mode!=RunMode::smoke || !enable_ct_grid || ct_schneider_physics_bundle_file.empty()))
         throw std::invalid_argument("Secondary MCS-off requires smoke Schneider CT bundle");
-    if (ct_secondary_schneider_sp_diagnostic &&
-        (run_mode!=RunMode::smoke || !enable_ct_grid || ct_schneider_physics_bundle_file.empty() ||
-         ct_schneider_stopping_power_file.empty() || ct_stopping_power_scale!=1.0))
-        throw std::invalid_argument("Secondary Schneider stopping diagnostic requires smoke CT bundle, exact primary stopping and unit scale");
-    if (ct_primary_midpoint_stopping_diagnostic &&
-        (run_mode!=RunMode::smoke || !enable_ct_grid || ct_schneider_stopping_power_file.empty() || enable_csda_range_energy_loss))
-        throw std::invalid_argument("CT midpoint stopping diagnostic requires smoke Schneider CT without legacy CSDA override");
-    if (ct_primary_midpoint_stopping && enable_csda_range_energy_loss)
-        throw std::invalid_argument("Formal midpoint stopping is mutually exclusive with legacy CSDA range override");
     if (spots_enable_upstream_air_mcs &&
         (run_mode != RunMode::smoke || !enable_tps_source || !enable_ct_grid ||
          !spots_enable_upstream_air_energy_loss || !enable_multiple_scattering ||
@@ -2068,11 +2080,6 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
         config.ct_schneider_primary_cinel03_file;
     const std::filesystem::path sec_cinel =
         config.ct_schneider_secondary_cinel03_file;
-    const std::filesystem::path stopping =
-        !config.ct_schneider_stopping_power_file.empty()
-            ? config.ct_schneider_stopping_power_file
-            : std::filesystem::path("data/schneider/schneider_stopping_v1.bin");
-
     auto require_pinned_sha = [](const minjson::Value& section, const std::string& role,
                                  const std::filesystem::path& actual) {
         const std::string pinned = minjson::require_string(section.at("sha256"), role + ".sha256");
@@ -2089,7 +2096,6 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
     require_pinned_sha(bundle.at("secondary_rate"), "secondary_rate", secondary_rate);
     require_pinned_sha(bundle.at("primary_package"), "primary_package", c12_cinel);
     require_pinned_sha(bundle.at("secondary_package"), "secondary_package", sec_cinel);
-    require_pinned_sha(bundle.at("stopping_table"), "stopping_table", stopping);
 
     // v3 requires exact versions; any v1 file with a bundle is mixing.
     if (primary_ver != 3 || secondary_ver != 3) {
@@ -2111,11 +2117,6 @@ void validate_schneider_physics_bundle(const TransportConfig& config) {
     if (pri_table.projectile_z() != config.primary_atomic_number ||
         pri_table.projectile_a() != config.primary_mass_number)
         throw std::runtime_error("Primary rate projectile does not match YAML source Z/A; new packages require projectile metadata");
-    const auto primary_stopping = SchneiderStoppingTable::from_binary(stopping);
-    if (primary_stopping.projectile_z() != config.primary_atomic_number ||
-        primary_stopping.projectile_a() != config.primary_mass_number)
-        throw std::runtime_error("Primary stopping projectile does not match YAML source Z/A");
-
     // Registry: bundle order == rate keys (order-sensitive, no aliasing).
     const minjson::Value& registry = bundle.at("projectile_registry");
     if (registry.type != minjson::Value::Type::Array ||
@@ -2287,13 +2288,8 @@ void validate_schneider_ct_startup(const TransportConfig& config) {
         std::filesystem::path c12_cinel = config.ct_schneider_primary_cinel03_file;
         std::filesystem::path sec_rate = config.ct_schneider_secondary_rate_file;
         std::filesystem::path sec_cinel = config.ct_schneider_secondary_cinel03_file;
-        std::filesystem::path stopping_table = !config.ct_schneider_stopping_power_file.empty()
-                                                   ? config.ct_schneider_stopping_power_file
-                                                   : std::filesystem::path("data/schneider/schneider_stopping_v1.bin");
-
         const std::vector<std::pair<std::string, std::filesystem::path>> required = {
             {"Schneider primary rate table", primary_source},
-            {"Schneider stopping power table", stopping_table},
             {"Schneider primary CINEL03 package", c12_cinel},
             {"Schneider secondary rate table", sec_rate},
             {"Schneider secondary CINEL03 package", sec_cinel},
@@ -2357,9 +2353,120 @@ PrimarySourceParameters load_primary_source_parameters(const std::filesystem::pa
 TransportConfig load_config(const std::filesystem::path& path) {
     auto values = read_key_values(path);
     const auto ion_physics_file = merge_ion_physics_manifest(path, values);
+    // Old Unified-EM inputs carried inert legacy sentinels/table paths. Consume
+    // those aliases without creating a runtime route or opening obsolete data.
+    if (!parse_bool(values, "enable_secondary_unified_em", true))
+        throw std::invalid_argument("Secondary legacy EM has been removed; Unified EM is mandatory");
+    values.erase("enable_secondary_unified_em");
+    if (const auto it = values.find("primary_em_model"); it != values.end()) {
+        if (it->second != "legacy")
+            throw std::invalid_argument("primary_em_model is obsolete; select em_model: g4_material_joint_v1");
+        values.erase(it);
+    }
+    for (const char* key : {"enable_csda_range_energy_loss", "enable_step_stable_straggling",
+                            "ct_primary_midpoint_stopping_diagnostic", "ct_secondary_schneider_sp_diagnostic"}) {
+        if (parse_bool(values, key, false))
+            throw std::invalid_argument(std::string(key) + " selects a removed legacy EM feature");
+        values.erase(key);
+    }
+    if (parse_number(values, "straggling_sampling_length_mm", 0.0) != 0.0)
+        throw std::invalid_argument("straggling_sampling_length_mm is obsolete; Unified EM uses native fluctuations");
+    if (parse_number(values, "ct_stopping_power_scale", 1.0) != 1.0)
+        throw std::invalid_argument("ct_stopping_power_scale is obsolete; Unified EM uses native material stopping");
+    if (const auto it = values.find("energy_straggling_model"); it != values.end()) {
+        if (it->second != "gaussian_clamped")
+            throw std::invalid_argument("energy_straggling_model is obsolete; Unified EM uses native fluctuations");
+        values.erase(it);
+    }
+    if (const auto it = values.find("energy_straggling_package_file");
+        it != values.end() && !it->second.empty())
+        throw std::invalid_argument("energy_straggling_package_file is a removed legacy package");
+    // Validate boolean aliases even though their old selection is inert.
+    (void)parse_bool(values, "ct_primary_midpoint_stopping", false);
+    (void)parse_bool(values, "ct_use_density_mass_spr", true);
+    for (const char* key : {"ct_primary_midpoint_stopping", "ct_use_density_mass_spr",
+                            "ct_schneider_stopping_power_file", "ct_secondary_ion_section_stopping_file",
+                            "ct_secondary_ion_section_stopping_sha256", "ct_secondary_ion_section_stopping_metadata_sha256",
+                            "straggling_sampling_length_mm", "ct_stopping_power_scale", "energy_straggling_package_file"})
+        values.erase(key);
+    (void)parse_bool(values, "use_particle_specific_stopping_power", false);
+    for (const char* key : {"ct_hu_stopping_power_lut_file", "ct_lung_particle_stopping_power_file",
+                            "ct_soft_tissue_particle_stopping_power_file", "ct_bone_particle_stopping_power_file",
+                            "use_particle_specific_stopping_power", "ct_air_stopping_power_file",
+                            "ct_lung_stopping_power_file", "ct_water_stopping_power_file", "ct_bone_stopping_power_file"}) values.erase(key);
+    if (parse_number(values, "straggling_scale", 1.0) != 1.0)
+        throw std::invalid_argument("straggling_scale is obsolete; Unified EM uses native unscaled fluctuations");
+    for (const char* key : {"straggling_scale_energies_MeVu", "straggling_scale_values"}) {
+        if (const auto it = values.find(key); it != values.end() &&
+            !parse_double_list(it->second, key).empty())
+            throw std::invalid_argument(std::string(key) + " is a removed legacy fluctuation table");
+        values.erase(key);
+    }
+    values.erase("straggling_scale");
+    (void)parse_bool(values, "minibeam_water_secondary_c12_enable_unified_em", false);
+    values.erase("minibeam_water_secondary_c12_enable_unified_em");
+    values.try_emplace("em_model", "g4_material_joint_v1");
     normalize_config_alias(values, "ct_schneider_c12_cinel03_file", "ct_schneider_primary_cinel03_file");
     normalize_config_alias(values, "enable_minibeam_primary_c12_roi_scoring", "enable_minibeam_primary_roi_scoring");
+    // Broad-beam YAML defaults apply to every source ZA, including protons.
+    // Insert before canonicalization so the effective defaults are recorded.
+    // Explicit model, enable/disable and species selections remain authoritative.
+    if (!parse_bool(values, "minibeam", false)) {
+        values.try_emplace("multiple_scattering_model", "fermi_eyges");
+        values.try_emplace("enable_multiple_scattering", "true");
+        values.try_emplace("fermi_eyges_species", "all_charged");
+    }
+    // Expand the explicit fast profile before parsing paths, validation and
+    // canonicalization. Unused packages are never opened/prefetched. Unknown
+    // keys are still rejected; only named, supported inputs are removed.
+    const auto profile_it=values.find("transport_profile");
+    const std::string profile=profile_it==values.end()?"reference":profile_it->second;
+    if(profile=="broadbeam_fast") {
+        if(parse_bool(values,"minibeam",false))
+            throw std::invalid_argument("broadbeam_fast requires minibeam: false");
+        values.try_emplace("fermi_eyges_gaussian_only", "true");
+        // Preserve the joint response pins and explicit research opt-ins.
+        // With replay explicitly OFF, its required tail table must not turn
+        // into an independent transverse-response model.
+        if (values.count("ct_electron_joint_response_diagnostic_file") &&
+            !parse_bool(values,"ct_electron_segment_transport",true))
+            values.erase("ct_schneider_delta_tail_file");
+        for(const char* key:{
+            "urban_mcs_package_file","urban_mcs_package_sha256",
+            "material_electron_response_index_file","material_electron_response_index_sha256",
+            "water_electron_response_diagnostic_file","water_electron_response_sha256",
+            "water_electron_response_metadata_sha256",
+            "neutron_package_file","neutron_recoil_stopping_manifest",
+            "electron_transport_data_file"})values.erase(key);
+        for(const auto& setting:std::initializer_list<std::pair<const char*,const char*>>{
+            {"multiple_scattering_model","fermi_eyges"},{"enable_multiple_scattering","true"},
+            {"fermi_eyges_species","all_charged"},{"fermi_eyges_parameter_set","species_water"},
+            {"multiple_scattering_scale","1.0"},
+            {"enable_ct_material_mcs","true"},
+            {"water_primary_specialization","false"},
+            {"urban_ct_density_scaling","false"},{"minibeam_water_proton_helium_mcs_model","inherit"},
+            {"enable_neutron_transport","false"},{"neutron_water_recoil_urban","false"},
+            {"enable_electron_transport","false"},{"electron_queue_capacity","0"},{"material_electron_retain_bank","false"},
+            {"material_electron_execution_mode","inline"},{"material_electron_group_size","1"},
+            {"material_electron_short_range_mm","0"},{"material_electron_response_cache_policy","strict"},
+            {"material_electron_response_hot_device_budget_MiB","0"},
+            {"water_electron_high_energy_diagnostic","false"},{"water_electron_nuclear_diagnostic","false"}
+        })values[setting.first]=setting.second;
+    }
     TransportConfig config;
+    config.transport_profile=profile;
+    // Eligible broad-beam full-physics runs benefit from the existing grouped
+    // continuation scheduler. Preserve explicit opt-outs and EM-only inputs.
+    if (profile == "broadbeam_fast" &&
+        parse_bool(values, "enable_inelastic", config.enable_inelastic) &&
+        parse_bool(values, "enable_secondary_transport", config.enable_secondary_transport)) {
+        values.try_emplace("secondary_species_grouping", "true");
+        values.try_emplace("secondary_step_chunking", "true");
+    }
+    if (const auto it=values.find("fermi_eyges_sampling"); it!=values.end())
+        config.fermi_eyges_sampling=it->second;
+    config.fermi_eyges_gaussian_only=parse_bool(values,"fermi_eyges_gaussian_only",false);
+
     config.config_schema_version = parse_number(
         values, "config_schema_version", config.config_schema_version);
     if (const auto mode = values.find("run_mode"); mode != values.end()) {
@@ -2441,6 +2548,7 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if (const auto it = values.find("em_model"); it != values.end()) config.em_model=it->second;
     config.em_primary_step_scale=parse_number(values,"em_primary_step_scale",config.em_primary_step_scale);
     config.em_secondary_step_scale=parse_number(values,"em_secondary_step_scale",config.em_secondary_step_scale);
+    config.broadbeam_maximum_mean_loss_fraction=parse_number(values,"broadbeam_maximum_mean_loss_fraction",config.broadbeam_maximum_mean_loss_fraction);
     config.em_package_file=parse_path(values,"em_package_file",config.em_package_file);
     if (!config.em_package_file.empty())
         config.em_package_file=resolve_input_path_from_config(config.em_package_file,path);
@@ -2452,8 +2560,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.em_delta_moments_source_sha256=it->second;
     if(!config.em_delta_moments_file.empty())
         config.em_delta_moments_file=resolve_input_path_from_config(config.em_delta_moments_file,path);
-    if (const auto it = values.find("primary_em_model"); it != values.end())
-        config.primary_em_model = it->second;
     config.maximum_step_mm = parse_number(values, "maximum_step_mm", config.maximum_step_mm);
     config.maximum_relative_energy_loss =
         parse_number(values, "maximum_relative_energy_loss", config.maximum_relative_energy_loss);
@@ -2570,14 +2676,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.ct_skip_homogeneous_face_clamp = parse_bool(
         values, "ct_skip_homogeneous_face_clamp", config.ct_skip_homogeneous_face_clamp);
-    config.ct_air_stopping_power_file = parse_path(
-        values, "ct_air_stopping_power_file", config.ct_air_stopping_power_file);
-    config.ct_lung_stopping_power_file = parse_path(
-        values, "ct_lung_stopping_power_file", config.ct_lung_stopping_power_file);
-    config.ct_water_stopping_power_file = parse_path(
-        values, "ct_water_stopping_power_file", config.ct_water_stopping_power_file);
-    config.ct_bone_stopping_power_file = parse_path(
-        values, "ct_bone_stopping_power_file", config.ct_bone_stopping_power_file);
     config.ct_air_cross_section_file = parse_path(
         values, "ct_air_cross_section_file", config.ct_air_cross_section_file);
     config.ct_lung_cross_section_file = parse_path(
@@ -2592,13 +2690,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if (!config.ct_schneider_cross_section_file.empty()) {
         config.ct_schneider_cross_section_file = resolve_input_path_from_config(
             config.ct_schneider_cross_section_file, path);
-    }
-    config.ct_schneider_stopping_power_file = parse_path(
-        values, "ct_schneider_stopping_power_file",
-        config.ct_schneider_stopping_power_file);
-    if (!config.ct_schneider_stopping_power_file.empty()) {
-        config.ct_schneider_stopping_power_file = resolve_input_path_from_config(
-            config.ct_schneider_stopping_power_file, path);
     }
     config.water_cinel_package_file = parse_path(
         values, "water_cinel_package_file", config.water_cinel_package_file);
@@ -2697,6 +2788,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.ct_schneider_delta_tail_file = resolve_input_path_from_config(
             config.ct_schneider_delta_tail_file, path);
     }
+    if(const auto it=values.find("material_electron_response_cache_policy");it!=values.end())
+        config.material_electron_response_cache_policy=it->second;
     config.material_electron_response_index_file=parse_path(values,"material_electron_response_index_file",config.material_electron_response_index_file);
     if(!config.material_electron_response_index_file.empty())config.material_electron_response_index_file=resolve_input_path_from_config(config.material_electron_response_index_file,path);
     if(const auto it=values.find("material_electron_response_index_sha256");it!=values.end())config.material_electron_response_index_sha256=it->second;
@@ -2705,6 +2798,39 @@ TransportConfig load_config(const std::filesystem::path& path) {
         if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value==0 || value>10240)
             throw std::invalid_argument("Invalid material response device budget");
         config.material_electron_response_device_budget_MiB=value;
+    }
+    if(const auto it=values.find("material_electron_response_hot_device_budget_MiB");it!=values.end()) {
+        std::size_t used=0;const auto value=std::stoull(it->second,&used);
+        if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value>10240)
+            throw std::invalid_argument("Invalid material response hot device budget");
+        config.material_electron_response_hot_device_budget_MiB=value;
+    }
+    config.material_electron_retain_bank=parse_bool(values,"material_electron_retain_bank",config.material_electron_retain_bank);
+    if(const auto it=values.find("material_electron_execution_mode");it!=values.end())
+        config.material_electron_execution_mode=it->second;
+    if(const auto it=values.find("material_electron_queue_budget_MiB");it!=values.end()) {
+        std::size_t used=0;const auto value=std::stoull(it->second,&used);
+        if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value>65536)
+            throw std::invalid_argument("Invalid material_electron_queue_budget_MiB");
+        config.material_electron_queue_budget_MiB=static_cast<std::uint32_t>(value);
+    }
+    if(const auto it=values.find("material_electron_queue_chunk");it!=values.end()) {
+        std::size_t used=0;const auto value=std::stoull(it->second,&used);
+        if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value>65536)
+            throw std::invalid_argument("Invalid material_electron_queue_chunk");
+        config.material_electron_queue_chunk=static_cast<std::uint32_t>(value);
+    }
+    if(const auto it=values.find("material_electron_queue_lanes");it!=values.end()) {
+        std::size_t used=0;const auto value=std::stoull(it->second,&used);
+        if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value>65536)
+            throw std::invalid_argument("Invalid material_electron_queue_lanes");
+        config.material_electron_queue_lanes=static_cast<std::uint32_t>(value);
+    }
+    if(const auto it=values.find("material_electron_group_size");it!=values.end()) {
+        std::size_t used=0;const auto value=std::stoull(it->second,&used);
+        if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value>65536)
+            throw std::invalid_argument("Invalid material_electron_group_size");
+        config.material_electron_group_size=static_cast<std::uint32_t>(value);
     }
     if(const auto it=values.find("material_electron_response_memory_mode");it!=values.end())
         config.material_electron_response_memory_mode=it->second;
@@ -2729,6 +2855,10 @@ TransportConfig load_config(const std::filesystem::path& path) {
         "ct_electron_joint_patient_experiment",config.ct_electron_joint_patient_experiment);
     config.ct_electron_joint_allow_research = parse_bool(values,
         "ct_electron_joint_allow_research",config.ct_electron_joint_allow_research);
+    config.ct_electron_joint_sample_probability = parse_number(values,
+        "ct_electron_joint_sample_probability", config.ct_electron_joint_sample_probability);
+    if(const auto it=values.find("ct_electron_joint_execution_mode");it!=values.end())
+        config.ct_electron_joint_execution_mode=it->second;
     config.electron_joint_diagnostics = parse_bool(values,
         "electron_joint_diagnostics",config.electron_joint_diagnostics);
     if(!config.ct_electron_joint_response_diagnostic_file.empty())
@@ -2747,6 +2877,7 @@ TransportConfig load_config(const std::filesystem::path& path) {
             config.ct_electron_joint_response_sha256.clear();
             config.ct_electron_joint_response_metadata_sha256.clear();
             config.ct_electron_joint_patient_experiment = false;
+            config.ct_electron_joint_sample_probability = 1.0;
         }
     }
     config.ct_schneider_delta_longitudinal_file = parse_path(
@@ -2758,13 +2889,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.ct_cinel02_rate_file = parse_path(
         values, "ct_cinel02_rate_file", config.ct_cinel02_rate_file);
-    config.ct_hu_stopping_power_lut_file = parse_path(
-        values, "ct_hu_stopping_power_lut_file",
-        config.ct_hu_stopping_power_lut_file);
-    config.ct_use_density_mass_spr = parse_bool(
-        values, "ct_use_density_mass_spr", config.ct_use_density_mass_spr);
-    config.ct_stopping_power_scale = parse_number(
-        values, "ct_stopping_power_scale", config.ct_stopping_power_scale);
     config.ct_schneider_delta_longitudinal_scale = parse_number(
         values, "ct_schneider_delta_longitudinal_scale",
         config.ct_schneider_delta_longitudinal_scale);
@@ -2939,47 +3063,26 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "enable_primary_loss_query_audit", config.enable_primary_loss_query_audit);
     config.enable_terminal_generation_em_transport = parse_bool(
         values, "enable_terminal_generation_em_transport", config.enable_terminal_generation_em_transport);
-    config.enable_csda_range_energy_loss = parse_bool(
-        values, "enable_csda_range_energy_loss", config.enable_csda_range_energy_loss);
-    config.enable_step_stable_straggling = parse_bool(
-        values, "enable_step_stable_straggling", config.enable_step_stable_straggling);
-    config.straggling_sampling_length_mm = parse_number(
-        values, "straggling_sampling_length_mm", config.straggling_sampling_length_mm);
     config.enable_secondary_energy_straggling = parse_bool(
         values, "enable_secondary_energy_straggling",
         config.enable_secondary_energy_straggling);
-    config.enable_secondary_unified_em = parse_bool(
-        values, "enable_secondary_unified_em",
-        config.enable_secondary_unified_em);
     config.secondary_species_grouping = parse_bool(
         values, "secondary_species_grouping", config.secondary_species_grouping);
+    config.water_primary_specialization = parse_bool(
+        values, "water_primary_specialization", config.water_primary_specialization);
+    config.minibeam_primary_specialization = parse_bool(
+        values, "minibeam_primary_specialization", config.minibeam_primary_specialization);
+    {
+        const auto it = values.find("minibeam_primary_pipeline");
+        if (it != values.end()) config.minibeam_primary_pipeline = it->second;
+        if (config.minibeam_primary_pipeline != "combined" &&
+            config.minibeam_primary_pipeline != "split" &&
+            config.minibeam_primary_pipeline != "compact")
+            throw std::invalid_argument(
+                "minibeam_primary_pipeline must be combined, split or compact");
+    }
     config.secondary_step_chunking = parse_bool(
         values, "secondary_step_chunking", config.secondary_step_chunking);
-    {
-        const auto it = values.find("energy_straggling_model");
-        if (it != values.end() && !it->second.empty()) {
-            config.energy_straggling_model = it->second;
-            std::transform(config.energy_straggling_model.begin(),
-                           config.energy_straggling_model.end(),
-                           config.energy_straggling_model.begin(),
-                           [](const unsigned char character) {
-                               return static_cast<char>(std::tolower(character));
-                           });
-        }
-    }
-    config.energy_straggling_package_file = parse_path(
-        values, "energy_straggling_package_file", config.energy_straggling_package_file);
-    config.straggling_scale = parse_number(values, "straggling_scale", config.straggling_scale);
-    if (const auto iterator = values.find("straggling_scale_energies_MeVu");
-        iterator != values.end()) {
-        config.straggling_scale_energies_MeVu = parse_double_list(
-            iterator->second, "straggling_scale_energies_MeVu");
-    }
-    if (const auto iterator = values.find("straggling_scale_values");
-        iterator != values.end()) {
-        config.straggling_scale_values = parse_double_list(
-            iterator->second, "straggling_scale_values");
-    }
     config.enable_inelastic =
         parse_bool(values, "enable_inelastic", config.enable_inelastic);
     config.primary_inelastic_package_v2_file = parse_path(
@@ -3024,6 +3127,7 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if(const auto it=values.find("urban_mcs_package_sha256");it!=values.end())
         config.urban_mcs_package_sha256=it->second;
     config.urban_water_half_width_mm=parse_number(values,"urban_water_half_width_mm",config.urban_water_half_width_mm);
+    config.urban_ct_density_scaling=parse_bool(values,"urban_ct_density_scaling",config.urban_ct_density_scaling);
     if (const auto it = values.find("fermi_eyges_species");
         it != values.end()) {
         config.fermi_eyges_species = it->second;
@@ -3132,6 +3236,22 @@ TransportConfig load_config(const std::filesystem::path& path) {
                 parse_bool(values, "enable_let_scoring", config.enable_let_scoring);
         }
     }
+    config.neutron_birth_capacity = parse_number(
+        values, "neutron_birth_capacity", config.neutron_birth_capacity);
+    config.neutron_birth_output_file = parse_path(
+        values, "neutron_birth_output_file", config.neutron_birth_output_file);
+    config.enable_neutron_transport = parse_bool(
+        values, "enable_neutron_transport", config.enable_neutron_transport);
+    config.neutron_world_half_width_mm=parse_number(values,"neutron_world_half_width_mm",config.neutron_world_half_width_mm);
+    config.neutron_max_collisions=parse_number(values,"neutron_max_collisions",config.neutron_max_collisions);
+    config.neutron_proton_birth_output_file=parse_path(values,"neutron_proton_birth_output_file",config.neutron_proton_birth_output_file);
+    config.neutron_proton_birth_capacity=parse_number(values,"neutron_proton_birth_capacity",config.neutron_proton_birth_capacity);
+    config.neutron_exact_plane_boundaries=parse_bool(values,"neutron_exact_plane_boundaries",config.neutron_exact_plane_boundaries);
+    config.neutron_water_recoil_urban=parse_bool(values,"neutron_water_recoil_urban",config.neutron_water_recoil_urban);
+    config.neutron_elastic_two_body=parse_bool(values,"neutron_elastic_two_body",config.neutron_elastic_two_body);
+    config.neutron_recoil_stopping_manifest=parse_path(values,"neutron_recoil_stopping_manifest",config.neutron_recoil_stopping_manifest);
+    config.neutron_package_file = parse_path(
+        values, "neutron_package_file", config.neutron_package_file);
     config.enable_electron_transport = parse_bool(
         values, "enable_electron_transport", config.enable_electron_transport);
     config.electron_queue_capacity = parse_number(
@@ -3245,6 +3365,26 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_air_stopping_power_file = parse_path(
         values, "minibeam_air_stopping_power_file",
         config.minibeam_air_stopping_power_file);
+    if (auto it = values.find("minibeam_air_mcs_model"); it != values.end())
+        config.minibeam_air_mcs_model = it->second;
+    config.minibeam_air_slit_max_step_mm = parse_number(values, "minibeam_air_slit_max_step_mm", config.minibeam_air_slit_max_step_mm);
+    if (!(config.minibeam_air_slit_max_step_mm > 0.0) || !std::isfinite(config.minibeam_air_slit_max_step_mm))
+        throw std::invalid_argument("Air slit max step must be finite and positive");
+    config.minibeam_air_urban_package_file = parse_path(values,
+        "minibeam_air_urban_package_file", config.minibeam_air_urban_package_file);
+    if (auto it = values.find("minibeam_air_urban_package_sha256"); it != values.end())
+        config.minibeam_air_urban_package_sha256 = it->second;
+    if (config.minibeam_air_mcs_model != "none" && config.minibeam_air_mcs_model != "urban_v2")
+        throw std::invalid_argument("minibeam_air_mcs_model must be none or urban_v2");
+    config.minibeam_air_ionization_rate_file = parse_path(values,
+        "minibeam_air_ionization_rate_file", config.minibeam_air_ionization_rate_file);
+    if (auto it=values.find("minibeam_air_ionization_rate_sha256"); it!=values.end())
+        config.minibeam_air_ionization_rate_sha256=it->second;
+    if (!config.minibeam_air_ionization_rate_file.empty() &&
+        (!config.enable_minibeam || config.minibeam_transport_mode!="copper_em" ||
+         config.minibeam_air_mcs_model!="urban_v2" ||
+         config.minibeam_air_ionization_rate_sha256.size()!=64 || config.run_mode==RunMode::production))
+        throw std::invalid_argument("Air ionization clock requires research/smoke copper_em, air urban_v2 and a pinned rate table");
     config.minibeam_copper_loss_range_file = parse_path(
         values, "minibeam_copper_loss_range_file",
         config.minibeam_copper_loss_range_file);
@@ -3279,6 +3419,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_copper_enable_energy_straggling = parse_bool(
         values, "minibeam_copper_enable_energy_straggling",
         config.minibeam_copper_enable_energy_straggling);
+    config.minibeam_copper_primary_native_mean_loss = parse_bool(
+        values, "minibeam_copper_primary_native_mean_loss",
+        config.minibeam_copper_primary_native_mean_loss);
+    if (const auto it = values.find("minibeam_copper_proton_straggling_model"); it != values.end())
+        config.minibeam_copper_proton_straggling_model = it->second;
     config.minibeam_copper_straggling_scale = parse_number(
         values, "minibeam_copper_straggling_scale",
         config.minibeam_copper_straggling_scale);
@@ -3373,9 +3518,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_water_secondary_c12_mcs_max_segment_mm = parse_number(
         values, "minibeam_water_secondary_c12_mcs_max_segment_mm",
         config.minibeam_water_secondary_c12_mcs_max_segment_mm);
-    config.minibeam_water_secondary_c12_enable_unified_em = parse_bool(
-        values, "minibeam_water_secondary_c12_enable_unified_em",
-        config.minibeam_water_secondary_c12_enable_unified_em);
     config.minibeam_water_secondary_c12_post_sample_loss_scale = parse_number(
         values, "minibeam_water_secondary_c12_post_sample_loss_scale",
         config.minibeam_water_secondary_c12_post_sample_loss_scale);
@@ -3472,16 +3614,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.spots_enable_upstream_air_energy_loss);
     config.spots_enable_upstream_air_mcs = parse_bool(
         values, "spots_enable_upstream_air_mcs", config.spots_enable_upstream_air_mcs);
-    config.ct_primary_midpoint_stopping_diagnostic = parse_bool(values,
-        "ct_primary_midpoint_stopping_diagnostic", config.ct_primary_midpoint_stopping_diagnostic);
-    config.ct_primary_midpoint_stopping = parse_bool(values,
-        "ct_primary_midpoint_stopping", config.ct_primary_midpoint_stopping);
-    if (values.find("ct_primary_midpoint_stopping_diagnostic") != values.end()) {
-        if (values.find("ct_primary_midpoint_stopping") != values.end() &&
-            config.ct_primary_midpoint_stopping != config.ct_primary_midpoint_stopping_diagnostic)
-            throw std::invalid_argument("Conflicting midpoint formal and diagnostic keys");
-        config.ct_primary_midpoint_stopping = config.ct_primary_midpoint_stopping_diagnostic;
-    }
     config.ct_secondary_exact_faces_diagnostic = parse_bool(values,
         "ct_secondary_exact_faces_diagnostic", config.ct_secondary_exact_faces_diagnostic);
     config.ct_secondary_exact_faces = parse_bool(values,
@@ -3494,28 +3626,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     config.ct_secondary_mcs_off_diagnostic = parse_bool(values,
         "ct_secondary_mcs_off_diagnostic", config.ct_secondary_mcs_off_diagnostic);
-    config.ct_secondary_schneider_sp_diagnostic = parse_bool(values,
-        "ct_secondary_schneider_sp_diagnostic", config.ct_secondary_schneider_sp_diagnostic);
-    config.ct_secondary_ion_section_stopping_file = parse_path(values,
-        "ct_secondary_ion_section_stopping_file",
-        config.ct_secondary_ion_section_stopping_file);
-    if (const auto it = values.find("ct_secondary_ion_section_stopping_sha256"); it != values.end())
-        config.ct_secondary_ion_section_stopping_sha256 = it->second;
-    if (const auto it = values.find("ct_secondary_ion_section_stopping_metadata_sha256"); it != values.end())
-        config.ct_secondary_ion_section_stopping_metadata_sha256 = it->second;
-    if (!config.ct_secondary_ion_section_stopping_file.empty()) {
-        config.ct_secondary_ion_section_stopping_file = resolve_input_path_from_config(config.ct_secondary_ion_section_stopping_file, path);
-        if (!config.enable_ct_grid || config.ct_schneider_stopping_power_file.empty() ||
-            !config.enable_inelastic || !config.enable_secondary_transport || !config.ct_primary_midpoint_stopping ||
-            !config.ct_secondary_exact_faces || config.ct_secondary_schneider_sp_diagnostic)
-            throw std::invalid_argument("Final section-ion stopping requires Schneider CT, primary midpoint, secondary transport and exact faces; factor diagnostic forbidden");
-        if (config.ct_secondary_ion_section_stopping_sha256.size() != 64 ||
-            config.ct_secondary_ion_section_stopping_metadata_sha256.size() != 64)
-            throw std::invalid_argument("Section ion stopping requires pinned sha256 + metadata sha256");
-    } else if (!config.ct_secondary_ion_section_stopping_sha256.empty() ||
-               !config.ct_secondary_ion_section_stopping_metadata_sha256.empty()) {
-        throw std::invalid_argument("Section ion stopping pins without data file");
-    }
     config.spots_upstream_air_mcs_file = parse_path(values, "spots_upstream_air_mcs_file", config.spots_upstream_air_mcs_file);
     if (const auto it=values.find("spots_upstream_air_mcs_sha256");it!=values.end()) config.spots_upstream_air_mcs_sha256=it->second;
     config.spots_upstream_air_stopping_power_file = parse_path(
@@ -3663,21 +3773,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.let_delta_electron_fraction_file = parse_path(
         values, "let_delta_electron_fraction_file",
         config.let_delta_electron_fraction_file);
-    config.use_particle_specific_stopping_power = parse_bool(
-        values, "use_particle_specific_stopping_power",
-        config.use_particle_specific_stopping_power);
     config.particle_stopping_power_file = parse_path(
         values, "particle_stopping_power_file",
         config.particle_stopping_power_file);
-    config.ct_lung_particle_stopping_power_file = parse_path(
-        values, "ct_lung_particle_stopping_power_file",
-        config.ct_lung_particle_stopping_power_file);
-    config.ct_soft_tissue_particle_stopping_power_file = parse_path(
-        values, "ct_soft_tissue_particle_stopping_power_file",
-        config.ct_soft_tissue_particle_stopping_power_file);
-    config.ct_bone_particle_stopping_power_file = parse_path(
-        values, "ct_bone_particle_stopping_power_file",
-        config.ct_bone_particle_stopping_power_file);
     config.electron_transport_data_file = parse_path(
         values, "electron_transport_data_file", config.electron_transport_data_file);
     {
@@ -3737,6 +3835,15 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_phase_space_output_file = parse_path(
         values, "minibeam_phase_space_output_file",
         config.minibeam_phase_space_output_file);
+    config.minibeam_phase_space_at_copper_exit = parse_bool(
+        values, "minibeam_phase_space_at_copper_exit",
+        config.minibeam_phase_space_at_copper_exit);
+    if (config.minibeam_phase_space_at_copper_exit &&
+        (!config.enable_minibeam || config.minibeam_transport_mode != "copper_em" ||
+         config.minibeam_air_mcs_model != "urban_v2" ||
+         config.minibeam_phase_space_output_file.empty() || config.run_mode == RunMode::production)) {
+        throw std::invalid_argument("Copper-exit phase scoring requires research/smoke copper_em, air urban_v2 and a phase output file");
+    }
     config.minibeam_water_primary_plane_output_file = parse_path(
         values, "minibeam_water_primary_plane_output_file",
         config.minibeam_water_primary_plane_output_file);
@@ -3935,8 +4042,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
         if(!config.enable_inelastic||!config.enable_secondary_transport||config.enable_let_scoring||
            (!config.enable_ct_grid&&!config.unified_water_nuclear_transport))
             throw std::invalid_argument("All-ion elastic requires Schneider CT/unified-water nuclear transport, secondary transport and LET off");
-        if(config.enable_ct_grid && (!config.ct_secondary_exact_faces||config.ct_schneider_stopping_power_file.empty()))
-            throw std::invalid_argument("All-ion elastic requires Schneider stopping and secondary exact faces");
+        if(config.enable_ct_grid && !config.ct_secondary_exact_faces)
+            throw std::invalid_argument("All-ion elastic requires secondary exact faces");
     }
     // The common selector is authoritative when it is explicitly present.
     // This makes Highland/FE a true one-key choice for minibeam configs while

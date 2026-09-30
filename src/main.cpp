@@ -5,8 +5,10 @@
 #include "carbon/device.hpp"
 #include "carbon/inelastic.hpp"
 #include "carbon/io.hpp"
+#include "carbon/min_json.hpp"
 #include "carbon/plan_run.hpp"
 #include "carbon/run_quality.hpp"
+#include "carbon/sha256.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/topas_spots.hpp"
 #include "carbon/tps_source.hpp"
@@ -16,12 +18,14 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
@@ -53,6 +57,8 @@ std::vector<std::filesystem::path> shard_output_paths(
     add(config.minibeam_phase_space_output_file);
     add(config.minibeam_water_primary_plane_output_file);
     add(config.minibeam_fragment_phase_space_output_file);
+    add(config.neutron_birth_output_file);
+    add(config.neutron_proton_birth_output_file);
     add(config.let_voxel_mhd_output_file);
     if (config.enable_voxel_scoring) add(config.voxel_dose_output_file);
     if (config.enable_charged_origin_voxel_scoring) {
@@ -84,12 +90,137 @@ std::vector<std::filesystem::path> shard_output_paths(
     return paths;
 }
 
+// Large input files named by the shard configs, plus files named inside the
+// JSON manifests they reference. Their pinned SHA256 digests are computed on
+// background threads while configs are validated and tables are built; each
+// loader still verifies its pin through compute_file_sha256_hex().
+std::vector<std::filesystem::path> sha256_prefetch_candidates(
+    const std::vector<std::filesystem::path>& config_paths) {
+    namespace fs = std::filesystem;
+    constexpr std::uintmax_t minimum_bytes = std::uintmax_t{1} << 20;
+    constexpr std::uintmax_t maximum_manifest_bytes = std::uintmax_t{8} << 20;
+    std::vector<std::pair<std::uintmax_t, fs::path>> files;
+    std::vector<fs::path> manifests;
+    const auto existing = [](const fs::path& value, const fs::path& base) -> fs::path {
+        std::error_code error;
+        if (value.empty()) return {};
+        if (value.is_absolute()) return fs::is_regular_file(value, error) ? value : fs::path{};
+        if (fs::is_regular_file(value, error)) return value;
+        for (auto directory = fs::absolute(base, error).parent_path(); !directory.empty();
+             directory = directory.parent_path()) {
+            if (fs::is_regular_file(directory / value, error)) return directory / value;
+            if (directory == directory.parent_path()) break;
+        }
+        return {};
+    };
+    const auto consider = [&](const fs::path& path, bool expand_manifest = true) {
+        std::error_code error;
+        const auto size = fs::file_size(path, error);
+        if (error) return;
+        if (expand_manifest && path.extension() == ".json" && size <= maximum_manifest_bytes) manifests.push_back(path);
+        if (size >= minimum_bytes) files.emplace_back(size, path);
+    };
+    const auto trim = [](std::string text) {
+        const auto first = text.find_first_not_of(" \t\r\"'");
+        const auto last = text.find_last_not_of(" \t\r\"'");
+        return first == std::string::npos ? std::string{} : text.substr(first, last - first + 1);
+    };
+    for (const auto& config_path : config_paths) {
+        std::ifstream in(config_path);
+        // Raw manifests may still name packages removed by profile expansion.
+        // Only prefetch direct, retained inputs for this profile. Nested raw
+        // manifests are left to effective-config loaders so an unused bank
+        // cannot be reached indirectly through a manifest.
+        bool broadbeam_fast = false;
+        for (std::string line; std::getline(in, line);) {
+            line = line.substr(0, line.find('#'));
+            const auto colon = line.find(':');
+            if (colon != std::string::npos &&
+                trim(line.substr(0, colon)) == "transport_profile")
+                broadbeam_fast = trim(line.substr(colon + 1)) == "broadbeam_fast";
+        }
+        in.clear();
+        in.seekg(0);
+        for (std::string line; std::getline(in, line);) {
+            const auto colon = line.find(':');
+            if (colon == std::string::npos || line.find('#') < colon) continue;
+            const auto key = trim(line.substr(0, colon));
+            if (key == "ct_schneider_stopping_power_file" ||
+                key == "ct_secondary_ion_section_stopping_file" ||
+                key == "energy_straggling_package_file" ||
+                key == "ct_hu_stopping_power_lut_file" ||
+                key == "ct_water_stopping_power_file" || key == "ct_air_stopping_power_file" ||
+                key == "ct_lung_stopping_power_file" || key == "ct_soft_tissue_stopping_power_file" ||
+                key == "ct_bone_stopping_power_file" || key == "ct_lung_particle_stopping_power_file" ||
+                key == "ct_soft_tissue_particle_stopping_power_file" || key == "ct_bone_particle_stopping_power_file") continue;
+            if (broadbeam_fast) {
+                if (key == "urban_mcs_package_file" ||
+                    key == "material_electron_response_index_file" ||
+                    key == "water_electron_response_diagnostic_file" ||
+                    key == "ct_electron_joint_response_diagnostic_file" ||
+                    key == "neutron_package_file" ||
+                    key == "neutron_recoil_stopping_manifest" ||
+                    key == "electron_transport_data_file") continue;
+            }
+            const auto value = trim(line.substr(colon + 1));
+            if (value.empty() || value.find('/') == std::string::npos) continue;
+            if (const auto path = existing(value, config_path); !path.empty())
+                consider(path, !broadbeam_fast);
+        }
+    }
+    for (std::size_t i = 0; i < manifests.size(); ++i) {
+        std::ifstream in(manifests[i]);
+        const std::string text((std::istreambuf_iterator<char>(in)), {});
+        // Bundles retain the archived stopping_table metadata. It no longer
+        // belongs to the effective physics inputs, so never hash its binary.
+        try {
+            const auto manifest = carbon::minjson::Parser(text).parse();
+            const bool nuclear_bundle = manifest.contains("primary_rate") &&
+                                        manifest.contains("secondary_rate");
+            const auto visit = [&](const auto& self, const carbon::minjson::Value& node,
+                                   bool is_root) -> void {
+                using Type = carbon::minjson::Value::Type;
+                if (node.type == Type::Object) {
+                    for (const auto& [key, child] : node.obj) {
+                        if (is_root && nuclear_bundle && key == "stopping_table") continue;
+                        self(self, child, false);
+                    }
+                } else if (node.type == Type::Array) {
+                    for (const auto& child : node.arr) self(self, child, false);
+                } else if (node.type == Type::String) {
+                    const auto& value = node.str;
+                    if (value.empty() || value.size() > 4096 || value.find('\n') != std::string::npos) return;
+                    fs::path candidate(value);
+                    if (!candidate.is_absolute()) candidate = manifests[i].parent_path() / candidate;
+                    std::error_code error;
+                    if (fs::is_regular_file(candidate, error) && candidate.extension() != ".json") consider(candidate);
+                }
+            };
+            visit(visit, manifest, true);
+        } catch (const std::exception&) {
+            // Prefetch is optional; the effective loader reports invalid input.
+        }
+    }
+
+    std::sort(files.begin(), files.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+    std::vector<fs::path> ordered;
+    ordered.reserve(files.size());
+    for (auto& file : files) ordered.push_back(std::move(file.second));
+    return ordered;
+}
+
 }  // namespace
 
 int main(int argc, char* argv[]) {
 #if CARBON_DISABLE_INTEGRITY_CHECKS
     std::cerr << "[integrity-checks] DISABLED: file SHA256 content checks and provenance hashing are skipped\n";
 #endif
+    // Hashing helper threads must finish before static teardown, whichever
+    // way main() returns.
+    carbon::initialize_sha256_backend();
+    struct JoinSha256Prefetch {
+        ~JoinSha256Prefetch() { carbon::join_file_sha256_prefetch(); }
+    } join_sha256_prefetch;
     carbon::RuntimeScope runtime_main("process_main");
     // Independent wall clock from process start to the point every result file
     // has been written. Unlike TransportResult::elapsed_seconds it includes
@@ -115,6 +246,12 @@ int main(int argc, char* argv[]) {
                       << plan_config_paths.size() << " shards, one process)\n";
         } else {
             plan_config_paths.push_back(cli.config_path);
+        }
+        if constexpr (carbon::file_integrity_checks_enabled) {
+            unsigned threads = 8;
+            if (const char* value = std::getenv("CARBON_SHA256_PREFETCH_THREADS"))
+                threads = static_cast<unsigned>(std::strtoul(value, nullptr, 10));
+            carbon::prefetch_file_sha256(sha256_prefetch_candidates(plan_config_paths), threads);
         }
 
         // Resolve and validate every shard before any transport work. Each
@@ -243,6 +380,7 @@ int main(int argc, char* argv[]) {
 #endif
         for (std::size_t plan_index = 0; plan_index < shards.size();
              ++plan_index) {
+        const auto shard_wall_start=std::chrono::steady_clock::now();
         const auto& active_config_path = shards[plan_index].config_path;
         const auto histories_cli_override = shards[plan_index].histories_overridden;
         const auto plan_only = shards[plan_index].plan_only;
@@ -331,7 +469,7 @@ int main(int argc, char* argv[]) {
 
 #ifdef CARBON_HAS_SYCL
         if (sycl_context == nullptr && config.device != "serial" &&
-            (!spots_files.empty() || config.enable_tps_source)) {
+            (!spots_files.empty() || config.enable_tps_source || config.material_electron_retain_bank)) {
             sycl_context_storage =
                 std::make_unique<carbon::SyclTransportContext>(config.device);
             sycl_context = sycl_context_storage.get();
@@ -633,7 +771,7 @@ int main(int argc, char* argv[]) {
             }
         } else {
             runtime_inputs.finish();
-            result = carbon::run_transport(config, stopping_power, cross_section, nullptr);
+            result = carbon::run_transport(config, stopping_power, cross_section, sycl_context);
         }
 
         runtime_inputs.finish();
@@ -648,6 +786,8 @@ int main(int argc, char* argv[]) {
                                                       ? std::filesystem::path{"run"}
                                                       : active_config_path.stem());
         const auto quality_report_path = quality_directory / "quality_report.json";
+        if(config.enable_neutron_transport)
+            carbon::write_neutron_experimental_outputs(quality_directory,config,result);
         const auto quality = carbon::evaluate_run_quality(config, result);
         carbon::write_run_quality_report_json(quality_report_path, quality);
         carbon::write_energy_ledger_json(quality_directory / "energy_ledger.json", config,
@@ -702,6 +842,12 @@ int main(int argc, char* argv[]) {
         if (!config.fragment_birth_spectrum_output_file.empty()) {
             carbon::write_fragment_birth_spectrum_csv(
                 config.fragment_birth_spectrum_output_file, config, result);
+        }
+        if (!config.neutron_proton_birth_output_file.empty()) {
+            carbon::write_neutron_proton_birth_csv(config.neutron_proton_birth_output_file, result);
+        }
+        if (!config.neutron_birth_output_file.empty()) {
+            carbon::write_neutron_birth_csv(config.neutron_birth_output_file, result);
         }
         if (!config.minibeam_phase_space_output_file.empty()) {
             carbon::write_minibeam_phase_space_csv(
@@ -771,6 +917,7 @@ int main(int argc, char* argv[]) {
                   << "Elapsed: " << result.elapsed_seconds << " s\n"
                   << "Throughput: " << histories_per_second << " histories/s\n"
                   << "Kernel time: primary=" << result.primary_kernel_seconds
+                  << " s electron=" << result.electron_kernel_seconds
                   << " s secondary=" << result.secondary_kernel_seconds
                   << " s neutral=" << result.neutral_kernel_seconds
                   << " s charged-after-neutral="
@@ -1223,6 +1370,9 @@ int main(int argc, char* argv[]) {
                   << shards.size() << " config=" << active_config_path
                   << " histories=" << config.number_of_histories
                   << " quality=" << quality.status() << '\n';
+        std::cout<<"[batch-wall] index="<<plan_index<<" seconds="
+                 <<std::chrono::duration<double>(std::chrono::steady_clock::now()-shard_wall_start).count()
+                 <<" histories="<<config.number_of_histories<<"\n";
         }  // for each plan shard (one process)
         runtime_wall.finish();
         return EXIT_SUCCESS;

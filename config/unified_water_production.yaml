@@ -40,7 +40,6 @@ ct_schneider_primary_rate_file: data/schneider/schneider_inelastic_rates_v2_1.bi
 ct_schneider_c12_cinel03_file: data/schneider/cinel03_c12_targets_v2_1.bin
 ct_schneider_secondary_rate_file: data/schneider/secondary_inelastic_rates_v2_1.bin
 ct_schneider_secondary_cinel03_file: data/schneider/cinel03_secondary_targets_v2_1_14p.bin
-ct_schneider_stopping_power_file: data/schneider/schneider_stopping_v1.bin
 ct_schneider_physics_bundle_file: data/schneider/schneider_physics_bundle_v2_1.json
 max_device_memory_fraction: 0.8
 dose_to_medium: true
@@ -54,15 +53,12 @@ em_model: g4_material_joint_v1
 em_delta_moments_file: data/em/unified_em_delta_moments_v2.bin
 em_package_file: data/em/unified_em_v1.bin
 em_package_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
-primary_em_model: legacy
 enable_energy_straggling: true
 enable_secondary_energy_straggling: true
-straggling_scale: 1.0
 ct_secondary_exact_faces: true
 history_chunk_size: 10000
 
 # Species scheduling authorized; dose equivalence investigation remains open.
-enable_secondary_unified_em: true
 secondary_species_grouping: true
 # Compact survivors after 16 complete steps; queues below 8192 finish directly.
 secondary_step_chunking: true

@@ -10,6 +10,13 @@ struct ElectronEnergyCrossingView {
     const std::uint64_t* rows{};
     std::size_t bins{};
     std::uint64_t count{};
+    // Optional lossless per-source row IDs. Bucket offsets/counts stay 64 bit.
+    // Exactly one row representation is populated for a nonempty index.
+    const std::uint32_t* rows32{};
+    bool valid_rows() const {return count==0 || ((rows!=nullptr)!=(rows32!=nullptr));}
+    std::uint64_t row_at(std::uint64_t index) const {
+        return rows32?static_cast<std::uint64_t>(rows32[index]):rows[index];
+    }
     std::size_t bin(double energy) const {
         if(!edges || !offsets || !bins || !std::isfinite(energy) || energy<=edges[0] || energy>edges[bins])return bins;
         std::size_t lo=0,hi=bins;

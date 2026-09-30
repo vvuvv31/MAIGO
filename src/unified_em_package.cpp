@@ -9,9 +9,8 @@
 #include <stdexcept>
 
 namespace carbon {
-UnifiedEmPackage UnifiedEmPackage::load(const std::filesystem::path& path,const std::string& sha) {
-    if(std::endian::native!=std::endian::little)throw std::runtime_error("EMJOINT1 requires little endian");
-    if(sha.size()!=64 || !file_sha256_matches(path,sha))throw std::runtime_error("Unified EM SHA256 mismatch");
+namespace {
+UnifiedEmPackage parse_unified_em(const std::filesystem::path& path) {
     std::ifstream in(path,std::ios::binary);
     char magic[8];std::uint32_t h[6];in.read(magic,8);in.read(reinterpret_cast<char*>(h),sizeof h);
     if(!in || std::memcmp(magic,"EMJOINT1",8) || h[0]!=1 || h[1]<26 || h[1]>256 || h[2]!=18 || h[3]!=h[1]*h[2])
@@ -58,6 +57,20 @@ UnifiedEmPackage UnifiedEmPackage::load(const std::filesystem::path& path,const 
             }
         }
     }
+    return p;
+}
+} // namespace
+
+UnifiedEmPackage UnifiedEmPackage::load(const std::filesystem::path& path,const std::string& sha) {
+    if(std::endian::native!=std::endian::little)throw std::runtime_error("EMJOINT1 requires little endian");
+    if(sha.size()!=64)throw std::runtime_error("Unified EM SHA256 mismatch");
+    // Parse while the pinned digest may still be computing on a prefetch
+    // thread. The pin is enforced before the package is returned, and a
+    // mismatch is reported in preference to any parse error.
+    const auto verify=[&]{if(!file_sha256_matches(path,sha))throw std::runtime_error("Unified EM SHA256 mismatch");};
+    UnifiedEmPackage p;
+    try{p=parse_unified_em(path);}catch(...){verify();throw;}
+    verify();
     return p;
 }
 } // namespace carbon

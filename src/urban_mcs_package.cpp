@@ -32,7 +32,7 @@ UrbanMcsPackage UrbanMcsPackage::load(const std::filesystem::path& path,const st
     if(!stream)throw std::runtime_error("Truncated Urban MSC package");
     std::set<std::pair<int,float>> material_keys;
     for(const auto& m:result.materials)
-        if(m.section< -2 || m.section>24 || !(m.density>0 && m.zeff>0 &&
+        if(m.section< -3 || m.section>24 || !(m.density>0 && m.zeff>0 &&
            m.radiation_length_mm>0 && m.production_cut_mm==.05f) ||
            !std::isfinite(m.density+m.zeff+m.radiation_length_mm) ||
            !material_keys.emplace(m.section,m.density).second)

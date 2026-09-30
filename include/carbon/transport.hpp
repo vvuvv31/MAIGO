@@ -2,6 +2,7 @@
 
 #include "carbon/cross_section.hpp"
 #include "carbon/particle.hpp"
+#include "carbon/neutron_transport.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/transport_config.hpp"
 #include "carbon/transport_profile.hpp"
@@ -17,6 +18,16 @@
 namespace carbon {
 
 class SyclTransportContext;
+
+// A true native CINEL03 neutron birth; no neutron cutoff or transport is applied.
+// Region -2 is copper, -1 water; generation uses the charged-queue convention.
+struct NeutronBirthRecord {
+    std::uint64_t history{}, rng_stream{};
+    std::uint32_t collision{}, product_index{}, generation{};
+    std::int32_t material_section{}, parent_z{}, parent_a{}, role{};
+    float kinetic_energy_MeV{}, x_mm{}, y_mm{}, z_mm{};
+    float direction_x{}, direction_y{}, direction_z{}, weight{};
+};
 
 // Read-only snapshots of queued He births, captured after GPU transport.
 // history is the source-history index, NOT a Geant4 parent track ID.
@@ -713,6 +724,8 @@ struct ElectronJointDiagnostics {
 inline constexpr std::size_t kLongitudinalDomainLogCap = 4096;
 
 struct TransportResult {
+    bool fe_sampling_diagnostics_enabled{false};
+    std::array<std::uint64_t, 8> fe_sampling_counts{};
     std::vector<LongitudinalDomainRecord> longitudinal_domain_log{};
     ElectronJointDiagnostics electron_joint_diagnostics{};
     std::string electron_ordered_path_sha256{};
@@ -810,6 +823,14 @@ struct TransportResult {
     std::vector<std::uint64_t> birth_counts_by_generation;  // cat * gen_bins
     std::vector<HeliumBirthRecord> helium_birth_records; // opt-in birth spectrum only
     std::vector<C12BirthRecord> c12_birth_records; // opt-in birth spectrum only
+    std::vector<NeutronBirthRecord> neutron_birth_records;
+    // Optional proton births within neutron pass. rng_stream identifies root
+    // neutron; product_index is charged ordinal, material uses -1/-2/-3.
+    std::vector<NeutronBirthRecord> neutron_proton_birth_records;
+    NeutronExperimentalDiagnostics neutron_experimental;
+    std::vector<double> neutron_voxel_deposited_energy_MeV;
+    // Diagnostic direct-depositor maps: proton, other charged, neutron local.
+    std::array<std::vector<float>,3> neutron_component_voxel_MeV;
     std::vector<MinibeamPhaseSpaceRecord> minibeam_phase_space_records;
     std::vector<MinibeamWaterPrimaryPlaneRecord>
         minibeam_water_primary_plane_records;
@@ -1053,21 +1074,13 @@ private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 
-    template<int EmMode>
+    template<bool BroadBeam, bool Gaussian, int JointResponse>
     friend TransportResult transport_sycl_impl(
         const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
         const std::string&, SyclTransportContext*);
     friend TransportResult transport_sycl(
         const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
         const std::string&, SyclTransportContext*);
-#if defined(CARBON_ENABLE_MINIBEAM)
-    friend TransportResult transport_sycl_legacy(
-        const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
-        const std::string&, SyclTransportContext*);
-    friend TransportResult transport_sycl_minibeam(
-        const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
-        const std::string&, SyclTransportContext*);
-#endif
 };
 
 [[gnu::noinline]] TransportResult transport_sycl(const TransportConfig& config,
@@ -1075,18 +1088,6 @@ private:
                                const CrossSectionTable& cross_section,
                                const std::string& device_name,
                                SyclTransportContext* context = nullptr);
-#if defined(CARBON_ENABLE_MINIBEAM)
-// Dual kernels: legacy is the master-compatible water/CT path; minibeam is the
-// Copper beamline path. transport_sycl() dispatches at runtime.
-TransportResult transport_sycl_legacy(
-    const TransportConfig& config, const StoppingPowerTable& stopping_power,
-    const CrossSectionTable& cross_section, const std::string& device_name,
-    SyclTransportContext* context = nullptr);
-TransportResult transport_sycl_minibeam(
-    const TransportConfig& config, const StoppingPowerTable& stopping_power,
-    const CrossSectionTable& cross_section, const std::string& device_name,
-    SyclTransportContext* context = nullptr);
-#endif
 std::string describe_sycl_device(const std::string& device_name);
 #endif
 

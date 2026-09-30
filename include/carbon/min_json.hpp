@@ -2,7 +2,6 @@
 
 // Minimal strict JSON reader for metadata/bundle validation.
 // Supports objects, arrays, strings, numbers, booleans, null.
-// Independent of the file-local parser in schneider_stopping_table.cpp.
 #include <cctype>
 #include <cmath>
 #include <cstdint>

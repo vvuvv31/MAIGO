@@ -96,30 +96,9 @@ struct SchneiderCtDeviceContext {
     std::uint32_t sec_total_events{0};
     std::uint32_t sec_total_products{0};
 
-    // Stopping power
-    const float* stopping_power_device{nullptr};
-    std::uint32_t sp_sections{25};
-    std::uint32_t sp_energies{4302};
-    float sp_e_min{0.01F};
-    float sp_e_max{430.11F};
-    float sp_inv_dE{10.0F};
-
     [[nodiscard]] bool is_schneider_ct() const noexcept {
         return mode == MaterialPhysicsMode::SchneiderCt;
     }
 };
-
-#if defined(CARBON_HAS_SYCL) || defined(SYCL_LANGUAGE_VERSION)
-SchneiderCtDeviceContext upload_schneider_ct_device_context(
-    sycl::queue& queue,
-    carbon::detail::DeviceMemoryTracker& mem_tracker,
-    const TransportConfig& config,
-    const float* schneider_stopping_device = nullptr,
-    std::uint32_t schneider_sp_sections = 25,
-    std::uint32_t schneider_sp_energies = 4302,
-    float schneider_sp_e_min = 0.01F,
-    float schneider_sp_e_max = 430.11F,
-    float schneider_sp_inv_dE = 10.0F);
-#endif
 
 } // namespace carbon

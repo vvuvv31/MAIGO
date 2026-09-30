@@ -149,8 +149,8 @@ struct TransportConfig {
     // in turn default to the native patient CT header.
     double phantom_length_mm{400.0};
     double depth_bin_width_mm{0.5};
-    // Explicit unified EM selection; legacy preserves historical input behaviour.
-    std::string em_model{"legacy"};
+    // The sole water/Schneider CT energy-loss model.
+    std::string em_model{"g4_material_joint_v1"};
     std::filesystem::path em_package_file{};
     std::string em_package_sha256{};
     // Empty selects unified_em_delta_moments_v2.bin next to em_package_file.
@@ -160,7 +160,7 @@ struct TransportConfig {
     // Research-only step extension, applied away from stopping/cut-onset regions.
     double em_primary_step_scale{1.0};
     double em_secondary_step_scale{1.0};
-    std::string primary_em_model{"legacy"};
+    double broadbeam_maximum_mean_loss_fraction{0.01};
     double maximum_step_mm{0.5};
     double maximum_relative_energy_loss{0.005};
     std::uint32_t maximum_primary_steps{2000000U};
@@ -215,12 +215,8 @@ struct TransportConfig {
     // When true (default), skip CT voxel-face step clamps in homogeneous regions.
     // Set false for isolated performance A/B against full face clamping.
     bool ct_skip_homogeneous_face_clamp{true};
-    // Optional absolute SP/XS for CT materials 0..3 (air/lung/water/bone).
-    // Empty → water table × local density for all materials.
-    std::filesystem::path ct_air_stopping_power_file{};
-    std::filesystem::path ct_lung_stopping_power_file{};
-    std::filesystem::path ct_water_stopping_power_file{};
-    std::filesystem::path ct_bone_stopping_power_file{};
+    // Independent nuclear cross sections for four-class CT diagnostics.
+    // Schneider full physics uses the section-resolved nuclear bundle.
     std::filesystem::path ct_air_cross_section_file{};
     std::filesystem::path ct_lung_cross_section_file{};
     std::filesystem::path ct_water_cross_section_file{};
@@ -262,7 +258,6 @@ struct TransportConfig {
     // EM transport with secondary nuclear reactions disabled; no other value
     // and no default fallback exist (empty refuses startup).
     std::string secondary_out_of_scope_nuclear_policy{};
-    std::filesystem::path ct_schneider_stopping_power_file{"data/schneider/schneider_stopping_v1.bin"};
     std::filesystem::path ct_schneider_radiation_length_file{"data/schneider/schneider_radiation_lengths.json"};
     // Optional TOPAS-derived primary C12 delta-electron transverse tail. Empty
     // preserves the condensed local-deposit path exactly. Schneider section 0 only.
@@ -291,6 +286,10 @@ struct TransportConfig {
     // counters stay always-on: they feed fail-closed quality gates.
     // Skipped counters never feed transport, so dose is bit-identical.
     bool electron_joint_diagnostics{true};
+    double ct_electron_joint_sample_probability{1.0};
+    // Execution layout only; both modes use the pinned joint response and RNG.
+    // Queued replay requires the optional FE joint queue build and research CT.
+    std::string ct_electron_joint_execution_mode{"inline"};
     std::string ct_electron_joint_response_sha256{};
     std::string ct_electron_joint_response_metadata_sha256{};
     // Unvalidated pure Water_75eV EM-only experiment; never a CT alias.
@@ -302,7 +301,16 @@ struct TransportConfig {
     std::filesystem::path material_electron_response_index_file{};
     std::string material_electron_response_index_sha256{};
     std::uint64_t material_electron_response_device_budget_MiB{8192};
+    std::uint64_t material_electron_response_hot_device_budget_MiB{0};
+    std::string material_electron_response_cache_policy{"strict"};
     std::string material_electron_response_memory_mode{"device"};
+    bool material_electron_retain_bank{false};
+    std::string material_electron_execution_mode{"inline"};
+    std::uint32_t material_electron_queue_budget_MiB{576};
+    std::uint32_t material_electron_queue_chunk{1024};
+    std::uint32_t material_electron_queue_lanes{8192};
+    std::uint32_t material_electron_group_size{1};
+
     double material_electron_short_range_mm{0.0}; // research-only, zero disables
     std::uint64_t material_electron_response_host_budget_MiB{98304};
 
@@ -310,16 +318,10 @@ struct TransportConfig {
     // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.
     std::filesystem::path ct_schneider_cross_section_file{};
     std::filesystem::path ct_cinel02_rate_file{};
-    std::filesystem::path ct_hu_stopping_power_lut_file{};
     // Optional CT validation mode. Supported: "none", "primary-attenuation-only".
     // "primary-attenuation-only" enforces C12 primary nuclear attenuation validation,
     // terminating primaries on first inelastic collision and disabling all secondary creation/transport.
     std::string ct_validation_mode{};
-    // moquimc-style continuous mass SPR(rho, E) for CT ionization and LET.
-    // When true and no HU LUT is configured, voxel density selects the
-    // water-relative electronic mass SPR instead of the analytic
-    // Schneider-section Bethe factor.
-    bool ct_use_density_mass_spr{true};
     // When true, fragment-species EnergyDeposit for Z in
     // [restrict_fragment_species_z_min, restrict_fragment_species_z_max]
     // uses (1 − δ) × unrestricted dE so the ion column matches TOPAS
@@ -335,9 +337,6 @@ struct TransportConfig {
     // the light-fragment cone (diagnostic residual-closure lever for multi-spot
     // mottling / distal secondary fill). Does not change product KE.
     double reaction_light_ion_forward_mix{0.0};
-    // Global multiplier on CT mass-scaled / material stopping power (default 1).
-    // Used to absorb residual WEPL calibration vs full Geant4 material SP.
-    double ct_stopping_power_scale{1.0};
     double scorer_area_mm2{90'000.0};
     // Output-only absolute dose calibration. This scales Gy scorers while
     // preserving raw deposited-energy tallies and transport energy balance.
@@ -377,39 +376,22 @@ struct TransportConfig {
     // always receive EM transport; the generation cap suppresses only further
     // nuclear reactions. The parser accepts this field but its value is ignored.
     bool enable_terminal_generation_em_transport{false};
-    // gaussian_clamped / legacy_calibrated: historical Gaussian + [0, 2μ] cap.
-    // moment_matched: positive Gamma/Gaussian sampler that keeps mean/variance
-    // without a 2μ clamp; scale tables are rejected.
-    std::string energy_straggling_model{"gaussian_clamped"};
-    std::filesystem::path energy_straggling_package_file{};
-    // Optional homogeneous-water CSDA residual-range energy loss on CPU/SYCL.
-    // Disabled preserves each backend's existing local-loss calculation.
-    bool enable_csda_range_energy_loss{false};
-    // When enabled, primary straggling is sampled on fixed physical blocks so
-    // subdividing a transport step does not create new independent Gaussians.
-    bool enable_step_stable_straggling{false};
-    // Physical sampling length for step-stable primary straggling. 0 disables
-    // the mode and preserves the historical per-step sampler.
-    double straggling_sampling_length_mm{0.0};
-    // Historical validation applied straggling only to primary ion.
-    // Enable this separately to apply Bohr straggling to charged fragments.
+    // Toggle native Unified EM fluctuations for charged secondaries.
     bool enable_secondary_energy_straggling{false};
-    // Unified EM for secondary charged fragments (native fluctuations, delta
-    // clock, material-specific stopping). Off = CSDA fallback
-    // (mid_sp x step, packaged fluctuation for C12 only).
-    bool enable_secondary_unified_em{false};
     // GPU generation-wise species ordering. Production YAML opts in explicitly.
     bool secondary_species_grouping{false};
+    // Compile-time geometry/model branch selection for uniform-water Urban
+    // minibeam. Runtime eligibility is checked before the first kernel launch.
+    bool minibeam_primary_specialization{false};
+    // Uniform-water Urban without a collimator; shares the specialized water body.
+    // Explicit opt-in; false retains the generic primary kernel.
+    bool water_primary_specialization{false};
+    // combined: one kernel; split: beamline then water; compact: also group
+    // surviving primary tracks at that boundary. No physics/step changes.
+    std::string minibeam_primary_pipeline{"combined"};
     // Pause after the compile-time secondary iteration limit (default 16) and compact survivors.
     // Production presets opt in; false retains full-track scheduling without state buffers.
     bool secondary_step_chunking{false};
-    // Scalar fallback for Bohr straggling. If the two optional tables below
-    // are populated, the scale is linearly interpolated using the current
-    // particle E/A rather than the incident beam energy. Empty tables retain
-    // the historical scalar behavior.
-    double straggling_scale{1.0};
-    std::vector<double> straggling_scale_energies_MeVu{};
-    std::vector<double> straggling_scale_values{};
     bool enable_inelastic{false};
     // geant4: load the configured macroscopic table as-is.
     std::string nuclear_model{"geant4"};
@@ -437,10 +419,17 @@ struct TransportConfig {
     // paths. `highland` preserves the historical end-of-step angular kick;
     // `fermi_eyges` (YAML alias `fe`) adds correlated lateral displacement
     // and a path-length Poisson tail for the selected ion groups.
+    // Explicit dispatch/physics preset. YAML loading defaults non-minibeam
+    // configurations to enabled FE for all charged species; explicit choices win.
+    std::string transport_profile{"reference"};
+    bool fermi_eyges_gaussian_only{false};
+    std::string fermi_eyges_sampling{"segmented"};
     std::string multiple_scattering_model{"highland"};
     // Global Urban v2: exact material/cut couples, every transported charged ion.
     std::filesystem::path urban_mcs_package_file{};
     std::string urban_mcs_package_sha256{};
+    // Research-only same-composition density scaling; not a CT dose validation.
+    bool urban_ct_density_scaling{false};
     // Physical water box outside the scored ROI (required in global water mode).
     double urban_water_half_width_mm{0.0};
     // Opt-in, water-only minibeam proton/helium Urban transport. "inherit"
@@ -525,6 +514,14 @@ struct TransportConfig {
     // electronic dE/dx in MeV/mm at the native material density.
     std::filesystem::path minibeam_copper_stopping_power_file{};
     std::filesystem::path minibeam_air_stopping_power_file{};
+    // Native ionization proposal clock for primary air transport.
+    std::filesystem::path minibeam_air_ionization_rate_file{};
+    std::string minibeam_air_ionization_rate_sha256{};
+    // Primary beamline air transport, independent of the water MCS selector.
+    std::string minibeam_air_mcs_model{"none"};
+    double minibeam_air_slit_max_step_mm{1.0e6};
+    std::filesystem::path minibeam_air_urban_package_file{};
+    std::string minibeam_air_urban_package_sha256{};
     // Restricted loss-range table for the Urban v2 C12/Cu couple
     // (theRangeTableForLoss semantics: E_total -> loss range -> restricted
     // dE/dx). Required when minibeam_copper_mcs_model == "urban_v2"; the
@@ -550,6 +547,10 @@ struct TransportConfig {
     // remain reproducible unless explicitly enabled.
     bool minibeam_copper_enable_energy_straggling{false};
     double minibeam_copper_straggling_scale{1.0};
+    // Research selector applies to Z=1,A=1 primary and fragment tracks only.
+    std::string minibeam_copper_proton_straggling_model{"legacy_clipped_gaussian"};
+    // Research candidate: native restricted mean law for primary protons in Cu.
+    bool minibeam_copper_primary_native_mean_loss{false};
     // Fragment loss fluctuations are separately gated until per-species
     // Copper exit spectra have been validated.
     bool minibeam_copper_fragment_enable_energy_straggling{false};
@@ -601,7 +602,9 @@ struct TransportConfig {
     // current aggregate local deposition (bit-identical default).
     // `water_response_v1` redistributes the step loss through the shared
     // WaterElectronResponse helper; transport (loss/MCS/steps/RNG) is
-    // untouched, only scoring locations change.
+    // untouched, only scoring locations change. `water_response_v2` uses
+    // source-pinned tables in full-physics primary transport; secondary ions
+    // and upstream electron production are not included in this response.
     std::string minibeam_water_delta_response_model{"local"};
     // Response table for water_response_v1 (WaterElectronResponse schema with
     // sha pins, same keys as the diagnostic file it replaces here).
@@ -616,9 +619,6 @@ struct TransportConfig {
     // primary path); research-only, default stays legacy_highland.
     std::string minibeam_water_secondary_c12_mcs_model{"legacy_highland"};
     double minibeam_water_secondary_c12_mcs_max_segment_mm{0.1};
-    // Diagnostic-only: route water-borne secondary C12 through Unified EM
-    // without changing the EM path of any other secondary species.
-    bool minibeam_water_secondary_c12_enable_unified_em{false};
     // Diagnostic-only replica of the primary minibeam post-sampling loss
     // scaling. One is neutral; formal secondary transport leaves it neutral.
     double minibeam_water_secondary_c12_post_sample_loss_scale{1.0};
@@ -694,21 +694,6 @@ struct TransportConfig {
     bool spots_enable_upstream_air_energy_loss{false};
     // Smoke-only uniform World-Air MCS covariance; no beam-model file tuning.
     bool spots_enable_upstream_air_mcs{false};
-    bool ct_primary_midpoint_stopping_diagnostic{false};
-    // Formal predictor-midpoint Schneider stopping (second-order
-    // in-step energy loss vs entry-value first order). Default OFF:
-    // full20 gamma validation was neutral-to-negative (lung local30
-    // 81.35->80.62, refined local11 98.25->98.20; band means improve
-    // but tails widen slightly, likely 0.5%-cap interplay near the
-    // Bragg peak). Available for research via this key or the
-    // diagnostic alias.
-    bool ct_primary_midpoint_stopping{false};
-    // Scheme-2 secondary stopping: per-ion per-Schneider-section Geant4
-    // tables (SCHNIOSP v1). Empty = current water x material-factor path.
-    // Values are unrestricted totals (electron contract preserved).
-    std::filesystem::path ct_secondary_ion_section_stopping_file{};
-    std::string ct_secondary_ion_section_stopping_sha256{};
-    std::string ct_secondary_ion_section_stopping_metadata_sha256{};
     bool ct_secondary_exact_faces_diagnostic{false};
     // Promoted formal behavior (validated: lung full20 local30 81.35->91.41,
     // single-shard cost +7%). Default ON. The diagnostic key above remains
@@ -717,7 +702,6 @@ struct TransportConfig {
     // Inert without a CT grid (callers branch on enable_ct_grid && sec_in_ct).
     bool ct_secondary_exact_faces{true};
     bool ct_secondary_mcs_off_diagnostic{false};
-    bool ct_secondary_schneider_sp_diagnostic{false};
     std::filesystem::path spots_upstream_air_mcs_file{};
     std::string spots_upstream_air_mcs_sha256{};
     std::filesystem::path spots_upstream_air_stopping_power_file{};
@@ -788,6 +772,22 @@ struct TransportConfig {
     bool enable_let_scoring{false};
     // V1 transports only neutral-package e-/e+ in homogeneous G4_WATER.
     // Ion delta electrons remain condensed in unrestricted ion stopping power.
+    // Experimental optional neutron transport (research mode only).
+    // Descendant coverage and event interpolation remain incomplete.
+    // Optional CINEL03 neutron-birth audit, independent of transport enable.
+    // Records true birth coordinates/direction before neutral products are skipped.
+    std::filesystem::path neutron_birth_output_file{};
+    std::size_t neutron_birth_capacity{1000000};
+    bool enable_neutron_transport{false};
+    std::filesystem::path neutron_package_file{};
+    double neutron_world_half_width_mm{3000.0};
+    unsigned neutron_max_collisions{4096};
+    std::filesystem::path neutron_recoil_stopping_manifest{};
+    bool neutron_elastic_two_body{false};
+    bool neutron_water_recoil_urban{false};
+    bool neutron_exact_plane_boundaries{true};
+    std::filesystem::path neutron_proton_birth_output_file{};
+    std::size_t neutron_proton_birth_capacity{2000000};
     bool enable_electron_transport{false};
     std::filesystem::path electron_transport_data_file{};
     std::size_t electron_queue_capacity{0};
@@ -837,24 +837,16 @@ struct TransportConfig {
     // Minibeam 0.1 mm scorer cases should enable this explicitly.
     bool robust_boundary_nudge{false};
     std::uint64_t random_seed{20'260'714};
+    // Reference energy grid for independent nuclear/recoil interpolation only;
+    // water/CT primary stopping comes exclusively from em_package_file.
     std::filesystem::path primary_stopping_power_file{
         "data/stopping_power_water_geant4_11_3_2.csv"};
     // Optional E_delta/(Edep+E_delta) lookup on the stopping-power energy grid.
     // Used only by the HadronLET-compatible scorer; dose transport is unchanged.
     std::filesystem::path let_delta_electron_fraction_file{};
-    // Accurate fragment transport: use isotope-specific G4 water dE/dx ratios and
-    // delta-electron corrections. False preserves the faster C-12 effective-charge
-    // approximation and all existing configurations.
-    bool use_particle_specific_stopping_power{false};
+    // Independent reference for unsupported elastic recoils only.
     std::filesystem::path particle_stopping_power_file{
         "data/ion_stopping_power_water_geant4_11_3_2.csv"};
-    // Optional isotope-specific stopping ratios in representative CT lung,
-    // soft-tissue, and bone materials. Each table is normalized to its own
-    // C-12 curve, then applied to the local Schneider C-12 stopping power.
-    // Missing species fall back to the production water ratio.
-    std::filesystem::path ct_lung_particle_stopping_power_file{};
-    std::filesystem::path ct_soft_tissue_particle_stopping_power_file{};
-    std::filesystem::path ct_bone_particle_stopping_power_file{};
     // MeV energy-deposition scorer outputs (absolute MeV → MeV/primary in writers).
     std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
     std::filesystem::path fragment_species_output_file{};
@@ -871,6 +863,8 @@ struct TransportConfig {
     // Optional primary C-12 water-entrance phase space. Empty disables the
     // device/host buffers and leaves production transport unchanged.
     std::filesystem::path minibeam_phase_space_output_file{};
+    // Diagnostic plane selector; default preserves the water-entry scorer.
+    bool minibeam_phase_space_at_copper_exit{false};
     // Optional primary C-12 crossing snapshots at fixed water depths. Both
     // fields must be configured; empty defaults have zero production cost.
     std::filesystem::path minibeam_water_primary_plane_output_file{};
@@ -994,33 +988,6 @@ struct TransportConfig {
     }
     [[nodiscard]] bool uses_fixed_patient_coordinates() const noexcept {
         return enable_tps_coordinate_system || enable_tps_source;
-    }
-    [[nodiscard]] bool uses_legacy_clamped_straggling() const noexcept {
-        return energy_straggling_model == "gaussian_clamped" ||
-               energy_straggling_model == "legacy_calibrated";
-    }
-    [[nodiscard]] bool uses_moment_matched_straggling() const noexcept {
-        return energy_straggling_model == "moment_matched";
-    }
-    [[nodiscard]] bool uses_vavilov_landau_straggling() const noexcept {
-        return energy_straggling_model == "vavilov_landau";
-    }
-
-    [[nodiscard]] bool uses_packaged_fluctuation() const noexcept {
-        return energy_straggling_model == "packaged_fluctuation" ||
-               energy_straggling_model == "packaged_fluctuation_fraction" ||
-               energy_straggling_model == "packaged_fluctuation_fraction_hybrid";
-    }
-
-
-    [[nodiscard]] int straggling_sampler_id() const noexcept {
-        if (uses_moment_matched_straggling()) {
-            return 1;
-        }
-        if (uses_vavilov_landau_straggling()) {
-            return 2;
-        }
-        return 0;
     }
     [[nodiscard]] bool is_primary_attenuation_only_mode() const noexcept {
         return ct_validation_mode == "primary-attenuation-only";

@@ -226,7 +226,7 @@ struct UnifiedEmPoint {
                 n.q2,n.dispersion*density_scale,n.universal_dispersion*density_scale,
                 n.fluctuation==1,delta*density_scale,variance*density_scale,f*r.ratio*raw_slope,delta_slope*density_scale,n.lambda*density_scale};
     }
-    float mean(float kinetic,float length,const UnifiedEmPointStep& pre)const {
+    template<bool NonIon=false> float mean(float kinetic,float length,const UnifiedEmPointStep& pre)const {
         const auto& r=*record;const float f=pre.factor;
         // Correct only the native linear restricted branch. Range inversion
         // already integrates energy dependence and must not be corrected twice.
@@ -239,14 +239,15 @@ struct UnifiedEmPoint {
         return primary_restricted_mean_candidate(kinetic,length,stopping,pre.range,
             [&](float x){return raw(2,x*f*r.ratio)/r.ratio;},
             [&](float mid,float loss,float h){
-                if(!r.is_ion)return loss;
+                if constexpr(NonIon)return loss;
+                else { if(!r.is_ion)return loss;
                 mid=std::max(.5f*kinetic,mid-.5f*pre.delta_stopping*h);
                 const auto m=at(mid/r.a);
                 if(mid*(938.272013f/r.mass)<=2.f){
                     if(r.z>2)return (m.stopping+m.correction)*density_scale*h;
                     return loss*m.q2/std::max(pre.q2,1e-30f);
                 }
-                return loss+m.correction*density_scale*h;
+                return loss+m.correction*density_scale*h; }
             },r.linear_limit).energy_loss;
     }
     float mean(float kinetic,float length)const {return mean(kinetic,length,prepare(kinetic));}
@@ -283,8 +284,8 @@ struct alignas(16) UnifiedEmState {
         }
         return {lo().prepare(t),hi().prepare(t)};
     }
-    float mean(float t,float h,const UnifiedEmStep& pre)const {
-        return mix(lo().mean(t,h,pre.lo),hi().mean(t,h,pre.hi));
+    template<bool NonIon=false> float mean(float t,float h,const UnifiedEmStep& pre)const {
+        return mix(lo().template mean<NonIon>(t,h,pre.lo),hi().template mean<NonIon>(t,h,pre.hi));
     }
     float cut()const{const auto* a=record();const auto b=hi();return mix(a->cut,b.record->cut);}
     float peak()const{const auto* a=record();const auto b=hi();return mix(a->peak,b.record->peak)*a->a;}
@@ -408,10 +409,10 @@ struct UnifiedEmClock {
     }
 };
 struct UnifiedEmLoss {float loss{},continuous{},delta{};bool valid{false};unsigned proposed{},accepted{};std::uint8_t failure_stage{0};float mean{},delta_mean{},delta_variance{};};
-template<class Uniform>
+template<bool NonIon=false,class Uniform>
 UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& cache,float t,float h,float proposal_rate,float distance,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform){
     UnifiedEmLoss out;const auto lo=s.lo(),hi=s.hi();const auto& r=*lo.record;
-    float mean=CARBON_EM_STEP_CACHE?s.mean(t,h,pre):s.mean(t,h),tau=t/r.mass,ratio=.51099891f/r.mass;
+    float mean=CARBON_EM_STEP_CACHE?s.template mean<NonIon>(t,h,pre):s.mean(t,h),tau=t/r.mass,ratio=.51099891f/r.mass;
     out.mean=mean;
     float tmax=2*.51099891f*tau*(tau+2)/(1+2*(tau+1)*ratio+ratio*ratio);
     float cut=std::min(s.cut(),tmax);float loss=mean;
@@ -426,7 +427,7 @@ UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& c
             fluct_lo.ion_fluctuation=a.fluctuation==1;
         }
         RestrictedFluctuationInput<float> input{t,r.mass,mean,s.mix(fluct_lo.dispersion,fluct_hi.dispersion)*h,s.mix(fluct_lo.universal_dispersion,fluct_hi.universal_dispersion)*h,cut,tmax,s.mix(r.excitation,hi.record->excitation),s.mix(r.e0,hi.record->e0)};
-        RestrictedFluctuationSampler<float,Uniform> sampler(uniform);auto draw=sampler.sample(input,fluct_lo.ion_fluctuation,float(r.z));
+        RestrictedFluctuationSampler<float,Uniform> sampler(uniform);auto draw=sampler.sample(input,NonIon?false:fluct_lo.ion_fluctuation,float(r.z));
         if(!draw.valid){out.failure_stage=1;return out;}
         loss=std::min(t,draw.loss);
     }
@@ -451,8 +452,8 @@ UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& c
     if(!out.valid)out.failure_stage=4;
     return out;
 }
-template<class Uniform>
+template<bool NonIon=false,class Uniform>
 UnifiedEmLoss unified_em_loss(const UnifiedEmState& s,UnifiedEmClock& cache,float t,float h,float proposal_rate,float distance,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform){
-    return unified_em_explicit_loss(s,cache,t,h,proposal_rate,distance,fluctuations,pre,uniform);
+    return unified_em_explicit_loss<NonIon>(s,cache,t,h,proposal_rate,distance,fluctuations,pre,uniform);
 }
 } // namespace carbon

@@ -49,6 +49,17 @@ void add_vector_in_place(std::vector<std::uint64_t>& total,
 
 void accumulate_transport_result(carbon::TransportResult& total,
                                  const carbon::TransportResult& part) {
+    add_vector_in_place(total.neutron_voxel_deposited_energy_MeV,part.neutron_voxel_deposited_energy_MeV);
+    for(unsigned c=0;c<3;++c){
+        auto& dst=total.neutron_component_voxel_MeV[c];
+        const auto& src=part.neutron_component_voxel_MeV[c];
+        if(src.empty())continue;
+        if(dst.empty()){dst=src;continue;}
+        if(dst.size()!=src.size())throw std::runtime_error("Neutron component size mismatch while accumulating spots");
+        for(std::size_t i=0;i<src.size();++i)dst[i]+=src[i];
+    }
+    for(unsigned i=0;i<carbon::NEnergyCount;++i)total.neutron_experimental.energy[i]+=part.neutron_experimental.energy[i];
+    for(unsigned i=0;i<carbon::NCountSize;++i)total.neutron_experimental.counts[i]+=part.neutron_experimental.counts[i];
     add_vector_in_place(total.deposited_energy_MeV, part.deposited_energy_MeV);
     add_vector_in_place(total.voxel_deposited_energy_MeV, part.voxel_deposited_energy_MeV);
     add_vector_in_place(total.charged_origin_voxel_deposited_energy_MeV,
@@ -489,6 +500,16 @@ void accumulate_transport_result(carbon::TransportResult& total,
     for (auto record : part.minibeam_fragment_phase_space_records) {
         record.history += minibeam_history_offset;
         total.minibeam_fragment_phase_space_records.push_back(record);
+    }
+    for (auto record : part.neutron_proton_birth_records) {
+        record.history += minibeam_history_offset;
+        total.neutron_proton_birth_records.push_back(record);
+    }
+    total.neutron_birth_records.reserve(
+        total.neutron_birth_records.size() + part.neutron_birth_records.size());
+    for (auto record : part.neutron_birth_records) {
+        record.history += minibeam_history_offset;
+        total.neutron_birth_records.push_back(record);
     }
     total.c12_birth_records.reserve(
         total.c12_birth_records.size() + part.c12_birth_records.size());

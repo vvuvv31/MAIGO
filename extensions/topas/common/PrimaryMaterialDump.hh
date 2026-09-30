@@ -14,4 +14,6 @@ public:
 private:
  G4String stem_;
  bool done_=false;
+ G4int maximum_node_=2510;
+ G4int samples_per_node_=512;
 };

@@ -10,7 +10,21 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <algorithm>
+#include <atomic>
+#include <cstdlib>
+#include <future>
+#include <map>
+#include <mutex>
+#include <stdexcept>
+#include <string_view>
+#include <thread>
+#include <utility>
+#if defined(__unix__)
+#include <sys/stat.h>
+#endif
 #ifdef CARBON_OPENSSL_SHA256
+#include <openssl/crypto.h>
 #include <openssl/evp.h>
 #endif
 
@@ -207,7 +221,24 @@ inline std::string compute_sha256_hex(std::string_view text) {
     return compute_sha256_hex(text.data(), text.size());
 }
 
-inline std::string compute_file_sha256_hex(const std::filesystem::path& path) {
+// Complete OpenSSL's one-time initialisation, including the atexit cleanup it
+// registers, on the calling thread. OPENSSL_init_crypto(0, ...) is a no-op, so
+// without this the first digest on a helper thread would register the cleanup
+// after the objects that join those threads, and an early process exit would
+// tear OpenSSL down under a running hash.
+inline void initialize_sha256_backend() {
+#ifdef CARBON_OPENSSL_SHA256
+    static const bool initialized = [] {
+        OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CONFIG, nullptr);
+        std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)> ctx(EVP_MD_CTX_new(), EVP_MD_CTX_free);
+        return ctx && EVP_DigestInit_ex(ctx.get(), EVP_sha256(), nullptr) == 1;
+    }();
+    (void)initialized;
+#endif
+}
+
+namespace detail {
+inline std::string compute_file_sha256_hex_uncached(const std::filesystem::path& path) {
     std::ifstream stream(path, std::ios::binary);
     if (!stream) {
         throw std::runtime_error("compute_file_sha256_hex: cannot open file " + path.string());
@@ -237,6 +268,161 @@ inline std::string compute_file_sha256_hex(const std::filesystem::path& path) {
     if(stream.bad())throw std::runtime_error("SHA256 file read failed: "+path.string());
     return ctx.finalize_hex();
 #endif
+}
+
+// Process-local digest memo. Large packages are pinned and re-verified by
+// several independent loaders/reports; each re-read costs ~0.5 s per GB.
+// A digest is reused only while the file keeps the device/inode/size/mtime
+// observed before it was hashed in this process, and waiters re-stat after
+// the digest is ready. CARBON_SHA256_MEMO=0 restores one full read per call.
+class FileSha256Memo {
+public:
+    FileSha256Memo() {
+        const char* value = std::getenv("CARBON_SHA256_MEMO");
+        enabled_ = !(value && std::string_view(value) == "0");
+        // OpenSSL's cleanup must be registered before this object's
+        // destructor, which joins the prefetch workers.
+        initialize_sha256_backend();
+    }
+    ~FileSha256Memo() { join(); }
+    FileSha256Memo(const FileSha256Memo&) = delete;
+    FileSha256Memo& operator=(const FileSha256Memo&) = delete;
+
+    std::string digest(const std::filesystem::path& path) {
+        Identity id{};
+        if (!enabled_ || !identity(path, id)) return compute_file_sha256_hex_uncached(path);
+        const auto key = std::make_pair(id.device, id.inode);
+        std::promise<std::string> promise;
+        std::shared_future<std::string> ready;
+        bool owner = false;
+        std::uint64_t token = 0;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            auto found = entries_.find(key);
+            if (found != entries_.end() && found->second.id == id) {
+                ready = found->second.digest;
+            } else {
+                ready = promise.get_future().share();
+                token = ++next_token_;
+                entries_[key] = Entry{id, ready, token};
+                owner = true;
+            }
+        }
+        if (!owner) {
+            try {
+                auto value = ready.get();
+                Identity now{};
+                if (identity(path, now) && now == id) return value;
+            } catch (...) {
+            }
+            return compute_file_sha256_hex_uncached(path);
+        }
+        try {
+            auto value = compute_file_sha256_hex_uncached(path);
+            Identity after{};
+            if (!identity(path, after) || !(after == id)) forget(key, token);
+            promise.set_value(value);
+            return value;
+        } catch (...) {
+            forget(key, token);
+            promise.set_exception(std::current_exception());
+            throw;
+        }
+    }
+
+    // Hash files on background threads; failures are left to the loader that
+    // later requests the digest, which reproduces its original error.
+    void prefetch(std::vector<std::filesystem::path> paths, unsigned threads) {
+        if (!enabled_ || threads == 0 || paths.empty()) return;
+        auto work = std::make_shared<std::vector<std::filesystem::path>>(std::move(paths));
+        auto next = std::make_shared<std::atomic<std::size_t>>(0);
+        threads = static_cast<unsigned>(std::min<std::size_t>(threads, work->size()));
+        std::lock_guard<std::mutex> lock(mutex_);
+        for (unsigned i = 0; i < threads; ++i) {
+            workers_.emplace_back([this, work, next] {
+                for (std::size_t j; !stopping_.load() && (j = next->fetch_add(1)) < work->size();) {
+                    try {
+                        (void)digest((*work)[j]);
+                    } catch (...) {
+                    }
+                }
+            });
+        }
+    }
+
+    // Workers finish the file in hand and take no further files.
+    void join() {
+        stopping_.store(true);
+        std::vector<std::thread> workers;
+        {
+            std::lock_guard<std::mutex> lock(mutex_);
+            workers.swap(workers_);
+        }
+        for (auto& worker : workers) worker.join();
+    }
+
+private:
+    struct Identity {
+        std::uint64_t device{}, inode{}, size{};
+        std::int64_t mtime_s{}, mtime_ns{};
+        bool operator==(const Identity& other) const noexcept {
+            return device == other.device && inode == other.inode && size == other.size &&
+                   mtime_s == other.mtime_s && mtime_ns == other.mtime_ns;
+        }
+    };
+    struct Entry {
+        Identity id;
+        std::shared_future<std::string> digest;
+        std::uint64_t token{};
+    };
+    static bool identity(const std::filesystem::path& path, Identity& out) noexcept {
+#if defined(__unix__)
+        struct stat status {};
+        if (::stat(path.c_str(), &status) != 0 || !S_ISREG(status.st_mode)) return false;
+        out = Identity{static_cast<std::uint64_t>(status.st_dev),
+                       static_cast<std::uint64_t>(status.st_ino),
+                       static_cast<std::uint64_t>(status.st_size),
+                       static_cast<std::int64_t>(status.st_mtim.tv_sec),
+                       static_cast<std::int64_t>(status.st_mtim.tv_nsec)};
+        return true;
+#else
+        (void)path;
+        (void)out;
+        return false;
+#endif
+    }
+    void forget(const std::pair<std::uint64_t, std::uint64_t>& key, std::uint64_t token) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto found = entries_.find(key);
+        if (found != entries_.end() && found->second.token == token) entries_.erase(found);
+    }
+
+    bool enabled_{true};
+    std::atomic<bool> stopping_{false};
+    std::uint64_t next_token_{0};
+    std::mutex mutex_;
+    std::map<std::pair<std::uint64_t, std::uint64_t>, Entry> entries_;
+    std::vector<std::thread> workers_;
+};
+
+inline FileSha256Memo& file_sha256_memo() {
+    static FileSha256Memo memo;
+    return memo;
+}
+}  // namespace detail
+
+inline std::string compute_file_sha256_hex(const std::filesystem::path& path) {
+    return detail::file_sha256_memo().digest(path);
+}
+
+// Start hashing input files in the background; later checks reuse the digest.
+inline void prefetch_file_sha256(std::vector<std::filesystem::path> paths, unsigned threads) {
+    detail::file_sha256_memo().prefetch(std::move(paths), threads);
+}
+
+// Wait for background hashing (e.g. before returning from main on an error).
+inline void join_file_sha256_prefetch() {
+    detail::file_sha256_memo().join();
 }
 
 inline constexpr bool file_integrity_checks_enabled =

@@ -6,8 +6,11 @@
 #include "G4hMultipleScattering.hh"
 #include "G4UrbanMscModel.hh"
 #include "G4SystemOfUnits.hh"
+#include "G4EmProcessSubType.hh"
+#include "G4VProcess.hh"
 #include <set>
 #include <stdexcept>
+#include <vector>
 G4_DECLARE_PHYSCONSTR_FACTORY(AllChargedUrbanPhysics);
 AllChargedUrbanPhysics::AllChargedUrbanPhysics(G4int) : G4VPhysicsConstructor("AllChargedUrbanPhysics") {}
 AllChargedUrbanPhysics::AllChargedUrbanPhysics(TsParameterManager*) : AllChargedUrbanPhysics(0) {}
@@ -21,12 +24,25 @@ void AllChargedUrbanPhysics::ConstructProcess() {
   for(int j=0;j<pm->GetProcessListLength();++j)
    if(auto* m=dynamic_cast<G4hMultipleScattering*>((*processes)[j])) { old=m; break; }
   if(!old) continue;
+  // opt4 pairs Wentzel multiple scattering with an independent hard-angle
+  // Coulomb process. Urban samples its own angular tail and does not use
+  // that angular split. Remove the companion only for a process manager
+  // whose hadron MSC is actually replaced; hadronic elastic is separate.
+  std::vector<G4VProcess*> companions;
+  for(int j=0;j<pm->GetProcessListLength();++j) {
+   auto* process=(*processes)[j];
+   if(process->GetProcessType()==fElectromagnetic &&
+      process->GetProcessSubType()==fCoulombScattering)
+    companions.push_back(process);
+  }
+  for(auto* process:companions) pm->RemoveProcess(process);
   auto name=old->GetProcessName(); pm->RemoveProcess(old);
   auto* replacement=new G4hMultipleScattering(name);
   auto* model=new G4UrbanMscModel(); model->SetHighEnergyLimit(10*GeV);
   replacement->SetEmModel(model);
   if(!G4PhysicsListHelper::GetPhysicsListHelper()->RegisterProcess(replacement,particle))
    throw std::runtime_error("failed to register hadron Urban process");
-  G4cout << "MAIGO Urban replacement: " << particle->GetParticleName() << G4endl;
+  G4cout << "MAIGO Urban replacement: " << particle->GetParticleName()
+         << " removed_companion_coulomb=" << companions.size() << G4endl;
  }
 }

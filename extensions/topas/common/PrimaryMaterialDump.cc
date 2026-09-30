@@ -1,5 +1,6 @@
 // Scorer for PrimaryMaterialDump
 #include "PrimaryMaterialDump.hh"
+#include "TsParameterManager.hh"
 #include "G4Step.hh"
 #include "G4Track.hh"
 #include "G4Material.hh"
@@ -25,7 +26,21 @@
 #include <stdexcept>
 PrimaryMaterialDump::PrimaryMaterialDump(TsParameterManager* p,TsMaterialManager* m,
  TsGeometryManager* g,TsScoringManager* s,TsExtensionManager* x,G4String n,
- G4String q,G4String o,G4bool sub):TsVScorer(p,m,g,s,x,n,q,o,sub),stem_(o) {}
+ G4String q,G4String o,G4bool sub):TsVScorer(p,m,g,s,x,n,q,o,sub),stem_(o) {
+ const auto key=GetFullParmName("MaximumEnergyPerNucleon");
+ if(p->ParameterExists(key)) {
+  const double maximum=p->GetDoubleParameter(key,"Energy")/MeV;
+  if(!std::isfinite(maximum)||maximum<.51||maximum>6500.)
+   throw std::runtime_error("Invalid material-table maximum energy per nucleon");
+  // Round to an elastic sampling node so fractional requested ceilings
+  // are covered by both the 0.1 MeV/u loss grid and 0.5 MeV/u elastic grid.
+  maximum_node_=5*int(std::ceil((maximum-.01)/.5-1e-8));
+ }
+ const auto samples=GetFullParmName("SamplesPerNode");
+ if(p->ParameterExists(samples))samples_per_node_=p->GetIntegerParameter(samples);
+ if(samples_per_node_<1 || samples_per_node_>1000000)
+  throw std::runtime_error("Invalid material-table samples per node");
+}
 G4bool PrimaryMaterialDump::ProcessHits(G4Step* step,G4TouchableHistory*) {
  if(done_ || step->GetTrack()->GetParentID()!=0)return false;
  done_=true;
@@ -46,7 +61,7 @@ G4bool PrimaryMaterialDump::ProcessHits(G4Step* step,G4TouchableHistory*) {
  xs<<std::setprecision(17)<<"energy_MeVu,macroscopic_cross_section_per_mm\n";
  el<<std::setprecision(17)<<"energy_MeV_per_u,macroscopic_cross_section_per_mm,transfer_fraction,target_a,target_mass_MeV\n";
  std::set<std::string> models;
- for(int i=0;i<=2510;++i) {
+ for(int i=0;i<=maximum_node_;++i) {
   const double eu=.01+.1*i,T=a*eu,m1=particle->GetPDGMass()/MeV;
   sp<<eu<<','<<calc.ComputeElectronicDEDX(T*MeV,particle,material)/(MeV/mm)<<'\n';
   xs<<eu<<','<<store->GetInelasticCrossSectionPerVolume(particle,T*MeV,material)*mm<<'\n';
@@ -60,7 +75,7 @@ G4bool PrimaryMaterialDump::ProcessHits(G4Step* step,G4TouchableHistory*) {
    el<<eu<<",0,0,"<<ta<<','<<G4NucleiProperties::GetNuclearMass(ta,tz)/MeV<<'\n';
    continue;
   }
-  for(int j=0;j<512;++j) {
+  for(int j=0;j<samples_per_node_;++j) {
    G4Nucleus nucleus;auto* element=data->SampleZandA(&dp,material,nucleus);
    const int ta=nucleus.GetA_asInt(),tz=nucleus.GetZ_asInt();
    const double m2=G4NucleiProperties::GetNuclearMass(ta,tz)/MeV;
@@ -75,7 +90,7 @@ G4bool PrimaryMaterialDump::ProcessHits(G4Step* step,G4TouchableHistory*) {
  }
  if(!sp||!xs||!el)throw std::runtime_error("Material table write failed");
  std::ofstream meta(stem_+"_metadata.json");meta<<std::setprecision(17)<<"{\"z\":"<<z<<",\"a\":"<<a<<",\"mass_MeV\":"<<particle->GetPDGMass()/MeV<<",\"material\":\""<<material->GetName()<<"\",\"elastic_models\":[";
- bool first=true;for(auto& name:models){if(!first)meta<<',';first=false;meta<<'"'<<name<<'"';}meta<<"],\"samples_per_node\":512}\n";
+ bool first=true;for(auto& name:models){if(!first)meta<<',';first=false;meta<<'"'<<name<<'"';}meta<<"],\"samples_per_node\":"<<samples_per_node_<<",\"maximum_energy_MeVu\":"<<(.01+.1*maximum_node_)<<",\"response_process\":\"native_elastic_ApplyYourself\"}\n";
  G4cout<<"PRIMARY_MATERIAL_DUMP=PASS Z="<<z<<" A="<<a<<" material="<<material->GetName()<<G4endl;
  return true;
 }

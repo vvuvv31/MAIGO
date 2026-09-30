@@ -19,8 +19,10 @@ struct MaterialElectronTableFile {
 // Load the small index first; callers select resident tables explicitly.
 // Loading an index must not allocate the entire material bank on the GPU.
 struct MaterialElectronResponseIndex {
+    int projectile_z{6},projectile_a{12};
     std::vector<MaterialElectronTableFile> files;
-    static MaterialElectronResponseIndex load(const std::filesystem::path&,const std::string&);
+    static MaterialElectronResponseIndex load(const std::filesystem::path&,const std::string&,
+                                              int projectile_z=6,int projectile_a=12);
     WaterElectronResponseTable load_table(std::size_t) const;
     std::vector<unsigned char> load_state_references(std::size_t,std::size_t byte_budget) const;
     std::vector<std::vector<unsigned char>> load_state_sources(std::size_t,std::size_t byte_budget) const;
@@ -87,7 +89,7 @@ inline ElectronEnergyCrossingDraw sample_material_electron_continuation(
         const auto view=table.state_sources[s].crossings;
         const auto bin=view.bin(energy);
         if(bin==view.bins) {out.status=ElectronCrossingStatus::energy_domain;return out;}
-        if((view.count && !view.rows) || view.offsets[bin]>view.offsets[bin+1] || view.offsets[bin+1]>view.count)return out;
+        if(!view.valid_rows() || view.offsets[bin]>view.offsets[bin+1] || view.offsets[bin+1]>view.count)return out;
         const auto count=view.offsets[bin+1]-view.offsets[bin];
         if(count>std::numeric_limits<std::uint64_t>::max()-total)return out;
         total+=count;
@@ -103,7 +105,7 @@ inline ElectronEnergyCrossingDraw sample_material_electron_continuation(
             const auto view=source.crossings;const auto bin=view.bin(energy);
             const auto count=view.offsets[bin+1]-view.offsets[bin];
             if(pick>=count) {pick-=count;continue;}
-            auto candidate=inspect_electron_energy_crossing(source.continuation(),view.rows[view.offsets[bin]+pick],energy);
+            auto candidate=inspect_electron_energy_crossing(source.continuation(),view.row_at(view.offsets[bin]+pick),energy);
             candidate.source=s;
             if(candidate.status!=ElectronCrossingStatus::rejected)return candidate;
             break;
@@ -117,7 +119,7 @@ inline ElectronEnergyCrossingDraw sample_material_electron_continuation(
         const auto& source=table.state_sources[s];
         const auto view=source.crossings;const auto bin=view.bin(energy);
         for(auto i=view.offsets[bin];i<view.offsets[bin+1];++i) {
-            auto candidate=inspect_electron_energy_crossing(source.continuation(),view.rows[i],energy);
+            auto candidate=inspect_electron_energy_crossing(source.continuation(),view.row_at(i),energy);
             if(candidate.status==ElectronCrossingStatus::rejected)continue;
             if(candidate.status!=ElectronCrossingStatus::ready)return candidate;
             ++seen;

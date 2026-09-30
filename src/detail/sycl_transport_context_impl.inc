@@ -1,5 +1,4 @@
-// Shared SyclTransportContext::Impl definition for dual SYCL TUs.
-// Included by transport_sycl_legacy.cpp and transport_sycl.cpp.
+// SyclTransportContext::Impl for the Unified EM transport TU.
 // Method definitions are emitted only when CARBON_DEFINE_SYCL_CONTEXT=1.
 
 // Parsed, immutable Schneider/CINEL03 host tables shared across shards in one
@@ -15,10 +14,6 @@ struct SchneiderHostCache {
     std::shared_ptr<SecondaryRateTable> secondary_rate;
     std::shared_ptr<InelasticPackageV3Table> secondary_cinel03;
     std::shared_ptr<Cinel03DeviceTables> secondary_cinel03_device_tables;
-    std::shared_ptr<SchneiderStoppingTable> schneider_stopping;
-    std::shared_ptr<std::vector<float>> schneider_stopping_flat;
-    std::shared_ptr<SchneiderIonStoppingTable> schneider_ion_stopping;
-    std::shared_ptr<std::vector<float>> schneider_ion_stopping_flat;
     std::uint64_t hits{0};
     std::uint64_t misses{0};
 };
@@ -36,9 +31,9 @@ struct SyclTransportContext::Impl {
                 pointer = nullptr;
             }
         };
-        release(table_device);
-        release(energy_grid_device);
-        release(cumulative_range_device);
+        release(electron_ct.density);
+        release(electron_ct.material);
+        electron_ct=CachedElectronCt{};
         release(cross_section_device);
         initialized = false;
     }
@@ -53,6 +48,14 @@ struct SyclTransportContext::Impl {
         std::shared_ptr<const std::vector<float>> delta_means;
         std::size_t package_node_count{0};
     };
+    struct CachedElectronCt {
+        std::string geometry_key,bank_key;
+        std::shared_ptr<const CtGrid> grid;
+        std::shared_ptr<MaterialElectronDeviceBank> bank;
+        float* density{};
+        std::uint8_t* material{};
+    };
+    CachedElectronCt electron_ct;
     CachedUnifiedEm unified_em_cache;
     SchneiderHostCache schneider_host_cache;
     std::uint64_t physics_cache_hits{0};
@@ -87,41 +90,16 @@ struct SyclTransportContext::Impl {
         cross_section_host = &cross_section;
 
         try {
-            table_device = sycl::malloc_device<float>(stopping_power.values().size(), queue);
-            energy_grid_device = sycl::malloc_device<float>(
-                stopping_power.energies().size(), queue);
-            cumulative_range_device = sycl::malloc_device<float>(
-                stopping_power.cumulative_ranges_mm().size(), queue);
             cross_section_device = sycl::malloc_device<float>(
                 stopping_power.energies().size(), queue);
 
-            const auto allocation_failed =
-                table_device == nullptr || energy_grid_device == nullptr ||
-                cumulative_range_device == nullptr ||
-                cross_section_device == nullptr;
+            const auto allocation_failed = cross_section_device == nullptr;
             if (allocation_failed) {
                 throw std::bad_alloc();
             }
 
-            std::vector<float> table_host(stopping_power.values().size());
-            std::transform(stopping_power.values().begin(), stopping_power.values().end(),
-                           table_host.begin(),
-                           [](double value) { return static_cast<float>(value); });
             const auto resampled_xs =
                 resample_cross_section_grid(cross_section, stopping_power.energies());
-            std::vector<float> energy_grid_host(stopping_power.energies().size());
-            std::transform(stopping_power.energies().begin(), stopping_power.energies().end(),
-                           energy_grid_host.begin(),
-                           [](double value) { return static_cast<float>(value); });
-            std::vector<float> cumulative_range_host(stopping_power.cumulative_ranges_mm().size());
-            std::transform(stopping_power.cumulative_ranges_mm().begin(),
-                           stopping_power.cumulative_ranges_mm().end(),
-                           cumulative_range_host.begin(),
-                           [](double value) { return static_cast<float>(value); });
-            queue.copy(table_host.data(), table_device, table_host.size());
-            queue.copy(energy_grid_host.data(), energy_grid_device, energy_grid_host.size());
-            queue.copy(cumulative_range_host.data(), cumulative_range_device,
-                       cumulative_range_host.size());
             queue.copy(resampled_xs.macroscopic_per_mm.data(), cross_section_device,
                        resampled_xs.macroscopic_per_mm.size());
             queue.wait_and_throw();
@@ -138,8 +116,5 @@ struct SyclTransportContext::Impl {
     std::string physics_signature;
     const StoppingPowerTable* stopping_power_host{nullptr};
     const CrossSectionTable* cross_section_host{nullptr};
-    float* table_device{nullptr};
-    float* energy_grid_device{nullptr};
-    float* cumulative_range_device{nullptr};
     float* cross_section_device{nullptr};
 };

@@ -56,30 +56,22 @@ ct_schneider_primary_rate_file: /mnt/sdb/wuwei/MAIGO/data/schneider/schneider_in
 ct_schneider_c12_cinel03_file: /mnt/sdb/wuwei/MAIGO/data/schneider/cinel03_c12_targets_v2_1.bin
 ct_schneider_secondary_rate_file: /mnt/sdb/wuwei/MAIGO/data/schneider/secondary_inelastic_rates_v2_1.bin
 ct_schneider_secondary_cinel03_file: /mnt/sdb/wuwei/MAIGO/data/schneider/cinel03_secondary_targets_v2_1_14p.bin
-ct_schneider_stopping_power_file: /mnt/sdb/wuwei/MAIGO/data/schneider/schneider_stopping_v1.bin
 ct_schneider_physics_bundle_file: /mnt/sdb/wuwei/MAIGO/data/schneider/schneider_physics_bundle_v2_1.json
 ct_electron_segment_transport: false
-ct_primary_midpoint_stopping: true
-ct_secondary_ion_section_stopping_file: data/schneider/schneider_ion_section_stopping_v1.bin
-ct_secondary_ion_section_stopping_sha256: ef87ad19bd0b0552d846a6c4e23eb635746e375432a40f40fb79b202235dec20
-ct_secondary_ion_section_stopping_metadata_sha256: c815808fd22e56e9db26475eeddb99aa596a9bc56aa01d0b8800c2e5e1ec12b8
 
 # User-accepted condensed delta + Poisson partition mean correction (2026-09-15).
 em_model: g4_material_joint_v1
 em_delta_moments_file: data/em/unified_em_delta_moments_v2.bin
 em_package_file: data/em/unified_em_v1.bin
 em_package_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
-primary_em_model: legacy
 enable_energy_straggling: true
 enable_secondary_energy_straggling: true
-straggling_scale: 1.0
 ct_secondary_exact_faces: true
 # Backend tuned: Intel Arc Level Zero currently selects 1,114,112; CUDA keeps
 # the validated 34,816-history chunk.
 history_chunk_size: 0
 
 # Species scheduling authorized; dose equivalence investigation remains open.
-enable_secondary_unified_em: true
 secondary_species_grouping: true
 # Compact survivors after 16 complete steps; queues below 8192 finish directly.
 secondary_step_chunking: true

@@ -21,7 +21,7 @@ option(CARBON_LET_FP64 "Use FP64 SYCL LET scorers/atomics" OFF)
 if(CARBON_DOSE_FP64)
     set(CARBON_DOSE_FP32 OFF CACHE BOOL "Use FP32 SYCL dose scorers/atomics" FORCE)
 endif()
-# Copper minibeam beamline. Default OFF keeps the legacy CT/water/LET kernel.
+# Copper minibeam beamline, alongside the Unified EM water/CT kernel.
 option(CARBON_ENABLE_MINIBEAM "Build Copper minibeam transport support" OFF)
 # Extra physics-validation scorers (fluence, survival, reaction-z, ledger files).
 # Default OFF keeps production DoseToMedium + LET_d atomics only.
@@ -48,7 +48,7 @@ add_library(carbon_core
     src/electron_transport.cpp
     src/electron_joint_response.cpp
     src/water_electron_response.cpp
-    src/energy_loss_fluctuation.cpp
+    src/neutron_package.cpp
     src/unified_em_package.cpp
     src/urban_mcs_package.cpp
     src/delta_moments_data.cpp
@@ -60,8 +60,6 @@ add_library(carbon_core
     src/schneider_rate_table.cpp
     src/material_nuclear_rates.cpp
     src/schneider_delta_tail.cpp
-    src/schneider_stopping_table.cpp
-    src/schneider_ion_stopping_table.cpp
     src/schneider_target_sampler.cpp
     src/secondary_rate_table.cpp
     src/topas_spots.cpp
@@ -99,8 +97,6 @@ target_compile_definitions(carbon_core PUBLIC
     CARBON_EM_SEARCH_KEY_AUDIT=$<BOOL:${CARBON_EM_SEARCH_KEY_AUDIT}>
     CARBON_EM_INTERVAL_WIDTH_AUDIT=$<BOOL:${CARBON_EM_INTERVAL_WIDTH_AUDIT}>
     CARBON_EM_PAIR_PREPARE=$<BOOL:${CARBON_EM_PAIR_PREPARE}>)
-option(CARBON_EM_SPECIALIZE "Specialize unified and legacy EM transport kernels" ON)
-target_compile_definitions(carbon_core PUBLIC CARBON_EM_SPECIALIZE=$<BOOL:${CARBON_EM_SPECIALIZE}>)
 option(CARBON_USE_OPENSSL_SHA256 "Use OpenSSL accelerated file SHA256 when available" ON)
 option(CARBON_DISABLE_INTEGRITY_CHECKS
     "Skip file SHA256 content checks and provenance hashing" OFF)
@@ -308,6 +304,7 @@ if(CARBON_ENABLE_SYCL)
     target_include_directories(carbon_core PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
     target_sources(carbon_core PRIVATE
         src/device.cpp
+        src/neutron_transport_sycl.cpp
         src/transport_sycl.cpp
         src/transport_profile.cpp)
     set_property(SOURCE src/transport_sycl.cpp APPEND PROPERTY
@@ -356,10 +353,6 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
         add_executable(all_ion_elastic_gpu tests/all_ion_elastic_gpu.cpp)
         target_link_libraries(all_ion_elastic_gpu PRIVATE carbon_core)
         target_compile_options(all_ion_elastic_gpu PRIVATE $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
-        add_executable(schneider_ion_stopping_gpu tests/schneider_ion_stopping_gpu.cpp)
-        target_link_libraries(schneider_ion_stopping_gpu PRIVATE carbon_core)
-        target_compile_options(schneider_ion_stopping_gpu PRIVATE
-            $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
         add_executable(material_electron_boundary_gpu_smoke tests/material_electron_boundary_gpu_smoke.cpp)
         target_link_libraries(material_electron_boundary_gpu_smoke PRIVATE carbon_core)
         target_compile_options(material_electron_boundary_gpu_smoke PRIVATE
@@ -518,9 +511,6 @@ if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
         endif()
     endif()
     add_test(NAME test_schneider_longitudinal COMMAND test_schneider_longitudinal)
-    add_executable(test_schneider_ion_stopping tests/test_schneider_ion_stopping.cpp)
-    target_link_libraries(test_schneider_ion_stopping PRIVATE carbon_core)
-    add_test(NAME test_schneider_ion_stopping COMMAND test_schneider_ion_stopping)
     add_executable(test_nuclear_elastic_scattering tests/test_nuclear_elastic_scattering.cpp)
     target_link_libraries(test_nuclear_elastic_scattering PRIVATE carbon_core)
     add_test(NAME test_nuclear_elastic_scattering COMMAND test_nuclear_elastic_scattering)
@@ -617,3 +607,23 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME primary_source_parameters COMMAND primary_source_parameters ${CMAKE_CURRENT_SOURCE_DIR})
 endif()
+
+# Isolated electron packet scheduling experiment; dose remains FP32.
+option(CARBON_ELECTRON_REPLAY_REUSE "Reuse checked electron genealogy within a packet transaction" OFF)
+if(CARBON_ELECTRON_REPLAY_REUSE)
+    target_compile_definitions(carbon_core PRIVATE CARBON_ELECTRON_REPLAY_REUSE=1)
+endif()
+
+option(CARBON_ELECTRON_CROSSING_ROWS32 "Use lossless 32-bit electron crossing row IDs when representable" OFF)
+if(CARBON_ELECTRON_CROSSING_ROWS32)
+    target_compile_definitions(carbon_core PRIVATE CARBON_ELECTRON_CROSSING_ROWS32=1)
+endif()
+
+option(CARBON_CT_ELECTRON_QUEUE "Experimental separate CT electron packet kernel" OFF)
+if(CARBON_CT_ELECTRON_QUEUE)
+    target_compile_definitions(carbon_core PRIVATE CARBON_CT_ELECTRON_QUEUE=1)
+endif()
+
+option(CARBON_FE_JOINT_QUEUE "Research: separate selected FE joint-response replays" OFF)
+target_compile_definitions(carbon_core PRIVATE
+    CARBON_FE_JOINT_QUEUE=$<BOOL:${CARBON_FE_JOINT_QUEUE}>)

@@ -48,15 +48,25 @@ inline UrbanGlobalProposal urban_global_prepare(
     UrbanMcsView view,int material,int ion,float energy,float true_ceiling,
     Direction3F position,Direction3F direction,UrbanVoxelCell cell,
     bool boundary,UrbanV2TrackState state,std::uint64_t seed,std::uint64_t history,
-    std::uint64_t step) {
+    std::uint64_t step,float actual_density=0.f) {
     UrbanGlobalProposal p{};p.state=state;p.cell=cell;p.position=position;p.direction=direction;p.energy=energy;
-    const auto context=view.at(material,ion,energy);
+    auto context=view.at(material,ion,energy);
     if(!context.valid() || !cell.valid || !(true_ceiling>0))return p;
     const auto& m=view.materials[material];const auto& s=view.species[ion];
+    float density_ratio=1.f;
+    if(view.ct_density_scaling && m.section>=0) {
+        if(!(actual_density>0) || !sycl::isfinite(actual_density))return p;
+        density_ratio=actual_density/m.density;
+        // Approximate fixed-cut range/dEdx scaling. Native-density validation
+        // is required; density effect and cut-energy shifts are not encoded.
+        context.factor*=density_ratio;
+        context.density_ratio=density_ratio;
+        if(!context.valid())return p;
+    }
     p.material.table.active_context=context;p.material.zeff=m.zeff;
-    p.material.radlen_mm=m.radiation_length_mm;p.material.projectile_z=s.z;
+    p.material.radlen_mm=m.radiation_length_mm/density_ratio;p.material.projectile_z=s.z;
     p.material.projectile_a=s.a;p.material.mass_mev=s.mass_mev;
-    p.material.density_g_per_cm3=m.density;p.material.mfp_kind=2;
+    p.material.density_g_per_cm3=m.density*density_ratio;p.material.mfp_kind=2;
     p.limit=copper_urban_v2_limit_step_with_range(true_ceiling,energy,p.material,
         urban_v2_safety_at(position.x,position.y,position.z,cell.safety),boundary,
         p.state,context.range(energy),seed,history,step,0);

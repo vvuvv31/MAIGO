@@ -11,7 +11,8 @@
 
 namespace carbon {
 WaterElectronResponseTable WaterElectronResponseTable::load(const std::filesystem::path& path,
-    const std::string& data_pin,const std::string& metadata_pin,bool material_response) {
+    const std::string& data_pin,const std::string& metadata_pin,bool material_response,
+    int projectile_z,int projectile_a) {
     auto metadata=path;metadata.replace_extension(".metadata.json");
     auto require=[](bool ok,const char* why) {if(!ok)throw std::invalid_argument(why);};
     require(data_pin.size()==64 && metadata_pin.size()==64 && file_sha256_matches(path,data_pin) &&
@@ -21,14 +22,22 @@ WaterElectronResponseTable WaterElectronResponseTable::load(const std::filesyste
     auto num=[&](const minjson::Value& v) {require(v.type==minjson::Value::Type::Number && std::isfinite(v.number),"Water response metadata number");return v.number;};
     const auto schema=num(m.at("schema_version"));
     const auto nominal_max=num(m.at("nominal_energy_max_MeVu"));
-    const bool material_schema=material_response && schema==4 && nominal_max==450 &&
+    const bool generic_material_schema=material_response && schema==6 &&
+        m.at("response_process").str=="primary_ionization" && nominal_max>0 &&
+        nominal_max<=450 && nominal_max/5==std::floor(nominal_max/5);
+    const bool material_schema=material_response && ((schema==4 && nominal_max==450) || generic_material_schema) &&
         m.at("status").str=="UNVALIDATED_MATERIAL_EM_DIAGNOSTIC";
-    const bool water_schema=!material_response && ((schema==2 && nominal_max==300) || (schema==3 && nominal_max==450)) &&
+    const bool generic_schema=!material_response && schema==5 &&
+        m.at("response_process").str=="primary_ionization" && nominal_max>0 &&
+        nominal_max<=450 && nominal_max/5==std::floor(nominal_max/5);
+    const bool water_schema=!material_response && ((schema==2 && nominal_max==300) || (schema==3 && nominal_max==450) || generic_schema) &&
         m.at("status").str=="UNVALIDATED_WATER_EM_DIAGNOSTIC" && m.at("material").str=="Water_75eV" && num(m.at("density_g_cm3"))==1;
     require((material_schema || water_schema) && num(m.at("density_g_cm3"))>0 && num(m.at("production_cut_mm"))==.05 &&
         num(m.at("actual_energy_max_MeVu"))>=nominal_max &&
         num(m.at("actual_energy_max_MeVu"))<=nominal_max+.0001 && m.at("projectile").arr.size()==2 &&
-        num(m.at("projectile").at(0))==6 && num(m.at("projectile").at(1))==12 &&
+        projectile_z>0 && projectile_a>=projectile_z &&
+        num(m.at("projectile").at(0))==projectile_z && num(m.at("projectile").at(1))==projectile_a &&
+        (generic_schema || generic_material_schema || (projectile_z==6 && projectile_a==12)) &&
         m.at("data_filename").str==path.filename().string() && m.at("data_sha256").str==data_pin &&
         num(m.at("data_size_bytes"))==std::filesystem::file_size(path),"Wrong water response scope/identity");
     static_assert(sizeof(WaterElectronChannel)==40 && sizeof(WaterElectronSample)==56 && sizeof(WaterElectronPathNode)==32);
@@ -36,13 +45,17 @@ WaterElectronResponseTable WaterElectronResponseTable::load(const std::filesyste
     f.read(magic,8);f.read(reinterpret_cast<char*>(&version),4);f.read(reinterpret_cast<char*>(&nc),4);f.read(reinterpret_cast<char*>(&ns),4);
     require(f && std::memcmp(magic,material_schema ? "MELSEG01" : "WELSEG01",8)==0 && version==((schema==2 || material_schema) ? 1U : 2U) && nc==nominal_max/5 && ns>0 && ns<=10000000 &&
         std::filesystem::file_size(path)==20ULL+40ULL*nc+56ULL*ns && m.at("channels").arr.size()==nc,"Water response binary header");
-    WaterElectronResponseTable out;out.channels.resize(nc);out.samples.resize(ns);
+    WaterElectronResponseTable out;out.projectile_z=projectile_z;out.projectile_a=projectile_a;out.channels.resize(nc);out.samples.resize(ns);
     out.reference_density_g_cm3=num(m.at("density_g_cm3"));out.material_name=m.at("material").str;
     if(material_schema) {
         const auto& id=m.at("material_identity");
         require(id.at("material_name").str==out.material_name && num(id.at("runtime_density_g_cm3"))==out.reference_density_g_cm3,
                 "Material response identity mismatch");
-        if(id.at("kind").str=="schneider") {
+        if(generic_material_schema && id.at("kind").str=="schneider_section") {
+            const double section=num(id.at("section_id"));
+            require(section>=0 && section<25 && section==std::floor(section),"Material response section identity");
+            out.material_section=static_cast<int>(section);
+        } else if(id.at("kind").str=="schneider") {
             const auto& truth=id.at("schneider_identity");
             const double section=num(truth.at("material_section"));
             const double hu=num(id.at("hu"));
@@ -107,14 +120,25 @@ WaterElectronResponseTable WaterElectronResponseTable::load(const std::filesyste
     return out;
 }
 MaterialElectronResponseIndex MaterialElectronResponseIndex::load(const std::filesystem::path& path,
-    const std::string& pin) {
+    const std::string& pin,int projectile_z,int projectile_a) {
     if(pin.size()!=64 || !file_sha256_matches(path,pin))throw std::invalid_argument("Material response index SHA mismatch");
     std::ifstream input(path);std::stringstream text;text<<input.rdbuf();
     const auto m=minjson::Parser(text.str()).parse();
-    if(m.at("schema_version").number!=1 || m.at("status").str!="UNVALIDATED_MATERIAL_RESPONSE_BANK" ||
+    if((m.at("schema_version").number!=1 && m.at("schema_version").number!=2) || m.at("status").str!="UNVALIDATED_MATERIAL_RESPONSE_BANK" ||
        m.at("tables").type!=minjson::Value::Type::Array || m.at("tables").arr.empty())
         throw std::invalid_argument("Unsupported material response index");
-    MaterialElectronResponseIndex out;
+    if(projectile_z<=0 || projectile_z>999 || projectile_a<projectile_z || projectile_a>999)
+        throw std::invalid_argument("Invalid material response projectile ZA");
+    if(m.at("schema_version").number==1) {
+        if(projectile_z!=6 || projectile_a!=12)throw std::invalid_argument("Legacy material response index is C12 only");
+    } else {
+        const auto& za=m.at("projectile");
+        if(za.type!=minjson::Value::Type::Array || za.arr.size()!=2 ||
+           za.at(0).type!=minjson::Value::Type::Number || za.at(1).type!=minjson::Value::Type::Number ||
+           za.at(0).number!=projectile_z || za.at(1).number!=projectile_a)
+            throw std::invalid_argument("Material response index projectile mismatch");
+    }
+    MaterialElectronResponseIndex out;out.projectile_z=projectile_z;out.projectile_a=projectile_a;
     for(const auto& t:m.at("tables").arr) {
         if(t.at("status").str!="COMPILED")throw std::invalid_argument("Incomplete material response index");
         const auto& id=t.at("material_identity");
@@ -124,7 +148,12 @@ MaterialElectronResponseIndex MaterialElectronResponseIndex::load(const std::fil
             throw std::invalid_argument("Invalid response reference density");
         file.density_g_cm3=density.number;
         file.reference_density_g_cm3=density.number;
-        if(id.at("kind").str=="schneider") {
+        if(m.at("schema_version").number==2 && id.at("kind").str=="schneider_section") {
+            const auto& sec=id.at("section_id");
+            if(sec.type!=minjson::Value::Type::Number || !std::isfinite(sec.number) || sec.number<0 || sec.number>=25 || sec.number!=std::floor(sec.number))
+                throw std::invalid_argument("Invalid response section");
+            file.section=static_cast<int>(sec.number);
+        } else if(id.at("kind").str=="schneider") {
             const auto& sec=id.at("schneider_identity").at("material_section");
             if(sec.type!=minjson::Value::Type::Number || !std::isfinite(sec.number) || sec.number<0 || sec.number>=25 || sec.number!=std::floor(sec.number))
                 throw std::invalid_argument("Invalid response section");
@@ -184,7 +213,7 @@ std::vector<std::size_t> MaterialElectronResponseIndex::required_tables(
 }
 WaterElectronResponseTable MaterialElectronResponseIndex::load_table(std::size_t i) const {
     const auto& file=files.at(i);
-    auto table=WaterElectronResponseTable::load(file.path,file.data_sha256,file.metadata_sha256,true);
+    auto table=WaterElectronResponseTable::load(file.path,file.data_sha256,file.metadata_sha256,true,projectile_z,projectile_a);
     if(table.material_section!=file.section || table.reference_density_g_cm3!=file.reference_density_g_cm3)
         throw std::invalid_argument("Material response index/table identity mismatch");
     return table;

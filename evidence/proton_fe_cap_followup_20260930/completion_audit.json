@@ -1,0 +1,80 @@
+{
+  "state": "completed",
+  "full": {
+    "histories": 250630000,
+    "wall_seconds": 623.8262178440636,
+    "histories_per_second": 401762.53070314106,
+    "primary_seconds": 517.068797,
+    "secondary_seconds": 61.807205
+  },
+  "matched_8_pairs": {
+    "baseline": {
+      "histories": 100252000,
+      "wall_seconds": 262.03467287297826,
+      "histories_per_second": 382590.58963772067,
+      "primary_seconds": 219.31626699999998,
+      "secondary_seconds": 24.608025599999998
+    },
+    "cap060": {
+      "histories": 100252000,
+      "wall_seconds": 248.5592390340462,
+      "histories_per_second": 403332.4224422335,
+      "primary_seconds": 205.864872,
+      "secondary_seconds": 24.7108106
+    },
+    "gain_percent": 5.421417401863837
+  },
+  "local11_percent": 99.8830941699842,
+  "current_baseline_local11_percent": 99.88215892334406,
+  "gamma_change_pp": 0.0009352466401395532,
+  "critical_change_vs_current_percent": {
+    "D95_Gy": 0.012921711884539278,
+    "D98_Gy": -0.017422577808345885,
+    "D50_Gy": 0.00020407792593601926,
+    "mean_Gy": -0.0006487201831939515,
+    "entrance_line_mean": -0.031747512246282916,
+    "entrance_volume_mean": -0.00020384351266944378
+  },
+  "paired_t95": {
+    "D95_Gy": {
+      "mean_percent": 0.01317624499156178,
+      "t95_halfwidth_pp": 0.03488937716658193,
+      "interval_within_one_percent": true
+    },
+    "D98_Gy": {
+      "mean_percent": 0.021540974185773054,
+      "t95_halfwidth_pp": 0.07030404267512974,
+      "interval_within_one_percent": true
+    },
+    "D50_Gy": {
+      "mean_percent": -0.007150617577449947,
+      "t95_halfwidth_pp": 0.008497523979385267,
+      "interval_within_one_percent": true
+    },
+    "mean_Gy": {
+      "mean_percent": -0.0006585979936041264,
+      "t95_halfwidth_pp": 0.004354093199138675,
+      "interval_within_one_percent": true
+    },
+    "entrance_line_mean": {
+      "mean_percent": -0.03178517946748893,
+      "t95_halfwidth_pp": 0.02600577456255961,
+      "interval_within_one_percent": true
+    },
+    "entrance_volume_mean": {
+      "mean_percent": -0.00020373472417956062,
+      "t95_halfwidth_pp": 0.0011018091937371095,
+      "interval_within_one_percent": true
+    }
+  },
+  "paired_statistics_scope": "20 independent seed batches, same original spot counts; paired batch DVH quantiles not per-voxel certification",
+  "max_relative_energy_residual": 3.4518611154e-07,
+  "queue_overflow_sum": 0,
+  "quality_all_accepted": true,
+  "binary_sha256": "0d82beda3e03e4cd45ee05d73ccc321e055c7ac3b65119aec8da045725ba6629",
+  "dose_scoring": "FP32",
+  "baseline_cap_mm": 0.5,
+  "candidate_cap_mm": 0.6,
+  "accepted": true,
+  "original_conservative_baseline_t95_pass": true
+}

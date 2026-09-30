@@ -114,12 +114,35 @@ struct ElectronContinuationAdvance {
     std::uint64_t children_begin{},children_end{};
     ElectronCtBoundary boundary{};
 };
+// Read-only proof of a successful raw genealogy check. Only advance can
+// populate it; callers cannot supply fabricated child ranges or energies.
+// Cache scope is one packet transaction over immutable source storage.
+class ElectronReplayCertificate {
+public:
+    bool matches(const ElectronContinuationView& v,std::uint64_t row) const {
+        return ready_ && row_==row && source_.payload==v.payload && source_.bytes==v.bytes &&
+            source_.next_rows==v.next_rows && source_.child_offsets==v.child_offsets &&
+            source_.child_rows==v.child_rows && source_.child_count==v.child_count;
+    }
+    std::uint64_t children_begin() const {return begin_;}
+    std::uint64_t children_end() const {return end_;}
+    double child_energy() const {return energy_;}
+private:
+    friend ElectronContinuationAdvance advance_electron_continuation(
+        const ElectronContinuationCursor&,const MaterialElectronResponseView&,
+        const ElectronCtGeometry&,ElectronReplayCertificate*);
+    ElectronContinuationView source_{};
+    std::uint64_t row_{},begin_{},end_{};
+    double energy_{};
+    bool ready_{};
+};
 // Prepare an immutable transaction: caller scores/enqueues ONLY after status is
 // valid. Children are exposed only at a completed source step, never before an
 // interface. An exhausted finite source retains KE and requires explicit action.
 inline ElectronContinuationAdvance advance_electron_continuation(
     const ElectronContinuationCursor& cursor,const MaterialElectronResponseView& table,
-    const ElectronCtGeometry& geometry) {
+    const ElectronCtGeometry& geometry,ElectronReplayCertificate* certificate=nullptr) {
+    if(certificate)*certificate=ElectronReplayCertificate{};
     ElectronContinuationAdvance out;
     if(!cursor.valid || (cursor.pdg!=11 && cursor.pdg!=22) || !table.state_sources || cursor.source>=table.state_source_count ||
        table.section!=cursor.section || table.density_g_cm3!=cursor.density_g_cm3 ||
@@ -128,6 +151,12 @@ inline ElectronContinuationAdvance advance_electron_continuation(
        !cursor.raw_to_world.valid())return out;
     const auto replay=prepare_electron_replay_step(table.state_sources[cursor.source].continuation(),cursor.row);
     if(replay.status!=ElectronReplayStatus::ready || replay.state.pdg!=cursor.pdg)return out;
+    if(certificate) {
+        certificate->source_=table.state_sources[cursor.source].continuation();
+        certificate->row_=cursor.row;certificate->begin_=replay.children_begin;
+        certificate->end_=replay.children_end;certificate->energy_=replay.child_energy_MeV;
+        certificate->ready_=true;
+    }
     const auto& step=replay.state;
     const bool photon=cursor.pdg==22;
     const double expected=step.pre_energy_MeV-(photon?0:cursor.fraction*step.deposited_MeV);

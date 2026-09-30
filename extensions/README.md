@@ -233,7 +233,74 @@ rates are extracted independently with the variable unset.
 `AllChargedUrbanPhysics`. Place it **after** `g4em-standard_opt4` in the module
 list. It replaces each hadron multiple-scattering process with a fresh
 `G4hMultipleScattering` using `G4UrbanMscModel` up to 10 GeV, matching
-`tools/urban/extract_active_urban.cc`. Other EM processes, including electron
-transport and discrete Coulomb scattering, retain the opt4 configuration.
+`tools/urban/extract_active_urban.cc`. For each replaced process manager it
+also removes the independent electromagnetic Coulomb-scattering companion
+from opt4's Wentzel mixed model. Urban samples its own angular tail; the
+reference is pure Urban. Hadronic elastic and nuclear stopping retain their
+configured processes, as does electron transport.
 The module does not activate unless explicitly named in the TOPAS input.
-See `../evidence/proton_urban_em_20260926/` for the proton EM-only comparison.
+Comparisons in `../evidence/proton_urban_em_20260926/` used the historical
+Urban-plus-Coulomb reference. The user selected pure Urban on 2026-09-27;
+see `../evidence/proton_pure_urban_20260927/` for the revised reference.
+
+## Primary electron-response extraction
+
+`PrimaryElectronDepositNtuple` and `PrimaryIonizationResponsePhysics` support
+source-specific homogeneous-water electron response extraction. The latter is
+**extraction only**, not a full-physics module: massive-particle Coulomb recoil
+and nuclear stopping are removed from the ionization response source.
+`tools/water_electron/compile.py` preserves deposition-weighted samples and
+complete path ancestry. See `../docs/minibeam_water_electron_response.md`.
+
+### Native copper elastic tables
+
+`PrimaryMaterialDump` supports `d:Sc/<name>/MaximumEnergyPerNucleon` (MeV;
+default 251.01 MeV/u coverage) and `i:Sc/<name>/SamplesPerNode` (default 512).
+Source ZA and target material come from the actual primary step. Elastic
+samples call the attached Geant4 model directly, with native isotope masses;
+continuous EM step loss must not be interpreted as nuclear recoil.
+
+`tools/minibeam_copper/compile_copper_physics.py` now requires
+`--native-elastic-file` and `--native-elastic-metadata`. The previous pre/post
+transport-step subtraction is invalid and is no longer available for compiling
+new banks. Existing pinned historical results remain evidence, not validated
+elastic reference tables. C12/Cu extraction and paired validation are recorded
+under `evidence/carbon_copper_elastic_20260926`.
+
+### Independent Copper primary path tag
+
+`PrimaryCopperTouchNtuple` records one `(run,event,track)` row for each primary
+with a positive Geant4 step in a pure Copper material (Z=29). Attach it to the
+Copper component and join its IDs to a separately scored exit phase space.
+It records the first Cu step length/energy, not cumulative path length. The
+scorer uses worker-local event state and does not modify transport or RNG.
+The native TOPAS traversed-component flag is not an equivalent path tag;
+independent validation is in `evidence/valley_gpu_compare_20260927`.
+
+### Native neutron package extraction (staged)
+
+`tools/neutron/` builds against Geant4 11.3.2 and extracts native conditional
+elastic/inelastic/capture/fission rates and complete correlated products for
+Water_75eV, G4_Cu and G4_AIR. Run builds/extraction with local Slurm. The compiler
+accepts only completed banks and emits a checksummed draft package;
+`inspect_neutron` reads it in audit mode. `SAMPLES=0` extracts rates only and is
+not a collision bank accepted by the compiler. An optional `RATE_REPEATS`
+argument (only with `SAMPLES=0`) records the rate mean, SEM and extrema; it
+evicts native exact-energy caches between queries. A single-query SEM of zero
+means unestimated uncertainty, not an exact rate. Raw CSV energies are MeV,
+macroscopic rates 1/mm and times ns.
+
+The YAML neutron interface is guarded: GPU neutron transport and photon
+descendants remain incomplete. See `../docs/neutron_package_plan.md` and
+`../evidence/neutron_package_20260927/`. Never promote a package based only on
+serialized kinetic bookkeeping closure.
+
+
+`topas/common/NeutronProtonBirthNtuple` records proton secondaries at their
+generating step, including parent PDG/process and birth phase space. Attach it
+separately to existing Water, ROI and Copper with propagation disabled; TOPAS
+forbids World scorers. Propagating Water scoring into an already scored ROI
+creates an extra parallel world and changes fixed-seed transport. It checks the generating endpoint and deduplicates child pointers
+per event/parent because scoring-step views can expose older secondaries.
+The associated same-seed total-dose regression is required before interpreting
+its birth statistics. See `evidence/neutron_package_20260927` in the repository.

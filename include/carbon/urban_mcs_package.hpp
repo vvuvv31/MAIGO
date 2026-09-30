@@ -31,6 +31,7 @@ struct UrbanMcsContext {
     const UrbanMcsNode* mfps{};
     const EmCubicSegmentCandidate<float>* segments{};
     float factor{};
+    float density_ratio{1.f}; // actual/reference, fixed for the active step
     static float interpolate(const UrbanMcsNode* v,unsigned n,float e) {
         if(!v || n<2 || e<v[0].energy || e>v[n-1].energy)
             return std::numeric_limits<float>::quiet_NaN();
@@ -39,7 +40,8 @@ struct UrbanMcsContext {
         float t=(e-v[lo].energy)/(v[hi].energy-v[lo].energy);
         return v[lo].value+t*(v[hi].value-v[lo].value);
     }
-    bool valid() const { return record && factor>0 && std::isfinite(factor); }
+    bool valid() const { return record && factor>0 && std::isfinite(factor) &&
+        density_ratio>0 && std::isfinite(density_ratio); }
     float raw(unsigned kind,float x) const {
         const auto* v=segments+record->offsets[kind];
         unsigned lo=0,hi=record->counts[kind]-1;
@@ -65,7 +67,7 @@ struct UrbanMcsContext {
         return (r<rmin?record->minimum_scaled_energy*x*x:raw(2,r))/record->mass_ratio;
     }
     float lambda(float energy_mev) const {
-        return interpolate(mfps+record->mfp_offset,record->mfp_count,energy_mev);
+        return interpolate(mfps+record->mfp_offset,record->mfp_count,energy_mev)/density_ratio;
     }
 };
 struct UrbanMcsView {
@@ -76,6 +78,7 @@ struct UrbanMcsView {
     const UrbanMcsNode* mfps{};
     const EmCubicSegmentCandidate<float>* segments{};
     std::uint32_t material_count{}, species_count{};
+    bool ct_density_scaling{false};
     int projectile(int z,int a) const {
         for(std::uint32_t i=0;i<species_count;++i)
             if(species[i].z==static_cast<unsigned>(z) && species[i].a==static_cast<unsigned>(a))
@@ -83,10 +86,22 @@ struct UrbanMcsView {
         return -1;
     }
     int material(int section,float density) const {
+        if(!(density>0) || !std::isfinite(density))return -1;
         for(std::uint32_t i=0;i<material_count;++i)
             if(materials[i].section==section &&
                std::fabs(materials[i].density-density)<=2.e-6f*materials[i].density)
                 return static_cast<int>(i);
+        // Research CT fallback stays within the same elemental composition.
+        // Exact material/cut couples above always take precedence.
+        if(ct_density_scaling && section>=0) {
+            int best=-1;float distance=std::numeric_limits<float>::infinity();
+            for(std::uint32_t i=0;i<material_count;++i)if(materials[i].section==section) {
+                const float ratio=density/materials[i].density;
+                const float d=std::max(ratio,1.f/ratio);
+                if(d<distance){distance=d;best=static_cast<int>(i);}
+            }
+            return best;
+        }
         return -1;
     }
     UrbanMcsContext at(int m,int ion,float energy) const {

@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import shutil
 import hashlib
 import json
 import math
@@ -76,7 +78,29 @@ def read_ascii_ntuple(stem: Path) -> list[dict[str, str]]:
     return rows
 
 
-def compile_tables(run_root: Path, output: Path) -> dict[str, object]:
+def compile_tables(run_root: Path, output: Path, native_elastic_file: Path,
+                   native_elastic_metadata: Path) -> dict[str, object]:
+    # A transport step's pre/post energy difference contains continuous EM
+    # loss. It cannot be used as a hadronic elastic recoil or scattering angle.
+    native = json.loads(native_elastic_metadata.read_text())
+    if (native.get("z"), native.get("a"), native.get("material"),
+        native.get("response_process")) != (6, 12, "G4_Cu", "native_elastic_ApplyYourself"):
+        raise ValueError("Expected native C12/Cu PrimaryMaterialDump elastic metadata")
+    count = 0
+    with native_elastic_file.open() as stream:
+        reader = csv.DictReader(stream)
+        expected = ["energy_MeV_per_u", "macroscopic_cross_section_per_mm",
+                    "transfer_fraction", "target_a", "target_mass_MeV"]
+        if reader.fieldnames != expected:
+            raise ValueError("Invalid native elastic columns")
+        for row in reader:
+            e, rate, fraction, a, mass = (float(row[k]) for k in expected)
+            if (not all(math.isfinite(v) for v in (e, rate, fraction, a, mass)) or
+                e <= 0 or rate < 0 or not 0 <= fraction <= 1 or a not in (63, 65) or mass <= 0):
+                raise ValueError("Invalid native C12/Cu elastic sample")
+            count += 1
+    if count < 2:
+        raise ValueError("Empty native elastic bank")
     stopping_rows = read_ascii_ntuple(run_root / "c12_copper_stopping")
     stopping = output / "c12_copper_stopping_geant4_11_3_2.csv"
     stopping_by_energy: dict[float, float] = {}
@@ -104,30 +128,9 @@ def compile_tables(run_root: Path, output: Path) -> dict[str, object]:
         stream.write("energy_MeV_per_u,c12_copper_macroscopic_inelastic_cross_section_per_mm\n")
         for energy, value in sorted(rate_by_energy.items()):
             stream.write(f"{energy},{value}\n")
-    elastic_rows = read_ascii_ntuple(run_root / "c12_copper_elastic")
     elastic = output / "c12_copper_general_ion_elastic.csv"
-    carbon_mass = 11174.86323534
-    with elastic.open("w", encoding="utf-8") as stream:
-        stream.write(
-            "energy_MeV_per_u,macroscopic_cross_section_per_mm,"
-            "transfer_fraction,target_a,target_mass_MeV\n"
-        )
-        for row in elastic_rows:
-            energy_u = float(row["Incident Energy (MeV/u)"])
-            outgoing_u = float(row["Outgoing Projectile Energy (MeV/u)"])
-            target_a = int(row["Target Mass Number A"])
-            target_mass = target_a * 931.49410242
-            kinetic = 12.0 * energy_u
-            maximum_transfer = (
-                2.0 * target_mass * kinetic * (kinetic + 2.0 * carbon_mass)
-                / ((carbon_mass + target_mass) ** 2 + 2.0 * target_mass * kinetic)
-            )
-            transfer = max(0.0, 12.0 * (energy_u - outgoing_u))
-            fraction = min(1.0, transfer / maximum_transfer) if maximum_transfer > 0 else 0.0
-            stream.write(
-                f'{energy_u},{row["Macroscopic Elastic Cross Section (1/mm)"]},'
-                f"{fraction},{target_a},{target_mass}\n"
-            )
+    if native_elastic_file.resolve() != elastic.resolve():
+        shutil.copyfile(native_elastic_file, elastic)
 
     return {
         "stopping_file": stopping.name,
@@ -136,7 +139,9 @@ def compile_tables(run_root: Path, output: Path) -> dict[str, object]:
         "inelastic_rate_sha256": sha256(rate),
         "elastic_file": elastic.name,
         "elastic_sha256": sha256(elastic),
-        "elastic_events": len(elastic_rows),
+        "elastic_events": count,
+        "elastic_response_process": native["response_process"],
+        "elastic_native_metadata_sha256": sha256(native_elastic_metadata),
     }
 
 
@@ -239,6 +244,9 @@ def main() -> None:
     parser.add_argument(
         "--campaign", default="20260917-0000-4000-8000-000000000030"
     )
+    parser.add_argument("--native-elastic-file", type=Path, required=True,
+                        help="Direct PrimaryMaterialDump elastic samples; step-difference banks are invalid")
+    parser.add_argument("--native-elastic-metadata", type=Path, required=True)
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     metadata = {
@@ -251,7 +259,7 @@ def main() -> None:
             "em": "g4em-standard_opt4",
         },
     }
-    metadata.update(compile_tables(args.run_root, args.output))
+    metadata.update(compile_tables(args.run_root, args.output, args.native_elastic_file, args.native_elastic_metadata))
     metadata.update(compile_inclxx(args.run_root, args.output, args.campaign))
     metadata_path = args.output / "copper_minibeam_physics.metadata.json"
     metadata_path.write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")

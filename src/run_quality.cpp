@@ -83,9 +83,25 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                                       const TransportResult& result) {
     RunQualityReport report;
     report.mode = config.run_mode;
+    if(config.enable_neutron_transport){
+        report.approximations.push_back({"experimental_neutron_transport",
+            "Unvalidated draft neutron rates and correlated energy rescaling; CSDA charged descendants with optional water Urban where covered, no descendant nuclear reactions; photon/electron and missing-ion energy unresolved; inspect neutron_transport.json. Dose uncertainties and charged species/LET component maps exclude this new contribution.",1.,0.});
+        const auto& n=result.neutron_experimental;
+        const auto& e=n.energy;
+        const double closure=std::abs(e[NInput]+e[NKineticGain]-e[NDepositWater]-e[NDepositOutside]-e[NEscape]-e[NUnsupported]-e[NBelowGrid]-e[NStepLimit]-e[NQueueOverflow]);
+        if(closure>1.e-4*std::max(1.,e[NInput]))report.failures.push_back({"neutron_energy_closure","Experimental neutron kinetic bookkeeping does not close",closure,1.e-4*std::max(1.,e[NInput])});
+        if(n.counts[NOverflowCount])report.failures.push_back({"neutron_stack_overflow","Experimental neutron stack overflow; energy recorded but tracks lost",double(n.counts[NOverflowCount]),0.});
+    }
     if(config.em_model=="g4_material_joint_v1")
         report.approximations.push_back({"condensed_delta_partition_v1",
-            "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition, 1% combined mean-loss guard; higher spectrum moments and patient BODY Gamma not validated",1.,0.});
+            "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition unless an explicit spatial response is enabled, configured combined mean-loss guard (default 1%); higher spectrum moments and patient BODY Gamma not validated",1.,0.});
+    if (config.minibeam_water_delta_response_model != "local") {
+        report.approximations.push_back({"minibeam_primary_electron_response",
+            "Primary EM loss is spatially partitioned using a source-pinned homogeneous-water "
+            "electron response; finite-library sampling, channel-averaged fractions and absorbing "
+            "slab boundaries remain approximations. Secondary-ion electron relocation, upstream "
+            "electron production and electron return from air are not included", 1., 0.});
+    }
     if(config.em_primary_step_scale!=1.0)
         report.approximations.push_back({"em_primary_step_extension",
             "Research EM step multiplier; only E/A >=20 MeV, both node ranges >=5 mm and density >=0.2 g/cm3; accuracy gate pending",config.em_primary_step_scale,1.0});
@@ -107,19 +123,54 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             1., 0.});
     if(config.em_model=="g4_material_joint_v1")
         report.approximations.push_back({"unified_material_em_accuracy_pending",
-            "Unified water/Schneider EM for all 18 charged ions; local delta deposition; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",1.,0.});
+            "Unified water/Schneider EM for all 18 charged ions; local delta deposition unless an explicit spatial response is enabled; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",1.,0.});
 
     if(!config.all_ion_elastic_file.empty()) {
         report.approximations.push_back({"all_ion_elastic_candidate",
             "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",1.,0.});
     }
+    if (config.enable_minibeam && config.minibeam_copper_proton_straggling_model != "legacy_clipped_gaussian")
+        report.approximations.push_back({"copper_proton_total_fluctuation",
+            "Native copper proton loss candidate: total-loss or native 0.05 mm cut plus sampled delta transfers; electron transport and other ion fluctuation models are not included",1.,0.});
     if (config.enable_minibeam && config.minibeam_transport_mode == "copper_em") {
         report.approximations.push_back({"minibeam_copper_candidate",
             "Copper primary transport uses the configured source ZA, elastic bank and nuclear event package; charged nuclear products use the available species stopping tables with source-charge-scaled fallback in Copper. Copper secondary MCS retains the Highland model. Neutral products are an explicit beamline energy sink. This remains a research comparison, not a validated neutral-dose model",1.,0.});
     }
 
+    if (result.fe_sampling_counts[7])
+        report.failures.push_back({"invalid_fe_moments","Nonfinite or non-positive-semidefinite FE covariance",static_cast<double>(result.fe_sampling_counts[7]),0.});
+    if (config.fermi_eyges_sampling=="moments")
+        report.approximations.push_back({"fe_moment_merge_candidate","Research single-frame Gaussian moment integration; finite-step rotations and CT interfaces require independent dose validation",1.,0.});
+    if(config.fermi_eyges_gaussian_only)
+        report.approximations.push_back({"gaussian_fermi_eyges_candidate",
+            "Gaussian FE matches local angular/displacement second moments of the existing FE core+tail model; non-Gaussian tails and heterogeneous patient dose require independent validation",1.,0.});
+    if(config.ct_electron_joint_sample_probability != 1.0)
+        report.approximations.push_back({"joint_electron_packet_roulette",
+            "Research unbiased joint-response packet sampling; probability floored by nonlocal fraction to conserve nonnegative step dose; finite-statistics patient gamma requires validation",
+            config.ct_electron_joint_sample_probability,1.0});
+    if(config.broadbeam_maximum_mean_loss_fraction != 0.01)
+        report.approximations.push_back({"broadbeam_extended_mean_loss",
+            "Research FE mean-loss cap relaxed; geometry faces, nuclear competition and sampled loss remain active; patient gamma requires validation",
+            config.broadbeam_maximum_mean_loss_fraction,0.01});
+    if(config.transport_profile=="broadbeam_fast") {
+        if(config.ct_electron_joint_response_diagnostic_file.empty())
+            report.approximations.push_back({"broadbeam_fast_local_electron_neutral_sink",
+                "Broad beam uses local ionization deposition and no neutron transport; nuclear neutral energy remains explicitly untransported. Field edges and tissue interfaces require dose validation",1.,0.});
+        else
+            report.approximations.push_back({"broadbeam_fast_joint_electron_neutral_sink",
+                "Broad beam uses the pinned C12 CT joint response for primary ionization; charged secondary electron losses remain local and nuclear neutral energy remains untransported. Patient accuracy is not validated",1.,0.});
+    }
     if(!config.material_electron_response_index_file.empty()) {
-        report.failures.push_back({"unvalidated_material_electron_response","Candidate main-kernel material response; patient accuracy and complete density coverage not validated",1.,0.});
+        // Research execution is explicitly requested; accuracy is still pending.
+        // Lookup/geometry failures below remain fatal in every run mode.
+        auto& scope_issues=config.run_mode==RunMode::research?report.approximations:report.failures;
+        scope_issues.push_back({"unvalidated_material_electron_response","Research material response with finite birth/path bank and density interpolation; patient accuracy is not validated",1.,0.});
+        if(config.enable_ct_grid && (config.enable_inelastic || config.enable_secondary_transport))
+            report.approximations.push_back({"ct_nuclear_primary_electron_response_only",
+                "CT material electron response relocates primary-loop ionization loss only, before nuclear interactions; charged secondary electron losses remain local. This is a partial full-physics integration, not a complete electron transport model",1.,0.});
+        if(config.enable_ct_grid && config.enable_inelastic && !config.enable_neutron_transport)
+            report.approximations.push_back({"ct_nuclear_neutron_dose_missing",
+                "CT nuclear reactions enabled but neutron transport is unavailable; neutral energy sinks do not contribute neutron-induced patient dose",1.,0.});
         if(result.material_electron_photon_untracked_MeV>0)
             report.approximations.push_back({"material_photon_untracked","Photon continuation not covered; separate energy sink, not local dose or patient escape",
                 result.material_electron_photon_untracked_MeV,0.});
@@ -150,7 +201,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     // the intentional TOPAS compatibility sink; the accounting residual
     // includes it. No independent analytic-model residual bucket remains.
     const auto physical_raw_residual =
-        result.initial_energy_MeV - result.total_deposited_energy_MeV -
+        result.initial_energy_MeV + result.neutron_experimental.energy[NKineticGain] - result.total_deposited_energy_MeV -
         result.escaped_energy_MeV - result.beamline_removed_energy_MeV -
         result.untracked_nuclear_energy_MeV -
         result.material_electron_untracked_MeV;

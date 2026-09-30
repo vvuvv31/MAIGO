@@ -1,5 +1,4 @@
-// Shared SYCL transport helpers included by transport_sycl_legacy.cpp and
-// transport_sycl.cpp. Do not compile this file as a standalone translation unit.
+// SYCL transport helpers for Unified EM and independent beamline/recoil modules. Do not compile this file as a standalone translation unit.
 //
 // Include context (required):
 //   - inside `namespace carbon`
@@ -3160,7 +3159,8 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
     const std::uint32_t random_dimension,
     const float observation_fraction = -1.0F,
     const bool use_species_water_parameters = true,
-    const float rest_mass_override_MeV = 0.0F) noexcept {
+    const float rest_mass_override_MeV = 0.0F,
+    const bool gaussian_only = false) noexcept {
     const float mass_per_u = rest_mass_override_MeV > 0.0F && mass_number > 0
         ? rest_mass_override_MeV / static_cast<float>(mass_number)
         : static_cast<float>(nucleon_rest_mass_MeV);
@@ -3202,8 +3202,12 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
         static_cast<float>(atomic_number) / (beta * momentum);
     const auto core_ratio =
         parameters.core_scattering_energy_MeV * charge_over_beta_momentum;
-    const auto core_power =
-        core_ratio * core_ratio / radiation_length_mm;
+    // Match the full local second moment, including Poisson tail variance.
+    // FE covariance per transverse axis: A0=T*L, A1=T*L^2/2, A2=T*L^3/3.
+    const auto tail_sigma_for_moments =
+        parameters.tail_scattering_energy_MeV * charge_over_beta_momentum;
+    const auto core_power = core_ratio * core_ratio / radiation_length_mm +
+        (gaussian_only ? tail_rate_per_mm * tail_sigma_for_moments * tail_sigma_for_moments : 0.0F);
     const auto core_theta_sigma = sycl::sqrt(core_power * path_length_mm);
 
     const auto normal_pair = [&](const std::uint32_t dimension) {
@@ -3304,7 +3308,7 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
     const auto poisson_limit = sycl::exp(-tail_mean);
     auto poisson_product = 1.0F;
     std::uint32_t tail_count = 0U;
-    while (true) {
+    while (!gaussian_only) {
         poisson_product *= sycl::fmax(
             rng::uniform01(seed, history_id, step_index,
                            random_dimension + 4U + tail_count),
@@ -3411,6 +3415,26 @@ bool ion_uses_fermi_eyges(const int scope, const int atomic_number,
 // displacement is relative to a straight drift along the input direction.
 // p/d/t/He-4 use their independent water tables. C12 and other uncalibrated
 // ions retain the C12-water candidate, with charge/(beta*p) scaling.
+// Conservative pre-sampling geometry guard. CT uses the physical voxel box;
+// no assumption that adjacent equal section IDs have equal density.
+float fe_geometry_safety(Direction3F p, bool ct, bool in_ct,
+                         Direction3F origin, Direction3F spacing,
+                         std::uint32_t nx, std::uint32_t ny, std::uint32_t nz,
+                         float water_length, bool simple_geometry) noexcept {
+    if (!simple_geometry) return 0.0F;
+    if (!ct) return sycl::fmax(0.0F,sycl::fmin(p.z,water_length-p.z));
+    if (!in_ct) return 0.0F;
+    const auto cell=urban_voxel_cell(p,Direction3F{0,0,1},origin,
+        Direction3F{origin.x+nx*spacing.x,origin.y+ny*spacing.y,origin.z+nz*spacing.z},
+        spacing,nx,ny,nz);
+    return cell.valid ? sycl::fmax(0.0F,urban_v2_box_safety(p.x,p.y,p.z,cell.safety)) : 0.0F;
+}
+
+inline void fe_count(std::uint64_t* counts, unsigned slot, std::uint64_t amount=1) noexcept {
+    if (counts) sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
+        sycl::memory_scope::device,sycl::access::address_space::global_space>(counts[slot]).fetch_add(amount);
+}
+
 CorrelatedScatteringStep ion_fermi_eyges_transport_step(
     const Direction3F direction, const float kinetic_energy_before_loss_MeV,
     const int atomic_number, const int mass_number,
@@ -3421,10 +3445,84 @@ CorrelatedScatteringStep ion_fermi_eyges_transport_step(
     const std::uint32_t random_dimension,
     const float observation_path_mm = -1.0F,
     const bool use_species_water_parameters = true,
-    const float rest_mass_override_MeV = 0.0F) noexcept {
+    const float rest_mass_override_MeV = 0.0F,
+    const bool gaussian_only = false,
+    const bool merge_moments = false, const float geometry_safety_mm = 0.0F,
+    std::uint64_t* counts = nullptr, const bool count_all = false) noexcept {
     CorrelatedScatteringStep result{
         direction, Direction3F{0.0F, 0.0F, 0.0F}};
     if (!(path_length_mm > 0.0F && max_segment_mm > 0.0F)) return result;
+
+    if (count_all) {
+        fe_count(counts,0);
+        fe_count(counts,1,static_cast<std::uint64_t>(sycl::ceil(path_length_mm/max_segment_mm)));
+    }
+    if (merge_moments && gaussian_only) {
+        unsigned fallback=0;
+        if (path_length_mm <= max_segment_mm) fallback=3;
+        else if (observation_path_mm >= 0.0F) fallback=4;
+        // Cheap eligibility rejection before evaluating the quadrature nodes.
+        else if (!(geometry_safety_mm > path_length_mm)) fallback=6;
+        else {
+            carbon::FeMoments m;
+            const float mass_per_u=rest_mass_override_MeV>0.0F && mass_number>0
+                ? rest_mass_override_MeV/static_cast<float>(mass_number)
+                : static_cast<float>(nucleon_rest_mass_MeV);
+            const float x0=10.0F*radiation_length_g_per_cm2/density_g_per_cm3;
+            for (float t=0.0F;t<path_length_mm;) {
+                const float h=sycl::fmin(max_segment_mm,path_length_mm-t);
+                const float mid=t+0.5F*h;
+                const float e=sycl::fmax(0.0F,kinetic_energy_before_loss_MeV-
+                    mid/path_length_mm*sampled_energy_loss_MeV)/static_cast<float>(mass_number);
+                const float momentum_per_u=sycl::sqrt(e*(e+2.0F*mass_per_u));
+                const float beta=momentum_per_u/(e+mass_per_u);
+                const float q=static_cast<float>(atomic_number)/(beta*mass_number*momentum_per_u);
+                const auto pars=water_ion_fermi_eyges_parameters(atomic_number,mass_number,e,use_species_water_parameters);
+                const float core=pars.core_scattering_energy_MeV*q;
+                const float tail=pars.tail_scattering_energy_MeV*q;
+                const float power=core*core/x0+pars.tail_rate_per_water_mm*(360.8297746F/x0)*tail*tail;
+                m.add(power,h,path_length_mm-mid);
+                t+=h;
+            }
+            if (!(m.a0>0.0F) || !sycl::isfinite(m.a2)) {
+                fe_count(counts,7); fallback=7;
+            } else if (m.a0>0.05F*0.05F) fallback=5;
+            else if (!(geometry_safety_mm>path_length_mm+6.0F*sycl::sqrt(m.a2))) fallback=6;
+            else {
+                const float conditional=m.a2-m.a1*m.a1/m.a0;
+                if (conditional < -16.0F*1.1920928955078125e-7F*m.a2) {
+                    fe_count(counts,7); fallback=7;
+                } else {
+                    const auto normals=[&](std::uint32_t dim) {
+                        const float u=sycl::fmax(rng::uniform01(seed,history_id,transport_step_index*1024U,dim),1.0e-12F);
+                        const float phi=6.2831853071795864769F*rng::uniform01(seed,history_id,transport_step_index*1024U,dim+1U);
+                        const float radius=sycl::sqrt(-2.0F*sycl::log(u));
+                        return Direction3F{radius*sycl::cos(phi),radius*sycl::sin(phi),0};
+                    };
+                    const auto n0=normals(random_dimension), n1=normals(random_dimension+2U);
+                    const float sigma=sycl::sqrt(m.a0), independent=sycl::sqrt(sycl::fmax(0.0F,conditional));
+                    const float tx=sigma*n0.x, ty=sigma*n0.y;
+                    const float dx=m.a1/m.a0*tx+independent*n1.x;
+                    const float dy=m.a1/m.a0*ty+independent*n1.y;
+                    const float norm=sycl::sqrt(direction.x*direction.x+direction.y*direction.y+direction.z*direction.z);
+                    const Direction3F w{direction.x/norm,direction.y/norm,direction.z/norm};
+                    const Direction3F ref=sycl::fabs(w.x)<0.9F ? Direction3F{1,0,0}:Direction3F{0,1,0};
+                    const float dot=ref.x*w.x+ref.y*w.y+ref.z*w.z;
+                    Direction3F u{ref.x-dot*w.x,ref.y-dot*w.y,ref.z-dot*w.z};
+                    const float inv=sycl::rsqrt(u.x*u.x+u.y*u.y+u.z*u.z);
+                    u=Direction3F{u.x*inv,u.y*inv,u.z*inv};
+                    const Direction3F v{w.y*u.z-w.z*u.y,w.z*u.x-w.x*u.z,w.x*u.y-w.y*u.x};
+                    Direction3F out{w.x+tx*u.x+ty*v.x,w.y+tx*u.y+ty*v.y,w.z+tx*u.z+ty*v.z};
+                    const float inv_out=1.0F/sycl::sqrt(out.x*out.x+out.y*out.y+out.z*out.z);
+                    result.direction=Direction3F{out.x*inv_out,out.y*inv_out,out.z*inv_out};
+                    result.displacement_mm=Direction3F{dx*u.x+dy*v.x,dx*u.y+dy*v.y,dx*u.z+dy*v.z};
+                    if (count_all) fe_count(counts,2);
+                    return result;
+                }
+            }
+        }
+        if (count_all && fallback!=7) fe_count(counts,fallback);
+    }
 
     auto segment_direction = direction;
     auto total_offset = Direction3F{0.0F, 0.0F, 0.0F};
@@ -3453,7 +3551,7 @@ CorrelatedScatteringStep ion_fermi_eyges_transport_step(
             density_g_per_cm3, radiation_length_g_per_cm2, seed, history_id,
             transport_step_index * 1024U + segment_index,
             random_dimension, observation_fraction,
-            use_species_water_parameters, rest_mass_override_MeV);
+            use_species_water_parameters, rest_mass_override_MeV, gaussian_only);
         if (segment.observation_valid) {
             const auto local_path = observation_fraction * segment_mm;
             observation_total_offset.x =

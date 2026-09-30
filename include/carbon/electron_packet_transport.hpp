@@ -77,10 +77,16 @@ inline ElectronEnergyPacket transport_electron_packet_step(
         if(packet.status==ElectronPacketStatus::active)++packet.source_restarts;
         return packet;
     }
-    const auto advanced=advance_electron_continuation(packet.cursor,tables[current],geometry);
+#if defined(CARBON_ELECTRON_REPLAY_REUSE)
+    ElectronReplayCertificate certificate;
+    auto* replay_certificate=&certificate;
+#else
+    ElectronReplayCertificate* replay_certificate=nullptr;
+#endif
+    const auto advanced=advance_electron_continuation(packet.cursor,tables[current],geometry,replay_certificate);
     // Sequence RNG explicitly; function argument evaluation order is not fixed.
     const double choice=uniform(),along=uniform();
-    const auto selected=choose_electron_energy_lineage(packet.cursor,advanced,tables[current],choice,along);
+    const auto selected=choose_electron_energy_lineage(packet.cursor,advanced,tables[current],choice,along,replay_certificate);
     ++packet.advances;
     switch(selected.status) {
     case ElectronLineageStatus::deposited:

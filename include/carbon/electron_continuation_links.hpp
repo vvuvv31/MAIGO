@@ -16,7 +16,7 @@ struct ElectronContinuationLinks {
         return {raw,bytes,next.data(),child_offsets.data(),child_rows.data(),child_rows.size()};
     }
     static ElectronContinuationLinks build(const unsigned char* raw,std::size_t bytes,
-                                          std::size_t byte_budget) {
+                                          std::size_t byte_budget,int projectile_pdg=1000060120) {
         if(!raw || !bytes || bytes%kElectronStateV4RecordBytes)
             throw std::invalid_argument("Invalid continuation source layout");
         const auto n=bytes/kElectronStateV4RecordBytes;
@@ -29,7 +29,7 @@ struct ElectronContinuationLinks {
         std::vector<Child> children;
         for(std::uint64_t row=0;row<n;++row) {
             const auto state=read_electron_continuation_step(raw,bytes,row);
-            if(!state.valid || (state.pdg!=11 && state.pdg!=22 && state.pdg!=1000060120))
+            if(!state.valid || (state.pdg!=11 && state.pdg!=22 && state.pdg!=projectile_pdg))
                 throw std::invalid_argument("Invalid/unsupported continuation source state");
             ordered.push_back({{state.run,state.event,state.track,state.step},row});
             if(state.step==1 && state.parent!=0)

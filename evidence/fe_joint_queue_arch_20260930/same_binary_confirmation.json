@@ -1,0 +1,550 @@
+{
+  "pairs": [
+    {
+      "baseline": {
+        "name": "final_inline_929203412",
+        "changes": {
+          "random_seed": 929203412,
+          "ct_electron_joint_execution_mode": "inline"
+        },
+        "exit_code": 1,
+        "wall_seconds": 48.01271028199699,
+        "binary_sha256": "109768dd6a61854a4cfe92257c9eba6d38f1d8b31f1315b2bc1431f4c52fcc98",
+        "histories_per_second": 135004.02210017457,
+        "quality": {
+          "schema_version": 3,
+          "status": "fail",
+          "run_mode": "research",
+          "accepted": false,
+          "absolute_physical_energy_residual_MeV": 58156.0892856,
+          "physical_relative_energy_residual": 3.4524464947e-06,
+          "absolute_accounting_energy_residual_MeV": 58156.0892856,
+          "accounting_relative_energy_residual": 3.4524464947e-06,
+          "absolute_energy_residual_MeV": 58156.0892856,
+          "relative_energy_residual": 3.4524464947e-06,
+          "topas_reference_energy_sink_active": false,
+          "queue_overflow_count": 0,
+          "queue_overflow_energy_MeV": 0,
+          "voxel_scored_energy_MeV": 14861864861.9,
+          "in_grid_deposited_energy_MeV": 14861936510,
+          "outside_grid_deposited_energy_MeV": 340611.49391,
+          "grid_split_closure_ratio": 1.00000015769,
+          "voxel_to_ingrid_ratio": 0.999995179088,
+          "voxel_to_total_deposited_ratio": 0.999972419026,
+          "failures": [
+            {
+              "code": "unvalidated_electron_joint_response",
+              "message": "Independent bulk response interface pilot; not patient/production validated",
+              "value": 1,
+              "limit": 0
+            }
+          ],
+          "approximations": [
+            {
+              "code": "condensed_delta_partition_v1",
+              "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition unless an explicit spatial response is enabled, configured combined mean-loss guard (default 1%); higher spectrum moments and patient BODY Gamma not validated",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "secondary_species_grouping_accuracy_pending",
+              "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "secondary_step_chunking_accepted",
+              "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "unified_material_em_accuracy_pending",
+              "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition unless an explicit spatial response is enabled; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "gaussian_fermi_eyges_candidate",
+              "message": "Gaussian FE matches local angular/displacement second moments of the existing FE core+tail model; non-Gaussian tails and heterogeneous patient dose require independent validation",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "joint_electron_packet_roulette",
+              "message": "Research unbiased joint-response packet sampling; probability floored by nonlocal fraction to conserve nonnegative step dose; finite-statistics patient gamma requires validation",
+              "value": 0.05,
+              "limit": 1
+            },
+            {
+              "code": "broadbeam_extended_mean_loss",
+              "message": "Research FE mean-loss cap relaxed; geometry faces, nuclear competition and sampled loss remain active; patient gamma requires validation",
+              "value": 0.05,
+              "limit": 0.01
+            },
+            {
+              "code": "broadbeam_fast_joint_electron_neutral_sink",
+              "message": "Broad beam uses the pinned C12 CT joint response for primary ionization; charged secondary electron losses remain local and nuclear neutral energy remains untransported. Patient accuracy is not validated",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "schneider_post_em_null_collisions",
+              "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 127,
+              "limit": 0
+            },
+            {
+              "code": "schneider_primary_post_em_null_collisions",
+              "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 166,
+              "limit": 0
+            }
+          ]
+        },
+        "energy_residual": 3.4524464947e-06,
+        "electron": {
+          "status": "unvalidated_interface_diagnostic",
+          "patient_experiment": true,
+          "data_sha256": "2f6c3321259eb07d336559e200a04c2a609b475fbf3ddafae75c2114e5572639",
+          "metadata_sha256": "7bad691107bba70e771098886ee7248792e73bfdffecb09feb0dcc170ab9837c",
+          "ordered_path_sha256": "c9b07452b73f4770834ed5af037c09f8ef8cdab695054888621d87a46f745d87",
+          "ordered_path_replays": 230675370,
+          "replaces_transverse_tail": true,
+          "queries": 1607800997,
+          "domain_misses": 0,
+          "invalid_marches": 0,
+          "redistributed_MeV": 933120905.305,
+          "escaped_MeV": 340609.194871,
+          "domain_retained_MeV": 0
+        },
+        "steps": 1605112272,
+        "nuclear_interactions": 2688891,
+        "kernels": [
+          "Kernel time: primary=23.24566 s electron=0 s secondary=22.213354 s neutral=0 s charged-after-neutral=0 s"
+        ],
+        "compiled_kernel": "broadbeam_fe_joint",
+        "local_1pct_1mm": 99.88470340494774,
+        "local_3pct_0mm": 79.74760922720826,
+        "mask_mean_relative_bias_percent": -0.5708277821540833,
+        "mask_mean_absolute_relative_error_percent": 1.9674367904663086,
+        "gamma_target_pass": true,
+        "throughput_target_pass": false,
+        "queue_log": []
+      },
+      "candidate": {
+        "name": "final_queued_929203412",
+        "changes": {
+          "random_seed": 929203412,
+          "ct_electron_joint_execution_mode": "queued"
+        },
+        "exit_code": 1,
+        "wall_seconds": 37.898906908987556,
+        "binary_sha256": "109768dd6a61854a4cfe92257c9eba6d38f1d8b31f1315b2bc1431f4c52fcc98",
+        "histories_per_second": 171031.55548960817,
+        "quality": {
+          "schema_version": 3,
+          "status": "fail",
+          "run_mode": "research",
+          "accepted": false,
+          "absolute_physical_energy_residual_MeV": 58156.1215312,
+          "physical_relative_energy_residual": 3.45244840896e-06,
+          "absolute_accounting_energy_residual_MeV": 58156.1215312,
+          "accounting_relative_energy_residual": 3.45244840896e-06,
+          "absolute_energy_residual_MeV": 58156.1215312,
+          "relative_energy_residual": 3.45244840896e-06,
+          "topas_reference_energy_sink_active": false,
+          "queue_overflow_count": 0,
+          "queue_overflow_energy_MeV": 0,
+          "voxel_scored_energy_MeV": 14861864866.3,
+          "in_grid_deposited_energy_MeV": 14861936510,
+          "outside_grid_deposited_energy_MeV": 340611.49391,
+          "grid_split_closure_ratio": 1.00000015768,
+          "voxel_to_ingrid_ratio": 0.999995179385,
+          "voxel_to_total_deposited_ratio": 0.999972419321,
+          "failures": [
+            {
+              "code": "unvalidated_electron_joint_response",
+              "message": "Independent bulk response interface pilot; not patient/production validated",
+              "value": 1,
+              "limit": 0
+            }
+          ],
+          "approximations": [
+            {
+              "code": "condensed_delta_partition_v1",
+              "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition unless an explicit spatial response is enabled, configured combined mean-loss guard (default 1%); higher spectrum moments and patient BODY Gamma not validated",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "secondary_species_grouping_accuracy_pending",
+              "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "secondary_step_chunking_accepted",
+              "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "unified_material_em_accuracy_pending",
+              "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition unless an explicit spatial response is enabled; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "gaussian_fermi_eyges_candidate",
+              "message": "Gaussian FE matches local angular/displacement second moments of the existing FE core+tail model; non-Gaussian tails and heterogeneous patient dose require independent validation",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "joint_electron_packet_roulette",
+              "message": "Research unbiased joint-response packet sampling; probability floored by nonlocal fraction to conserve nonnegative step dose; finite-statistics patient gamma requires validation",
+              "value": 0.05,
+              "limit": 1
+            },
+            {
+              "code": "broadbeam_extended_mean_loss",
+              "message": "Research FE mean-loss cap relaxed; geometry faces, nuclear competition and sampled loss remain active; patient gamma requires validation",
+              "value": 0.05,
+              "limit": 0.01
+            },
+            {
+              "code": "broadbeam_fast_joint_electron_neutral_sink",
+              "message": "Broad beam uses the pinned C12 CT joint response for primary ionization; charged secondary electron losses remain local and nuclear neutral energy remains untransported. Patient accuracy is not validated",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "schneider_post_em_null_collisions",
+              "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 127,
+              "limit": 0
+            },
+            {
+              "code": "schneider_primary_post_em_null_collisions",
+              "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 166,
+              "limit": 0
+            }
+          ]
+        },
+        "energy_residual": 3.45244840896e-06,
+        "electron": {
+          "status": "unvalidated_interface_diagnostic",
+          "patient_experiment": true,
+          "data_sha256": "2f6c3321259eb07d336559e200a04c2a609b475fbf3ddafae75c2114e5572639",
+          "metadata_sha256": "7bad691107bba70e771098886ee7248792e73bfdffecb09feb0dcc170ab9837c",
+          "ordered_path_sha256": "c9b07452b73f4770834ed5af037c09f8ef8cdab695054888621d87a46f745d87",
+          "ordered_path_replays": 230675370,
+          "replaces_transverse_tail": true,
+          "queries": 1607800997,
+          "domain_misses": 0,
+          "invalid_marches": 0,
+          "redistributed_MeV": 933120905.305,
+          "escaped_MeV": 340609.194871,
+          "domain_retained_MeV": 0
+        },
+        "steps": 1605112272,
+        "nuclear_interactions": 2688891,
+        "kernels": [
+          "Kernel time: primary=11.171087 s electron=1.9508763 s secondary=22.075467 s neutral=0 s charged-after-neutral=0 s"
+        ],
+        "compiled_kernel": "broadbeam_fe_joint_queue",
+        "local_1pct_1mm": 99.88470340494774,
+        "local_3pct_0mm": 79.74739168646288,
+        "mask_mean_relative_bias_percent": -0.5708277821540833,
+        "mask_mean_absolute_relative_error_percent": 1.9674367904663086,
+        "gamma_target_pass": true,
+        "throughput_target_pass": false,
+        "queue_log": [
+          "[fe-joint-queue] capacity=5592405 task_bytes=48 lanes=17408",
+          "[fe-joint-queue-time] seconds=1.95088 tasks=230675370 peak_tasks=1399476 overflow=0 drain_mismatch=0"
+        ]
+      },
+      "integer_differences": [],
+      "relative_dose_l1": 1.1076030776529638e-07,
+      "gain_percent": 26.686266697077187
+    },
+    {
+      "baseline": {
+        "name": "final_inline_929203512",
+        "changes": {
+          "random_seed": 929203512,
+          "ct_electron_joint_execution_mode": "inline"
+        },
+        "exit_code": 1,
+        "wall_seconds": 49.216398114018375,
+        "binary_sha256": "109768dd6a61854a4cfe92257c9eba6d38f1d8b31f1315b2bc1431f4c52fcc98",
+        "histories_per_second": 131702.22219398353,
+        "quality": {
+          "schema_version": 3,
+          "status": "fail",
+          "run_mode": "research",
+          "accepted": false,
+          "absolute_physical_energy_residual_MeV": 59322.1735404,
+          "physical_relative_energy_residual": 3.52163807353e-06,
+          "absolute_accounting_energy_residual_MeV": 59322.1735404,
+          "accounting_relative_energy_residual": 3.52163807353e-06,
+          "absolute_energy_residual_MeV": 59322.1735404,
+          "relative_energy_residual": 3.52163807353e-06,
+          "topas_reference_energy_sink_active": false,
+          "queue_overflow_count": 0,
+          "queue_overflow_energy_MeV": 0,
+          "voxel_scored_energy_MeV": 14862444308,
+          "in_grid_deposited_energy_MeV": 14862515935.8,
+          "outside_grid_deposited_energy_MeV": 339792.582363,
+          "grid_split_closure_ratio": 1.00000015767,
+          "voxel_to_ingrid_ratio": 0.999995180644,
+          "voxel_to_total_deposited_ratio": 0.999972476559,
+          "failures": [
+            {
+              "code": "unvalidated_electron_joint_response",
+              "message": "Independent bulk response interface pilot; not patient/production validated",
+              "value": 1,
+              "limit": 0
+            }
+          ],
+          "approximations": [
+            {
+              "code": "condensed_delta_partition_v1",
+              "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition unless an explicit spatial response is enabled, configured combined mean-loss guard (default 1%); higher spectrum moments and patient BODY Gamma not validated",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "secondary_species_grouping_accuracy_pending",
+              "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "secondary_step_chunking_accepted",
+              "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "unified_material_em_accuracy_pending",
+              "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition unless an explicit spatial response is enabled; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "gaussian_fermi_eyges_candidate",
+              "message": "Gaussian FE matches local angular/displacement second moments of the existing FE core+tail model; non-Gaussian tails and heterogeneous patient dose require independent validation",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "joint_electron_packet_roulette",
+              "message": "Research unbiased joint-response packet sampling; probability floored by nonlocal fraction to conserve nonnegative step dose; finite-statistics patient gamma requires validation",
+              "value": 0.05,
+              "limit": 1
+            },
+            {
+              "code": "broadbeam_extended_mean_loss",
+              "message": "Research FE mean-loss cap relaxed; geometry faces, nuclear competition and sampled loss remain active; patient gamma requires validation",
+              "value": 0.05,
+              "limit": 0.01
+            },
+            {
+              "code": "broadbeam_fast_joint_electron_neutral_sink",
+              "message": "Broad beam uses the pinned C12 CT joint response for primary ionization; charged secondary electron losses remain local and nuclear neutral energy remains untransported. Patient accuracy is not validated",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "schneider_post_em_null_collisions",
+              "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 108,
+              "limit": 0
+            },
+            {
+              "code": "schneider_primary_post_em_null_collisions",
+              "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 168,
+              "limit": 0
+            }
+          ]
+        },
+        "energy_residual": 3.52163807353e-06,
+        "electron": {
+          "status": "unvalidated_interface_diagnostic",
+          "patient_experiment": true,
+          "data_sha256": "2f6c3321259eb07d336559e200a04c2a609b475fbf3ddafae75c2114e5572639",
+          "metadata_sha256": "7bad691107bba70e771098886ee7248792e73bfdffecb09feb0dcc170ab9837c",
+          "ordered_path_sha256": "c9b07452b73f4770834ed5af037c09f8ef8cdab695054888621d87a46f745d87",
+          "ordered_path_replays": 230707782,
+          "replaces_transverse_tail": true,
+          "queries": 1607964431,
+          "domain_misses": 0,
+          "invalid_marches": 0,
+          "redistributed_MeV": 933099586.629,
+          "escaped_MeV": 339791.045324,
+          "domain_retained_MeV": 0
+        },
+        "steps": 1605276893,
+        "nuclear_interactions": 2687706,
+        "kernels": [
+          "Kernel time: primary=23.583862 s electron=0 s secondary=23.057424 s neutral=0 s charged-after-neutral=0 s"
+        ],
+        "compiled_kernel": "broadbeam_fe_joint",
+        "local_1pct_1mm": 99.84489344854292,
+        "local_3pct_0mm": 80.18725907362449,
+        "mask_mean_relative_bias_percent": -0.5101302862167358,
+        "mask_mean_absolute_relative_error_percent": 1.9531654119491577,
+        "gamma_target_pass": true,
+        "throughput_target_pass": false,
+        "queue_log": []
+      },
+      "candidate": {
+        "name": "final_queued_929203512",
+        "changes": {
+          "random_seed": 929203512,
+          "ct_electron_joint_execution_mode": "queued"
+        },
+        "exit_code": 1,
+        "wall_seconds": 39.63991219297168,
+        "binary_sha256": "109768dd6a61854a4cfe92257c9eba6d38f1d8b31f1315b2bc1431f4c52fcc98",
+        "histories_per_second": 163519.76181090708,
+        "quality": {
+          "schema_version": 3,
+          "status": "fail",
+          "run_mode": "research",
+          "accepted": false,
+          "absolute_physical_energy_residual_MeV": 59322.307852,
+          "physical_relative_energy_residual": 3.52164604689e-06,
+          "absolute_accounting_energy_residual_MeV": 59322.307852,
+          "accounting_relative_energy_residual": 3.52164604689e-06,
+          "absolute_energy_residual_MeV": 59322.307852,
+          "relative_energy_residual": 3.52164604689e-06,
+          "topas_reference_energy_sink_active": false,
+          "queue_overflow_count": 0,
+          "queue_overflow_energy_MeV": 0,
+          "voxel_scored_energy_MeV": 14862444308.3,
+          "in_grid_deposited_energy_MeV": 14862515935.8,
+          "outside_grid_deposited_energy_MeV": 339792.582363,
+          "grid_split_closure_ratio": 1.00000015766,
+          "voxel_to_ingrid_ratio": 0.999995180664,
+          "voxel_to_total_deposited_ratio": 0.99997247657,
+          "failures": [
+            {
+              "code": "unvalidated_electron_joint_response",
+              "message": "Independent bulk response interface pilot; not patient/production validated",
+              "value": 1,
+              "limit": 0
+            }
+          ],
+          "approximations": [
+            {
+              "code": "condensed_delta_partition_v1",
+              "message": "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition unless an explicit spatial response is enabled, configured combined mean-loss guard (default 1%); higher spectrum moments and patient BODY Gamma not validated",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "secondary_species_grouping_accuracy_pending",
+              "message": "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "secondary_step_chunking_accepted",
+              "message": "16 complete iterations per launch, stable survivor index compaction, tail below 8192; user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "unified_material_em_accuracy_pending",
+              "message": "Unified water/Schneider EM for all 18 charged ions; local delta deposition unless an explicit spatial response is enabled; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "gaussian_fermi_eyges_candidate",
+              "message": "Gaussian FE matches local angular/displacement second moments of the existing FE core+tail model; non-Gaussian tails and heterogeneous patient dose require independent validation",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "joint_electron_packet_roulette",
+              "message": "Research unbiased joint-response packet sampling; probability floored by nonlocal fraction to conserve nonnegative step dose; finite-statistics patient gamma requires validation",
+              "value": 0.05,
+              "limit": 1
+            },
+            {
+              "code": "broadbeam_extended_mean_loss",
+              "message": "Research FE mean-loss cap relaxed; geometry faces, nuclear competition and sampled loss remain active; patient gamma requires validation",
+              "value": 0.05,
+              "limit": 0.01
+            },
+            {
+              "code": "broadbeam_fast_joint_electron_neutral_sink",
+              "message": "Broad beam uses the pinned C12 CT joint response for primary ionization; charged secondary electron losses remain local and nuclear neutral energy remains untransported. Patient accuracy is not validated",
+              "value": 1,
+              "limit": 0
+            },
+            {
+              "code": "schneider_post_em_null_collisions",
+              "message": "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 108,
+              "limit": 0
+            },
+            {
+              "code": "schneider_primary_post_em_null_collisions",
+              "message": "primary candidates resolved as post-EM null collisions (track continues, no lookup)",
+              "value": 168,
+              "limit": 0
+            }
+          ]
+        },
+        "energy_residual": 3.52164604689e-06,
+        "electron": {
+          "status": "unvalidated_interface_diagnostic",
+          "patient_experiment": true,
+          "data_sha256": "2f6c3321259eb07d336559e200a04c2a609b475fbf3ddafae75c2114e5572639",
+          "metadata_sha256": "7bad691107bba70e771098886ee7248792e73bfdffecb09feb0dcc170ab9837c",
+          "ordered_path_sha256": "c9b07452b73f4770834ed5af037c09f8ef8cdab695054888621d87a46f745d87",
+          "ordered_path_replays": 230707782,
+          "replaces_transverse_tail": true,
+          "queries": 1607964431,
+          "domain_misses": 0,
+          "invalid_marches": 0,
+          "redistributed_MeV": 933099586.629,
+          "escaped_MeV": 339791.045324,
+          "domain_retained_MeV": 0
+        },
+        "steps": 1605276893,
+        "nuclear_interactions": 2687706,
+        "kernels": [
+          "Kernel time: primary=11.613154 s electron=2.0684017 s secondary=23.374406 s neutral=0 s charged-after-neutral=0 s"
+        ],
+        "compiled_kernel": "broadbeam_fe_joint_queue",
+        "local_1pct_1mm": 99.84489344854292,
+        "local_3pct_0mm": 80.18725907362449,
+        "mask_mean_relative_bias_percent": -0.5101302862167358,
+        "mask_mean_absolute_relative_error_percent": 1.9531656503677368,
+        "gamma_target_pass": true,
+        "throughput_target_pass": false,
+        "queue_log": [
+          "[fe-joint-queue] capacity=5592405 task_bytes=48 lanes=17408",
+          "[fe-joint-queue-time] seconds=2.0684 tasks=230707782 peak_tasks=1397323 overflow=0 drain_mismatch=0"
+        ]
+      },
+      "integer_differences": [],
+      "relative_dose_l1": 1.1073789744812251e-07,
+      "gain_percent": 24.158696100100464
+    }
+  ],
+  "baseline_aggregate_histories_per_second": 133332.68415049338,
+  "candidate_aggregate_histories_per_second": 167191.32623045627,
+  "gain_percent": 25.394105200602148,
+  "gamma_target_pass": true,
+  "refactoring_pass": true,
+  "throughput_target_pass": false
+}

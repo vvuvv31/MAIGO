@@ -6,6 +6,8 @@
 #include <fstream>
 
 namespace carbon {
+void write_neutron_experimental_outputs(const std::filesystem::path& directory,
+                                       const TransportConfig&,const TransportResult&);
 
 // MeV energy-deposition scorer: absolute MeV summed over all histories.
 // Also writes a derived total dose_Gy column for convenience.
@@ -44,6 +46,9 @@ void write_fragment_birth_spectrum_csv(const std::filesystem::path& prefix,
                                        const TransportConfig& config,
                                        const TransportResult& result);
 
+void write_neutron_proton_birth_csv(const std::filesystem::path& path, const TransportResult& result);
+void write_neutron_birth_csv(const std::filesystem::path& path,
+                             const TransportResult& result);
 void write_minibeam_phase_space_csv(const std::filesystem::path& path,
                                     const TransportResult& result);
 void write_minibeam_water_primary_plane_csv(

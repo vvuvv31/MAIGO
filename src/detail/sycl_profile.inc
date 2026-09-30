@@ -1,5 +1,4 @@
-// Shared SYCL transport helpers included by transport_sycl_legacy.cpp and
-// transport_sycl.cpp. Do not compile this file as a standalone translation unit.
+// SYCL transport helpers for Unified EM and independent beamline/recoil modules. Do not compile this file as a standalone translation unit.
 //
 // Include context (required):
 //   - inside `namespace carbon` (NOT the anonymous namespace)

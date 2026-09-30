@@ -11,6 +11,8 @@
 #undef private
 #include "G4Box.hh"
 #include "G4EmParameters.hh"
+#include "G4EmProcessSubType.hh"
+#include "G4VProcess.hh"
 #include "G4EmStandardPhysics_option4.hh"
 #include "G4Event.hh"
 #include "G4EventManager.hh"
@@ -56,7 +58,7 @@
 #include <vector>
 
 namespace {
-#ifdef MAIGO_URBAN_COPPER_ONLY
+#if defined(MAIGO_URBAN_COPPER_ONLY) || defined(MAIGO_URBAN_AIR_ONLY)
 constexpr int material_count = 1;
 #else
 constexpr int material_count = 5;
@@ -66,6 +68,7 @@ constexpr double emin_mev = 0.05;
 constexpr double emax_mev = 6500.0;
 int projectile_z = 6, projectile_a = 12, node_count = 32769;
 double grid_offset = 0.;
+double density_scale = 1.;
 std::filesystem::path output;
 struct MaterialSpec {
   const char* name;
@@ -77,7 +80,9 @@ struct MaterialSpec {
 // M0/M1/M8/M20 are the unchanged benchmark20260912/materials.txt inputs
 // referenced by the reused B3/B4 TOPAS runs. Water uses atomic stoichiometry.
 const std::array<MaterialSpec, material_count> specs{{
-#ifdef MAIGO_URBAN_COPPER_ONLY
+#ifdef MAIGO_URBAN_AIR_ONLY
+  {"G4_AIR", -3, 0.00120479, 85.7, {}, {} }
+#elif defined(MAIGO_URBAN_COPPER_ONLY)
   {"G4_Cu", -2, 8.96, 322., {29}, {1.}}
 #else
   {"Water_75eV", -1, 1., 75., {}, {}},
@@ -113,10 +118,10 @@ class Detector final : public G4VUserDetectorConstruction {
     auto* world=new G4PVPlacement(nullptr,{},world_lv,"world",nullptr,false,0);
     for(int i=0;i<material_count;++i) {
       const auto& s=specs[i];
-#ifdef MAIGO_URBAN_COPPER_ONLY
-      auto* material=nist->FindOrBuildMaterial("G4_Cu");
+#if defined(MAIGO_URBAN_COPPER_ONLY) || defined(MAIGO_URBAN_AIR_ONLY)
+      auto* material=nist->FindOrBuildMaterial(s.name);
 #else
-      auto* material=new G4Material(s.name,s.density*g/cm3,
+      auto* material=new G4Material(s.name,s.density*density_scale*g/cm3,
           i==0?2:static_cast<int>(s.z.size()));
       if(i==0) {
         auto* h=new G4Element("WaterHydrogen75","Hw75",1.,1.00794*g/mole);
@@ -164,6 +169,16 @@ class Physics final : public G4VModularPhysicsList {
       for(int j=0;j<pm->GetProcessListLength();++j)
         if(auto* m=dynamic_cast<G4hMultipleScattering*>((*processes)[j])) { old=m; break; }
       if(!old) continue;
+      // Match the pure-Urban TOPAS module: opt4's Wentzel companion
+      // single-scattering process must not survive an Urban replacement.
+      std::vector<G4VProcess*> companions;
+      for(int j=0;j<pm->GetProcessListLength();++j) {
+        auto* candidate=(*processes)[j];
+        if(candidate->GetProcessType()==fElectromagnetic &&
+           candidate->GetProcessSubType()==fCoulombScattering)
+          companions.push_back(candidate);
+      }
+      for(auto* companion:companions) pm->RemoveProcess(companion);
       auto name=old->GetProcessName(); pm->RemoveProcess(old);
       auto* replacement=new G4hMultipleScattering(name);
       auto* model=new G4UrbanMscModel(); model->SetHighEnergyLimit(10*GeV);
@@ -334,10 +349,16 @@ void write_tables() {
 } // namespace
 
 int main(int argc,char** argv) {
-  if(argc<5 || argc>6) { std::cerr<<"usage: extract_active_urban output_dir Z A nodes [grid_offset]\n";return 2; }
+  if(argc<5 || argc>7) { std::cerr<<"usage: extract_active_urban output_dir Z A nodes [grid_offset [density_scale]]\n";return 2; }
   try {
     output=argv[1];projectile_z=std::stoi(argv[2]);projectile_a=std::stoi(argv[3]);
-    node_count=std::stoi(argv[4]);if(argc==6)grid_offset=std::stod(argv[5]);
+    node_count=std::stoi(argv[4]);if(argc>=6)grid_offset=std::stod(argv[5]);
+    if(argc==7)density_scale=std::stod(argv[6]);
+    if(!(density_scale>0) || !std::isfinite(density_scale))
+      throw std::runtime_error("density_scale must be finite and positive");
+#if defined(MAIGO_URBAN_COPPER_ONLY) || defined(MAIGO_URBAN_AIR_ONLY)
+    if(density_scale!=1.)throw std::runtime_error("NIST material extraction does not support density_scale");
+#endif
     if(node_count<3 || projectile_z<1 || projectile_a<projectile_z || grid_offset<0 || grid_offset>=1)
       throw std::runtime_error("invalid extraction arguments");
     if(std::filesystem::exists(output)) throw std::runtime_error("output already exists; refusing overwrite");

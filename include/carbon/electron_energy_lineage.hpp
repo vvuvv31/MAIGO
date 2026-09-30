@@ -62,7 +62,8 @@ struct ElectronEnergyLineage {
 };
 inline ElectronEnergyLineage choose_electron_energy_lineage(
     const ElectronContinuationCursor& incoming,const ElectronContinuationAdvance& advance,
-    const MaterialElectronResponseView& table,double u_choice,double u_along) {
+    const MaterialElectronResponseView& table,double u_choice,double u_along,
+    const ElectronReplayCertificate* certificate=nullptr) {
     ElectronEnergyLineage out;
     if(!incoming.valid || (incoming.pdg!=11 && incoming.pdg!=22))return out;
     if(!table.state_sources || incoming.source>=table.state_source_count)return out;
@@ -114,11 +115,19 @@ inline ElectronEnergyLineage choose_electron_energy_lineage(
         if(std::abs(total-advance.deposited_MeV-advance.next.energy_MeV)>tolerance)return out;
     } else {
         // Completed steps must reproduce the exact raw genealogy range.
-        const auto replay=prepare_electron_replay_step(raw_view,incoming.row);
-        if(replay.status!=ElectronReplayStatus::ready)return out;
-        if(advance.children_begin!=replay.children_begin ||
-           advance.children_end!=replay.children_end)return out;
-        if(std::abs(advance.child_energy_MeV-replay.child_energy_MeV)>tolerance)return out;
+        std::uint64_t raw_begin{},raw_end{};double raw_energy{};
+        if(certificate && certificate->matches(raw_view,incoming.row)) {
+            raw_begin=certificate->children_begin();raw_end=certificate->children_end();
+            raw_energy=certificate->child_energy();
+        } else {
+            // Standalone callers retain the complete raw-data validation.
+            const auto replay=prepare_electron_replay_step(raw_view,incoming.row);
+            if(replay.status!=ElectronReplayStatus::ready)return out;
+            raw_begin=replay.children_begin;raw_end=replay.children_end;
+            raw_energy=replay.child_energy_MeV;
+        }
+        if(advance.children_begin!=raw_begin || advance.children_end!=raw_end)return out;
+        if(std::abs(advance.child_energy_MeV-raw_energy)>tolerance)return out;
         for(auto c=advance.children_begin;c<advance.children_end;++c) {
             const auto child=electron_continuation_child(incoming,advance,table,c);
             if(!child.valid || (child.pdg!=11 && child.pdg!=22))return out;

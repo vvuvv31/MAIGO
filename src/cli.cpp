@@ -88,11 +88,11 @@ void apply_cli_overrides(int argc, char** argv, TransportConfig& config, CliStat
         } else if (argument == "--ct-grid" && index + 1 < argc) {
             config.ct_grid_file = argv[++index];
         } else if (argument == "--ct-stopping-power-scale" && index + 1 < argc) {
-            config.ct_stopping_power_scale = std::stod(argv[++index]);
+            throw std::invalid_argument("--ct-stopping-power-scale is obsolete; Unified EM uses native material stopping");
         } else if (argument == "--auto-device-tuning") {
             config.auto_device_tuning = true;
         } else if (argument == "--ct-schneider-stopping-power-file" && index + 1 < argc) {
-            config.ct_schneider_stopping_power_file = argv[++index];
+            throw std::invalid_argument("--ct-schneider-stopping-power-file is obsolete; use em_package_file in YAML");
         } else if (argument == "--spots" && index + 1 < argc) {
             if (!spots_cli_override) {
                 config.topas_spots_file.clear();
@@ -103,9 +103,8 @@ void apply_cli_overrides(int argc, char** argv, TransportConfig& config, CliStat
         } else if (argument == "--spot-weights" && index + 1 < argc) {
             config.spot_weights_file = argv[++index];
         } else if (argument == "--straggling-scale" && index + 1 < argc) {
-            config.straggling_scale = std::stod(argv[++index]);
-            config.straggling_scale_energies_MeVu.clear();
-            config.straggling_scale_values.clear();
+            if (std::stod(argv[++index]) != 1.0)
+                throw std::invalid_argument("--straggling-scale is obsolete; Unified EM uses native fluctuations");
         } else if (argument == "--output" && index + 1 < argc) {
             config.output_file = argv[++index];
         } else if (argument == "--dose-output" && index + 1 < argc) {

@@ -77,6 +77,7 @@ inline WaterElectronPathStatus water_electron_path_in_slab(
     return WaterElectronPathStatus::contained;
 }
 struct WaterElectronResponseTable {
+    int projectile_z{6},projectile_a{12};
     int material_section{-1};
     double reference_density_g_cm3{1.0};
     std::string material_name;
@@ -86,7 +87,7 @@ struct WaterElectronResponseTable {
     std::vector<WaterElectronPathNode> nodes;
     std::vector<double> prefix_radius;
     static WaterElectronResponseTable load(const std::filesystem::path&,const std::string&,const std::string&,
-                                          bool material_response=false);
+                                          bool material_response=false, int projectile_z=6, int projectile_a=12);
 };
 
 // Shared Unified-water delta relocation (Phase E). Used by the legacy

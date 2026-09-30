@@ -75,7 +75,6 @@ ct_schneider_primary_rate_file: /mnt/sdb/wuwei/MAIGO/data/schneider/schneider_in
 ct_schneider_c12_cinel03_file: /mnt/sdb/wuwei/MAIGO/data/schneider/cinel03_c12_targets_v2_1.bin
 ct_schneider_secondary_rate_file: /mnt/sdb/wuwei/MAIGO/data/schneider/secondary_inelastic_rates_v2_1.bin
 ct_schneider_secondary_cinel03_file: /mnt/sdb/wuwei/MAIGO/data/schneider/cinel03_secondary_targets_v2_1_14p.bin
-ct_schneider_stopping_power_file: data/schneider/schneider_stopping_v1.bin
 ct_schneider_physics_bundle_file: data/schneider/schneider_physics_bundle_v2_1.json
 secondary_out_of_scope_nuclear_policy: em_only
 enable_energy_straggling: true

@@ -262,6 +262,47 @@ inline float minibeam_path_to_material_boundary(
     return best;
 }
 
+// Long air steps need analytic interval intersections. Fixed 1e-5 mm
+// before/after probes can round to the same FP32 point at grazing slit walls
+// and silently miss a crossing. Scan every finite slit, without spatial probes.
+inline float minibeam_path_to_surface_interval(
+    const float x, const float y, const float dx, const float dy,
+    const float ca, const float sa, const float radius, const int slit_count,
+    const float width, const float pitch, const float half_length,
+    const float offset, const float max_path) noexcept {
+    float best=max_path;
+    auto consider=[&](float t) { if(t>1.0e-6F && t<best) best=t; };
+    const float aa=dx*dx+dy*dy, bb=x*dx+y*dy, cc=x*x+y*y-radius*radius;
+    float c0=-1.0e30F,c1=1.0e30F;
+    if(aa>1.0e-16F) {
+        const float disc=bb*bb-aa*cc;
+        if(disc<0.0F) return max_path;
+        const float root=std::sqrt(disc);
+        c0=(-bb-root)/aa; c1=(-bb+root)/aa;
+        consider(c0); consider(c1);
+    } else if(cc>=0.0F) return max_path;
+    const float u=ca*x+sa*y-offset, v=-sa*x+ca*y;
+    const float du=ca*dx+sa*dy, dv=-sa*dx+ca*dy;
+    for(int slit=-slit_count/2;slit<=slit_count/2;++slit) {
+        float enter=-1.0e30F,leave=1.0e30F;
+        auto slab=[&](float p,float d,float lo,float hi) {
+            if(std::fabs(d)<1.0e-12F) { if(p<lo || p>hi) leave=-1.0e30F; }
+            else {
+                float a=(lo-p)/d,b=(hi-p)/d;
+                if(a>b) {const float tmp=a;a=b;b=tmp;}
+                if(a>enter)enter=a; if(b<leave)leave=b;
+            }
+        };
+        slab(u,du,slit*pitch-0.5F*width,slit*pitch+0.5F*width);
+        slab(v,dv,-half_length,half_length);
+        if(enter<leave) {
+            if(enter>=c0 && enter<=c1)consider(enter);
+            if(leave>=c0 && leave<=c1)consider(leave);
+        }
+    }
+    return best;
+}
+
 // Straight-ahead Copper length before a downstream axial plane.  This is a
 // diagnostic geometry integral: it subtracts finite slit air and stops after
 // a cylindrical side exit, but intentionally does not predict later MCS.

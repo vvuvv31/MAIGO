@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <array>
+#include <charconv>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -17,6 +18,7 @@
 #include <numeric>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 #include <tuple>
 #include <vector>
 
@@ -152,6 +154,41 @@ void ensure_parent_directory(const std::filesystem::path& path) {
         std::filesystem::create_directories(path.parent_path());
     }
 }
+
+// Buffered row formatter for the large sparse CSVs. std::to_chars with
+// general/12 is specified as printf("%.12g"), which is what an ostream with
+// setprecision(12) and default float flags emits, so files are byte-identical.
+class CsvRowBuffer {
+public:
+    explicit CsvRowBuffer(std::ofstream& output) : output_(output) {
+        buffer_.reserve(capacity + 512);
+    }
+    void integer(std::size_t value) {
+        char text[24];
+        const auto end = std::to_chars(text, text + sizeof(text), value).ptr;
+        buffer_.append(text, end);
+    }
+    void real(double value) {
+        char text[64];
+        const auto end = std::to_chars(text, text + sizeof(text), value,
+                                       std::chars_format::general, 12).ptr;
+        buffer_.append(text, end);
+    }
+    void separator() { buffer_.push_back(','); }
+    void end_row() {
+        buffer_.push_back('\n');
+        if (buffer_.size() >= capacity) flush();
+    }
+    void flush() {
+        output_.write(buffer_.data(), static_cast<std::streamsize>(buffer_.size()));
+        buffer_.clear();
+    }
+
+private:
+    static constexpr std::size_t capacity = std::size_t{1} << 20;
+    std::ofstream& output_;
+    std::string buffer_;
+};
 
 }  // namespace
 
@@ -823,6 +860,30 @@ void write_minibeam_water_primary_plane_csv(
     }
 }
 
+static void write_neutron_birth_records_csv(const std::filesystem::path& path,
+                             const std::vector<NeutronBirthRecord>& records) {
+    ensure_parent_directory(path);
+    std::ofstream out(path);
+    if (!out) throw std::runtime_error("Cannot create neutron birth file: " + path.string());
+    out << "source_history,rng_stream,collision,product_index,generation,material_section,parent_Z,parent_A,role,kinetic_energy_MeV,x_mm,y_mm,z_mm,direction_x,direction_y,direction_z,weight\n"
+        << std::setprecision(17);
+    for (const auto& r : records) {
+        out << r.history << ',' << r.rng_stream << ',' << r.collision << ','
+            << r.product_index << ',' << r.generation << ',' << r.material_section << ','
+            << r.parent_z << ',' << r.parent_a << ',' << r.role << ','
+            << r.kinetic_energy_MeV << ',' << r.x_mm << ',' << r.y_mm << ',' << r.z_mm << ','
+            << r.direction_x << ',' << r.direction_y << ',' << r.direction_z << ',' << r.weight << '\n';
+    }
+    if (!out) throw std::runtime_error("Failed to write neutron birth file");
+}
+
+void write_neutron_birth_csv(const std::filesystem::path& path,const TransportResult& result) {
+    write_neutron_birth_records_csv(path,result.neutron_birth_records);
+}
+void write_neutron_proton_birth_csv(const std::filesystem::path& path,const TransportResult& result) {
+    write_neutron_birth_records_csv(path,result.neutron_proton_birth_records);
+}
+
 void write_minibeam_fragment_phase_space_csv(
     const std::filesystem::path& path, const TransportResult& result) {
     ensure_parent_directory(path);
@@ -1069,7 +1130,8 @@ void write_sparse_charged_origin_voxel_dose_csv(
     };
 #endif
     for (std::size_t voxel = 0; voxel < voxel_count; ++voxel) {
-        double reconstructed = 0.0;
+        double reconstructed = result.neutron_voxel_deposited_energy_MeV.empty()
+            ? 0.0 : result.neutron_voxel_deposited_energy_MeV.at(voxel);
         for (std::size_t category = 0; category < charged_origin_category_count;
              ++category) {
             reconstructed += result.charged_origin_voxel_deposited_energy_MeV[
@@ -1150,7 +1212,7 @@ void write_sparse_charged_origin_voxel_dose_csv(
               "secondary_boron_MeV,secondary_beryllium_MeV,"
               "secondary_lithium_MeV,secondary_helium_MeV,"
               "secondary_proton_MeV,secondary_other_charged_MeV\n";
-    output << std::setprecision(12);
+    CsvRowBuffer rows(output);
     for (std::size_t z = 0; z < bins; ++z) {
         for (std::size_t y = 0; y < config.voxel_bins_y; ++y) {
             for (std::size_t x = 0; x < config.voxel_bins_x; ++x) {
@@ -1168,18 +1230,21 @@ void write_sparse_charged_origin_voxel_dose_csv(
                 const auto z_mm =
                     (static_cast<double>(z) + 0.5) *
                     config.scorer_spacing_z_mm();
-                output << x << ',' << y << ',' << z << ',' << x_mm << ','
-                       << y_mm << ',' << z_mm << ',' << total;
+                rows.integer(x); rows.separator(); rows.integer(y); rows.separator();
+                rows.integer(z); rows.separator(); rows.real(x_mm); rows.separator();
+                rows.real(y_mm); rows.separator(); rows.real(z_mm); rows.separator();
+                rows.real(total);
                 for (std::size_t category = 0;
                      category < charged_origin_category_count; ++category) {
-                    output << ','
-                           << result.charged_origin_voxel_deposited_energy_MeV[
-                                  category * voxel_count + voxel];
+                    rows.separator();
+                    rows.real(result.charged_origin_voxel_deposited_energy_MeV[
+                        category * voxel_count + voxel]);
                 }
-                output << '\n';
+                rows.end_row();
             }
         }
     }
+    rows.flush();
 }
 
 void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
@@ -1408,7 +1473,7 @@ void write_sparse_charged_origin_voxel_dose_Gy_csv(
               "secondary_boron_Gy,secondary_beryllium_Gy,"
               "secondary_lithium_Gy,secondary_helium_Gy,"
               "secondary_proton_Gy,secondary_other_charged_Gy\n";
-    output << std::setprecision(12);
+    CsvRowBuffer rows(output);
     for (std::size_t z = 0; z < bins; ++z) {
         for (std::size_t y = 0; y < config.voxel_bins_y; ++y) {
             for (std::size_t x = 0; x < config.voxel_bins_x; ++x) {
@@ -1426,22 +1491,24 @@ void write_sparse_charged_origin_voxel_dose_Gy_csv(
                 const auto z_mm =
                     (static_cast<double>(z) + 0.5) *
                     config.scorer_spacing_z_mm();
-                output << x << ',' << y << ',' << z << ',' << x_mm << ','
-                       << y_mm << ',' << z_mm << ','
-                       << scored_dose_Gy(config, total, mass_kg);
+                rows.integer(x); rows.separator(); rows.integer(y); rows.separator();
+                rows.integer(z); rows.separator(); rows.real(x_mm); rows.separator();
+                rows.real(y_mm); rows.separator(); rows.real(z_mm); rows.separator();
+                rows.real(scored_dose_Gy(config, total, mass_kg));
                 for (std::size_t category = 0;
                      category < charged_origin_category_count; ++category) {
-                    output << ','
-                           << scored_dose_Gy(
-                                  config,
-                                  result.charged_origin_voxel_deposited_energy_MeV[
-                                      category * voxel_count + voxel],
-                                  mass_kg);
+                    rows.separator();
+                    rows.real(scored_dose_Gy(
+                        config,
+                        result.charged_origin_voxel_deposited_energy_MeV[
+                            category * voxel_count + voxel],
+                        mass_kg));
                 }
-                output << '\n';
+                rows.end_row();
             }
         }
     }
+    rows.flush();
 }
 
 void write_dense_charged_origin_voxel_dose_mhd(
@@ -1556,7 +1623,8 @@ void write_dense_charged_origin_voxel_dose_mhd(
                 "water_he3", "water_he4", "water_heavy", "water_other"};
         const auto histories = static_cast<double>(config.number_of_histories);
         for (std::size_t voxel = 0; voxel < voxel_count; ++voxel) {
-            double reconstructed = 0.0;
+            double reconstructed = result.neutron_voxel_deposited_energy_MeV.empty()
+                ? 0.0 : result.neutron_voxel_deposited_energy_MeV.at(voxel);
             for (std::size_t category = 0;
                  category < minibeam_component_category_count; ++category) {
                 reconstructed +=
@@ -2047,6 +2115,8 @@ void write_energy_ledger_json(const std::filesystem::path& path,
     output << "{\n"
            << "  \"histories\": " << config.number_of_histories << ",\n"
            << "  \"E_in_MeV\": " << result.initial_energy_MeV << ",\n"
+           << "  \"E_neutron_kinetic_gain_MeV\": " << result.neutron_experimental.energy[NKineticGain] << ",\n"
+           << "  \"E_neutron_deposited_water_MeV\": " << result.neutron_experimental.energy[NDepositWater] << ",\n"
            << "  \"E_dep_MeV\": " << result.total_deposited_energy_MeV << ",\n"
            << "  \"E_dep_in_grid_MeV\": " << result.in_grid_deposited_energy_MeV << ",\n"
            << "  \"E_dep_outside_grid_MeV\": "
@@ -2084,22 +2154,15 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"nuclear_interactions\": " << result.nuclear_interactions << ",\n"
            << "  \"material_physics_mode\": \"" << material_physics_mode_name(config.material_physics_mode) << "\",\n"
            << "  \"upstream_air_mcs_covariance_enabled\": " << (config.spots_enable_upstream_air_mcs ? "true" : "false") << ",\n"
-           << "  \"ct_primary_midpoint_stopping\": " << (config.ct_primary_midpoint_stopping ? "true" : "false") << ",\n"
            << "  \"ct_secondary_exact_faces\": " << (config.ct_secondary_exact_faces ? "true" : "false") << ",\n"
-           << "  \"ct_secondary_ion_section_stopping_file\": \"" << config.ct_secondary_ion_section_stopping_file.string() << "\",\n"
-           << "  \"ct_secondary_ion_section_stopping_sha256\": \"" << config.ct_secondary_ion_section_stopping_sha256 << "\",\n"
-           << "  \"ct_secondary_ion_section_stopping_metadata_sha256\": \"" << config.ct_secondary_ion_section_stopping_metadata_sha256 << "\",\n"
-           << "  \"ct_primary_midpoint_stopping_diagnostic\": " << (config.ct_primary_midpoint_stopping_diagnostic ? "true" : "false") << ",\n"
            << "  \"ct_secondary_exact_faces_diagnostic\": " << (config.ct_secondary_exact_faces_diagnostic ? "true" : "false") << ",\n"
            << "  \"ct_secondary_mcs_off_diagnostic\": " << (config.ct_secondary_mcs_off_diagnostic ? "true" : "false") << ",\n"
-           << "  \"ct_secondary_schneider_sp_diagnostic\": " << (config.ct_secondary_schneider_sp_diagnostic ? "true" : "false") << ",\n"
            << "  \"upstream_air_mcs_file\": \"" << config.spots_upstream_air_mcs_file.string() << "\",\n"
            << "  \"upstream_air_mcs_sha256\": \"" << config.spots_upstream_air_mcs_sha256 << "\",\n"
            << "  \"ct_schneider_primary_rate_file\": \"" << config.ct_schneider_primary_rate_file.string() << "\",\n"
            << "  \"ct_schneider_primary_cinel03_file\": \"" << config.ct_schneider_primary_cinel03_file.string() << "\",\n"
            << "  \"ct_schneider_secondary_rate_file\": \"" << config.ct_schneider_secondary_rate_file.string() << "\",\n"
            << "  \"ct_schneider_secondary_cinel03_file\": \"" << config.ct_schneider_secondary_cinel03_file.string() << "\",\n"
-           << "  \"ct_schneider_stopping_power_file\": \"" << config.ct_schneider_stopping_power_file.string() << "\",\n"
            << "  \"ct_schneider_cross_section_file\": \"" << config.ct_schneider_cross_section_file.string() << "\",\n"
            << "  \"ct_schneider_delta_tail_file\": \"" << config.ct_schneider_delta_tail_file.string() << "\",\n"
            << "  \"ct_schneider_delta_longitudinal_file\": \"" << config.ct_schneider_delta_longitudinal_file.string() << "\",\n"
@@ -2127,15 +2190,32 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"elastic_recoil_stopping_sha256\": \"" << config.elastic_recoil_stopping_sha256 << "\",\n";
     if (config.unified_water_nuclear_transport) {
         output << "  \"unified_water_material_sha256\": \"" << config.unified_water_material_sha256 << "\",\n"
-               << "  \"unified_water_primary_stopping_file\": \"" << config.primary_stopping_power_file.string() << "\",\n"
+               << "  \"nuclear_recoil_reference_grid_file\": \"" << config.primary_stopping_power_file.string() << "\",\n"
                << "  \"unified_water_material_id_note\": \"255 is a diagnostic sentinel, not a Schneider section; rate uses a separate water row\",\n";
     }
+    output << "  \"transport_profile\": \"" << config.transport_profile << "\",\n"
+           << "  \"fermi_eyges_gaussian_only\": " << (config.fermi_eyges_gaussian_only ? "true" : "false") << ",\n";
+    output << "  \"fermi_eyges_sampling\": \"" << config.fermi_eyges_sampling << "\",\n"
+           << "  \"fe_sampling_diagnostics_enabled\": " << (result.fe_sampling_diagnostics_enabled ? "true" : "false") << ",\n"
+           << "  \"fe_sampling_counts\": [";
+    for (std::size_t i=0;i<result.fe_sampling_counts.size();++i) {
+        if(i) output << ", ";
+        output << result.fe_sampling_counts[i];
+    }
+    output << "],\n";
     if(!config.material_electron_response_index_file.empty()) {
         const auto& d=result.electron_joint_diagnostics;
         output<<"  \"material_electron_response\": {\"status\": \"unvalidated_main_kernel_integration\", "
               <<"\"density_sampling\": \""<<(config.enable_ct_grid?"candidate_same_section_density_mixture_birth_energy_packets":"deposited_fraction_weighted_brackets_no_coordinate_scaling")<<"\", "
               <<"\"index_sha256\": \""<<config.material_electron_response_index_sha256<<"\", "
               <<"\"memory_mode\": \""<<config.material_electron_response_memory_mode<<"\", "
+              <<"\"execution_mode\": \""<<config.material_electron_execution_mode<<"\", "
+              <<"\"group_size\": "<<config.material_electron_group_size<<", "
+              <<"\"queue_budget_MiB\": "<<config.material_electron_queue_budget_MiB<<", "
+              <<"\"queue_chunk\": "<<config.material_electron_queue_chunk<<", "
+              <<"\"queue_lanes\": "<<config.material_electron_queue_lanes<<", "
+              <<"\"retained_bank\": "<<(config.material_electron_retain_bank?"true":"false")<<", "
+              <<"\"electron_kernel_seconds\": "<<result.electron_kernel_seconds<<", "
               <<"\"density_g_cm3\": "<<(config.enable_ct_grid?"null":std::to_string(config.water_density_g_per_cm3))<<", "
               <<"\"heterogeneous_continuation\": "<<(config.enable_ct_grid?"true":"false")
               <<", \"unresolved_photon_policy\": \""<<(config.enable_ct_grid?"separate_untracked_energy_not_patient_escape":"explicit_escape_bound_not_validated")<<"\", "
@@ -2876,3 +2956,45 @@ void write_schneider_unsupported_tracks_json(const std::filesystem::path& path,
 }
 
 }  // namespace carbon
+
+namespace carbon {
+void write_neutron_experimental_outputs(const std::filesystem::path& directory,
+                                       const TransportConfig& config,const TransportResult& result){
+ std::filesystem::create_directories(directory);
+ std::ofstream out(directory/"neutron_transport.json");out<<std::setprecision(17);
+ const char* energy_names[]={"input_water","input_copper","deposit_water","deposit_outside_water","escaped","unsupported","outside_energy_grid","step_limit","queue_overflow","kinetic_gain","unsupported_photon","unsupported_electron","missing_ion_stopping","deposit_in_scoring_grid","input_total"};
+ const char* count_names[]={"births","collisions","elastic","inelastic","capture","fission","rescaled_events","unresolved_rate_interval_queries","charged_descendants","unsupported","step_limit","queue_overflow","two_body_elastic","recoil_extension_steps","water_urban_steps","water_urban_uncovered_steps","water_urban_failures","boundary_material_corrections"};
+ out<<"{\n  \"experimental\": true,\n  \"runtime_validated\": false,\n  \"model\": \"neutron bank plus CSDA ions with optional water Urban; photons/electrons unresolved\",\n  \"energy_MeV\": {";
+ for(unsigned i=0;i<NEnergyCount;++i)out<<(i?",":"")<<"\n    \""<<energy_names[i]<<"\": "<<result.neutron_experimental.energy[i];
+ out<<"\n  },\n  \"counts\": {";
+ for(unsigned i=0;i<NCountSize;++i)out<<(i?",":"")<<"\n    \""<<count_names[i]<<"\": "<<result.neutron_experimental.counts[i];
+ out<<"\n  },\n  \"water_recoil_urban_enabled\": "<<(config.neutron_water_recoil_urban?"true":"false")<<",\n  \"exact_plane_boundaries_enabled\": "<<(config.neutron_exact_plane_boundaries?"true":"false")<<"\n}\n";if(!out)throw std::runtime_error("Failed to write neutron diagnostics");
+ if(result.neutron_voxel_deposited_energy_MeV.empty())return;
+ std::vector<float> values(result.neutron_voxel_deposited_energy_MeV.begin(),result.neutron_voxel_deposited_energy_MeV.end());
+ std::ofstream raw(directory/"neutron_deposit_MeV.raw",std::ios::binary);raw.write(reinterpret_cast<const char*>(values.data()),values.size()*sizeof(float));
+ std::ofstream hdr(directory/"neutron_deposit_MeV.mhd");
+ hdr<<"ObjectType = Image\nNDims = 3\nBinaryData = True\nBinaryDataByteOrderMSB = False\nOffset = "
+    <<(-.5*config.voxel_bins_x+.5)*config.voxel_size_x_mm<<' '<<(-.5*config.voxel_bins_y+.5)*config.voxel_size_y_mm<<' '<<.5*config.scorer_spacing_z_mm()
+    <<"\nElementSpacing = "<<config.voxel_size_x_mm<<' '<<config.voxel_size_y_mm<<' '<<config.scorer_spacing_z_mm()
+    <<"\nDimSize = "<<config.voxel_bins_x<<' '<<config.voxel_bins_y<<' '<<result.deposited_energy_MeV.size()
+    <<"\nElementType = MET_FLOAT\nElementDataFile = neutron_deposit_MeV.raw\n";
+ if(!raw||!hdr)throw std::runtime_error("Failed to write experimental neutron dose map");
+ const char* component_names[]={"proton","other_charged","local"};
+ for(unsigned c=0;c<3;++c){
+  const auto& v=result.neutron_component_voxel_MeV[c];
+  if(v.size()!=values.size())throw std::runtime_error("Invalid neutron component map size");
+  const auto name=std::string("neutron_")+component_names[c]+"_MeV.raw";
+  std::ofstream f(directory/name,std::ios::binary);
+  f.write(reinterpret_cast<const char*>(v.data()),v.size()*sizeof(float));
+  if(!f)throw std::runtime_error("Failed to write neutron component map");
+  std::ofstream h(directory/(std::string("neutron_")+component_names[c]+"_MeV.mhd"));
+  h<<"ObjectType = Image\nNDims = 3\nBinaryData = True\nBinaryDataByteOrderMSB = False\nOffset = "
+   <<(-.5*config.voxel_bins_x+.5)*config.voxel_size_x_mm<<' '<<(-.5*config.voxel_bins_y+.5)*config.voxel_size_y_mm<<' '<<.5*config.scorer_spacing_z_mm()
+   <<"\nElementSpacing = "<<config.voxel_size_x_mm<<' '<<config.voxel_size_y_mm<<' '<<config.scorer_spacing_z_mm()
+   <<"\nDimSize = "<<config.voxel_bins_x<<' '<<config.voxel_bins_y<<' '<<result.deposited_energy_MeV.size()
+   <<"\nElementType = MET_FLOAT\nElementDataFile = "<<name<<'\n';
+  if(!h)throw std::runtime_error("Failed to write neutron component header");
+ }
+
+}
+}

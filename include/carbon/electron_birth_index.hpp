@@ -10,8 +10,12 @@ namespace carbon {
 // or number of subsequent steps. No package yield/energy modification.
 class ElectronBirthIndex {
 public:
-    explicit ElectronBirthIndex(const std::vector<WaterElectronChannel>& channels):reference_(channels),
-        roots_(channels.size()),loss_(channels.size()),local_(channels.size()),birth_(channels.size()) {}
+    explicit ElectronBirthIndex(const std::vector<WaterElectronChannel>& channels,int z=6,int a=12):
+        projectile_pdg_(0),mass_number_(a),reference_(channels),
+        roots_(channels.size()),loss_(channels.size()),local_(channels.size()),birth_(channels.size()) {
+        if(z<=0 || z>999 || a<z || a>999)throw std::invalid_argument("Invalid electron birth projectile ZA");
+        projectile_pdg_=z==1 && a==1?2212:1000000000+z*10000+a*10;
+    }
     void add(const ElectronContinuationView& source,std::uint32_t source_id) {
         const auto n=source.bytes/kElectronStateV4RecordBytes;
         if(!source.payload || !source.child_offsets || (source.child_count && !source.child_rows))
@@ -20,8 +24,8 @@ public:
             const auto parent=read_electron_continuation_step(source.payload,source.bytes,row);
             if(!parent.valid)throw std::invalid_argument("Invalid primary birth source");
             if(parent.parent!=0)continue;
-            if(parent.pdg!=1000060120)throw std::invalid_argument("Non-C12 electron birth source");
-            const auto bin=energy_bin(parent.pre_energy_MeV/12.);
+            if(parent.pdg!=projectile_pdg_)throw std::invalid_argument("Electron birth source projectile mismatch");
+            const auto bin=energy_bin(parent.pre_energy_MeV/mass_number_);
             const auto loss=parent.pre_energy_MeV-parent.post_energy_MeV;
             if(loss<0)throw std::invalid_argument("Negative primary energy loss");
             loss_[bin]+=loss;local_[bin]+=parent.deposited_MeV;
@@ -70,6 +74,7 @@ private:
         if(energy>reference_[lo].high)throw std::invalid_argument("Gap in primary birth energy domain");
         return lo;
     }
+    int projectile_pdg_,mass_number_;
     std::vector<WaterElectronChannel> reference_;
     std::vector<std::vector<ElectronBirthSample>> roots_;
     std::vector<double> loss_,local_,birth_;
