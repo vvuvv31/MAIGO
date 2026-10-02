@@ -1,186 +1,137 @@
-# MAIGO
+# MAIGO minimal runtime worktree
 
-基于 TOPAS / Geant4 提取数据的碳离子凝聚历史 GPU Monte Carlo，目标是复现
-*A Data-Driven Fragmentation Model for Carbon Therapy: GPU-Accelerated Monte Carlo
-Dose Recalculation* 所述方法。**仅用于研究，不用于临床治疗计划。**
+面向 proton / carbon 的水模体、Schneider CT、铜多缝准直器输运。
+此目录从 minibeam 的 bce9806 创建，并复制原工作树当时未提交的最新
+src/、include/、failed.md。初始整理保留原输运源码；后续水/CT公共路径
+合并与运行验证见 [minibeam共享路径报告](docs/minibeam_shared_20261001.md)。
 
-当前患者计算使用 SYCL、Schneider 25 分区材料和 CINEL03 相关末态；
-GPU 不在运行时调用 Geant4。当前水生产入口使用共享 CINEL03 框架和统一 EM 包。
-CT 包含 H/O 靶通道，不等于已经替代水中所有 stopping、XS、MCS 和 fluctuation 数据。
+## 构建与运行
 
-非 minibeam 的统一 EM GPU 路径通过 YAML 的 `primary_particle` 或 Z/A、
-质量和匹配物理包选择入射粒子。主粒子核反应、stopping、EM 与弹性包检查源身份，
-新 EM 包及其 δ 矩表可在 YAML 指定路径和哈希。已完成质子水模体及 170 MeV
-铜准直器 minibeam 的 GPU/TOPAS 研究对照，局部剂量偏差仍待排查；旧 C12 数据
-不会作为质子主束数据替代。详见 [束源参数与数据契约](docs/primary_source_parameters.md)
-和 [proton minibeam](docs/proton_minibeam.md)。
+本机需 SYCL CUDA 编译器、CUDA 驱动/工具链、CMake、OpenSSL 开发库和 Python 3。
+默认编译器为 `/home/wuwei/sycl_workspace/llvm/build/install/bin/icpx`；
+换机器时设置 `CXX=/path/to/icpx`。运行依赖同一 SYCL 安装的 lib/。
 
-本工作树当前开发与提交目标为 `minibeam` / `origin/minibeam`。
-历史归档中的分支名不代表现行工作流。
-commit / push 仍需用户明确授权，详见 [AGENTS](AGENTS.md)。
-
-## 文档入口
-
-- [完整文档导航](docs/README.md)
-- [源码结构](docs/structure.md)、[物理模型与局限](docs/TOPAS_GPU_Physics_Model.md)
-- [Planning / geometry](docs/planning.md)、[Scoring / Gamma](docs/scoring_validation.md)
-- [当前结果索引](docs/results.md)、[Materials and Methods](mm.md) / [中文](mm_zh.md)
-- [活动数据与恢复](data/ACTIVE_DATA.md)、[执行规则与数据最低版本](AGENTS.md)
-- [Schneider 计划进度](plan/README.md)、[电子响应计划进度](plan2/README.md)
-- [历史记录](docs/archive/README.md)、[FRED 论文解读](docs/FRED_Carbon_Fragmentation_Model.md)
-
-## pristine 分支
-
-`pristine` 是最小可运行快照：只保留 `src/`、`include/`、`config/`、`docs/`、构建文件、
-Git 跟踪的小型数据表，以及数据校验/下载工具；`tests/`、`startup/`、`benchmark/`、
-`evidence/`、`plan*/`、`scripts/` 等研究、测试和历史脚本不在此分支。
-
-大型物理数据包（统一 EM、δ矩、Schneider v2.1 二进制）与 RT07575 CT 输入不在 Git 中，
-以 `pristine-v1` release 资产发布。下载并解包：
-
-```sh
-./tools/fetch_release_data.sh
+```bash
+cd /mnt/sdb/wuwei/MAIGO_minibeam
+./scripts/build.sh
+./scripts/run.sh                             # 列出配置
+./scripts/run.sh proton_water_minibeam
+./scripts/run.sh proton_ct_minibeam
+./scripts/run.sh proton_water_broadbeam
+./scripts/run.sh proton_ct_plan_fe
+./scripts/run.sh carbon_water_broadbeam
+./scripts/run.sh carbon_water_minibeam
+./scripts/run.sh carbon_ct_plan_fe_joint
 ```
 
-解包后运行生产前仍需校验 Schneider v2.1 数据：
+scripts/run.sh 自动切换到工作树根目录，以便所有运行输入使用相对路径。
+每个配置的剂量输出为 out/<配置名>/dose.mhd 和关联 raw 文件。
+配置中的原始历史数/spot 权重保留，启动前可在 YAML 中修改。
+TPS 计划请同时检查 tps_spot_weight_mode 和 spot 表；不要把
+--histories 直接理解为所有 TPS 模式下都有效的总粒子数覆盖。
 
-```sh
-python3 tools/verify_schneider_v2_1_data.py
+构建使用 FP32 剂量原子累加：CARBON_DOSE_FP32=ON、CARBON_DOSE_FP64=OFF。
+启用 minibeam、CT 电子队列、FE 联合电子响应队列；
+完整编译参数在 scripts/build_options.json。
+
+原生多批次运行无需生成多份 YAML。例如每批 2M incident primaries，连续 10 批：
+
+```bash
+./scripts/run.sh proton_ct_minibeam \
+  --histories-per-batch 2000000 --batch-count 10 \
+  --batch-output out/proton_ct_10_batches
 ```
 
-CT 输入解包到 `data/ct/`（`rt07575_packed.bin`、`RT07575/shard_01/spots.csv`、
-`beam_model.csv`）；运行 CT 配置前将其路径填入 `ct_grid_file`、`tps_spots_file`、
-`tps_beam_model_file`。水 benchmark 只需 `data/` 中的表。
+同样适用于本仓库所有 proton/carbon、CT/water、broadbeam/minibeam 预设，以及 TPS 和 TOPAS spot 计划。指定的粒子数是**每批整个计划的总数**；
+计划权重按全部批次的总粒子数分配，再均衡拆分。每批独立随机种子、剂量和审计报告写入
+`batch000000/` 等目录；`batches.csv` 和各批 `primary_batches.csv` 记录实际粒子数与源参数。
+只读物理包和适用的 CT 电子响应库跨批复用；输运状态清零，任一批质量失败即停止。
+输出根目录须不存在或为空；暂不支持断点续跑。可追加 `--plan-preflight` 先检查而不运行输运。
+不要同时使用 `--histories`、`--plan-manifest` 或 `--sequential-spots`。
+该功能降低进程启动和重复读取开销，不会自动提高单批队列容量；电子 group size 和 queue chunk 仍由 YAML 控制。
+详见 [原生多批次说明与验证](docs/native_batches_20261002.md)。
 
-## 构建
+所有预设使用相同入口；把上例的 `proton_ct_minibeam` 换成 `proton_ct_plan_fe`、
+`carbon_ct_plan_fe_joint`、`proton_water_broadbeam`、`carbon_water_broadbeam`、
+`proton_water_minibeam` 或 `carbon_water_minibeam` 即可，输出目录也应换成新目录。
+普通 `--plan-manifest` 和逐 spot GPU 运行也持有进程级物理缓存。
+CT 几何复用不再依赖 minibeam 电子库开关；联合电子响应、水响应和中子包共用只读输入缓存。
+Carbon CT 联合响应预设仍会在原有质量失败后停止，不会为了执行完批次数而忽略门禁。
+详见 [全预设共用缓存与批次验证](docs/shared_batches_20261002.md)。
 
-需要 CMake ≥3.22、C++20、Ninja；GPU 需要支持 NVIDIA 的 oneAPI/DPC++ SYCL 工具链。
-本仓库当前验证硬件为本地 RTX 2080 Ti（sm_75）。先按本机安装设置编译器及共享库路径。
+连续执行 proton CT minibeam 时，可在同一进程内复用已验证的 CT 和电子响应表。
+以下脚本需要 PyYAML；每批历史数和种子独立，输出目录必须不存在：
 
-```sh
-cmake --preset oneapi-nvidia-release -DCARBON_CUDA_ARCH=sm_75
-cmake --build --preset oneapi-nvidia-release --parallel 8
+```bash
+python3 scripts/run_ct_batch.py --histories 2000000 \
+  --seeds 100115501 100115502 100115503 --output out/ct_batch_example
 ```
 
-CPU 子集可用 `cpu-debug` preset 构建，但不作为患者 CT GPU 验证的替代后端。
-SYCL/GPU 在沙盒外执行；禁止远程/集群 GPU。未指定环境时 TOPAS 经本地 sbatch；明确指定远端时可在该处运行。
-并发总预算为 192 CPU 线程 / 160 GiB，具体约束见 AGENTS。
+脚本保存配置、日志、二进制校验值、各批剂量和质量报告；完整运行吞吐见输出目录的
+`execution.json`。CT 专用化及性能验证见 [CT 优化报告](docs/ct_minibeam_optimization_20261001.md)。
+当前 proton CT minibeam 的 group32 批次为 262,144：RTX 2080 Ti 两组 2M 配对，
+相对 65,536 批次的完整吞吐提高 7.48%，输运吞吐提高 12.55%；
+详见 [GPU 批次调度优化](docs/gpu_schedule_20261001.md)。
+在上述 262,144 基线上，当前预设使用无损电子记录预解码 `tiered_decoded`：
+两组反向顺序 2M 配对的完整吞吐进一步提高 12.95%，输运吞吐提高 26.07%。
+FP32 计分、原始响应文件和全部回放物理保持不变；
+详见 [CT 电子响应优化](docs/ct_response_20261002.md)。
+在每事务及时补充任务版本上，当前 CT 预设将次级队列预留设为 8M、响应热预算设为 4 GiB：
+RTX 2080 Ti 两组反向 2M 配对，完整吞吐进一步提高 9.95%，电子吞吐提高 73.63%，
+采样显存峰值降低 554 MiB。该容量配置验证至每次 2M 历史，电子任务队列容量不变；
+详见 [CT 电子包显存分配优化](docs/electron_memory_20261002.md)。
 
-## 数据与运行
+## 配置范围
 
-统一 EM 已按 [AGENTS.md](AGENTS.md) 中的授权例外接入正式运行：
-[水生产配置](config/unified_water_production.yaml)、
-[RT07575 生产配置](config/rt07575_unified_em_production.yaml)。
-原发 C12 和全部 18 种已支持带电离子共用水 / Schneider EM 核心包与派生矩表。
-当前默认采用**两矩 Gamma δ 聚合＋解析 Poisson 分步修正**：保留材料特异受限
-stopping/range、原生受限涨落（scale=1）及 MCS，取消逐 δ 碰撞抽样与 δ 时钟限步；
-δ 能量局部沉积，不运行电子空间 tracking。仅 δ stopping>0 时追加 1% 组合平均能损限步。
-非弹性事件重放保持开启；独立核弹性仍是研究选项。公式和近似边界见 [mm_zh.md](mm_zh.md)。
-两个生产预设默认开启 `secondary_step_chunking: true`（每 16 次完整次级循环
-保存状态并压紧存活索引）；设为 `false` 可关闭，详见
-[接入验证](benchmark/runtime_breakdown_20260914/SEGMENT_PRODUCTION.md)。
-默认 `CARBON_EM_EXACT_INDEX=ON`：按浮点指数桶缩小 EM 二分查找，不改节点或插值；
-关闭用预设 `oneapi-nvidia-index-off`。
-使用前需重新构建二进制，旧构建不能执行新配置开关。
-低密度阈值区和患者 Gamma 精度验收尚未完成，质量报告保留提示。
-核弹性仍受原有研究模式限制；联合核弹性计算继续使用研究配置。
-新 EM 二进制约 1.29 GiB，需单独复制，尚未上传到 Release；
-详见[数据说明](data/ACTIVE_DATA.md)和[实现说明](docs/physics/unified_em_v1.md)。
+| 配置 | 场景 | 说明 |
+|---|---|---|
+| proton_water_broadbeam | 170 MeV 水开放野 | FE 专用核，核反应及带电次级，电子局部沉积 |
+| proton_water_minibeam | 170 MeV，3×3 cm 入射，铜多缝＋水 | Urban、电子响应、研究用中子输运 |
+| proton_ct_minibeam | 170 MeV，铜多缝＋肺 CT | Urban 密度缩放、材料电子响应 group32；中子关闭 |
+| proton_ct_plan_fe | RT07575 proton 优化计划 | FE core+tail；原计划第一分片，12,531,500 histories，不是完整计划 |
+| carbon_water_broadbeam | 200 MeV/u 水开放野 | 从 unified water 配置派生为 FE 专用核；本次未做新剂量对照 |
+| carbon_water_minibeam | 250 MeV/u 单 spot，铜多缝＋水 | 碳原生弹性、Urban 主粒子、电子响应；保留较细的旧步长 |
+| carbon_ct_plan_fe_joint | RT07575 carbon 6,481,909 histories | FE 专用核＋研究用联合电子响应 |
 
-安装核心数据后，还需生成 206,977,416 字节的派生矩表；旧 Release 不含该表，
-Git 只提供生成器与固定 SHA256 清单。需要 Python、NumPy：
+非 minibeam 配置使用 FE。Minibeam 保留各原配置的散射、电子响应和核反应选择。
+水参考为 Water_75eV，停止本领比例保持 1.0。
 
-```sh
-python3 tools/build_delta_moments.py
-```
+这些配置继承原来的研究限制：CT group32 的严格 local gamma 验收尚未全部完成；
+carbon CT 联合电子响应仍可能报告 unvalidated_electron_joint_response；
+中子包的 runtime_validated: false 状态原样保留。
+本目录没有新建或验证 carbon CT minibeam 专用参考配置，也不把 proton
+材料电子响应包用于 carbon。现有源代码与碳 CT/铜/水所需模块均保留。
 
-每次 Schneider CT 运行前：
+## 目录和数据
 
-```sh
-python3 tools/verify_schneider_v2_1_data.py
-python3 tools/verify_unified_em_data.py
-```
+- src/、include/：当前完整核心；共享代码规模很小，未做额外物理重构。
+- config/：上述七个入口。
+- data/：配置依赖的运行数据、校验清单和必要侧文件。
+- inputs/：CT 二进制、spot 表、束流光学表；没有原始 DICOM 或历史剂量结果。
+- scripts/：构建/运行入口。
+- docs/package_manifest.json：每个数据文件的来源、SHA256、大小与配置变更。
+- AGENTS.md、failed.md：项目约束和已有失败路线，继续开发时必须保留。
 
-任一缺失、SHA/size 不符、schema 降级或 registry 不完整都必须停止。
-最新最低栈是 v2.1 / 14-projectile；文件名中的 stopping v1 和 delta-tail v1
-仍是当前数据，不能仅按名字判断过时。大文件及外部 water 包不是普通 clone 就能获得，
-依照 manifest 和 [活动数据说明](data/ACTIVE_DATA.md) 安装，不从 trash 自动 fallback。
+数据文件独立复制，不依赖旧目录的软链接或硬链接；共享核反应/EM 数据只存一份。
+CT 电子响应的 replay 原始轨迹属于运行依赖，必须保留；提取日志和中间产物不带入。
+运行时清单已改为相对路径并更新受影响的 SHA256。部分不可变侧文件中的绝对路径
+仅记录提取来源，不是运行时依赖，保留它们以维持原始 provenance 和校验值。
 
-新计算从上述当前生产配置出发，按病例核对 CT、spot、beam model 和几何。
-[2026-09-05 冻结配置和结果](benchmark/topas10x/gpu_current_20260905.md) 仅供历史比较；
-不要覆盖原有配置、日志和剂量。
-运行接口为：
+## Git 工作树
 
-```text
-./build/oneapi-nvidia-release/carbon_mc --config <准备好的新运行配置> --device cuda
-```
+分支：minibeam-minimal-20261001。这是稀疏 Git 工作树，共享原仓库的 Git 历史；
+本次尚未提交。稀疏检出只影响本目录的物理文件，不删除历史 benchmark/evidence。
+不要执行 git sparse-checkout disable，否则会展开仓库历史跟踪的全部目录。
+data/、inputs/、build/、out/ 中新增的大文件默认忽略，源代码、配置和
+数据来源清单可以正常提交。新工作树的运行数据独立，但 .git 仍依赖公共 Git 目录。
 
-配置是项目的轻量 `key: value` 格式，不是任意 YAML。
-先核对实际逐 spot histories、几何、数据和输出路径，再运行。
-大任务必须分片，任一 secondary overflow 必须缩小分片重跑。
-不要把旧示例配置当作当前 CT 验证配置；旧 fixtures 已部分归档。
+本次整理执行独立编译和依赖检查，不重新运行蒙卡或 TOPAS 对照。
 
-## 当前吞吐与 CT benchmark
+检查结果：独立 GPU 编译成功；7 个配置预检通过；577 项运行数据 SHA 引用通过；
+124 个核心源文件与原工作树一致。运行数据/CT 输入共 13.32 GiB，详情见
+`docs/packaging_check.json`。未运行新的蒙卡剂量或吞吐测试。
 
-正式接入回归：RT07575 6,481,909 粒子，wall **68.76 s**、程序 elapsed **65.45 s**，
-约 **99.0k histories/s**，零 overflow。b1–b4 全部 10 个 200k 用例通过运行质量检查；
-100/200/300 MeV/u 零能散峰高误差约 −0.0715% / −0.1098% / +0.0424%。
-详见[接入验证](benchmark/benchmark20260915/delta_partition_production/README.md)。
-
-最近 RT07575 单片测试：4,861,226 粒子用时 **48.88 s**，程序吞吐 **103.0k/s**，
-采样显存峰值 **9,517 MiB**，零 overflow。CUDA保留已验证的
-`history_chunk_size=34816`。Intel Arc B580的完整6,481,909-history分片显示旧批量只产生
-约136个256线程work-groups/launch，设备调度不足；Level Zero自动批量1,114,112将原发
-kernel从约16.2 s降至约11.8 s，端到端吞吐中位约160.9k histories/s。生产配置使用
-`history_chunk_size=0`按后端选择；本次剩余任务目标上限为每片490万粒子。
-次级队列固定 3,200 万条，原发全部完成后才处理次级；当前代续跑状态为 264 字节/条
-另加索引，不能以原发阶段约 4.4 GB 占用判断整片显存余量。该分片上限不是对任意病例的安全保证。
-
-本次三病例全粒子数比较**运行中**：
-
-| Case | GPU / TOPAS 各自总粒子数 | GPU 分片安排 |
-|---|---:|---|
-| RT07575 | 129,638,170 | 20 个已完成小片＋14 个剩余大片 |
-| RT06423 | 151,087,660 | 31 片 |
-| 20022516 | 177,173,040 | 37 片 |
-
-原始 TOPAS 及 GPU 结果按病例保存在 `benchmark/ctbenchmark20260915/<case>/`，
-后处理保存在 `benchmark/ctbenchmark20260915/result/`。这些本地大数据不是普通 clone 的内容。
-每个 spot 的整数总粒子数保持一致，测试剂量不计入；显存不足或 overflow 须拆小重跑。
-
-比较 BODY 内 TOPAS ≥10% 全局最大剂量的体素，输出 3%/3mm、2%/2mm、1%/1mm、
-3%/0mm 的 global/local Gamma。搜索步长依次为 0.3、0.2、0.1 mm；0mm 不做空间搜索。
-等中心处三解剖面输出 1D 曲线、2D 剂量及 GPU−TOPAS 差值，差值色标固定为
-±5% TOPAS 全局最大剂量。累计 Gy 不拟合归一、不做剂量配准。
-本批 TOPAS 启用独立核弹性，GPU 最新生产配置未启用；报告保留这一物理范围差异。
-
-## 验证边界
-
-2026-09-05 三病例共 60/60 shards accepted、零 overflow；457,898,870 histories。
-Global 1%/1mm 为 96.74–98.79%，Global 3%/0mm 为 94.27–99.97%；
-完整 Global/Local 指标及严格定义见 [结果索引](docs/results.md)。
-
-这些结果绑定冻结 executable 和输入，包含当时的 entrance-mask candidate；
-不表示当前工作树任意新候选已验证，也不表示 plan2 电子纵向响应完成。
-不以 Gamma 通过率声称全物理等价、任意材料/能区泛化或临床准入。
-
-测试入口及已归档 fixtures 的限制见 [structure](docs/structure.md)。
-本轮全粒子数计算仍在运行；未完成结果不作为已通过验收的证据。
-
-## License
-
-[GPL-3.0-or-later](LICENSE)。
-
-旧 FRED 功能及解析碎裂代码的移除范围、通用模块替代和验证结果见[清理报告](docs/fred_cleanup.md)。
-
-
-通用束源 YAML 参数、C12 兼容规则和 proton 接入边界见 [primary_source_parameters.md](docs/primary_source_parameters.md)。
-
-## Proton 主束数据（非 minibeam）
-
-已提取并组装 0.1–250 MeV 的质子主束包：
-[配置入口](config/proton_water_fullphysics.yaml) · [包清单、来源与限制](docs/proton_fullphysics_packages.md)。
-包含核非弹性、核弹性、反冲 stopping 及共享 EM/次级包；已开展质子 GPU/TOPAS 剂量对照，尚未达到所有局部区域的精度验收。
-
-质子纯水另提供 [Urban v2 配置](config/proton_water_fullphysics_urban_v2.yaml)：
-使用包含 proton 的全离子参考包，详见 [接入范围与状态](docs/proton_urban_v2.md)。
+后续开发已补齐电子队列的CMake宏，并将水/CT的铜与空气段合并为共同实现，
+下游水/CT物理仍分别特化。性能候选、回归和最终运行验证记录在上述共享路径报告中；
+`packaging_check.json` 保留初始打包检查记录。回归计时可使用
+`scripts/compare_minibeam.py`（需NumPy与PyYAML），所有GPU性能构建仍固定使用FP32剂量。

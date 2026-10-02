@@ -1,5 +1,6 @@
 #pragma once
 #include "carbon/material_electron_response.hpp"
+#include "carbon/material_electron_lookup.hpp"
 #include "carbon/electron_continuation_links.hpp"
 #include "carbon/electron_continuation_crossings.hpp"
 #include "carbon/electron_birth_index.hpp"
@@ -8,6 +9,8 @@
 #include <limits>
 #include <stdexcept>
 #include <iostream>
+#include <algorithm>
+#include <numeric>
 
 namespace carbon {
 enum class MaterialElectronMemory { device, host_mapped };
@@ -17,7 +20,7 @@ class MaterialElectronDeviceBank {
 public:
     explicit MaterialElectronDeviceBank(sycl::queue queue,
         MaterialElectronMemory memory=MaterialElectronMemory::device,
-        std::size_t hot_device_budget=0,bool device_indices=false,bool tiered=false):queue_(std::move(queue)),memory_(memory),hot_budget_(hot_device_budget),device_indices_(device_indices),tiered_(tiered) {
+        std::size_t hot_device_budget=0,bool device_indices=false,bool tiered=false,bool small_first=false,bool decoded=false):queue_(std::move(queue)),memory_(memory),hot_budget_(hot_device_budget),device_indices_(device_indices),tiered_(tiered),small_first_(small_first),decoded_(decoded) {
         if(tiered_ && (memory_!=MaterialElectronMemory::host_mapped || hot_budget_<metadata_reserve_))
             throw std::invalid_argument("Tiered response requires host_mapped and at least 64 MiB hot budget");
         if(device_indices_ && memory_==MaterialElectronMemory::host_mapped && !hot_budget_)
@@ -35,14 +38,30 @@ public:
     }
     void load(const MaterialElectronResponseIndex& index,
               const std::vector<std::pair<int,double>>& geometry,std::size_t byte_budget,
-              bool packet_only=false,bool short_range_cache=false) {
+              bool packet_only=false,bool short_range_cache=false,bool material_lookup=false) {
         if(!allocations_.empty() || views_)throw std::logic_error("Response bank already loaded");
         const auto selected=index.required_tables(geometry);
         if(selected.empty())throw std::invalid_argument("Empty response geometry demand");
         budget_=byte_budget;
+        if(decoded_ && !packet_only)throw std::invalid_argument("Decoded response requires packet-only views");
         std::vector<MaterialElectronResponseView> host;
-        host.reserve(selected.size());
-        for(auto id:selected) {
+        host.resize(selected.size());
+        std::vector<std::size_t> load_order(selected.size());
+        std::iota(load_order.begin(),load_order.end(),std::size_t{0});
+        // Only allocation order changes. Published table IDs remain identical.
+        // Reference-file size is a cheap row-count proxy, never physics input.
+        if(small_first_) {
+            std::vector<std::uintmax_t> sizes(selected.size());
+            for(std::size_t i=0;i<selected.size();++i) {
+                const auto& file=index.files[selected[i]];
+                sizes[i]=std::filesystem::file_size(file.state_reference_file.empty()?file.path:file.state_reference_file);
+            }
+            std::stable_sort(load_order.begin(),load_order.end(),[&](auto a,auto b){return sizes[a]<sizes[b];});
+        }
+        std::size_t loaded=0;
+        for(auto slot:load_order) {
+            const auto id=selected[slot];
+            const auto hot_before=hot_bytes_;
             const auto table=index.load_table(id);
             MaterialElectronResponseView view;
             view.section=table.material_section;
@@ -75,11 +94,21 @@ public:
                     const auto expected=ElectronStateReferenceView::integer(payload.data()+32+8*s,8);
                     if(sources[s].size()/kElectronStateV4RecordBytes!=expected)
                         throw std::invalid_argument("State-source row count differs from references");
-                    const auto* raw_device=copy(sources[s],!(tiered_ && device_indices_),true);
+                    const unsigned char* raw_device=nullptr;
+                    const ElectronContinuationStep* decoded_device=nullptr;
+                    if(decoded_) {
+                        static_assert(sizeof(ElectronContinuationStep)<=kElectronStateV4RecordBytes);
+                        std::vector<ElectronContinuationStep> decoded(sources[s].size()/kElectronStateV4RecordBytes);
+                        for(std::size_t row=0;row<decoded.size();++row)
+                            decoded[row]=read_electron_continuation_step(sources[s].data(),sources[s].size(),row);
+                        decoded_device=copy(decoded,!(tiered_ && device_indices_),true);
+                        decoded_bytes_saved_+=sources[s].size()-decoded.size()*sizeof(ElectronContinuationStep);
+                    } else raw_device=copy(sources[s],!(tiered_ && device_indices_),true);
                     const auto links=ElectronContinuationLinks::build(sources[s].data(),sources[s].size(),budget_-bytes_,projectile_pdg);
                     births.add(links.view(sources[s].data(),sources[s].size()),static_cast<std::uint32_t>(s));
                     MaterialElectronStateSource state{raw_device,sources[s].size(),copy(links.next,device_indices_,true),
                         copy(links.child_offsets,device_indices_,true),copy(links.child_rows,device_indices_,true),links.child_rows.size()};
+                    state.decoded=decoded_device;
                     if(short_range_cache) {
                         const auto rows=links.next.size();
                         if(rows>(budget_-bytes_)/sizeof(double))
@@ -120,22 +149,45 @@ public:
                 view.birth_channels=copy(births.channels,true);view.birth_samples=copy(births.samples,true,true);
                 view.birth_sample_count=births.samples.size();
             }
-            host.push_back(view);
+            host[slot]=view;
+            ++loaded;
+            std::cout<<"[material-response-placement] table="<<slot<<" section="<<view.section
+                     <<" density="<<view.density_g_cm3<<" hot_bytes="<<hot_bytes_-hot_before<<"\n";
             if(memory_==MaterialElectronMemory::host_mapped)
-                std::cout<<"[material-response] mapped tables="<<host.size()<<'/'<<selected.size()
+                std::cout<<"[material-response] mapped tables="<<loaded<<'/'<<selected.size()
                          <<" resident_MiB="<<bytes_/(1024*1024)<<std::endl;
         }
         // Publish the device view only after the entire required bank loads.
+        if(material_lookup) {
+            std::vector<std::size_t> order(host.size());
+            std::iota(order.begin(),order.end(),std::size_t{0});
+            std::stable_sort(order.begin(),order.end(),[&](auto a,auto b) {
+                return host[a].section<host[b].section;
+            });
+            std::vector<MaterialElectronLookupSection> sections;
+            std::vector<MaterialElectronLookupEntry> entries;
+            entries.reserve(host.size());
+            for(const auto table:order) {
+                if(sections.empty() || sections.back().section!=host[table].section)
+                    sections.push_back({host[table].section,entries.size(),entries.size()});
+                entries.push_back({host[table].density_g_cm3,table});
+                sections.back().end=entries.size();
+            }
+            lookup_={copy(sections,true),copy(entries,true),sections.size(),host.size()};
+        }
         views_=copy(host,true);count_=host.size();
-        std::cout<<"[material-response-layout] policy="<<(tiered_?(device_indices_?"tiered_indices":"tiered"):"strict")
+        std::cout<<"[material-response-layout] policy="<<(small_first_?"tiered_small_first":(tiered_?(device_indices_?"tiered_indices":"tiered"):"strict"))
                  <<" total_bytes="<<bytes_<<" hot_device_bytes="<<hot_bytes_
                  <<" metadata_device_bytes="<<metadata_bytes_
                  <<" bulk_device_bytes="<<bulk_bytes_
                  <<" budget_mapped_bulk_bytes="<<budget_mapped_bytes_
                  <<" crossing_bytes_saved="<<crossing_bytes_saved_
+                 <<" decoded="<<decoded_<<" decoded_record_bytes="<<sizeof(ElectronContinuationStep)
+                 <<" decoded_bytes_saved="<<decoded_bytes_saved_
                  <<" compact_crossing_sources="<<compact_crossing_sources_<<std::endl;
     }
     const MaterialElectronResponseView* views() const {return views_;}
+    MaterialElectronLookupView lookup() const {return lookup_;}
     std::size_t size() const {return count_;}
     std::size_t allocated_bytes() const {return bytes_;}
     std::size_t hot_device_bytes() const {return hot_bytes_;}
@@ -176,9 +228,11 @@ private:
     MaterialElectronMemory memory_;
     std::vector<void*> allocations_;
     MaterialElectronResponseView* views_{};
+    MaterialElectronLookupView lookup_{};
     std::size_t count_{},bytes_{},budget_{};
     std::size_t hot_budget_{},hot_bytes_{};
-    bool device_indices_{},tiered_{};
+    bool device_indices_{},tiered_{},small_first_{},decoded_{};
+    std::size_t decoded_bytes_saved_{};
     static constexpr std::size_t metadata_reserve_=64ULL*1024*1024;
     std::size_t metadata_bytes_{},bulk_bytes_{},budget_mapped_bytes_{};
     std::size_t crossing_bytes_saved_{},compact_crossing_sources_{};

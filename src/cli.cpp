@@ -1,11 +1,22 @@
 #include "carbon/cli.hpp"
 
 #include <fstream>
+#include <charconv>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 
 namespace carbon {
+namespace {
+std::size_t positive_count(const std::string& text) {
+    std::size_t value{};
+    const auto [end, ec] = std::from_chars(text.data(), text.data()+text.size(), value);
+    if (ec != std::errc{} || end != text.data()+text.size() || value == 0)
+        throw std::invalid_argument("Batch counts must be positive integers: " + text);
+    return value;
+}
+}
+
 
 void print_usage(const char* executable) {
     std::cout << "Usage: " << executable
@@ -16,7 +27,13 @@ void print_usage(const char* executable) {
                  " [--minibeam-phase-space-output FILE]"
                  " [--minibeam-fragment-phase-space-output FILE]"
                  " [--plan-manifest FILE] [--plan-only] [--plan-preflight]"
+                 " [--batch-count N --histories-per-batch N --batch-output DIR]"
                  " [--sequential-spots]\n"
+                 "  --batch-count N --histories-per-batch H --batch-output DIR\n"
+                 "                       Repeat one configuration N times in one session;\n"
+                 "                       H total incident primaries per batch, isolated\n"
+                 "                       outputs, independent seeds, retained packages.\n"
+                 "                       Plan weights are normalized across all N*H primaries.\n"
                  "  --plan-manifest FILE  Run each config listed in FILE sequentially in\n"
                  "                       one process, reusing validated read-only physics\n"
                  "                       data across shards\n"
@@ -58,6 +75,12 @@ void parse_config_and_help(int argc, char** argv, CliState& state) {
             state.config_path = argv[++index];
         } else if (argument == "--plan-manifest" && index + 1 < argc) {
             state.plan_manifest = argv[++index];
+        } else if (argument == "--batch-count" && index + 1 < argc) {
+            state.batch_count = positive_count(argv[++index]);
+        } else if (argument == "--histories-per-batch" && index + 1 < argc) {
+            state.histories_per_batch = positive_count(argv[++index]);
+        } else if (argument == "--batch-output" && index + 1 < argc) {
+            state.batch_output = argv[++index];
         } else if (argument == "--write-canonical-config" && index + 1 < argc) {
             state.canonical_config_output_path = argv[++index];
         } else if (argument == "--plan-preflight") {
@@ -75,6 +98,9 @@ void apply_cli_overrides(int argc, char** argv, TransportConfig& config, CliStat
         if (argument == "--config") {
             ++index;
         } else if (argument == "--plan-manifest" && index + 1 < argc) {
+            ++index;
+        } else if ((argument == "--batch-count" || argument == "--histories-per-batch" ||
+                    argument == "--batch-output") && index + 1 < argc) {
             ++index;
         } else if (argument == "--write-canonical-config" && index + 1 < argc) {
             ++index;

@@ -387,7 +387,9 @@ struct TransportConfig {
     // Explicit opt-in; false retains the generic primary kernel.
     bool water_primary_specialization{false};
     // combined: one kernel; split: beamline then water; compact: also group
-    // surviving primary tracks at that boundary. No physics/step changes.
+    // surviving primary tracks at that boundary. CT supports compact with the
+    // material-aware patient kernel (water specialization remains false).
+    // No physics/step changes.
     std::string minibeam_primary_pipeline{"combined"};
     // Pause after the compile-time secondary iteration limit (default 16) and compact survivors.
     // Production presets opt in; false retains full-track scheduling without state buffers.

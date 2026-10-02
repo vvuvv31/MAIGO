@@ -83,6 +83,9 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                                       const TransportResult& result) {
     RunQualityReport report;
     report.mode = config.run_mode;
+    if(result.conditional_copper_response_enabled)
+        report.approximations.push_back({"conditional_copper_response_accuracy_pending",
+            "Research170MeV Cu interior conditional event bank; coherent zero/output events, charged entries at water and native Cu neutron births. Absolute0.1x1mm entrance bins without translations; finite-bank dose/gamma accuracy not certified.",1.,0.});
     if(config.enable_neutron_transport){
         report.approximations.push_back({"experimental_neutron_transport",
             "Unvalidated draft neutron rates and correlated energy rescaling; CSDA charged descendants with optional water Urban where covered, no descendant nuclear reactions; photon/electron and missing-ion energy unresolved; inspect neutron_transport.json. Dose uncertainties and charged species/LET component maps exclude this new contribution.",1.,0.});

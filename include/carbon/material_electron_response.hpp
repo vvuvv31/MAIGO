@@ -41,8 +41,9 @@ struct MaterialElectronStateSource {
     std::uint64_t child_count{};
     ElectronEnergyCrossingView crossings{};
     const double* short_range_lengths{}; // Optional immutable, raw-row indexed cache.
+    const ElectronContinuationStep* decoded{};
     ElectronContinuationView continuation() const {
-        return {data,bytes,next_rows,child_offsets,child_rows,child_count};
+        return {data,bytes,next_rows,child_offsets,child_rows,child_count,decoded};
     }
 };
 struct MaterialElectronResponseView {
@@ -66,7 +67,7 @@ struct MaterialElectronResponseView {
     ElectronContinuationStep state_at(ElectronStateReference reference) const {
         if(!reference.valid || !state_sources || reference.source>=state_source_count)return {};
         const auto source=state_sources[reference.source];
-        return read_electron_continuation_step(source.data,source.bytes,reference.row);
+        return source.continuation().read(reference.row);
     }
     ElectronReplayStep replay_at(ElectronStateReference reference) const {
         if(!reference.valid || !state_sources || reference.source>=state_source_count)return {};

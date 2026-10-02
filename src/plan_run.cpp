@@ -750,7 +750,8 @@ void apply_spot_to_config(carbon::TransportConfig& config,
         config.beam_uz_x = pose.uz_x;
         config.beam_uz_y = pose.uz_y;
         config.beam_uz_z = pose.uz_z;
-    } else if (config.spots_geometry_mode == "minibeam_topas_y") {
+    } else if (config.spots_geometry_mode == "minibeam_topas_y" ||
+               config.spots_geometry_mode == "minibeam_pbs_y") {
         // TOPAS reference beam travels world +Y. Preserve the source-plane
         // emittance until the upstream collimator, then map to the canonical
         // GPU frame: (x,y,z)_gpu = (X,Z,Y-Y_water_entry)_topas.

@@ -19,7 +19,8 @@ struct NeutronExperimentalDiagnostics {
 namespace carbon {
 struct TransportConfig;
 struct TransportResult;
-void transport_neutrons_experimental(sycl::queue&,const TransportConfig&,TransportResult&);
-void prefetch_neutron_inputs(const TransportConfig&);
+class ImmutableInputCache;
+void transport_neutrons_experimental(sycl::queue&,const TransportConfig&,TransportResult&,ImmutableInputCache* = nullptr);
+void prefetch_neutron_inputs(const TransportConfig&,ImmutableInputCache* = nullptr);
 }
 #endif

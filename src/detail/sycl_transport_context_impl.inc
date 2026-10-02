@@ -58,10 +58,12 @@ struct SyclTransportContext::Impl {
     CachedElectronCt electron_ct;
     CachedUnifiedEm unified_em_cache;
     SchneiderHostCache schneider_host_cache;
+    ImmutableInputCache immutable_inputs;
     std::uint64_t physics_cache_hits{0};
     std::uint64_t physics_cache_misses{0};
 
     void clear_physics_cache() noexcept {
+        immutable_inputs = ImmutableInputCache{};
         unified_em_cache = CachedUnifiedEm{};
         schneider_host_cache = SchneiderHostCache{};
         physics_cache_hits = 0;

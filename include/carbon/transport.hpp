@@ -724,6 +724,7 @@ struct ElectronJointDiagnostics {
 inline constexpr std::size_t kLongitudinalDomainLogCap = 4096;
 
 struct TransportResult {
+    bool conditional_copper_response_enabled{false};
     bool fe_sampling_diagnostics_enabled{false};
     std::array<std::uint64_t, 8> fe_sampling_counts{};
     std::vector<LongitudinalDomainRecord> longitudinal_domain_log{};

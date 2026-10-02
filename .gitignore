@@ -1,81 +1,29 @@
-# Build / runtime
-build/
-build-*/
-out/
-tmp/
+/build/
+/out/
+/data/
+/inputs/
 *.log
-*.vtk
-*.root
 __pycache__/
 *.pyc
-.venv*/
-.plot-*/
-
-# Local agent / editor clutter
-mcps/
-.agents/
-.codex/
-codex-session-*.md
-.idea/
 .vscode/
-*.swp
+.idea/
 *~
-*:Zone.Identifier
+*.swp
 
-# Local validation workspaces. They are not part of project commits while the
-# benchmark protocol and patient-dose validation are still under development.
-ct/
-benchmark/*
-!benchmark/carbonminibeam/
-!benchmark/carbonminibeam/**
-benchmark/carbonminibeam/**/__pycache__/
-benchmark/carbonminibeam/**/*.pyc
-benchmark/carbonminibeam/**/*.orig
-!benchmark/fermi_eyges_species_water/
-!benchmark/fermi_eyges_species_water/**
-benchmark/fermi_eyges_species_water/**/__pycache__/
-benchmark/fermi_eyges_species_water/**/*.pyc
-validation/
-
-# Recoverable local archives; never include discarded data in Git.
-/trash/
-
-
-# Windows-only convenience wrappers under scripts/ (not required for Linux builds)
-scripts/windows_*.cmd
-scripts/build_windows_*.cmd
-scripts/run_windows_*.cmd
-
-# Derived EM moments are reproducible, SHA-pinned data, not Git source artifacts.
-/data/em/unified_em_delta_moments_v2.bin
-
-# Physics data delivered as pristine-v1 GitHub release assets; never committed.
-/data/em/unified_em_v1.bin
-/data/em/unified_em_delta_moments_v2.bin
-/data/schneider/all_ion_elastic_v1.bin
-/data/schneider/cinel03_c12_targets_v2_1.bin
-/data/schneider/cinel03_secondary_targets_v2_1_14p.bin
-/data/schneider/elastic_recoil_stopping_v1.bin
-/data/schneider/schneider_elastic_rates_v1.bin
-/data/schneider/schneider_inelastic_rates_v2_1.bin
-/data/schneider/secondary_inelastic_rates_v2_1.bin
-/data/schneider/schneider_ion_section_stopping_v1.bin
-/data/schneider/elratev1_*/
-/data/ct/
-
-# Generated minibeam study artifacts; source, small inputs and reports are selected explicitly.
-/evidence/**/analysis_venv/
-/evidence/**/OpenTOPAS-*/
-/evidence/**/topas_build/
-/evidence/**/topas_tps_source_extension/
-/evidence/**/bin/
-/evidence/**/baseline/
-/evidence/**/*.bin
-/evidence/**/*.binheader
-/evidence/**/*.raw
-/evidence/**/*.phsp
-/evidence/**/*.npz
-/evidence/**/*.tar.gz
-/evidence/**/serial.lock
-/evidence/**/memory_usage.tsv
-/evidence/field3cm_emonly_64M_20260923/serial_status.json
+# Keep proton benchmark source/report files; generated datasets stay local.
+/benchmark/protonCT/**
+!/benchmark/protonCT/**/
+!/benchmark/protonCT/**/*.py
+!/benchmark/protonCT/**/*.sh
+!/benchmark/protonCT/**/*.m
+!/benchmark/protonCT/**/*.c
+!/benchmark/protonCT/**/*.h
+!/benchmark/protonCT/**/*.cpp
+!/benchmark/protonCT/**/*.hpp
+!/benchmark/protonCT/**/*.md
+!/benchmark/protonCT/RT07575_minibeam/spots.csv
+/benchmark/protonCT/**/inputs/
+/benchmark/protonCT/**/out/
+/benchmark/protonCT/**/results/
+/benchmark/protonCT/**/merged/
+/benchmark/protonCT/**/output_minibeam/

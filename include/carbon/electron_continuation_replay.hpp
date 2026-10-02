@@ -11,6 +11,12 @@ struct ElectronContinuationView {
     const std::uint64_t* child_offsets{}; // rows+1; immutable compiler-verified CSR
     const std::uint64_t* child_rows{};
     std::uint64_t child_count{};
+    // Immutable host-decoded records replace the wire payload, never both.
+    const ElectronContinuationStep* decoded{};
+    ElectronContinuationStep read(std::uint64_t row) const {
+        if(bytes%kElectronStateV4RecordBytes || row>=bytes/kElectronStateV4RecordBytes)return {};
+        return decoded?decoded[row]:read_electron_continuation_step(payload,bytes,row);
+    }
 };
 enum class ElectronReplayStatus { ready, invalid_view, invalid_state, invalid_genealogy,
                                   invalid_continuation, energy_mismatch };
@@ -26,10 +32,10 @@ struct ElectronReplayStep {
 inline ElectronReplayStep prepare_electron_replay_step(
     const ElectronContinuationView& view,std::uint64_t row) {
     ElectronReplayStep result;
-    if(!view.payload || !view.next_rows || !view.child_offsets ||
+    if((!view.payload && !view.decoded) || !view.next_rows || !view.child_offsets ||
        (view.child_count && !view.child_rows) || view.bytes%kElectronStateV4RecordBytes ||
        row>=view.bytes/kElectronStateV4RecordBytes)return result;
-    result.state=read_electron_continuation_step(view.payload,view.bytes,row);
+    result.state=view.read(row);
     const auto& state=result.state;
     result.status=ElectronReplayStatus::invalid_state;
     if(!state.valid || (state.pdg!=11 && state.pdg!=22))return result;
@@ -37,7 +43,7 @@ inline ElectronReplayStep prepare_electron_replay_step(
     result.children_begin=view.child_offsets[row];result.children_end=view.child_offsets[row+1];
     if(result.children_begin>result.children_end || result.children_end>view.child_count)return result;
     for(auto i=result.children_begin;i<result.children_end;++i) {
-        const auto child=read_electron_continuation_step(view.payload,view.bytes,view.child_rows[i]);
+        const auto child=view.read(view.child_rows[i]);
         if(!generated_by_electron_step(state,child) || (child.pdg!=11 && child.pdg!=22))return result;
         if(std::abs(child.pre_energy_MeV-child.birth_energy_MeV)>1e-8)return result;
         // The continuation model applies the discrete branch at the endpoint.
@@ -49,7 +55,7 @@ inline ElectronReplayStep prepare_electron_replay_step(
     result.next=view.next_rows[row];
     result.status=ElectronReplayStatus::invalid_continuation;
     if(result.next!=kElectronContinuationEnd) {
-        const auto next=read_electron_continuation_step(view.payload,view.bytes,result.next);
+        const auto next=view.read(result.next);
         if(!same_electron_continuation_track(state,next) ||
            std::abs(next.pre_energy_MeV-state.post_energy_MeV)>1e-8)return result;
         for(unsigned a=0;a<3;++a)

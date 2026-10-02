@@ -53,7 +53,7 @@ inline ElectronEnergyPacket resume_electron_packet(
 template<class Uniform>
 inline ElectronEnergyPacket transport_electron_packet_step(
     ElectronEnergyPacket packet,const MaterialElectronResponseView* tables,std::size_t count,
-    const ElectronCtGeometry& geometry,Uniform& uniform) {
+    const ElectronCtGeometry& geometry,Uniform& uniform,MaterialElectronLookupView lookup={}) {
     if(packet.status!=ElectronPacketStatus::active)return packet;
     if(!packet.cursor.valid || !std::isfinite(packet.weight_MeV) || packet.weight_MeV<=0 ||
        !std::isfinite(packet.cursor.energy_MeV) || packet.cursor.energy_MeV<=0 || !tables) {
@@ -105,7 +105,7 @@ inline ElectronEnergyPacket transport_electron_packet_step(
     case ElectronLineageStatus::material_boundary: {
         packet.cursor=selected.cursor;
         const auto bracket=material_electron_density_bracket(advanced.boundary.to_section,
-            advanced.boundary.to_density,tables,count);
+            advanced.boundary.to_density,tables,count,lookup);
         if(!bracket.valid) {
             packet.status=ElectronPacketStatus::coverage_missing;packet.gap=ElectronPacketGap::material;return packet;
         }

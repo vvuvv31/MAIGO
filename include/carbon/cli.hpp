@@ -11,6 +11,8 @@ struct CliState {
     std::filesystem::path config_path{"config/unified_water_production.yaml"};
     std::filesystem::path canonical_config_output_path{};
     std::filesystem::path plan_manifest{};
+    std::size_t batch_count{0}, histories_per_batch{0};
+    std::filesystem::path batch_output{};
     bool help{false};
     bool histories_overridden{false};
     bool plan_only{false};

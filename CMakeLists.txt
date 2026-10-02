@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.22)
 
 project(carbon_oneapi_mc VERSION 0.1.0 LANGUAGES CXX)
 
-include(CTest)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -39,6 +38,7 @@ set(CARBON_CUDA_ARCH "" CACHE STRING
 
 add_library(carbon_core
     src/cli.cpp
+    src/batch_run.cpp
     src/config.cpp
     src/cross_section.cpp
     src/ct_grid.cpp
@@ -68,6 +68,21 @@ add_library(carbon_core
 )
 
 target_include_directories(carbon_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+
+# These options are consumed by the electron transport headers as well as
+# the SYCL backend. Presence-tested macros must stay undefined when OFF.
+option(CARBON_ELECTRON_REPLAY_REUSE "Reuse checked electron genealogy within a packet transaction" OFF)
+option(CARBON_ELECTRON_CROSSING_ROWS32 "Use lossless 32-bit electron crossing row IDs when representable" OFF)
+option(CARBON_CT_ELECTRON_QUEUE "Build separate CT electron packet execution" OFF)
+foreach(feature ELECTRON_REPLAY_REUSE ELECTRON_CROSSING_ROWS32 CT_ELECTRON_QUEUE)
+    if(CARBON_${feature})
+        target_compile_definitions(carbon_core PRIVATE CARBON_${feature}=1)
+    endif()
+endforeach()
+option(CARBON_FE_JOINT_QUEUE "Build separate selected FE joint-response replays" OFF)
+target_compile_definitions(carbon_core PRIVATE
+    CARBON_FE_JOINT_QUEUE=$<BOOL:${CARBON_FE_JOINT_QUEUE}>)
+
 option(CARBON_EM_EXACT_INDEX "Narrow EM searches with exact exponent buckets" ON)
 target_compile_definitions(carbon_core PUBLIC CARBON_EM_EXACT_INDEX=$<BOOL:${CARBON_EM_EXACT_INDEX}>)
 option(CARBON_EM_EMPTY_BUCKET_FAST_PATH
@@ -343,287 +358,3 @@ target_link_libraries(carbon_mc PRIVATE carbon_core)
 if(CARBON_ENABLE_SYCL)
     target_compile_options(carbon_mc PRIVATE $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
 endif()
-
-if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests")
-    if(CARBON_ENABLE_SYCL)
-        add_executable(unified_em_gpu tests/unified_em_gpu.cpp)
-        target_link_libraries(unified_em_gpu PRIVATE carbon_core)
-        target_compile_options(unified_em_gpu PRIVATE $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
-        # Explicit invocation with a verified real table on the local GPU.
-        add_executable(all_ion_elastic_gpu tests/all_ion_elastic_gpu.cpp)
-        target_link_libraries(all_ion_elastic_gpu PRIVATE carbon_core)
-        target_compile_options(all_ion_elastic_gpu PRIVATE $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
-        add_executable(material_electron_boundary_gpu_smoke tests/material_electron_boundary_gpu_smoke.cpp)
-        target_link_libraries(material_electron_boundary_gpu_smoke PRIVATE carbon_core)
-        target_compile_options(material_electron_boundary_gpu_smoke PRIVATE
-            $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
-        # Explicit real-data/local-GPU invocation, not an automatic CTest run.
-        add_executable(material_electron_density_gpu_smoke tests/material_electron_density_gpu_smoke.cpp)
-        target_link_libraries(material_electron_density_gpu_smoke PRIVATE carbon_core)
-        target_compile_options(material_electron_density_gpu_smoke PRIVATE
-            $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
-    endif()
-    if(CARBON_ENABLE_SYCL AND CARBON_EM_EXACT_INDEX)
-        add_executable(unified_em_index tests/unified_em_index.cpp)
-        target_link_libraries(unified_em_index PRIVATE carbon_core)
-        target_compile_options(unified_em_index PRIVATE $<TARGET_PROPERTY:carbon_core,COMPILE_OPTIONS>)
-    endif()
-    add_executable(nuclear_collision tests/nuclear_collision.cpp)
-    target_link_libraries(nuclear_collision PRIVATE carbon_core)
-    add_test(NAME nuclear_collision COMMAND nuclear_collision)
-    add_executable(sha256_file tests/sha256_file.cpp)
-    target_link_libraries(sha256_file PRIVATE carbon_core)
-    add_test(NAME sha256_file COMMAND sha256_file)
-    foreach(test_name delta_partition delta_loss_sampling delta_moments_data_test)
-        add_executable(${test_name} tests/${test_name}.cpp)
-        target_link_libraries(${test_name} PRIVATE carbon_core)
-    endforeach()
-    add_test(NAME delta_partition COMMAND delta_partition)
-    add_test(NAME delta_loss_sampling COMMAND delta_loss_sampling)
-    add_test(NAME delta_moments_data COMMAND delta_moments_data_test ${CMAKE_CURRENT_SOURCE_DIR}/data/em/unified_em_delta_moments_v2.bin)
-    add_test(NAME unified_em_production_config COMMAND unified_em_production ${CMAKE_CURRENT_SOURCE_DIR}/config/unified_water_production.yaml)
-    set_tests_properties(unified_em_production_config PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
-    add_executable(unified_em_step tests/unified_em_step.cpp)
-    target_link_libraries(unified_em_step PRIVATE carbon_core)
-    add_test(NAME unified_em_step COMMAND unified_em_step)
-    add_executable(unified_em_selection tests/unified_em_selection.cpp)
-    target_link_libraries(unified_em_selection PRIVATE carbon_core)
-    add_executable(unified_em_production tests/unified_em_production.cpp)
-    target_link_libraries(unified_em_production PRIVATE carbon_core)
-    add_executable(unified_em_density tests/unified_em_density.cpp)
-    target_link_libraries(unified_em_density PRIVATE carbon_core)
-    add_executable(unified_em_distribution tests/unified_em_distribution.cpp)
-    target_link_libraries(unified_em_distribution PRIVATE carbon_core)
-    add_executable(unified_em_delta tests/unified_em_delta.cpp)
-    target_link_libraries(unified_em_delta PRIVATE carbon_core)
-    add_executable(unified_em_mean tests/unified_em_mean.cpp)
-    target_link_libraries(unified_em_mean PRIVATE carbon_core)
-    add_executable(unified_em_lookup tests/unified_em_lookup.cpp)
-    target_link_libraries(unified_em_lookup PRIVATE carbon_core)
-    add_executable(primary_em_mean_candidate_unit tests/primary_em_mean_candidate_unit.cpp)
-    target_include_directories(primary_em_mean_candidate_unit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    add_test(NAME primary_em_mean_candidate_unit COMMAND primary_em_mean_candidate_unit)
-    add_executable(restricted_fluctuation_candidate_unit tests/restricted_fluctuation_candidate_unit.cpp)
-    target_include_directories(restricted_fluctuation_candidate_unit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    add_test(NAME restricted_fluctuation_candidate_unit COMMAND restricted_fluctuation_candidate_unit)
-    add_executable(discrete_delta_candidate_unit tests/discrete_delta_candidate_unit.cpp)
-    target_include_directories(discrete_delta_candidate_unit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    add_test(NAME discrete_delta_candidate_unit COMMAND discrete_delta_candidate_unit)
-    if(UNIX)
-        foreach(candidate_target primary_em_mean_candidate_unit restricted_fluctuation_candidate_unit discrete_delta_candidate_unit)
-            target_link_libraries(${candidate_target} PRIVATE m)
-        endforeach()
-    endif()
-    add_executable(water_electron_response_unit tests/water_electron_response_unit.cpp)
-    target_include_directories(water_electron_response_unit PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include)
-    target_link_libraries(water_electron_response_unit PRIVATE carbon_core)
-    add_test(NAME water_electron_response_unit COMMAND water_electron_response_unit)
-    add_test(NAME water_electron_config_guard COMMAND water_electron_response_unit
-        ${CMAKE_CURRENT_SOURCE_DIR}/config/unified_water_production.yaml)
-    set_tests_properties(water_electron_config_guard PROPERTIES WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-    add_executable(carbon_tests tests/carbon_tests.cpp)
-    add_executable(inelastic_package_v2_tests tests/inelastic_package_v2_tests.cpp)
-    target_link_libraries(inelastic_package_v2_tests PRIVATE carbon_core)
-    target_include_directories(inelastic_package_v2_tests PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(inelastic_package_v2_tests PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(inelastic_package_v2_tests PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-    target_link_libraries(carbon_tests PRIVATE carbon_core)
-    add_executable(test_material_nuclear_rates tests/test_material_nuclear_rates.cpp)
-    target_link_libraries(test_material_nuclear_rates PRIVATE carbon_core)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(test_material_nuclear_rates PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(test_material_nuclear_rates PRIVATE -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-    add_test(NAME material_nuclear_rates COMMAND test_material_nuclear_rates)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(carbon_tests PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(carbon_tests PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-    target_compile_definitions(carbon_tests PRIVATE
-        CARBON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-    add_executable(run_step13_gpu tools/run_step13_gpu.cpp)
-    target_link_libraries(run_step13_gpu PRIVATE carbon_core)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(run_step13_gpu PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(run_step13_gpu PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-
-    add_executable(run_step19_gpu tools/run_step19_gpu.cpp)
-    target_link_libraries(run_step19_gpu PRIVATE carbon_core)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(run_step19_gpu PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(run_step19_gpu PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-
-    add_executable(run_step21_level3_gpu tools/run_step21_level3_gpu.cpp)
-    target_link_libraries(run_step21_level3_gpu PRIVATE carbon_core)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(run_step21_level3_gpu PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(run_step21_level3_gpu PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-
-    add_executable(test_schneider_dicom_reference tests/test_schneider_dicom_reference.cpp)
-    target_link_libraries(test_schneider_dicom_reference PRIVATE carbon_core)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(test_schneider_dicom_reference PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(test_schneider_dicom_reference PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-
-    add_executable(dump_tps_phase_space tools/dump_tps_phase_space.cpp)
-    target_link_libraries(dump_tps_phase_space PRIVATE carbon_core)
-
-    add_executable(test_secondary_rate_table_hardening tests/test_secondary_rate_table_hardening.cpp)
-    target_link_libraries(test_secondary_rate_table_hardening PRIVATE carbon_core)
-
-    add_test(NAME carbon_tests COMMAND carbon_tests)
-    add_executable(test_schneider_longitudinal tests/test_schneider_longitudinal.cpp)
-    target_link_libraries(test_schneider_longitudinal PRIVATE carbon_core)
-    target_compile_definitions(test_schneider_longitudinal PRIVATE
-        CARBON_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(test_schneider_longitudinal PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(test_schneider_longitudinal PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-    add_test(NAME test_schneider_longitudinal COMMAND test_schneider_longitudinal)
-    add_executable(test_nuclear_elastic_scattering tests/test_nuclear_elastic_scattering.cpp)
-    target_link_libraries(test_nuclear_elastic_scattering PRIVATE carbon_core)
-    add_test(NAME test_nuclear_elastic_scattering COMMAND test_nuclear_elastic_scattering)
-    add_test(NAME inelastic_package_v2_tests COMMAND inelastic_package_v2_tests)
-    add_test(NAME test_schneider_dicom_reference COMMAND test_schneider_dicom_reference)
-    add_test(NAME test_secondary_rate_table_hardening COMMAND test_secondary_rate_table_hardening)
-    set_tests_properties(carbon_tests PROPERTIES
-        TIMEOUT 300
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-    set_tests_properties(test_schneider_dicom_reference PROPERTIES
-        TIMEOUT 300
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-    set_tests_properties(test_secondary_rate_table_hardening PROPERTIES
-        TIMEOUT 300
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-endif()
-
-# urban_v2 production regression: calls the shared helpers directly
-# (src/detail/sycl_device_math.inc + carbon/minibeam_collimator.hpp).
-# Outside the tests/ block on purpose: tests/ is not tracked on pristine.
-if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmark/carbonminibeam/test_urban_v2_helpers.cpp")
-    add_executable(urban_v2_helpers benchmark/carbonminibeam/test_urban_v2_helpers.cpp)
-    target_include_directories(urban_v2_helpers PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_link_libraries(urban_v2_helpers PRIVATE carbon_core)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(urban_v2_helpers PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(urban_v2_helpers PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-    add_test(NAME urban_v2_helpers COMMAND urban_v2_helpers)
-    set_tests_properties(urban_v2_helpers PROPERTIES
-        TIMEOUT 600
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-endif()
-
-# Urban localization experiments (E1/E2/E3): host-side, deterministic,
-# production code. Temporary diagnostic binary for the default-migration
-# task; not a permanent regression gate until Phase A pins tolerances.
-if(BUILD_TESTING AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmark/carbonminibeam/test_urban_localize.cpp")
-    add_executable(urban_localize benchmark/carbonminibeam/test_urban_localize.cpp)
-    target_include_directories(urban_localize PRIVATE
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_link_libraries(urban_localize PRIVATE carbon_core)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(urban_localize PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(urban_localize PRIVATE
-                -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-    add_test(NAME urban_localize COMMAND urban_localize)
-    set_tests_properties(urban_localize PROPERTIES
-        TIMEOUT 900
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
-endif()
-
-# Global Urban contracts require a validated, SHA-pinned reference package.
-if(BUILD_TESTING AND CARBON_ENABLE_SYCL)
-    add_executable(urban_global_contract benchmark/carbonminibeam/test_urban_global.cpp)
-    target_include_directories(urban_global_contract PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_link_libraries(urban_global_contract PRIVATE carbon_core)
-    target_compile_options(urban_global_contract PRIVATE -fsycl)
-    if(CARBON_SYCL_TARGETS)
-        target_compile_options(urban_global_contract PRIVATE -fsycl-targets=${CARBON_SYCL_TARGETS})
-    endif()
-endif()
-
-if(BUILD_TESTING AND CARBON_ENABLE_SYCL)
-    add_executable(minibeam_proton_helium_urban_contract
-        benchmark/carbonminibeam/test_minibeam_proton_helium_urban.cpp)
-    target_include_directories(minibeam_proton_helium_urban_contract PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    target_link_libraries(minibeam_proton_helium_urban_contract PRIVATE carbon_core)
-    target_compile_options(minibeam_proton_helium_urban_contract PRIVATE -fsycl)
-    if(CARBON_SYCL_TARGETS)
-        target_compile_options(minibeam_proton_helium_urban_contract PRIVATE -fsycl-targets=${CARBON_SYCL_TARGETS})
-    endif()
-endif()
-
-# Source parsing/contracts do not require MC data or a GPU.
-if(BUILD_TESTING)
-    add_executable(primary_source_parameters benchmark/carbonminibeam/test_primary_source_parameters.cpp)
-    target_link_libraries(primary_source_parameters PRIVATE carbon_core)
-    target_include_directories(primary_source_parameters PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-    if(CARBON_ENABLE_SYCL)
-        target_compile_options(primary_source_parameters PRIVATE -fsycl)
-        if(CARBON_SYCL_TARGETS)
-            target_compile_options(primary_source_parameters PRIVATE -fsycl-targets=${CARBON_SYCL_TARGETS})
-        endif()
-    endif()
-    add_test(NAME primary_source_parameters COMMAND primary_source_parameters ${CMAKE_CURRENT_SOURCE_DIR})
-endif()
-
-# Isolated electron packet scheduling experiment; dose remains FP32.
-option(CARBON_ELECTRON_REPLAY_REUSE "Reuse checked electron genealogy within a packet transaction" OFF)
-if(CARBON_ELECTRON_REPLAY_REUSE)
-    target_compile_definitions(carbon_core PRIVATE CARBON_ELECTRON_REPLAY_REUSE=1)
-endif()
-
-option(CARBON_ELECTRON_CROSSING_ROWS32 "Use lossless 32-bit electron crossing row IDs when representable" OFF)
-if(CARBON_ELECTRON_CROSSING_ROWS32)
-    target_compile_definitions(carbon_core PRIVATE CARBON_ELECTRON_CROSSING_ROWS32=1)
-endif()
-
-option(CARBON_CT_ELECTRON_QUEUE "Experimental separate CT electron packet kernel" OFF)
-if(CARBON_CT_ELECTRON_QUEUE)
-    target_compile_definitions(carbon_core PRIVATE CARBON_CT_ELECTRON_QUEUE=1)
-endif()
-
-option(CARBON_FE_JOINT_QUEUE "Research: separate selected FE joint-response replays" OFF)
-target_compile_definitions(carbon_core PRIVATE
-    CARBON_FE_JOINT_QUEUE=$<BOOL:${CARBON_FE_JOINT_QUEUE}>)

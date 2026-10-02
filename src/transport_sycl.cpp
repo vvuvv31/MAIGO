@@ -1,3 +1,5 @@
+#include "carbon/immutable_input_cache.hpp"
+#include "carbon/input_dependencies.hpp"
 #include "carbon/nuclear_collision.hpp"
 #include "carbon/fe_moments.hpp"
 #include "carbon/charged_species.hpp"
@@ -58,10 +60,12 @@
 #define CARBON_SECONDARY_CONTEXT_FIELD(name) name
 #endif
 #include <fstream>
+#include <charconv>
 #include <sstream>
 #include "carbon/cross_section.hpp"
 #include "carbon/hadronic_cache_candidate.hpp"
 #include "carbon/ct_grid.hpp"
+#include "carbon/electron_ct_birth_position.hpp"
 #include "carbon/device.hpp"
 #include "carbon/electron_transport.hpp"
 #include "carbon/electron_joint_response.hpp"
@@ -71,6 +75,7 @@
 #endif
 #include "carbon/water_electron_response.hpp"
 #include "carbon/material_electron_response.hpp"
+#include "carbon/material_electron_birth_prepare.hpp"
 #include "carbon/material_electron_device.hpp"
 #include "carbon/electron_packet_transport.hpp"
 #include "carbon/electron_short_range.hpp"
@@ -129,15 +134,15 @@ namespace carbon {
 template<bool ProductionPath = false, bool UniformWaterPath = false, int Stage = 0, bool BroadBeam = false, bool Gaussian = false, int JointResponse = 0>
 class CarbonPrimaryTransportKernel;
 template<bool Gaussian> class FeJointReplayKernel;
-// A single transfer at the beamline/water boundary. All physics-specific
+// A single transfer at the beamline/medium boundary. All physics-specific
 // step states remain private to their own stage; RNG identity is preserved.
-struct PrimaryWaterEntryState {
+struct PrimaryMediumEntryState {
     std::uint64_t rng_history, spot_seed, global_history;
     float spot_initial_energy_MeV, energy_MeV, sampled_initial_energy_MeVu;
     float position_x_mm, position_y_mm, position_z_mm;
     float direction_x, direction_y, direction_z;
 };
-static_assert(sizeof(PrimaryWaterEntryState) == 64);
+static_assert(sizeof(PrimaryMediumEntryState) == 64);
 
 template<bool ProductionPath = false, int ExactSpecies = -1, bool BroadBeam = false, bool Gaussian = false, int JointResponse = 0>
 class CarbonSecondaryTransportKernel;
@@ -149,6 +154,9 @@ class CarbonSecondaryTransportKernel;
 #include "detail/sycl_cinel02_device.inc"
 
 namespace {
+
+#include "detail/sycl_minibeam_copper_diagnostic.inc"
+#include "detail/sycl_copper_response.inc"
 
 #if defined(CARBON_ENABLE_MINIBEAM)
 struct WaterEntrySecondaryReplay {
@@ -1641,6 +1649,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                const std::string& device_name,
                                SyclTransportContext* context) {
     using SecondaryResumeState = SecondaryResumeStateT<BroadBeam>;
+    ImmutableInputCache local_inputs;
+    auto& inputs = context ? context->impl_->immutable_inputs : local_inputs;
+    const auto input_hits_before = inputs.hits;
+    const auto input_misses_before = inputs.misses;
     RuntimeScope runtime_transport("transport_total");
     RuntimeScope runtime_setup("transport_setup_including_upload");
     config.validate();
@@ -1660,12 +1672,13 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             prefetch_cinel03(config.ct_schneider_secondary_cinel03_file);
         }
 #if defined(CARBON_ENABLE_MINIBEAM)
-        if ((!BroadBeam && config.enable_minibeam) && config.minibeam_transport_mode == "copper_em")
+        if ((!BroadBeam && config.enable_minibeam) && config.minibeam_transport_mode == "copper_em" &&
+            !inputs.contains<LoadedCinel03>(input_cache_key(config.minibeam_copper_inclxx_file)))
             prefetch_cinel03(config.minibeam_copper_inclxx_file);
 #endif
         if ( !(context != nullptr && context->impl_->unified_em_cache.valid))
             prefetch_unified_em(unified_em_request(config));
-        if ((!BroadBeam && config.enable_neutron_transport)) prefetch_neutron_inputs(config);
+        if ((!BroadBeam && config.enable_neutron_transport)) prefetch_neutron_inputs(config,&inputs);
     }
 
     // Verify provenance and metadata early before ANY GPU queue creation or device memory allocation
@@ -1991,7 +2004,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     std::vector<UrbanMcsSpecies> urban_species_host;
     std::uint64_t* urban_step_counts=nullptr;
     if(uses_urban_package) {
-        auto package=UrbanMcsPackage::load(config.urban_mcs_package_file,config.urban_mcs_package_sha256);
+        const auto& package = inputs.get<UrbanMcsPackage>(input_cache_key(config.urban_mcs_package_file,config.urban_mcs_package_sha256),
+            [&] { return UrbanMcsPackage::load(config.urban_mcs_package_file,config.urban_mcs_package_sha256); });
         if (global_urban) {
             const auto index = package.view().projectile(config.primary_atomic_number, config.primary_mass_number);
             if (index < 0) throw std::invalid_argument("Urban package lacks the YAML primary projectile");
@@ -2033,8 +2047,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         if (!(!BroadBeam && config.enable_minibeam) || config.minibeam_transport_mode != "copper_em" ||
             !config.minibeam_copper_exact_material_boundaries)
             throw std::invalid_argument("Air Urban requires copper_em with exact material boundaries");
-        auto package = UrbanMcsPackage::load(config.minibeam_air_urban_package_file,
-                                            config.minibeam_air_urban_package_sha256);
+        const auto& package = inputs.get<UrbanMcsPackage>(input_cache_key(config.minibeam_air_urban_package_file,config.minibeam_air_urban_package_sha256),
+            [&] { return UrbanMcsPackage::load(config.minibeam_air_urban_package_file,config.minibeam_air_urban_package_sha256); });
         air_urban_projectile = package.view().projectile(config.primary_atomic_number, config.primary_mass_number);
         if (package.materials.size() != 1 || package.materials[0].section != -3 || air_urban_projectile < 0)
             throw std::invalid_argument("Air Urban requires a G4_AIR (-3) bank containing source ZA");
@@ -2225,21 +2239,36 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         config.minibeam_water_delta_response_model == "water_response_v2");
     const bool use_material_electron=!BroadBeam && !config.material_electron_response_index_file.empty();
     const bool use_material_ct=use_material_electron && config.enable_ct_grid;
+    // CT minibeam queue lookup; the environment switch retains a same-binary control.
+    const bool use_material_lookup=[&]() {
+        if(!use_material_ct)return false;
+        const char* value=std::getenv("CARBON_CT_ELECTRON_MATERIAL_INDEX");
+        if(!value)return config.enable_minibeam &&
+            config.material_electron_execution_mode=="queue";
+        if(std::string_view(value)=="0")return false;
+        if(std::string_view(value)!="1")
+            throw std::invalid_argument("CARBON_CT_ELECTRON_MATERIAL_INDEX must be 0 or 1");
+        return true;
+    }();
     constexpr bool use_water_electron = false;
     std::shared_ptr<MaterialElectronDeviceBank> material_electron_bank;
     const bool retain_electron_ct=config.material_electron_retain_bank && context;
     bool retained_ct_arrays=false;
-    if(context && !retain_electron_ct) {
+    if(context) {
         auto& cached=context->impl_->electron_ct;
-        if(cached.grid || cached.bank) {
+        if(!enable_ct_grid) {
             queue.wait_and_throw();
             if(cached.density)sycl::free(cached.density,queue);
             if(cached.material)sycl::free(cached.material,queue);
             cached={};
+        } else if(!retain_electron_ct && cached.bank) {
+            queue.wait_and_throw();
+            cached.bank.reset();cached.bank_key.clear();
         }
     }
 
     const MaterialElectronResponseView* material_electron_views=nullptr;
+    MaterialElectronLookupView material_electron_lookup{};
     std::size_t material_electron_view_count=0;
     std::uint64_t* material_untracked_device=nullptr; // photon / other, micro-MeV
     struct MaterialPacketFailure {
@@ -2255,8 +2284,22 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     if(config.material_electron_execution_mode=="queue")
         throw std::invalid_argument("Queue execution requires CARBON_CT_ELECTRON_QUEUE build");
 #endif
+    // Preserve per-step coverage/yield and group selection. Only the CDF
+    // reference draw of the retained packet moves to the existing queue.
+    const bool defer_material_birth_sampling = [&] {
+        const char* value=std::getenv("CARBON_CT_DEFER_BIRTH_SAMPLING");
+        if(!value)return use_material_ct && defer_material_packets && config.enable_minibeam &&
+            config.primary_atomic_number==1 && config.primary_mass_number==1;
+        if(std::string_view(value)=="0")return false;
+        if(std::string_view(value)!="1")
+            throw std::invalid_argument("CARBON_CT_DEFER_BIRTH_SAMPLING must be 0 or 1");
+        if(!use_material_ct || !defer_material_packets || !config.enable_minibeam)
+            throw std::invalid_argument("Deferred birth sampling requires queued CT minibeam response");
+        return true;
+    }();
+    std::cout<<"[ct-defer-birth-sampling] enabled="<<defer_material_birth_sampling<<"\n";
     struct MaterialBirthTask {
-        ElectronBirthDraw birth;
+        QueuedElectronBirth birth;
         std::array<double,3> position;
         std::array<float,3> direction;
         double density;
@@ -2264,6 +2307,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         std::uint32_t step,table;
         double weight;
     };
+    static_assert(sizeof(MaterialBirthTask)==128, "Retain the configured electron task capacity");
     MaterialBirthTask* material_tasks=nullptr;
     std::uint64_t* material_task_counts=nullptr; // produced / consumed
     std::uint64_t* material_queue_work=nullptr; // advances / source restarts / boundary restarts
@@ -2285,6 +2329,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         std::cout<<"[material-response-queue] capacity="<<material_task_capacity
                  <<" task_bytes="<<sizeof(MaterialBirthTask)<<" max_chunk="<<material_queue_chunk<<" lanes="<<material_queue_lanes
                  <<" group_size="<<material_group_size<<"\n";
+        std::cout<<"[electron-step-refill] enabled=1 transactions_per_iteration=1\n";
     }
 
     std::uint64_t* short_range_hits_device=nullptr;
@@ -2335,8 +2380,17 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     std::array<double,kElectronJointSections> electron_joint_minimum{},electron_joint_maximum{};
     double electron_joint_ceiling=185;
     if(use_electron_joint) {
-        const auto table=ElectronJointResponseTable::from_csv(config.ct_electron_joint_response_diagnostic_file,
-            config.ct_electron_joint_response_sha256,config.ct_electron_joint_response_metadata_sha256);
+        auto metadata=config.ct_electron_joint_response_diagnostic_file;
+        metadata.replace_extension(".metadata.json");
+        const auto key=input_cache_key(config.ct_electron_joint_response_diagnostic_file,
+            config.ct_electron_joint_response_sha256+config.ct_electron_joint_response_metadata_sha256)
+            +"|"+companion_input_key(metadata,{"ordered_path_file"});
+        const bool hit=inputs.contains<ElectronJointResponseTable>(key);
+        const auto& table=inputs.get<ElectronJointResponseTable>(key,[&] {
+            return ElectronJointResponseTable::from_csv(config.ct_electron_joint_response_diagnostic_file,
+                config.ct_electron_joint_response_sha256,config.ct_electron_joint_response_metadata_sha256);
+        });
+        std::cout<<"[joint-response-cache] "<<(hit?"hit":"miss")<<'\n';
         if(config.ct_electron_joint_patient_experiment && !table.full_schneider_scope)
             throw std::invalid_argument("Patient experiment requires full 25-section multi-energy schema 3, not a two-material pilot");
         // Explicitly authorized ISOLATED smoke diagnostic only. Config still
@@ -2380,7 +2434,9 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             material_electron_bank=std::make_shared<MaterialElectronDeviceBank>(queue,mapped?MaterialElectronMemory::host_mapped:MaterialElectronMemory::device,
                 static_cast<std::size_t>(config.material_electron_response_hot_device_budget_MiB)*1024*1024,
                 config.material_electron_response_cache_policy=="tiered_indices",
-                config.material_electron_response_cache_policy!="strict");
+                config.material_electron_response_cache_policy!="strict",
+                config.material_electron_response_cache_policy=="tiered_small_first" || config.material_electron_response_cache_policy=="tiered_small_decoded",
+                config.material_electron_response_cache_policy=="tiered_decoded" || config.material_electron_response_cache_policy=="tiered_small_decoded");
             material_electron_bank->load(index,{{-1,material_response_density}},budget-7*sizeof(std::uint64_t));
             material_electron_views=material_electron_bank->views();
             material_electron_view_count=material_electron_bank->size();
@@ -2396,10 +2452,18 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     !config.minibeam_water_delta_response_table_file.empty()
                 ? config.minibeam_water_delta_response_table_file
                 : config.water_electron_response_diagnostic_file;
-        const auto table=WaterElectronResponseTable::load(response_table_path,
-            config.water_electron_response_sha256,config.water_electron_response_metadata_sha256,
-            false, use_minibeam_water_response ? config.primary_atomic_number : 6,
-            use_minibeam_water_response ? config.primary_mass_number : 12);
+        const int response_z=use_minibeam_water_response?config.primary_atomic_number:6;
+        const int response_a=use_minibeam_water_response?config.primary_mass_number:12;
+        const auto key=input_cache_key(response_table_path,
+            config.water_electron_response_sha256+config.water_electron_response_metadata_sha256)
+            +"|"+std::to_string(response_z)+":"+std::to_string(response_a);
+        const bool hit=inputs.contains<WaterElectronResponseTable>(key);
+        const auto& table=inputs.get<WaterElectronResponseTable>(key,[&] {
+            return WaterElectronResponseTable::load(response_table_path,
+                config.water_electron_response_sha256,config.water_electron_response_metadata_sha256,
+                false,response_z,response_a);
+        });
+        std::cout<<"[water-response-cache] "<<(hit?"hit":"miss")<<'\n';
         water_electron_channel_count=table.channels.size();
         const double required_ceiling = use_minibeam_water_response ? config.initial_energy_MeVu :
             ((use_material_electron || config.water_electron_high_energy_diagnostic) ? 450.0 : 300.0);
@@ -2497,27 +2561,21 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     if (enable_ct_grid) {
         std::shared_ptr<const CtGrid> grid_storage;
         std::string geometry_key;
-        if(retain_electron_ct) {
-            if(!std::filesystem::is_regular_file(config.ct_grid_file))
-                throw std::invalid_argument("Retained CT requires a regular CT grid file");
-            std::ifstream packed_ct(config.ct_grid_file,std::ios::binary);
-            std::uint32_t packed_magic=0;
-            packed_ct.read(reinterpret_cast<char*>(&packed_magic),sizeof(packed_magic));
-            if(!packed_ct || packed_magic!=CtGrid::magic_value)
-                throw std::invalid_argument("Retained CT requires a self-contained CCTG file");
-            geometry_key=compute_file_sha256_hex(config.ct_grid_file)+"|"+config.ct_dicom_origin_mode;
-            if(!config.ct_schneider_file.empty())geometry_key+="|"+compute_file_sha256_hex(config.ct_schneider_file);
+        if(context) {
+            geometry_key=ct_input_key(config.ct_grid_file,config.ct_schneider_file,config.ct_dicom_origin_mode);
             auto& cached=context->impl_->electron_ct;
-            if(cached.geometry_key!=geometry_key) {
+            const bool hit=cached.grid && cached.geometry_key==geometry_key;
+            if(!hit) {
                 queue.wait_and_throw();
-                if(cached.density) {sycl::free(cached.density,queue);cached.density=nullptr;}
-                if(cached.material) {sycl::free(cached.material,queue);cached.material=nullptr;}
+                if(cached.density)sycl::free(cached.density,queue);
+                if(cached.material)sycl::free(cached.material,queue);
                 cached={};
                 cached.grid=std::make_shared<CtGrid>(CtGrid::load(
                     config.ct_grid_file,config.ct_schneider_file,config.ct_dicom_origin_mode));
                 cached.geometry_key=geometry_key;
             }
             grid_storage=cached.grid;
+            std::cout<<"[ct-grid-cache] "<<(hit?"hit":"miss")<<'\n';
         } else grid_storage=std::make_shared<CtGrid>(CtGrid::load(
             config.ct_grid_file,config.ct_schneider_file,config.ct_dicom_origin_mode));
         const auto& grid=*grid_storage;
@@ -2544,7 +2602,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 <<":"<<config.primary_mass_number<<":"<<config.material_electron_response_memory_mode
                 <<":"<<config.material_electron_response_cache_policy<<":"<<config.material_electron_response_host_budget_MiB
                 <<":"<<config.material_electron_response_device_budget_MiB<<":"<<config.material_electron_response_hot_device_budget_MiB
-                <<":"<<(config.material_electron_short_range_mm>0)<<":"<<geometry_key;
+                <<":"<<(config.material_electron_short_range_mm>0)
+                <<":"<<use_material_lookup<<":"<<geometry_key;
             const auto bank_key=bank_key_stream.str();
             const bool bank_hit=retain_electron_ct && context->impl_->electron_ct.bank &&
                 context->impl_->electron_ct.bank_key==bank_key;
@@ -2568,10 +2627,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             material_electron_bank=std::make_shared<MaterialElectronDeviceBank>(queue,mapped?MaterialElectronMemory::host_mapped:MaterialElectronMemory::device,
                 static_cast<std::size_t>(config.material_electron_response_hot_device_budget_MiB)*1024*1024,
                 config.material_electron_response_cache_policy=="tiered_indices",
-                config.material_electron_response_cache_policy!="strict");
+                config.material_electron_response_cache_policy!="strict",
+                config.material_electron_response_cache_policy=="tiered_small_first" || config.material_electron_response_cache_policy=="tiered_small_decoded",
+                config.material_electron_response_cache_policy=="tiered_decoded" || config.material_electron_response_cache_policy=="tiered_small_decoded");
             material_electron_bank->load(response_index,demand,
                 budget-10*sizeof(std::uint64_t)-sizeof(MaterialPacketFailure),true,
-                config.material_electron_short_range_mm>0);
+                config.material_electron_short_range_mm>0,use_material_lookup);
                 if(retain_electron_ct) {
                     context->impl_->electron_ct.bank=material_electron_bank;
                     context->impl_->electron_ct.bank_key=bank_key;
@@ -2579,6 +2640,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             }
             if(retain_electron_ct)std::cout<<"[electron-bank-cache] "<<(bank_hit?"hit":"miss")<<"\n";
             material_electron_views=material_electron_bank->views();material_electron_view_count=material_electron_bank->size();
+            material_electron_lookup=material_electron_bank->lookup();
+            std::cout<<"[electron-material-index] enabled="<<use_material_lookup
+                <<" sections="<<material_electron_lookup.section_count
+                <<" tables="<<material_electron_lookup.table_count<<"\n";
             electron_joint_diag_device=mem_tracker.allocate<std::uint64_t>(7);
             material_untracked_device=mem_tracker.allocate<std::uint64_t>(3);
             material_failure_device=mem_tracker.allocate<MaterialPacketFailure>(1);
@@ -2613,7 +2678,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             grid.file_version >= CtGrid::version_v2;
 
         const auto voxel_count = static_cast<std::size_t>(ct_nx) * ct_ny * ct_nz;
-        if(retain_electron_ct) {
+        if(context) {
             auto& cached=context->impl_->electron_ct;
             if(!cached.density || !cached.material) {
                 if(cached.density) {sycl::free(cached.density,queue);cached.density=nullptr;}
@@ -2801,13 +2866,15 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     float* elastic_energy = nullptr; // local, queued charged, overflow
     std::uint32_t* elastic_audit = nullptr; // primary, secondary, bad query, unsupported recoil
     if(use_all_elastic) {
-        const auto stop=ElasticRecoilStoppingTable::load(config.elastic_recoil_stopping_file,config.elastic_recoil_stopping_sha256);
+        const auto& stop = inputs.get<ElasticRecoilStoppingTable>(input_cache_key(config.elastic_recoil_stopping_file,config.elastic_recoil_stopping_sha256),
+            [&] { return ElasticRecoilStoppingTable::load(config.elastic_recoil_stopping_file,config.elastic_recoil_stopping_sha256); });
         auto* keys=mem_tracker.allocate<std::int32_t>(stop.keys.size());
         auto* se=mem_tracker.allocate<float>(stop.energies.size());auto* sv=mem_tracker.allocate<float>(stop.values.size());
         if(!keys||!se||!sv)throw std::bad_alloc();
         queue.copy(stop.keys.data(),keys,stop.keys.size());queue.copy(stop.energies.data(),se,stop.energies.size());queue.copy(stop.values.data(),sv,stop.values.size()).wait_and_throw();
         recoil_stopping={keys,se,sv,static_cast<std::uint32_t>(stop.keys.size()/2),static_cast<std::uint32_t>(stop.energies.size())};
-        const auto bank=AllIonElasticTable::load(config.all_ion_elastic_file,config.all_ion_elastic_sha256);
+        const auto& bank = inputs.get<AllIonElasticTable>(input_cache_key(config.all_ion_elastic_file,config.all_ion_elastic_sha256),
+            [&] { return AllIonElasticTable::load(config.all_ion_elastic_file,config.all_ion_elastic_sha256); });
         config.require_primary_reference_mass(bank.masses[primary_elastic_projectile], "Elastic package");
         auto* e=mem_tracker.allocate<float>(bank.energies.size());
         auto* r=mem_tracker.allocate<float>(bank.rates.size());
@@ -2904,7 +2971,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
            material!="G4_AIR" || std::abs(density-0.00120479)>1e-10 ||
            std::abs(cut-0.05)>1e-12 || !(peak>0) || !std::isfinite(peak))
             throw std::runtime_error("Air ionization rate metadata mismatch");
-        const auto rates=CrossSectionTable::from_csv(config.minibeam_air_ionization_rate_file);
+        const auto& rates=inputs.get<CrossSectionTable>(input_cache_key(config.minibeam_air_ionization_rate_file),
+            [&]{return CrossSectionTable::from_csv(config.minibeam_air_ionization_rate_file);});
         if(rates.energies().front()*a>config.energy_cutoff_MeV ||
            rates.energies().back()*a<config.initial_energy_MeVu*a)
             throw std::runtime_error("Air ionization rate energy domain does not cover source");
@@ -2913,27 +2981,29 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         std::cout<<"[air-ionization-clock] native proposal rate; aggregate air energy law unchanged\n";
     }
     if (minibeam_copper_transport) {
-        const auto copper_sp = StoppingPowerTable::from_csv(
-            config.minibeam_copper_stopping_power_file);
-        const auto air_sp = StoppingPowerTable::from_csv(
-            config.minibeam_air_stopping_power_file);
-        const auto copper_xs = CrossSectionTable::from_csv(
-            config.minibeam_copper_cross_section_file);
-        const auto elastic = load_copper_elastic_events(
-            config.minibeam_copper_elastic_file);
+        const auto& copper_sp = inputs.get<StoppingPowerTable>(input_cache_key(config.minibeam_copper_stopping_power_file),
+            [&] { return StoppingPowerTable::from_csv(config.minibeam_copper_stopping_power_file); });
+        const auto& air_sp = inputs.get<StoppingPowerTable>(input_cache_key(config.minibeam_air_stopping_power_file),
+            [&] { return StoppingPowerTable::from_csv(config.minibeam_air_stopping_power_file); });
+        const auto& copper_xs = inputs.get<CrossSectionTable>(input_cache_key(config.minibeam_copper_cross_section_file),
+            [&] { return CrossSectionTable::from_csv(config.minibeam_copper_cross_section_file); });
+        const auto& elastic = inputs.get<std::vector<CopperElasticRecord>>(input_cache_key(config.minibeam_copper_elastic_file),
+            [&] { return load_copper_elastic_events(config.minibeam_copper_elastic_file); });
         std::vector<float> copper_ion_sp_ratios;
         std::vector<std::uint8_t> copper_ion_sp_present;
         std::vector<float> copper_ion_xs;
         std::vector<std::uint8_t> copper_ion_xs_present;
         if (!config.minibeam_copper_ion_stopping_power_file.empty()) {
-            const auto ion_stopping = IonStoppingPowerTables::from_csv(
-                config.minibeam_copper_ion_stopping_power_file, copper_sp);
+            const auto& ion_stopping = inputs.get<IonStoppingPowerTables>(
+                input_cache_key(config.minibeam_copper_ion_stopping_power_file) + "|base=" +
+                input_cache_key(config.minibeam_copper_stopping_power_file), [&] {
+                    return IonStoppingPowerTables::from_csv(config.minibeam_copper_ion_stopping_power_file, copper_sp); });
             copper_ion_sp_ratios = ion_stopping.ratios_to_carbon();
             copper_ion_sp_present = ion_stopping.species_present();
         }
         if (!config.minibeam_copper_ion_cross_section_file.empty()) {
-            const auto ion_xs = IonCrossSectionTables::from_csv(
-                config.minibeam_copper_ion_cross_section_file);
+            const auto& ion_xs = inputs.get<IonCrossSectionTables>(input_cache_key(config.minibeam_copper_ion_cross_section_file),
+            [&] { return IonCrossSectionTables::from_csv(config.minibeam_copper_ion_cross_section_file); });
             copper_ion_xs = ion_xs.values();
             copper_ion_xs_present = ion_xs.species_present();
             minibeam_copper_ion_xs_grid_size =
@@ -2941,7 +3011,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             minibeam_copper_ion_xs_minimum_energy = ion_xs.minimum_energy_MeVu();
             minibeam_copper_ion_xs_inverse_step = 1.0F / ion_xs.energy_step_MeVu();
         }
-        const auto loaded_cascade = take_cinel03(config.minibeam_copper_inclxx_file);
+        const auto& loaded_cascade = inputs.get<LoadedCinel03>(input_cache_key(config.minibeam_copper_inclxx_file),
+            [&] { return take_cinel03(config.minibeam_copper_inclxx_file); });
         const auto& package = *loaded_cascade.package;
         const auto& tables = *loaded_cascade.tables;
         upload_float_pair(copper_sp.energies(), copper_sp.values(),
@@ -2949,8 +3020,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                           minibeam_copper_sp_values_device);
         minibeam_copper_sp_count = static_cast<std::uint32_t>(copper_sp.energies().size());
         if (!config.minibeam_copper_loss_range_file.empty()) {
-            const auto loss_table = UrbanLossRangeTable::from_csv(
-                config.minibeam_copper_loss_range_file);
+            const auto& loss_table = inputs.get<UrbanLossRangeTable>(input_cache_key(config.minibeam_copper_loss_range_file),
+            [&] { return UrbanLossRangeTable::from_csv(config.minibeam_copper_loss_range_file); });
             if (config.minibeam_copper_mcs_model == "urban_v2" &&
                 !loss_table.is_active_reference(config.resolved_primary_urban_reference_particle(),
                      config.resolved_primary_urban_ionisation_process(), "G4_Cu",
@@ -3103,8 +3174,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             throw std::runtime_error(
                 "physical water Urban voxels require an integral number of depth bins");
         }
-        const auto water_table = UrbanLossRangeTable::from_csv(
-            config.minibeam_water_urban_loss_range_file);
+        const auto& water_table = inputs.get<UrbanLossRangeTable>(input_cache_key(config.minibeam_water_urban_loss_range_file),
+            [&] { return UrbanLossRangeTable::from_csv(config.minibeam_water_urban_loss_range_file); });
         if (config.minibeam_water_primary_mcs_model == "urban_v2" &&
             !water_table.is_active_reference(config.resolved_primary_urban_reference_particle(),
                     config.resolved_primary_urban_ionisation_process(), "Water_75eV",
@@ -3339,6 +3410,40 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     auto* cutoff_stopped_energy_device = mem_tracker.allocate<float>(number_of_histories);
 #if defined(CARBON_ENABLE_MINIBEAM)
     const bool phase_at_copper_exit = config.minibeam_phase_space_at_copper_exit;
+    const std::string copper_capture_path = std::getenv("CARBON_MINIBEAM_COPPER_CAPTURE")
+        ? std::getenv("CARBON_MINIBEAM_COPPER_CAPTURE") : "";
+    const std::string copper_diagnostic_path = !copper_capture_path.empty() ? copper_capture_path+"/input.csv" : std::getenv("CARBON_MINIBEAM_COPPER_DIAGNOSTIC")
+        ? std::getenv("CARBON_MINIBEAM_COPPER_DIAGNOSTIC") : "";
+    const std::string copper_history_mask_path = std::getenv("CARBON_MINIBEAM_DIAGNOSTIC_HISTORY_MASK")
+        ? std::getenv("CARBON_MINIBEAM_DIAGNOSTIC_HISTORY_MASK") : "";
+    if ((!copper_diagnostic_path.empty() || !copper_history_mask_path.empty()) &&
+        (BroadBeam || config.run_mode != RunMode::research || !config.enable_minibeam ||
+         config.enable_ct_grid || config.enable_tps_source || config.enable_tps_coordinate_system ||
+         config.primary_atomic_number != 1 || config.primary_mass_number != 1 ||
+         config.multiple_scattering_model != "urban_v2" ||
+         config.minibeam_transport_mode != "copper_em" ||
+         !config.minibeam_water_entry_secondary_replay_file.empty()))
+        throw std::invalid_argument("Copper history diagnostics require research proton homogeneous-water Urban minibeam without TPS/replay");
+    const auto copper_history_mask_host = read_copper_history_mask(
+        copper_history_mask_path, number_of_histories, config.random_seed);
+    auto* copper_history_mask_device = copper_history_mask_host.empty() ? nullptr
+        : mem_tracker.allocate<std::uint8_t>(number_of_histories);
+    auto* copper_diagnostic_device = copper_diagnostic_path.empty() ? nullptr
+        : mem_tracker.allocate<CopperHistoryDiagnostic>(number_of_histories);
+    if ((!copper_history_mask_host.empty() && !copper_history_mask_device) ||
+        (!copper_diagnostic_path.empty() && !copper_diagnostic_device)) throw std::bad_alloc();
+    if (copper_history_mask_device) {
+        queue.copy(copper_history_mask_host.data(),copper_history_mask_device,number_of_histories).wait_and_throw();
+        std::cout << "[copper-diagnostic-mask] selected="
+                  << std::count(copper_history_mask_host.begin(),copper_history_mask_host.end(),std::uint8_t{1})
+                  << " of=" << number_of_histories << " source_histories; subset dose is normalized to the full source count; path="
+                  << copper_history_mask_path << '\n';
+    }
+    if (copper_diagnostic_device)
+        queue.memset(copper_diagnostic_device,0,number_of_histories*sizeof(CopperHistoryDiagnostic));
+    auto* copper_capture_entry_device=copper_capture_path.empty() ? nullptr
+        : mem_tracker.allocate<PrimaryMediumEntryState>(number_of_histories);
+    if(!copper_capture_path.empty() && !copper_capture_entry_device)throw std::bad_alloc();
     const auto enable_minibeam_phase_space =
         (!BroadBeam && config.enable_minibeam) &&
         !config.minibeam_phase_space_output_file.empty();
@@ -3582,7 +3687,50 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             throw std::runtime_error("Neutron birth buffer allocation failed");
         queue.fill(neutron_birth_buffer.count, std::uint64_t{0}, 1).wait_and_throw();
     }
+    // CT uses the identical upstream Cu/air transport and entry record, but
+    // must retain the generic material-aware downstream kernel. Never apply
+    // the uniform-water substitutions to patient transport.
+    const bool ct_minibeam_split = !BroadBeam && config.enable_minibeam &&
+        config.enable_ct_grid && config.minibeam_primary_pipeline != "combined";
+    if(ct_minibeam_split && (config.run_mode!=RunMode::research ||
+        config.enable_tps_source || config.enable_tps_coordinate_system ||
+        config.primary_atomic_number!=1 || config.primary_mass_number!=1 ||
+        config.multiple_scattering_model!="urban_v2" || config.minibeam_primary_pipeline!="compact" ||
+        config.minibeam_transport_mode!="copper_em" || !config.enable_secondary_transport ||
+        !config.minibeam_water_entry_secondary_replay_file.empty()))
+        throw std::invalid_argument("CT split minibeam requires research proton Urban copper transport without TPS/replay");
 #if defined(CARBON_ENABLE_MINIBEAM)
+    const bool queue_copper_primary_children = [&] {
+        const char* value=std::getenv("CARBON_MINIBEAM_CU_CHARGED_QUEUE");
+        const char* specialization_override=std::getenv("CARBON_MINIBEAM_PRIMARY_SPECIALIZE");
+        const char* pipeline_override=std::getenv("CARBON_MINIBEAM_PRIMARY_SPLIT");
+        if(!value)return !(specialization_override && std::string_view(specialization_override)=="0") &&
+            !(pipeline_override && std::string_view(pipeline_override)=="0") &&
+            !BroadBeam && config.run_mode==RunMode::research &&
+            config.enable_minibeam && (!config.enable_ct_grid || ct_minibeam_split) && !config.enable_tps_source &&
+            !config.enable_tps_coordinate_system && config.primary_atomic_number==1 &&
+            config.primary_mass_number==1 && config.multiple_scattering_model=="urban_v2" &&
+            config.minibeam_transport_mode=="copper_em" && config.enable_secondary_transport &&
+            (config.minibeam_primary_specialization || ct_minibeam_split) && config.minibeam_primary_pipeline=="compact" &&
+            config.minibeam_water_entry_secondary_replay_file.empty();
+        if(std::string_view(value)=="0")return false;
+        if(std::string_view(value)!="1")throw std::invalid_argument("CARBON_MINIBEAM_CU_CHARGED_QUEUE must be0 or1");
+        if(BroadBeam || config.run_mode!=RunMode::research || !config.enable_minibeam || (config.enable_ct_grid && !ct_minibeam_split) ||
+            config.enable_tps_source || config.enable_tps_coordinate_system ||
+            config.primary_atomic_number!=1 || config.primary_mass_number!=1 ||
+            config.multiple_scattering_model!="urban_v2" || !config.enable_secondary_transport ||
+            config.minibeam_primary_pipeline=="legacy" || !config.minibeam_water_entry_secondary_replay_file.empty())
+            throw std::invalid_argument("Cu charged queue requires research proton water/CT split/compact Urban minibeam");
+        return true;
+    }();
+    const auto copper_primary_child_capacity=std::min<std::size_t>(max_secondaries,
+        std::max<std::size_t>(4096,2*number_of_histories));
+    auto* copper_primary_child_tasks=queue_copper_primary_children
+        ? mem_tracker.allocate<CopperPrimaryChildTask>(copper_primary_child_capacity) : nullptr;
+    auto* copper_primary_child_counts=queue_copper_primary_children
+        ? mem_tracker.allocate<std::uint32_t>(3) : nullptr;
+    if(queue_copper_primary_children && (!copper_primary_child_tasks || !copper_primary_child_counts))throw std::bad_alloc();
+    if(copper_primary_child_counts)queue.fill(copper_primary_child_counts,0U,3).wait_and_throw();
     auto* minibeam_copper_cascade_queue_device =
         need_secondary_buffers && (!BroadBeam && config.enable_minibeam) &&
                 config.minibeam_copper_fragment_cascade_generations > 0
@@ -3604,6 +3752,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         enable_minibeam_fragment_phase_space
             ? mem_tracker.allocate<std::uint32_t>(1)
             : nullptr;
+#else
+    constexpr bool queue_copper_primary_children=false;
 #endif
     if (need_secondary_buffers) {
         if (!secondary_queue_device || !secondary_count_device ||
@@ -3861,6 +4011,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const auto flat_source_half_width_y_mm =
         static_cast<float>(config.flat_source_half_width_y_mm);
     const auto enable_emittance_source = config.enable_emittance_source;
+    const bool minibeam_pbs_source = config.spots_geometry_mode == "minibeam_pbs_y";
     const auto emittance_sigma_x_mm = static_cast<float>(config.emittance_sigma_x_mm);
     const auto emittance_sigma_y_mm = static_cast<float>(config.emittance_sigma_y_mm);
     const auto emittance_sigma_x_prime = static_cast<float>(config.emittance_sigma_x_prime);
@@ -4067,6 +4218,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
               << " B of closures out of the kernel argument list\n";
 #endif
 
+    std::cout << "[input-cache] hits=" << inputs.hits-input_hits_before
+              << " misses=" << inputs.misses-input_misses_before << "\n";
     runtime_setup.finish();
     RuntimeScope runtime_steps("transport_loop_including_scoring_and_queue_transfers");
     double primary_kernel_seconds = 0.0;
@@ -4108,6 +4261,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         !enable_ct_grid && !enable_hetero_insert && slab_layer_count == 0))
         throw std::invalid_argument("Minibeam primary specialization requires uniform-water Urban minibeam");
     std::cout << "[minibeam-primary-specialization] " << use_minibeam_primary_path << "\n";
+    std::cout << "[ct-minibeam-split] " << ct_minibeam_split << "\n";
 
     // Both entry routes share the same compile-time uniform-water physics body.
     // Stage 5 samples the source and transports water, with copper disabled at
@@ -4141,15 +4295,107 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             throw std::invalid_argument("CARBON_MINIBEAM_PRIMARY_SPLIT must be 0, 1 or 2");
         return value == "2" ? 2 : value == "1" ? 1 : 0;
     }();
-    if (split_minibeam_primary && !use_minibeam_primary_path)
-        throw std::invalid_argument("Split primary requires homogeneous-water Urban minibeam specialization");
-    auto* primary_water_entry = split_minibeam_primary
-        ? mem_tracker.allocate<PrimaryWaterEntryState>(history_chunk) : nullptr;
-    if (split_minibeam_primary && !primary_water_entry) throw std::bad_alloc();
+    if (split_minibeam_primary && !use_minibeam_primary_path && !ct_minibeam_split)
+        throw std::invalid_argument("Split primary requires water specialization or CT compact Urban minibeam");
+    if(ct_minibeam_split && split_minibeam_primary!=2)
+        throw std::invalid_argument("CT minibeam requires compact pipeline (no split environment override)");
+#if defined(CARBON_ENABLE_MINIBEAM)
+    if(queue_copper_primary_children && !split_minibeam_primary)
+        throw std::invalid_argument("Cu charged queue requires a split primary launch");
+#endif
+    // Exact CT profile: every constant substituted in stage 11 is checked
+    // here. The original material-aware stage 4 remains the control/fallback.
+    const bool ct_queued_primary_eligible = ct_minibeam_split &&
+        split_minibeam_primary == 2 &&
+        global_urban == true &&
+        enable_ct_grid == true &&
+        enable_hetero_insert == false &&
+        use_unified_water == false &&
+        enable_voxel_scoring == true &&
+        enable_multiple_scattering == true &&
+        enable_inelastic == true &&
+        use_schneider_primary_xs == true &&
+        use_material_electron == true &&
+        use_material_ct == true &&
+        defer_material_packets == true &&
+        use_minibeam_water_response == false &&
+        use_ct_elastic == false &&
+        use_schneider_delta_tail == false &&
+        use_schneider_delta_longitudinal == false &&
+        use_longitudinal_interface_mass == false &&
+        slab_layer_count == 0 &&
+        primary_atomic_number == 1 &&
+        primary_mass_number == 1 &&
+        inverse_mass_number == 1.0F;
+    const bool ct_queued_primary_specialize = [&] {
+        const char* value = std::getenv("CARBON_CT_QUEUED_PRIMARY_SPECIALIZE");
+        if (!value) return ct_queued_primary_eligible;
+        if (std::string_view(value) == "0") return false;
+        if (std::string_view(value) != "1")
+            throw std::invalid_argument("CARBON_CT_QUEUED_PRIMARY_SPECIALIZE must be 0 or 1");
+        if (!ct_queued_primary_eligible)
+            throw std::invalid_argument("CT queued primary specialization requires the exact proton Urban CT queue profile");
+        return true;
+    }();
+    std::cout << "[ct-queued-primary-specialize] enabled=" << ct_queued_primary_specialize << "\n";
+    auto* primary_medium_entry = split_minibeam_primary
+        ? mem_tracker.allocate<PrimaryMediumEntryState>(history_chunk) : nullptr;
+    if (split_minibeam_primary && !primary_medium_entry) throw std::bad_alloc();
     auto* primary_entry_counts = split_minibeam_primary == 2
         ? mem_tracker.allocate<std::uint64_t>(2) : nullptr;
     if (split_minibeam_primary == 2 && !primary_entry_counts) throw std::bad_alloc();
 #if defined(CARBON_ENABLE_MINIBEAM)
+    const std::string copper_response_path=std::getenv("CARBON_MINIBEAM_COPPER_RESPONSE")
+        ? std::getenv("CARBON_MINIBEAM_COPPER_RESPONSE") : "";
+    std::optional<CopperResponseBank> copper_response_host;
+    CopperResponseEvent* copper_response_events=nullptr;
+    SecondaryParticle* copper_response_charged=nullptr;
+    NeutronBirthRecord* copper_response_neutrons=nullptr;
+    std::uint32_t* copper_response_offsets=nullptr;
+    std::uint64_t* copper_response_counts=nullptr;
+    if(!copper_response_path.empty()) {
+        if(BroadBeam || ct_minibeam_split || !queue_copper_primary_children || !copper_capture_path.empty() || !copper_history_mask_path.empty() || split_minibeam_primary!=2)
+            throw std::invalid_argument("Conditional Cu response cannot combine with capture/mask/broadbeam; compact pipeline required");
+        const char* sha=std::getenv("CARBON_MINIBEAM_COPPER_RESPONSE_SHA256");
+        copper_response_host=load_copper_response(copper_response_path,sha ? sha : "",config);
+        auto copy_records=[&]<class Record>(const std::vector<Record>& records) {
+            auto* device=mem_tracker.allocate<Record>(std::max<std::size_t>(1,records.size()));
+            if(!device)throw std::bad_alloc();
+            if(!records.empty())queue.copy(records.data(),device,records.size()).wait_and_throw();
+            return device;
+        };
+        copper_response_events=copy_records(copper_response_host->events);
+        copper_response_charged=copy_records(copper_response_host->charged);
+        copper_response_neutrons=copy_records(copper_response_host->neutrons);
+        copper_response_offsets=copy_records(copper_response_host->offsets);
+        copper_response_counts=mem_tracker.allocate<std::uint64_t>(6);
+        if(!copper_response_counts)throw std::bad_alloc();
+        queue.fill(copper_response_counts,std::uint64_t{0},6).wait_and_throw();
+        std::cout << "[copper-response] experimental correlated event bank; events="
+                  << copper_response_host->events.size() << "; no coordinate translations; native Cu neutron births\n";
+        copper_response_host.reset();
+    }
+    const unsigned water_energy_buckets = [&] {
+        const char* value=std::getenv("CARBON_MINIBEAM_WATER_ENERGY_BUCKETS");
+        if(!value)return split_minibeam_primary==2 && (use_minibeam_primary_path || ct_minibeam_split) &&
+            config.primary_atomic_number==1 && config.primary_mass_number==1 ? 16U : 0U;
+        if(std::string_view(value)=="0")return 0U;
+        unsigned buckets=0;
+        const std::string_view view(value);
+        auto parsed=std::from_chars(view.data(),view.data()+view.size(),buckets);
+        if (parsed.ec!=std::errc{} || parsed.ptr!=view.data()+view.size() ||
+            (buckets!=4 && buckets!=8 && buckets!=16 && buckets!=32))
+            throw std::invalid_argument("CARBON_MINIBEAM_WATER_ENERGY_BUCKETS must be 0,4,8,16,32");
+        if (split_minibeam_primary!=2 || (!use_minibeam_primary_path && !ct_minibeam_split))
+            throw std::invalid_argument("Entry energy ordering requires compact water/CT minibeam");
+        return buckets;
+    }();
+    auto* water_energy_order = water_energy_buckets ? mem_tracker.allocate<std::uint32_t>(history_chunk) : nullptr;
+    auto* water_energy_counts = water_energy_buckets ? mem_tracker.allocate<std::uint32_t>(water_energy_buckets+1) : nullptr;
+    auto* water_energy_offsets = water_energy_buckets ? mem_tracker.allocate<std::uint32_t>(water_energy_buckets+1) : nullptr;
+    if(water_energy_buckets && (!water_energy_order || !water_energy_counts || !water_energy_offsets))throw std::bad_alloc();
+    std::vector<sycl::event> water_order_events;
+    std::cout << "[minibeam-candidates] water_energy_buckets=" << water_energy_buckets << '\n';
     // Beamline lane order: a straight-ray prediction from the sampled flat
     // source groups copper-bound histories (~600 Cu steps) apart from open-slit
     // ones (a few air steps), so fewer warps idle on a single long lane. Only
@@ -4173,7 +4419,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     constexpr std::uint32_t* beamline_order = nullptr;
 #endif
     std::cout << "[primary-split] enabled=" << split_minibeam_primary
-              << " entry_bytes=" << sizeof(PrimaryWaterEntryState) << "\n";
+              << " entry_bytes=" << sizeof(PrimaryMediumEntryState) << "\n";
     std::vector<sycl::event> electron_events;
     std::uint64_t electron_tasks_total=0, electron_queue_peak=0;
     std::vector<sycl::event> primary_events;
@@ -4189,14 +4435,63 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         if (defer_material_packets)queue.fill(material_task_counts,std::uint64_t{0},2);
         if constexpr(separate_fe_joint)queue.fill(fe_joint_queue_counts,std::uint64_t{0},3);
         const auto launch_primary_chunk = [&](auto production_path_tag, auto uniform_water_path_tag, auto stage_tag) {
-            constexpr int kPrimaryStage = decltype(stage_tag)::value;
+            constexpr int kKernelStage = decltype(stage_tag)::value;
+            constexpr bool kQueueCopperChildren = kKernelStage == 8 || kKernelStage == 9 || kKernelStage == 10;
+            constexpr bool kCtQueuedPrimaryPath = kKernelStage == 11;
+            constexpr int kPrimaryStage = kCtQueuedPrimaryPath ? 4 : kKernelStage == 8 ? 1 : (kKernelStage == 9 || kKernelStage == 10) ? 3 : kKernelStage;
             constexpr bool kUniformWaterPrimaryPath = decltype(uniform_water_path_tag)::value;
+            // Host eligibility requires global Urban for every split beamline.
+            // Downstream CT material handling must not select upstream physics.
+            constexpr bool kUrbanBeamlinePath = kUniformWaterPrimaryPath ||
+                kPrimaryStage == 1 || kPrimaryStage == 3;
             constexpr bool kProductionPrimaryPath =
                 decltype(production_path_tag)::value;
+            const auto ct_runtime_global_urban = global_urban;
+            const auto ct_runtime_enable_ct_grid = enable_ct_grid;
+            const auto ct_runtime_enable_hetero_insert = enable_hetero_insert;
+            const auto ct_runtime_use_unified_water = use_unified_water;
+            const auto ct_runtime_enable_voxel_scoring = enable_voxel_scoring;
+            const auto ct_runtime_enable_multiple_scattering = enable_multiple_scattering;
+            const auto ct_runtime_enable_inelastic = enable_inelastic;
+            const auto ct_runtime_use_schneider_primary_xs = use_schneider_primary_xs;
+            const auto ct_runtime_use_material_electron = use_material_electron;
+            const auto ct_runtime_use_material_ct = use_material_ct;
+            const auto ct_runtime_defer_material_packets = defer_material_packets;
+            const auto ct_runtime_use_minibeam_water_response = use_minibeam_water_response;
+            const auto ct_runtime_use_ct_elastic = use_ct_elastic;
+            const auto ct_runtime_use_schneider_delta_tail = use_schneider_delta_tail;
+            const auto ct_runtime_use_schneider_delta_longitudinal = use_schneider_delta_longitudinal;
+            const auto ct_runtime_use_longitudinal_interface_mass = use_longitudinal_interface_mass;
+            const auto ct_runtime_slab_layer_count = slab_layer_count;
+            const auto ct_runtime_primary_atomic_number = primary_atomic_number;
+            const auto ct_runtime_primary_mass_number = primary_mass_number;
+            const auto ct_runtime_inverse_mass_number = inverse_mass_number;
             return queue.parallel_for<CarbonPrimaryTransportKernel<
-                kProductionPrimaryPath, kUniformWaterPrimaryPath, kPrimaryStage, BroadBeam, Gaussian, JointResponse>>(
+                kProductionPrimaryPath, kUniformWaterPrimaryPath, kKernelStage, BroadBeam, Gaussian, JointResponse>>(
             sycl::nd_range<1>{sycl::range<1>{chunk_global}, sycl::range<1>{local_size}},
             [=](sycl::nd_item<1> item) {
+                // Constexpr-selected values remove unused physics branches;
+                // the host eligibility test proves their runtime equivalence.
+                const auto global_urban = kCtQueuedPrimaryPath ? true : ct_runtime_global_urban;
+                const auto enable_ct_grid = kCtQueuedPrimaryPath ? true : ct_runtime_enable_ct_grid;
+                const auto enable_hetero_insert = kCtQueuedPrimaryPath ? false : ct_runtime_enable_hetero_insert;
+                const auto use_unified_water = kCtQueuedPrimaryPath ? false : ct_runtime_use_unified_water;
+                const auto enable_voxel_scoring = kCtQueuedPrimaryPath ? true : ct_runtime_enable_voxel_scoring;
+                const auto enable_multiple_scattering = kCtQueuedPrimaryPath ? true : ct_runtime_enable_multiple_scattering;
+                const auto enable_inelastic = kCtQueuedPrimaryPath ? true : ct_runtime_enable_inelastic;
+                const auto use_schneider_primary_xs = kCtQueuedPrimaryPath ? true : ct_runtime_use_schneider_primary_xs;
+                const auto use_material_electron = kCtQueuedPrimaryPath ? true : ct_runtime_use_material_electron;
+                const auto use_material_ct = kCtQueuedPrimaryPath ? true : ct_runtime_use_material_ct;
+                const auto defer_material_packets = kCtQueuedPrimaryPath ? true : ct_runtime_defer_material_packets;
+                const auto use_minibeam_water_response = kCtQueuedPrimaryPath ? false : ct_runtime_use_minibeam_water_response;
+                const auto use_ct_elastic = kCtQueuedPrimaryPath ? false : ct_runtime_use_ct_elastic;
+                const auto use_schneider_delta_tail = kCtQueuedPrimaryPath ? false : ct_runtime_use_schneider_delta_tail;
+                const auto use_schneider_delta_longitudinal = kCtQueuedPrimaryPath ? false : ct_runtime_use_schneider_delta_longitudinal;
+                const auto use_longitudinal_interface_mass = kCtQueuedPrimaryPath ? false : ct_runtime_use_longitudinal_interface_mass;
+                const auto slab_layer_count = kCtQueuedPrimaryPath ? 0 : ct_runtime_slab_layer_count;
+                const auto primary_atomic_number = kCtQueuedPrimaryPath ? 1 : ct_runtime_primary_atomic_number;
+                const auto primary_mass_number = kCtQueuedPrimaryPath ? 1 : ct_runtime_primary_mass_number;
+                const auto inverse_mass_number = kCtQueuedPrimaryPath ? 1.0F : ct_runtime_inverse_mass_number;
                 const bool enable_minibeam = kPrimaryStage == 5 ? false : primary_minibeam_enabled;
                 const auto lane = item.get_global_linear_id();
                 if (lane >= chunk_count) {
@@ -4215,1839 +4510,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 const auto& schneider_ct_device_ctx = *primary_schneider_ct_ptr;
 #endif
 
-                PrimaryWaterEntryState entry{};
-                if constexpr (kPrimaryStage != 2 && kPrimaryStage != 4) {
-                const PrimarySpotBatchEntry* spot = nullptr;
-                std::uint64_t rng_history = global_history;
-                if (primary_spot_count > 0) {
-                    std::size_t lower = 0;
-                    std::size_t upper = primary_spot_count;
-                    while (lower + 1 < upper) {
-                        const auto middle = lower + (upper - lower) / 2;
-                        if (global_history < primary_spots_device[middle].history_begin) {
-                            upper = middle;
-                        } else {
-                            lower = middle;
-                        }
-                    }
-                    spot = primary_spots_device + lower;
-                    rng_history = global_history - spot->history_begin;
-                }
-                const auto spot_seed = spot != nullptr ? spot->random_seed : random_seed;
-                const auto spot_initial_energy_MeV =
-                    spot != nullptr ? spot->floats[0] : initial_energy_MeV;
-                const auto spot_energy_spread =
-                    spot != nullptr ? spot->floats[1] : beam_energy_spread;
-
-                auto energy_MeV = spot_initial_energy_MeV;
-                if (spot_energy_spread > 0.0F) {
-                    const auto u0 = sycl::fmax(
-                        rng::uniform01(spot_seed, rng_history, 0, 40), 1.0e-12F);
-                    const auto u1 = rng::uniform01(spot_seed, rng_history, 0, 41);
-                    constexpr float two_pi = 6.2831853071795864769F;
-                    const auto gauss =
-                        sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::cos(two_pi * u1);
-                    energy_MeV =
-                        spot_initial_energy_MeV * (1.0F + spot_energy_spread * gauss);
-                    if (energy_MeV < energy_cutoff_MeV) {
-                        energy_MeV = energy_cutoff_MeV;
-                    }
-                }
-
-                const auto sampled_initial_energy_MeVu = energy_MeV * inverse_mass_number;
-                // Store the energy actually transported after source sampling/cutoff.
-                // This does not consume RNG or change the source distribution.
-                sampled_incident_device[global_history] = energy_MeV;
-                auto local_x_mm = 0.0F;
-                auto local_y_mm = 0.0F;
-                auto local_dx = 0.0F;
-                auto local_dy = 0.0F;
-                auto local_dz = 1.0F;
-                if (enable_flat_source) {
-                    local_x_mm = flat_source_half_width_x_mm *
-                                 (2.0F * rng::uniform01(spot_seed, rng_history, 0, 34) - 1.0F);
-                    local_y_mm = flat_source_half_width_y_mm *
-                                 (2.0F * rng::uniform01(spot_seed, rng_history, 0, 35) - 1.0F);
-                } else if (enable_emittance_source) {
-                    const auto u0 = sycl::fmax(
-                        rng::uniform01(spot_seed, rng_history, 0, 30), 1.0e-12F);
-                    const auto u1 = rng::uniform01(spot_seed, rng_history, 0, 31);
-                    const auto u2 = sycl::fmax(
-                        rng::uniform01(spot_seed, rng_history, 0, 32), 1.0e-12F);
-                    const auto u3 = rng::uniform01(spot_seed, rng_history, 0, 33);
-                    constexpr float two_pi = 6.2831853071795864769F;
-                    const auto g0 = sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::cos(two_pi * u1);
-                    const auto g1 = sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::sin(two_pi * u1);
-                    const auto g2 = sycl::sqrt(-2.0F * sycl::log(u2)) * sycl::cos(two_pi * u3);
-                    const auto g3 = sycl::sqrt(-2.0F * sycl::log(u2)) * sycl::sin(two_pi * u3);
-                    const auto sigma_x = spot != nullptr ? spot->floats[2] : emittance_sigma_x_mm;
-                    const auto sigma_y = spot != nullptr ? spot->floats[3] : emittance_sigma_y_mm;
-                    const auto sigma_x_prime =
-                        spot != nullptr ? spot->floats[4] : emittance_sigma_x_prime;
-                    const auto sigma_y_prime =
-                        spot != nullptr ? spot->floats[5] : emittance_sigma_y_prime;
-                    local_x_mm = sigma_x * g0;
-                    local_y_mm = sigma_y * g2;
-                    const auto rho_x = sycl::clamp(
-                        spot != nullptr ? spot->floats[6] : emittance_correlation_x,
-                        -0.9999F, 0.9999F);
-                    const auto rho_y = sycl::clamp(
-                        spot != nullptr ? spot->floats[7] : emittance_correlation_y,
-                        -0.9999F, 0.9999F);
-                    const auto x_prime =
-                        sigma_x_prime * (rho_x * g0 + sycl::sqrt(1.0F - rho_x * rho_x) * g1);
-                    const auto y_prime =
-                        sigma_y_prime * (rho_y * g2 + sycl::sqrt(1.0F - rho_y * rho_y) * g3);
-                    const auto inv_norm =
-                        sycl::rsqrt(1.0F + x_prime * x_prime + y_prime * y_prime);
-                    local_dx = x_prime * inv_norm;
-                    local_dy = y_prime * inv_norm;
-                    local_dz = inv_norm;
-                }
-
-                const auto origin_x = spot != nullptr ? spot->floats[8] : source_origin_x_mm;
-                const auto origin_y = spot != nullptr ? spot->floats[9] : source_origin_y_mm;
-                const auto origin_z = spot != nullptr ? spot->floats[10] : source_origin_z_mm;
-                const auto ux_x = spot != nullptr ? spot->floats[11] : beam_ux_x;
-                const auto ux_y = spot != nullptr ? spot->floats[12] : beam_ux_y;
-                const auto ux_z = spot != nullptr ? spot->floats[13] : beam_ux_z;
-                const auto uy_x = spot != nullptr ? spot->floats[14] : beam_uy_x;
-                const auto uy_y = spot != nullptr ? spot->floats[15] : beam_uy_y;
-                const auto uy_z = spot != nullptr ? spot->floats[16] : beam_uy_z;
-                const auto uz_x = spot != nullptr ? spot->floats[17] : beam_uz_x;
-                const auto uz_y = spot != nullptr ? spot->floats[18] : beam_uz_y;
-                const auto uz_z = spot != nullptr ? spot->floats[19] : beam_uz_z;
-
-                auto position_x_mm = origin_x + ux_x * local_x_mm + uy_x * local_y_mm;
-                auto position_y_mm = origin_y + ux_y * local_x_mm + uy_y * local_y_mm;
-                auto position_z_mm = origin_z + ux_z * local_x_mm + uy_z * local_y_mm;
-                const auto composed_direction = compose_tps_direction(
-                    local_dx, local_dy, local_dz, ux_x, ux_y, ux_z,
-                    uy_x, uy_y, uy_z, uz_x, uz_y, uz_z);
-                auto direction_x = composed_direction.x;
-                auto direction_y = composed_direction.y;
-                auto direction_z = composed_direction.z;
-                {
-                    const auto inv_n = sycl::rsqrt(sycl::fmax(
-                        1.0e-20F, direction_x * direction_x + direction_y * direction_y +
-                                      direction_z * direction_z));
-                    direction_x *= inv_n;
-                    direction_y *= inv_n;
-                    direction_z *= inv_n;
-                }
-
-#if defined(CARBON_ENABLE_MINIBEAM)
-                float beamline_air_loss_MeV = 0.0F;
-                const auto minibeam_block_entrance_z =
-                    minibeam_block_center_z - 0.5F * minibeam_block_thickness;
-                const auto minibeam_block_exit_z =
-                    minibeam_block_center_z + 0.5F * minibeam_block_thickness;
-                UrbanV2TrackState air_urban_state{};
-                std::uint64_t air_urban_step = 0;
-                DiscreteDeltaClockCandidate<float> air_ion_clock;
-                float air_ion_threshold=std::numeric_limits<float>::max(),air_ion_rate=0;
-
-                bool air_urban_boundary = true;
-                auto advance_air = [&](const float boundary_path, const UrbanV2SafetyCtx& safety, const float ceiling) {
-                    UrbanV2Material material{};
-                    const auto reference = air_urban_device.materials[0];
-                    material.table.active_context = air_urban_device.at(0, air_urban_projectile, energy_MeV);
-                    material.zeff = reference.zeff;
-                    material.radlen_mm = reference.radiation_length_mm;
-                    material.density_g_per_cm3 = reference.density;
-                    material.projectile_z = primary_atomic_number;
-                    material.projectile_a = primary_mass_number;
-                    material.mass_mev = air_urban_device.species[air_urban_projectile].mass_mev;
-                    material.mfp_kind = 2;
-                    float ion_distance=std::numeric_limits<float>::infinity();
-                    if(air_ion_count) {
-                        if(energy_MeV<air_ion_e_device[0]*primary_mass_number ||
-                           energy_MeV>air_ion_e_device[air_ion_count-1]*primary_mass_number) {
-                            urban_record_first_failure(minibeam_event_counts_device,rng_history,air_urban_step,0U,106);
-                            return false;
-                        }
-                        if(energy_MeV<=air_ion_peak) {
-                            if(energy_MeV*1.25F<air_ion_threshold)air_ion_threshold=energy_MeV;
-                        } else if(energy_MeV<air_ion_threshold)air_ion_threshold=sycl::fmax(air_ion_peak,.8F*energy_MeV);
-                        air_ion_rate=minibeam_linear_table(air_ion_e_device,air_ion_rate_device,air_ion_count,
-                            air_ion_threshold*inverse_mass_number);
-                        if(!air_ion_clock.active)
-                            air_ion_clock.arm(-sycl::log(sycl::fmax(0x1p-24F,rng::msc_unit_strict(
-                                spot_seed ^ 0xB3E520A174C968DFULL,rng_history,air_urban_step,125U))));
-                        ion_distance=air_ion_clock.distance(air_ion_rate);
-                    }
-                    const auto step = urban_v2_propose_and_sample(
-                        Direction3F{direction_x,direction_y,direction_z}, energy_MeV,
-                        sycl::fmin(ceiling,ion_distance), boundary_path, position_x_mm,position_y_mm,position_z_mm,
-                        direction_x,direction_y,direction_z,safety,air_urban_boundary,air_urban_state,
-                        material,1.0F,spot_seed ^ 0xA17B09D5C628E341ULL,rng_history,air_urban_step++,0U,50);
-                    const int reason = step.limit_reason < 0 ? -step.limit_reason : urban_step_field_reason(step);
-                    if (reason || step.numeric_guard_tripped || air_urban_step >= 100000U) {
-                        urban_record_first_failure(minibeam_event_counts_device,rng_history,
-                            air_urban_step,0U,reason ? reason : 104);
-                        return false;
-                    }
-                    if(air_ion_count) {
-                        const bool proposed=step.final_true_path_mm>=ion_distance;
-                        air_ion_clock.consume(step.final_true_path_mm,air_ion_rate,proposed);
-                        sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
-                            sycl::memory_scope::device,sycl::access::address_space::global_space>(
-                                minibeam_event_counts_device[air_ion_step_slot]).fetch_add(1U);
-                        if(proposed)sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
-                            sycl::memory_scope::device,sycl::access::address_space::global_space>(
-                                minibeam_event_counts_device[air_ion_proposal_slot]).fetch_add(1U);
-                    }
-                    position_x_mm += step.final_geom_path_mm*direction_x + step.displacement_mm.x;
-                    position_y_mm += step.final_geom_path_mm*direction_y + step.displacement_mm.y;
-                    position_z_mm += step.final_geom_path_mm*direction_z + step.displacement_mm.z;
-                    direction_x=step.direction.x; direction_y=step.direction.y; direction_z=step.direction.z;
-                    air_urban_boundary=step.boundary_crossed;
-                    const auto stopping = minibeam_linear_table(minibeam_air_sp_energies_device,
-                        minibeam_air_sp_values_device,minibeam_air_sp_count,energy_MeV*inverse_mass_number);
-                    auto loss=sycl::fmin(energy_MeV,stopping*step.final_true_path_mm);
-                    if (energy_MeV-loss <= energy_cutoff_MeV) loss=energy_MeV;
-                    energy_MeV-=loss; beamline_air_loss_MeV+=loss;
-                    return true;
-                };
-                auto advance_air_to_plane = [&](const float target_z) {
-                    UrbanV2SafetyCtx safety{}; safety.kind=1;
-                    safety.box_x0=-3000.0F; safety.box_x1=3000.0F;
-                    safety.box_y0=-3000.0F; safety.box_y1=3000.0F;
-                    safety.box_z0=position_z_mm; safety.box_z1=target_z;
-                    air_urban_boundary=true;
-                    while (position_z_mm < target_z-1.0e-6F && direction_z>1.0e-8F && energy_MeV>energy_cutoff_MeV) {
-                        const float boundary=(target_z-position_z_mm)/direction_z;
-                        safety.box_boundary_path_mm=boundary;
-                        if (!advance_air(boundary,safety,1.0e6F)) return false;
-                    }
-                    return true;
-                };
-                if (kPrimaryStage != 5 && minibeam_air_urban) {
-                    if (!advance_air_to_plane(minibeam_block_entrance_z)) energy_MeV=0.0F;
-                }
-                if (kPrimaryStage != 5 && minibeam_copper_transport && !minibeam_air_urban && direction_z > 1.0e-8F) {
-                    const auto entrance_air_distance = sycl::fmax(
-                        0.0F, (minibeam_block_entrance_z - position_z_mm) /
-                                  direction_z);
-                    const auto entrance_air_loss = sycl::fmin(
-                        energy_MeV,
-                        minibeam_linear_table(
-                            minibeam_air_sp_energies_device,
-                            minibeam_air_sp_values_device,
-                            minibeam_air_sp_count,
-                            energy_MeV * inverse_mass_number) *
-                            entrance_air_distance);
-                    energy_MeV -= entrance_air_loss;
-                    beamline_air_loss_MeV += entrance_air_loss;
-                }
-                const auto minibeam_hits_copper = enable_minibeam &&
-                    minibeam_ray_hits_cylindrical_copper(
-                        position_x_mm, position_y_mm, position_z_mm,
-                        direction_x, direction_y, direction_z,
-                        minibeam_cos, minibeam_sin, minibeam_block_radius,
-                        minibeam_block_center_z,
-                        minibeam_block_thickness, minibeam_slit_count,
-                        minibeam_slit_width, minibeam_slit_pitch,
-                        0.5F * minibeam_slit_length,
-                        minibeam_slit_thickness, minibeam_slit_offset);
-                auto minibeam_primary_elastic = false;
-                auto minibeam_source_slit = 0;
-                // Versioned touch state (history scope): flushed to the
-                // phase-space record after transport.  Legacy copper_touched
-                // keeps the initial-ray meaning; ever_in_copper and the Cu
-                // true-path accumulator below are the actual-touch observables.
-                auto beamline_ever_in_copper_hist = false;
-                auto beamline_cu_true_path_hist_mm = 0.0F;
-                // urban_v2 step diagnostics (research-only aggregates).
-                std::uint32_t beamline_cu_steps_hist = 0;
-                std::uint32_t beamline_disp_below_hist = 0;
-                std::uint32_t beamline_disp_accept_hist = 0;
-                std::uint32_t beamline_disp_reduce_hist = 0;
-                std::uint32_t beamline_disp_cancel_hist = 0;
-                std::uint32_t beamline_cth_one_hist = 0;
-                std::uint32_t beamline_limit_user_hist = 0;
-                std::uint32_t beamline_limit_msc_hist = 0;
-                std::uint32_t beamline_limit_geom_hist = 0;
-                std::uint32_t beamline_limit_range_hist = 0;
-                float beamline_g_sum_hist_mm = 0.0F;
-                float beamline_t_sum_hist_mm = 0.0F;
-                float beamline_delta_sum_hist_mm = 0.0F;
-                float beamline_raw2_sum_hist_mm2 = 0.0F;
-                float beamline_acc2_sum_hist_mm2 = 0.0F;
-                if (enable_minibeam && direction_z > 1.0e-8F) {
-                    const auto slit_entrance_distance =
-                        (minibeam_block_entrance_z - position_z_mm) /
-                        direction_z;
-                    const auto slit_entrance_x =
-                        position_x_mm + slit_entrance_distance * direction_x;
-                    const auto slit_entrance_y =
-                        position_y_mm + slit_entrance_distance * direction_y;
-                    const auto slit_u = minibeam_cos * slit_entrance_x +
-                        minibeam_sin * slit_entrance_y - minibeam_slit_offset;
-                    minibeam_source_slit = nearest_minibeam_slit(
-                        slit_u, minibeam_slit_pitch);
-                }
-                if (minibeam_absorbing_geometry && minibeam_hits_copper) {
-                    beamline_removed_device[global_history] = energy_MeV;
-                    energy_MeV = 0.0F;
-                }
-                if (kPrimaryStage != 5 && minibeam_copper_transport && (minibeam_hits_copper || minibeam_air_urban) &&
-                    direction_z > 1.0e-8F) {
-                    const auto incident_beamline_energy = energy_MeV;
-                    const auto air_loss_at_block_entry = beamline_air_loss_MeV;
-                    const auto block_entrance_z = minibeam_block_entrance_z;
-                    const auto block_exit_z = minibeam_block_exit_z;
-                    const auto to_entrance =
-                        (block_entrance_z - position_z_mm) / direction_z;
-                    if (to_entrance >= 0.0F) {
-                        position_x_mm += to_entrance * direction_x;
-                        position_y_mm += to_entrance * direction_y;
-                        position_z_mm = block_entrance_z;
-                    }
-                    float removed_energy = 0.0F;
-                    std::uint64_t beamline_step = 0;
-                    float copper_nuclear_tau_remaining = 0.0F;
-                    bool copper_nuclear_tau_active = false;
-                    // Urban v2 fMinimal state (Phase 2/5): persists across the
-                    // steps of one Cu traversal; at_boundary marks steps that
-                    // start at the block entrance or a material interface.
-                    UrbanV2TrackState urban_v2_state{};
-                    bool urban_v2_at_boundary = true;
-                    bool urban_v2_prev_in_cu = false;
-                    UrbanV2GeomCtx urban_v2_geom{};
-                    urban_v2_geom.cos_a = minibeam_cos;
-                    urban_v2_geom.sin_a = minibeam_sin;
-                    urban_v2_geom.radius_mm = minibeam_block_radius;
-                    urban_v2_geom.slit_count = minibeam_slit_count;
-                    urban_v2_geom.slit_width_mm = minibeam_slit_width;
-                    urban_v2_geom.slit_pitch_mm = minibeam_slit_pitch;
-                    urban_v2_geom.slit_half_len_mm = 0.5F * minibeam_slit_length;
-                    urban_v2_geom.slit_offset_mm = minibeam_slit_offset;
-                    urban_v2_geom.block_entrance_z_mm = minibeam_block_entrance_z;
-                    urban_v2_geom.block_exit_z_mm = minibeam_block_exit_z;
-                    UrbanV2LossTable urban_v2_loss_table{
-                        minibeam_copper_loss_e_device,
-                        minibeam_copper_loss_r_device,
-                        minibeam_copper_loss_d_device,
-                        static_cast<int>(minibeam_copper_loss_count)};
-                    // (touch accumulators live at history scope:
-                    // beamline_ever_in_copper_hist / beamline_cu_true_path_hist_mm)
-                    constexpr std::uint64_t maximum_beamline_steps = 100000;
-                    while (energy_MeV > energy_cutoff_MeV &&
-                           direction_z > 1.0e-8F &&
-                           position_z_mm < block_exit_z - 1.0e-6F &&
-                           beamline_step < maximum_beamline_steps) {
-                        // Limit the transported path, not only its axial
-                        // projection. This keeps the Poisson tail truncation
-                        // and every material interaction bounded for oblique
-                        // slit-edge tracks.
-                        const bool starts_in_copper = minibeam_point_in_copper(
-                            position_x_mm+1.0e-5F*direction_x,position_y_mm+1.0e-5F*direction_y,
-                            minibeam_cos,minibeam_sin,minibeam_block_radius,minibeam_slit_count,
-                            minibeam_slit_width,minibeam_slit_pitch,0.5F*minibeam_slit_length,minibeam_slit_offset);
-                        const auto nominal_path_step = sycl::fmin(
-                            minibeam_air_urban && !starts_in_copper ? 1.0e6F : minibeam_copper_max_step,
-                            (block_exit_z - position_z_mm) / direction_z);
-                        const auto path_step = minibeam_air_urban
-                            ? minibeam_path_to_surface_interval(
-                                  position_x_mm,position_y_mm,direction_x,direction_y,
-                                  minibeam_cos,minibeam_sin,minibeam_block_radius,minibeam_slit_count,
-                                  minibeam_slit_width,minibeam_slit_pitch,0.5F*minibeam_slit_length,
-                                  minibeam_slit_offset,nominal_path_step)
-                            : minibeam_copper_exact_material_boundaries
-                            ? minibeam_path_to_material_boundary(
-                                  position_x_mm, position_y_mm, direction_x,
-                                  direction_y, minibeam_cos, minibeam_sin,
-                                  minibeam_block_radius, minibeam_slit_count,
-                                  minibeam_slit_width, minibeam_slit_pitch,
-                                  0.5F * minibeam_slit_length,
-                                  minibeam_slit_offset, nominal_path_step)
-                            : nominal_path_step;
-                        const auto axial_step = path_step * direction_z;
-                        const auto midpoint_x =
-                            position_x_mm + 0.5F * path_step * direction_x;
-                        const auto midpoint_y =
-                            position_y_mm + 0.5F * path_step * direction_y;
-                        const auto in_copper = minibeam_point_in_copper(
-                            midpoint_x, midpoint_y, minibeam_cos, minibeam_sin,
-                            minibeam_block_radius,
-                            minibeam_slit_count, minibeam_slit_width,
-                            minibeam_slit_pitch, 0.5F * minibeam_slit_length,
-                            minibeam_slit_offset);
-                        if (!in_copper) {
-                            if (kPrimaryStage != 5 && minibeam_air_urban) {
-                                UrbanV2SafetyCtx safety{}; safety.kind=0; safety.cu=urban_v2_geom;
-                                air_urban_boundary=air_urban_boundary || urban_v2_prev_in_cu;
-                                if (!advance_air(path_step,safety,air_slit_max_step)) break;
-                                ++beamline_step;
-                                urban_v2_prev_in_cu=false;
-                                continue;
-                            }
-                            position_x_mm += path_step * direction_x;
-                            position_y_mm += path_step * direction_y;
-                            position_z_mm += axial_step;
-                            const auto air_loss = sycl::fmin(
-                                energy_MeV,
-                                minibeam_linear_table(
-                                    minibeam_air_sp_energies_device,
-                                    minibeam_air_sp_values_device,
-                                    minibeam_air_sp_count,
-                                    energy_MeV * inverse_mass_number) *
-                                    path_step);
-                            energy_MeV -= air_loss;
-                            beamline_air_loss_MeV += air_loss;
-                            ++beamline_step;
-                            urban_v2_prev_in_cu = false;
-                            continue;
-                        }
-                        if (kPrimaryStage != 5 && minibeam_air_urban) { air_urban_boundary=true; beamline_ever_in_copper_hist=true; }
-                        const auto energy_u = energy_MeV * inverse_mass_number;
-                        const auto stopping_scale = minibeam_survivor_stopping_scale(
-                            energy_u, minibeam_copper_survivor_energy_loss_scale,
-                            minibeam_survivor_calibration_energies.data(),
-                            minibeam_survivor_calibration_scales.data(),
-                            minibeam_survivor_calibration_count);
-                        const auto stopping = stopping_scale * minibeam_linear_table(
-                            minibeam_copper_sp_energies_device,
-                            minibeam_copper_sp_values_device,
-                            minibeam_copper_sp_count, energy_u);
-                        const auto rate_elastic_index = minibeam_elastic_nearest_bracketed(
-                            minibeam_copper_elastic_device,
-                            minibeam_copper_elastic_count, energy_u,
-                            minibeam_copper_elastic_brackets_device,
-                            minibeam_copper_elastic_bracket_bins,
-                            minibeam_copper_elastic_bracket_first_energy,
-                            minibeam_copper_elastic_bracket_inverse_width);
-                        const auto rate_elastic = minibeam_copper_enable_elastic
-                            ? minibeam_copper_elastic_device[
-                                  rate_elastic_index].macroscopic_rate_per_mm
-                            : 0.0F;
-                        const auto rate_inelastic = minibeam_copper_enable_inelastic
-                            ? minibeam_linear_table(
-                                  minibeam_copper_xs_energies_device,
-                                  minibeam_copper_xs_values_device,
-                                  minibeam_copper_xs_count, energy_u)
-                            : 0.0F;
-                        const auto rate_total = rate_elastic + rate_inelastic;
-                        if (rate_total > 0.0F && !copper_nuclear_tau_active) {
-                            // FP32 midpoint conversion can round the largest
-                            // 24-bit draw to 1.0. Keep the exponential variate
-                            // strictly positive; all other draws are unchanged.
-                            const auto optical_uniform = sycl::fmin(
-                                0x1.fffffep-1F, sycl::fmax(
-                                    1.0e-7F, rng::uniform01(
-                                        spot_seed, rng_history, beamline_step, 60)));
-                            copper_nuclear_tau_remaining = -sycl::log(optical_uniform);
-                            copper_nuclear_tau_active = true;
-                        }
-                        auto collision_in_step = rate_total > 0.0F &&
-                            copper_nuclear_tau_active &&
-                            copper_nuclear_tau_remaining <= rate_total * path_step;
-                        const auto transport_path = collision_in_step
-                            ? copper_nuclear_tau_remaining / rate_total
-                            : path_step;
-                        const Direction3F pre_scatter_direction{
-                            direction_x, direction_y, direction_z};
-                        auto correlated_scattering = CorrelatedScatteringStep{
-                            pre_scatter_direction, Direction3F{0.0F, 0.0F, 0.0F}};
-                        if (minibeam_copper_enable_mcs &&
-                            minibeam_copper_correlated_scattering &&
-                            energy_MeV > energy_cutoff_MeV) {
-                            if (minibeam_copper_urban_v2_msc) {
-                                // Re-entry after air also starts at a
-                                // geometry boundary (reference stepStatus).
-                                urban_v2_at_boundary = urban_v2_at_boundary ||
-                                    !urban_v2_prev_in_cu;
-                                // Phase 5: external TRUE candidate (user
-                                // ceiling) -> fMinimal limit -> true->geom ->
-                                // geometry truncation -> final true -> scatter.
-                                // boundary_path_mm is the geometry-reachable
-                                // length (exact material boundaries honored).
-                                // The legacy E/stopping range is never used;
-                                // currentRange comes from the loss table.
-                                if ((kUniformWaterPrimaryPath || global_urban)) {
-                                    urban_v2_loss_table.active_context = urban_device.at(
-                                        urban_device.material(-2, minibeam_copper_density),
-                                        urban_device.projectile(primary_atomic_number, primary_mass_number),
-                                        energy_MeV);
-                                }
-                                correlated_scattering =
-                                    copper_urban_v2_propose_and_sample(
-                                        pre_scatter_direction, energy_MeV,
-                                        primary_atomic_number, primary_mass_number,
-                                        (kUniformWaterPrimaryPath || global_urban) && rate_total > 0.0F
-                                            ? sycl::fmin(minibeam_copper_max_step,
-                                                copper_nuclear_tau_remaining / rate_total)
-                                            : minibeam_copper_max_step,
-                                        (kUniformWaterPrimaryPath || global_urban) ? path_step : transport_path,
-                                        position_x_mm, position_y_mm,
-                                        position_z_mm, direction_x, direction_y,
-                                        direction_z, urban_v2_geom,
-                                        urban_v2_at_boundary, urban_v2_state,
-                                        urban_v2_loss_table,
-                                        minibeam_copper_density,
-                                        minibeam_copper_radiation_length,
-                                        minibeam_copper_mcs_scale, spot_seed,
-                                        rng_history, beamline_step, 0U, 50, primary_mcs_mass_override_MeV);
-                                urban_v2_at_boundary =
-                                    correlated_scattering.boundary_crossed;
-                                urban_v2_prev_in_cu = true;
-                            } else if (minibeam_copper_urban_msc) {
-                                const auto copper_range_mm = stopping > 0.0F
-                                    ? energy_MeV / stopping
-                                    : 0.0F;
-                                correlated_scattering = copper_urban_msc_step(
-                                    pre_scatter_direction, energy_MeV,
-                                    primary_atomic_number, primary_mass_number,
-                                    transport_path, minibeam_copper_density,
-                                    minibeam_copper_radiation_length,
-                                    copper_range_mm, minibeam_copper_mcs_scale,
-                                    spot_seed, rng_history, beamline_step, 50);
-                            } else {
-                                correlated_scattering = copper_fermi_eyges_tail_step(
-                                    pre_scatter_direction, energy_MeV,
-                                    primary_atomic_number, primary_mass_number,
-                                    transport_path, minibeam_copper_density,
-                                    minibeam_copper_radiation_length,
-                                    minibeam_copper_mcs_scale, spot_seed,
-                                    rng_history, beamline_step, 50, primary_mcs_mass_override_MeV);
-                            }
-                        }
-                        // R4: explicit step proposal/finalization contract for
-                        // urban_v2 only (legacy/highland/FE/urban untouched).
-                        // Geometry consumes final g; loss/fluctuation and the
-                        // reaction path below consume final t.  No post-hoc
-                        // t/g rescaling of the ledger.
-                        const auto urban_v2_proposal =
-                            minibeam_copper_urban_v2_msc &&
-                            correlated_scattering.proposal_valid;
-                        // Fix B5/C2.3: an invalid Urban proposal must fail the
-                        // run and stop this history (flag + record; the host
-                        // throws). The old code advanced the full path
-                        // unscattered; a failed proposal must never continue
-                        // as normal transport. Field contract reasons 1-5,8
-                        // (no segment loop here: single advance, so no
-                        // progress reasons; overshoot is structural).
-                        if (minibeam_copper_urban_v2_msc) {
-                            const int cu_reason = correlated_scattering.limit_reason < 0
-                                ? -correlated_scattering.limit_reason
-                                : urban_step_field_reason(correlated_scattering);
-                            if (correlated_scattering.numeric_guard_tripped &&
-                                minibeam_event_counts_device != nullptr) {
-                                urban_record_guard_evidence(
-                                    minibeam_event_counts_device, 1ULL,
-                                    energy_MeV,
-                                    correlated_scattering
-                                        .proposed_true_path_mm,
-                                    correlated_scattering
-                                        .final_geom_path_mm);
-                                sycl::atomic_ref<
-                                    std::uint64_t,
-                                    sycl::memory_order::relaxed,
-                                    sycl::memory_scope::device,
-                                    sycl::access::address_space::global_space>(
-                                    minibeam_event_counts_device
-                                        [minibeam_urban_numeric_guard_slot])
-                                    .fetch_add(1U);
-                            }
-                            if (cu_reason != 0) {
-                                urban_record_first_failure(
-                                    minibeam_event_counts_device, rng_history,
-                                    beamline_step, 0U, cu_reason);
-                                break;
-                            }
-                        }
-                        // (fatal++ is done inside urban_record_first_failure.)
-                        const auto geom_advance_mm = urban_v2_proposal
-                            ? correlated_scattering.final_geom_path_mm
-                            : transport_path;
-                        const auto true_loss_path_mm = urban_v2_proposal
-                            ? correlated_scattering.final_true_path_mm
-                            : transport_path;
-                        if ((kUniformWaterPrimaryPath || global_urban) && urban_v2_proposal) {
-                            // Compete on the accepted TRUE path. Geometry/MSC
-                            // can shorten a nuclear candidate, never advance it.
-                            collision_in_step = rate_total > 0.0F &&
-                                copper_nuclear_tau_active &&
-                                true_loss_path_mm >= copper_nuclear_tau_remaining / rate_total;
-                        }
-                        position_x_mm += geom_advance_mm * direction_x +
-                            correlated_scattering.displacement_mm.x;
-                        position_y_mm += geom_advance_mm * direction_y +
-                            correlated_scattering.displacement_mm.y;
-                        position_z_mm += geom_advance_mm * direction_z +
-                            correlated_scattering.displacement_mm.z;
-                        const auto predictor_loss = stopping * true_loss_path_mm;
-                        const auto midpoint_energy_u = sycl::fmax(
-                            0.0F, (energy_MeV - 0.5F * predictor_loss) *
-                                      inverse_mass_number);
-                        const auto midpoint_stopping_scale =
-                            minibeam_survivor_stopping_scale(
-                                midpoint_energy_u,
-                                minibeam_copper_survivor_energy_loss_scale,
-                                minibeam_survivor_calibration_energies.data(),
-                                minibeam_survivor_calibration_scales.data(),
-                                minibeam_survivor_calibration_count);
-                        const auto midpoint_stopping = midpoint_stopping_scale *
-                            minibeam_linear_table(
-                                minibeam_copper_sp_energies_device,
-                                minibeam_copper_sp_values_device,
-                                minibeam_copper_sp_count, midpoint_energy_u);
-                        const auto mean_loss = midpoint_stopping * true_loss_path_mm;
-                        float native_restricted_mean = -1.0F;
-                        if (copper_primary_native_mean) {
-                            const auto context = urban_v2_loss_table.active_context;
-                            if (!context.valid()) {
-                                urban_record_first_failure(minibeam_event_counts_device,
-                                    rng_history, beamline_step, 0U, 8);
-                                break;
-                            }
-                            const auto range = context.range(energy_MeV);
-                            if (true_loss_path_mm >= range) {
-                                // G4VEnergyLossProcess stops without fluctuating
-                                // when the accepted true path reaches its range.
-                                removed_energy += energy_MeV;
-                                energy_MeV = 0.0F;
-                                break;
-                            }
-                            native_restricted_mean = context.dedx(energy_MeV) * true_loss_path_mm;
-                            if (native_restricted_mean > 0.02F * energy_MeV) {
-                                const auto decrement = energy_MeV -
-                                    context.energy(range - true_loss_path_mm);
-                                if (decrement > 0.0F) native_restricted_mean = decrement;
-                            }
-                        }
-                        auto proposed_loss = mean_loss;
-                        // The native proton fluctuation below replaces this
-                        // Gaussian loss (or stops the run); its counter-based
-                        // draws 48/49 are not consumed by anything else.
-                        if (minibeam_copper_enable_energy_straggling &&
-                            !(copper_proton_native_fluctuation && primary_atomic_number == 1 &&
-                              primary_mass_number == 1)) {
-                            constexpr float copper_z_over_a_rel_water =
-                                (29.0F / 63.546F) / 0.55509F;
-                            const auto effective_charge =
-                                ion_effective_charge_device(primary_atomic_number, midpoint_energy_u);
-                            const auto variance =
-                                condensed_total_loss_variance_MeV2_device(
-                                    midpoint_energy_u, primary_mass_number, effective_charge,
-                                    true_loss_path_mm, minibeam_copper_density,
-                                    copper_z_over_a_rel_water);
-                            const auto gaussian_u0 = sycl::fmax(
-                                rng::uniform01(spot_seed, rng_history,
-                                               beamline_step, 48),
-                                1.0e-12F);
-                            const auto gaussian_u1 = rng::uniform01(
-                                spot_seed, rng_history, beamline_step, 49);
-                            constexpr float two_pi = 6.2831853071795864769F;
-                            const auto gaussian =
-                                sycl::sqrt(-2.0F * sycl::log(gaussian_u0)) *
-                                sycl::cos(two_pi * gaussian_u1);
-                            proposed_loss = sycl::fmax(
-                                0.0F, mean_loss + minibeam_copper_straggling_scale *
-                                    sycl::sqrt(sycl::fmax(0.0F, variance)) * gaussian);
-                        }
-                        if (minibeam_copper_enable_energy_straggling) {
-                            if (copper_proton_native_fluctuation && primary_atomic_number == 1 && primary_mass_number == 1) {
-                                std::uint64_t draw_index = 0;
-                                auto uniform = [&]() { return (rng::random_u32(
-                                    spot_seed, rng_history, (std::uint64_t(beamline_step) << 32) | draw_index++, 124) >> 8) * 0x1p-24f; };
-                                const auto draw = copper_proton_total_fluctuation(
-                                    energy_MeV, primary_rest_mass_MeV, mean_loss, true_loss_path_mm, minibeam_copper_density, uniform, copper_proton_finite_cut, native_restricted_mean);
-                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                    sycl::memory_scope::device, sycl::access::address_space::global_space>(
-                                    minibeam_event_counts_device[draw.valid ? copper_proton_primary_loss_slot : copper_proton_loss_failure_slot]).fetch_add(1U);
-                                if (!draw.valid) break; // host rejects the entire run
-                                proposed_loss = draw.loss;
-                            }
-                        }
-                        if (proposed_loss >=
-                            energy_MeV - energy_cutoff_MeV) {
-                            removed_energy += energy_MeV;
-                            energy_MeV = 0.0F;
-                            break;
-                        }
-                        const auto loss = proposed_loss;
-                        energy_MeV -= loss;
-                        removed_energy += loss;
-                        if (rate_total > 0.0F && copper_nuclear_tau_active) {
-                            copper_nuclear_tau_remaining = (kUniformWaterPrimaryPath || global_urban)
-                                ? sycl::fmax(0.0F,
-                                    copper_nuclear_tau_remaining / rate_total - true_loss_path_mm) * rate_total
-                                : sycl::fmax(0.0F, copper_nuclear_tau_remaining -
-                                    rate_total * true_loss_path_mm);
-                        }
-                        if (in_copper) {
-                            beamline_ever_in_copper_hist = true;
-                            beamline_cu_true_path_hist_mm += true_loss_path_mm;
-                            if (minibeam_copper_urban_v2_msc) {
-                                ++beamline_cu_steps_hist;
-                                const auto& sc = correlated_scattering;
-                                beamline_g_sum_hist_mm +=
-                                    sc.proposal_valid ? sc.final_geom_path_mm
-                                                      : transport_path;
-                                beamline_t_sum_hist_mm +=
-                                    sc.proposal_valid ? sc.final_true_path_mm
-                                                      : transport_path;
-                                beamline_delta_sum_hist_mm +=
-                                    sc.proposal_valid ? sc.stable_delta_mm
-                                                      : 0.0F;
-                                beamline_raw2_sum_hist_mm2 +=
-                                    sc.raw_displacement_r_mm *
-                                    sc.raw_displacement_r_mm;
-                                beamline_acc2_sum_hist_mm2 +=
-                                    sc.displacement_mm.x *
-                                        sc.displacement_mm.x +
-                                    sc.displacement_mm.y *
-                                        sc.displacement_mm.y +
-                                    sc.displacement_mm.z *
-                                        sc.displacement_mm.z;
-                                switch (sc.displacement_branch) {
-                                    case 1: ++beamline_disp_below_hist; break;
-                                    case 2: ++beamline_disp_accept_hist; break;
-                                    case 3: ++beamline_disp_reduce_hist; break;
-                                    case 4: ++beamline_disp_cancel_hist; break;
-                                    default: break;
-                                }
-                                if (sc.cth_rounded_to_one) {
-                                    ++beamline_cth_one_hist;
-                                }
-                                switch (sc.limit_reason) {
-                                    case 1: ++beamline_limit_user_hist; break;
-                                    case 2: ++beamline_limit_msc_hist; break;
-                                    case 3: ++beamline_limit_geom_hist; break;
-                                    case 4: ++beamline_limit_range_hist; break;
-                                    default: break;
-                                }
-                            }
-                        }
-                        const auto collision_energy_u = energy_MeV * inverse_mass_number;
-                        const auto elastic_index = minibeam_elastic_nearest(
-                            minibeam_copper_elastic_device,
-                            minibeam_copper_elastic_count, collision_energy_u);
-                        const auto elastic_rate = minibeam_copper_enable_elastic
-                            ? minibeam_copper_elastic_device[
-                                  elastic_index].macroscopic_rate_per_mm
-                            : 0.0F;
-                        const auto inelastic_rate = minibeam_copper_enable_inelastic
-                            ? minibeam_linear_table(
-                                  minibeam_copper_xs_energies_device,
-                                  minibeam_copper_xs_values_device,
-                                  minibeam_copper_xs_count, collision_energy_u)
-                            : 0.0F;
-                        const auto total_nuclear_rate = elastic_rate + inelastic_rate;
-                        if (minibeam_copper_enable_mcs &&
-                            !minibeam_copper_correlated_scattering &&
-                            energy_MeV > energy_cutoff_MeV) {
-                            const auto theta = minibeam_copper_mcs_scale *
-                                highland_projected_rms_angle_device(
-                                    energy_MeV, primary_atomic_number,
-                                    primary_mass_number, transport_path,
-                                    minibeam_copper_density,
-                                    minibeam_copper_radiation_length, primary_mcs_mass_override_MeV);
-                            const auto scattered = scatter_direction(
-                                Direction3F{direction_x, direction_y, direction_z},
-                                theta, spot_seed, rng_history, beamline_step, 50);
-                            direction_x = scattered.x;
-                            direction_y = scattered.y;
-                            direction_z = scattered.z;
-                        } else if (minibeam_copper_enable_mcs &&
-                                   minibeam_copper_correlated_scattering) {
-                            direction_x = correlated_scattering.direction.x;
-                            direction_y = correlated_scattering.direction.y;
-                            direction_z = correlated_scattering.direction.z;
-                        }
-                        if (collision_in_step && total_nuclear_rate > 0.0F) {
-                            copper_nuclear_tau_active = false;
-                            const auto choose = rng::uniform01(
-                                spot_seed, rng_history, beamline_step, 61) *
-                                total_nuclear_rate;
-                            if (choose < elastic_rate) {
-                                minibeam_primary_elastic = true;
-                                const auto sample_index = minibeam_elastic_local_sample(
-                                    minibeam_copper_elastic_device,
-                                    minibeam_copper_elastic_count, collision_energy_u,
-                                    rng::uniform01(spot_seed, rng_history,
-                                                   beamline_step, 63));
-                                const auto& sample = minibeam_copper_elastic_device[
-                                    sample_index];
-                                const auto outcome = elastic_two_body(
-                                    energy_MeV, direction_x, direction_y, direction_z,
-                                    1.0 - 2.0 * sample.transfer_fraction,
-                                    rng::uniform01(spot_seed, rng_history,
-                                                   beamline_step, 62),
-                                    primary_rest_mass_MeV, sample.target_mass_MeV);
-                                removed_energy += outcome.recoil_ke_MeV;
-                                energy_MeV = outcome.projectile_ke_MeV;
-                                direction_x = outcome.proj_dir_x;
-                                direction_y = outcome.proj_dir_y;
-                                direction_z = outcome.proj_dir_z;
-                            } else {
-                                sycl::atomic_ref<
-                                    std::uint64_t, sycl::memory_order::relaxed,
-                                    sycl::memory_scope::device,
-                                    sycl::access::address_space::global_space>
-                                    nuclear_count(minibeam_event_counts_device[0]);
-                                nuclear_count.fetch_add(1U);
-                                const auto lookup = cinel03_lookup_event_device(
-                                    minibeam_copper_nodes_device,
-                                    minibeam_copper_node_count,
-                                    minibeam_copper_offsets_device,
-                                    minibeam_copper_indices_device,
-                                    minibeam_copper_event_count,
-                                    primary_atomic_number, primary_mass_number,
-                                    29, collision_energy_u,
-                                    rng::uniform01(spot_seed, rng_history,
-                                                   beamline_step, 63),
-                                    rng::uniform01(spot_seed, rng_history,
-                                                   beamline_step, 64));
-                                float queued_energy = 0.0F;
-                                if (lookup.status == Cinel03LookupStatus::Hit) {
-                                    const auto& event = minibeam_copper_interactions_device[
-                                        lookup.event_index];
-                                    sycl::atomic_ref<
-                                        std::uint64_t, sycl::memory_order::relaxed,
-                                        sycl::memory_scope::device,
-                                        sycl::access::address_space::global_space>
-                                        generated_count(minibeam_event_counts_device[1]);
-                                    generated_count.fetch_add(event.direct_product_count);
-                                    const auto phi = 6.2831853071795864769F *
-                                        rng::uniform01(spot_seed, rng_history,
-                                                       beamline_step, 65);
-                                    const auto event_cos = sycl::cos(phi);
-                                    const auto event_sin = sycl::sin(phi);
-                                    for (std::uint32_t product_index = 0;
-                                         product_index < event.direct_product_count;
-                                         ++product_index) {
-                                        const auto flat_index =
-                                            event.product_offset + product_index;
-                                        if (flat_index >= minibeam_copper_product_count) break;
-                                        const auto& product =
-                                            minibeam_copper_products_device[flat_index];
-                                        record_neutron_birth(neutron_birth_buffer, product,
-                                            position_x_mm, position_y_mm, position_z_mm,
-                                            {direction_x,direction_y,direction_z}, event_cos,event_sin,
-                                            global_history,rng_history,beamline_step,product_index,0,
-                                            -2,primary_atomic_number,primary_mass_number);
-                                        if ((product.role != 0 && product.role != 1) ||
-                                            product.z <= 0 || product.a <= 0 ||
-                                            product.kinetic_energy_MeV <= energy_cutoff_MeV) {
-                                            continue;
-                                        }
-                                        const auto local_direction =
-                                            rotate_cinel03_event_azimuth(
-                                                product.local_direction_x,
-                                                product.local_direction_y,
-                                                product.local_direction_z,
-                                                event_cos, event_sin);
-                                        auto child_direction = rotate_local_direction(
-                                            local_direction.x, local_direction.y,
-                                            local_direction.z,
-                                            Direction3F{direction_x, direction_y,
-                                                        direction_z});
-                                        auto child_energy = product.kinetic_energy_MeV;
-                                        auto child_x = position_x_mm;
-                                        auto child_y = position_y_mm;
-                                        auto child_z = position_z_mm;
-                                        std::uint32_t child_step = 0;
-                                        float child_copper_segment_path = 0.0F;
-                                        float child_nuclear_tau_remaining = 0.0F;
-                                        bool child_nuclear_tau_active = false;
-                                        const auto child_species_category =
-                                            product.z == 6 ? 0U :
-                                            product.z == 5 ? 1U :
-                                            product.z == 4 ? 2U :
-                                            product.z == 3 ? 3U :
-                                            product.z == 2 ? 4U :
-                                            (product.z == 1 && product.a == 1) ? 5U :
-                                            (product.z == 1 && product.a == 2) ? 6U :
-                                            (product.z == 1 && product.a == 3) ? 7U : 8U;
-                                        const auto child_rng_stream =
-                                            rng::event_product_stream(
-                                                rng_history, beamline_step,
-                                                rng::branch_role_primary_charged,
-                                                product_index);
-                                        while (child_energy > energy_cutoff_MeV &&
-                                               child_direction.z > 1.0e-8F &&
-                                               child_z < block_exit_z - 1.0e-6F &&
-                                               child_step < 100000U) {
-                                            const auto nominal_child_path = sycl::fmin(
-                                                minibeam_copper_max_step,
-                                                (block_exit_z - child_z) /
-                                                    child_direction.z);
-                                            const auto child_path =
-                                                minibeam_copper_exact_material_boundaries
-                                                ? minibeam_path_to_material_boundary(
-                                                      child_x, child_y,
-                                                      child_direction.x,
-                                                      child_direction.y,
-                                                      minibeam_cos, minibeam_sin,
-                                                      minibeam_block_radius,
-                                                      minibeam_slit_count,
-                                                      minibeam_slit_width,
-                                                      minibeam_slit_pitch,
-                                                      0.5F * minibeam_slit_length,
-                                                      minibeam_slit_offset,
-                                                      nominal_child_path)
-                                                : nominal_child_path;
-                                            const auto child_mid_x = child_x +
-                                                0.5F * child_path * child_direction.x;
-                                            const auto child_mid_y = child_y +
-                                                0.5F * child_path * child_direction.y;
-                                            const auto child_in_copper =
-                                                minibeam_point_in_copper(
-                                                    child_mid_x, child_mid_y,
-                                                    minibeam_cos, minibeam_sin,
-                                                    minibeam_block_radius,
-                                                    minibeam_slit_count,
-                                                    minibeam_slit_width,
-                                                    minibeam_slit_pitch,
-                                                    0.5F * minibeam_slit_length,
-                                                    minibeam_slit_offset);
-                                            auto child_inelastic_rate = 0.0F;
-                                            auto child_collision_in_step = false;
-                                            auto child_transport_path = child_path;
-                                            if (child_in_copper) {
-                                                child_inelastic_rate =
-                                                    minibeam_copper_ion_inelastic_rate(
-                                                        minibeam_copper_ion_xs_device,
-                                                        minibeam_copper_ion_xs_present_device,
-                                                        minibeam_copper_ion_xs_grid_size,
-                                                        minibeam_copper_ion_xs_minimum_energy,
-                                                        minibeam_copper_ion_xs_inverse_step,
-                                                        child_energy,
-                                                        product.z, product.a);
-                                                if (child_inelastic_rate > 0.0F &&
-                                                    !child_nuclear_tau_active) {
-                                                    const auto optical_uniform =
-                                                        sycl::fmax(
-                                                            1.0e-7F,
-                                                            rng::uniform01(
-                                                                spot_seed,
-                                                                child_rng_stream,
-                                                                child_step, 2));
-                                                    child_nuclear_tau_remaining =
-                                                        -sycl::log(optical_uniform);
-                                                    child_nuclear_tau_active = true;
-                                                }
-                                                child_collision_in_step =
-                                                    child_inelastic_rate > 0.0F &&
-                                                    child_nuclear_tau_active &&
-                                                    child_nuclear_tau_remaining <=
-                                                        child_inelastic_rate * child_path;
-                                                if (child_collision_in_step) {
-                                                    child_transport_path =
-                                                        child_nuclear_tau_remaining /
-                                                        child_inelastic_rate;
-                                                }
-                                            }
-                                            child_x += child_transport_path *
-                                                child_direction.x;
-                                            child_y += child_transport_path *
-                                                child_direction.y;
-                                            child_z += child_transport_path *
-                                                child_direction.z;
-                                            if (child_in_copper) {
-                                                const auto child_stopping =
-                                                    minibeam_copper_ion_stopping(
-                                                        minibeam_copper_sp_energies_device,
-                                                        minibeam_copper_sp_values_device,
-                                                        minibeam_copper_sp_count,
-                                                        minibeam_copper_ion_sp_ratios_device,
-                                                        minibeam_copper_ion_sp_present_device,
-                                                        child_energy, product.z, product.a, primary_atomic_number);
-                                                const auto predictor_child_loss =
-                                                    child_stopping * child_transport_path;
-                                                const auto child_midpoint_energy =
-                                                    sycl::fmax(
-                                                        0.0F,
-                                                        child_energy - 0.5F *
-                                                            predictor_child_loss);
-                                                const auto child_midpoint_stopping =
-                                                    minibeam_copper_ion_stopping(
-                                                        minibeam_copper_sp_energies_device,
-                                                        minibeam_copper_sp_values_device,
-                                                        minibeam_copper_sp_count,
-                                                        minibeam_copper_ion_sp_ratios_device,
-                                                        minibeam_copper_ion_sp_present_device,
-                                                        child_midpoint_energy,
-                                                        product.z, product.a, primary_atomic_number);
-                                                const auto mean_child_loss =
-                                                    child_midpoint_stopping *
-                                                    child_transport_path;
-                                                auto proposed_child_loss = mean_child_loss;
-                                                if (minibeam_copper_fragment_enable_energy_straggling) {
-                                                    constexpr float copper_z_over_a_rel_water =
-                                                        (29.0F / 63.546F) / 0.55509F;
-                                                    const auto child_energy_u =
-                                                        child_midpoint_energy /
-                                                        static_cast<float>(product.a);
-                                                    const auto effective_charge =
-                                                        ion_effective_charge_device(
-                                                            product.z, child_energy_u);
-                                                    const auto variance =
-                                                        condensed_total_loss_variance_MeV2_device(
-                                                            child_energy_u, product.a,
-                                                            effective_charge,
-                                                            child_transport_path,
-                                                            minibeam_copper_density,
-                                                            copper_z_over_a_rel_water);
-                                                    const auto gaussian_u0 = sycl::fmax(
-                                                        rng::uniform01(
-                                                            spot_seed, child_rng_stream,
-                                                            child_step, 10),
-                                                        1.0e-12F);
-                                                    const auto gaussian_u1 = rng::uniform01(
-                                                        spot_seed, child_rng_stream,
-                                                        child_step, 11);
-                                                    constexpr float two_pi =
-                                                        6.2831853071795864769F;
-                                                    const auto gaussian = sycl::sqrt(
-                                                        -2.0F * sycl::log(gaussian_u0)) *
-                                                        sycl::cos(two_pi * gaussian_u1);
-                                                    proposed_child_loss = sycl::fmax(
-                                                        0.0F,
-                                                        mean_child_loss +
-                                                            minibeam_copper_fragment_straggling_scale *
-                                                                sycl::sqrt(sycl::fmax(
-                                                                    0.0F, variance)) *
-                                                                gaussian);
-                                                }
-                                                if (minibeam_copper_fragment_enable_energy_straggling) {
-                                                    if (copper_proton_native_fluctuation && product.z == 1 && product.a == 1) {
-                                                        std::uint64_t draw_index = 0;
-                                                        auto uniform = [&]() { return (rng::random_u32(
-                                                            spot_seed, child_rng_stream, (std::uint64_t(child_step) << 32) | draw_index++, 124) >> 8) * 0x1p-24f; };
-                                                        const auto draw = copper_proton_total_fluctuation(
-                                                            child_energy, product.rest_mass, mean_child_loss, child_transport_path, minibeam_copper_density, uniform, copper_proton_finite_cut);
-                                                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                            sycl::memory_scope::device, sycl::access::address_space::global_space>(
-                                                            minibeam_event_counts_device[draw.valid ? copper_proton_fragment_loss_slot : copper_proton_loss_failure_slot]).fetch_add(1U);
-                                                        if (!draw.valid) break; // host rejects the entire run
-                                                        proposed_child_loss = draw.loss;
-                                                    }
-                                                }
-                                                if (proposed_child_loss >=
-                                                    child_energy -
-                                                        energy_cutoff_MeV) {
-                                                    child_energy = 0.0F;
-                                                    break;
-                                                }
-                                                const auto child_loss =
-                                                    proposed_child_loss;
-                                                const auto scatter_energy =
-                                                    child_energy - 0.5F * child_loss;
-                                                child_energy -= child_loss;
-                                                if (!child_collision_in_step &&
-                                                    child_inelastic_rate > 0.0F &&
-                                                    child_nuclear_tau_active) {
-                                                    child_nuclear_tau_remaining -=
-                                                        child_inelastic_rate *
-                                                        child_transport_path;
-                                                }
-                                                if (minibeam_copper_enable_mcs) {
-                                                    const auto previous_path =
-                                                        child_copper_segment_path;
-                                                    child_copper_segment_path +=
-                                                        child_transport_path;
-                                                    const auto total_rms =
-                                                        highland_projected_rms_angle_device(
-                                                            scatter_energy, product.z,
-                                                            product.a,
-                                                            child_copper_segment_path,
-                                                            minibeam_copper_density,
-                                                            minibeam_copper_radiation_length);
-                                                    const auto previous_rms =
-                                                        highland_projected_rms_angle_device(
-                                                            scatter_energy, product.z,
-                                                            product.a, previous_path,
-                                                            minibeam_copper_density,
-                                                            minibeam_copper_radiation_length);
-                                                    child_direction = scatter_direction(
-                                                        child_direction,
-                                                        minibeam_copper_fragment_mcs_scale *
-                                                            sycl::sqrt(sycl::fmax(
-                                                                0.0F,
-                                                                total_rms * total_rms -
-                                                                    previous_rms *
-                                                                        previous_rms)),
-                                                        spot_seed, child_rng_stream,
-                                                        child_step, 0);
-                                                }
-                                                if (child_collision_in_step) {
-                                                    child_nuclear_tau_active = false;
-                                                    if (minibeam_copper_cascade_queue_device != nullptr &&
-                                                        product.a > 0) {
-                                                        sycl::atomic_ref<
-                                                            std::uint64_t,
-                                                            sycl::memory_order::relaxed,
-                                                            sycl::memory_scope::device,
-                                                            sycl::access::address_space::global_space>
-                                                            reaction_count(
-                                                                minibeam_event_counts_device[
-                                                                    minibeam_fragment_cascade_interactions_slot]);
-                                                        reaction_count.fetch_add(1U);
-                                                        sycl::atomic_ref<
-                                                            std::uint64_t,
-                                                            sycl::memory_order::relaxed,
-                                                            sycl::memory_scope::device,
-                                                            sycl::access::address_space::global_space>
-                                                            generation_reaction_count(
-                                                                minibeam_event_counts_device[
-                                                                    minibeam_fragment_generation_interaction_slot]);
-                                                        generation_reaction_count.fetch_add(1U);
-                                                        const auto fragment_lookup =
-                                                            cinel03_lookup_event_device(
-                                                                minibeam_copper_nodes_device,
-                                                                minibeam_copper_node_count,
-                                                                minibeam_copper_offsets_device,
-                                                                minibeam_copper_indices_device,
-                                                                minibeam_copper_event_count,
-                                                                product.z, product.a, 29,
-                                                                child_energy /
-                                                                    static_cast<float>(product.a),
-                                                                rng::uniform01(
-                                                                    spot_seed, child_rng_stream,
-                                                                    child_step, 20),
-                                                                rng::uniform01(
-                                                                    spot_seed, child_rng_stream,
-                                                                    child_step, 21));
-                                                        if (fragment_lookup.status ==
-                                                            Cinel03LookupStatus::Hit) {
-                                                            sycl::atomic_ref<
-                                                                std::uint64_t,
-                                                                sycl::memory_order::relaxed,
-                                                                sycl::memory_scope::device,
-                                                                sycl::access::address_space::global_space>
-                                                                hit_count(
-                                                                    minibeam_event_counts_device[
-                                                                        minibeam_fragment_cascade_hits_slot]);
-                                                            hit_count.fetch_add(1U);
-                                                            sycl::atomic_ref<
-                                                                std::uint64_t,
-                                                                sycl::memory_order::relaxed,
-                                                                sycl::memory_scope::device,
-                                                                sycl::access::address_space::global_space>
-                                                                generation_hit_count(
-                                                                    minibeam_event_counts_device[
-                                                                        minibeam_fragment_generation_hit_slot]);
-                                                            generation_hit_count.fetch_add(1U);
-                                                            const auto& fragment_event =
-                                                                minibeam_copper_interactions_device[
-                                                                    fragment_lookup.event_index];
-                                                            const auto local_keV =
-                                                                static_cast<std::uint64_t>(
-                                                                    sycl::fmax(
-                                                                        0.0F,
-                                                                        fragment_event
-                                                                            .process_local_deposit_MeV) *
-                                                                        1000.0F + 0.5F);
-                                                            sycl::atomic_ref<
-                                                                std::uint64_t,
-                                                                sycl::memory_order::relaxed,
-                                                                sycl::memory_scope::device,
-                                                                sycl::access::address_space::global_space>
-                                                                local_energy(
-                                                                    minibeam_event_counts_device[
-                                                                        minibeam_fragment_cascade_local_keV_slot]);
-                                                            local_energy.fetch_add(local_keV);
-                                                            const auto fragment_phi =
-                                                                6.2831853071795864769F *
-                                                                rng::uniform01(
-                                                                    spot_seed, child_rng_stream,
-                                                                    child_step, 22);
-                                                            const auto fragment_cos =
-                                                                sycl::cos(fragment_phi);
-                                                            const auto fragment_sin =
-                                                                sycl::sin(fragment_phi);
-                                                            auto accounted_charged = 0.0F;
-                                                            auto replay_product_energy = 0.0F;
-                                                            auto replay_product_rest_mass = 0.0F;
-                                                            std::int32_t replay_product_a = 0;
-                                                            for (std::uint32_t cascade_index = 0;
-                                                                 cascade_index <
-                                                                     fragment_event.direct_product_count;
-                                                                 ++cascade_index) {
-                                                                const auto cascade_flat =
-                                                                    fragment_event.product_offset +
-                                                                    cascade_index;
-                                                                if (cascade_flat >=
-                                                                    minibeam_copper_product_count) break;
-                                                                const auto& cascade_product =
-                                                                    minibeam_copper_products_device[
-                                                                        cascade_flat];
-                                                                record_neutron_birth(neutron_birth_buffer,cascade_product,
-                                                                    child_x,child_y,child_z,child_direction,fragment_cos,fragment_sin,
-                                                                    global_history,child_rng_stream,child_step,cascade_index,1,
-                                                                    -2,product.z,product.a);
-                                                                replay_product_energy += sycl::fmax(
-                                                                    0.0F,
-                                                                    cascade_product.kinetic_energy_MeV);
-                                                                replay_product_rest_mass += sycl::fmax(
-                                                                    0.0F,
-                                                                    cascade_product.rest_mass);
-                                                                replay_product_a += sycl::max(
-                                                                    0, static_cast<int>(cascade_product.a));
-                                                                const bool supported_charged =
-                                                                    (cascade_product.role == 0 ||
-                                                                     cascade_product.role == 1) &&
-                                                                    cascade_product.z > 0 &&
-                                                                    cascade_product.a > 0;
-                                                                const auto count_slot =
-                                                                    supported_charged
-                                                                        ? minibeam_fragment_cascade_charged_slot
-                                                                        : (cascade_product.z <= 0
-                                                                               ? minibeam_fragment_cascade_neutral_slot
-                                                                               : minibeam_fragment_cascade_unsupported_slot);
-                                                                sycl::atomic_ref<
-                                                                    std::uint64_t,
-                                                                    sycl::memory_order::relaxed,
-                                                                    sycl::memory_scope::device,
-                                                                    sycl::access::address_space::global_space>
-                                                                    product_count_ref(
-                                                                        minibeam_event_counts_device[
-                                                                            count_slot]);
-                                                                product_count_ref.fetch_add(1U);
-                                                                if (!supported_charged ||
-                                                                    cascade_product.kinetic_energy_MeV <=
-                                                                        energy_cutoff_MeV) {
-                                                                    continue;
-                                                                }
-                                                                accounted_charged +=
-                                                                    cascade_product.kinetic_energy_MeV;
-                                                                const auto cascade_local =
-                                                                    rotate_cinel03_event_azimuth(
-                                                                        cascade_product.local_direction_x,
-                                                                        cascade_product.local_direction_y,
-                                                                        cascade_product.local_direction_z,
-                                                                        fragment_cos, fragment_sin);
-                                                                const auto cascade_direction =
-                                                                    rotate_local_direction(
-                                                                        cascade_local.x,
-                                                                        cascade_local.y,
-                                                                        cascade_local.z,
-                                                                        child_direction);
-                                                                sycl::atomic_ref<
-                                                                    std::uint32_t,
-                                                                    sycl::memory_order::relaxed,
-                                                                    sycl::memory_scope::device,
-                                                                    sycl::access::address_space::global_space>
-                                                                    cascade_queue_count(
-                                                                        *minibeam_copper_cascade_count_device);
-                                                                const auto cascade_output =
-                                                                    cascade_queue_count.fetch_add(1U);
-                                                                if (cascade_output < max_secondaries) {
-                                                                    SecondaryParticle cascade_child{};
-                                                                    cascade_child.z = cascade_product.z;
-                                                                    cascade_child.a = cascade_product.a;
-                                                                    cascade_child.energy_MeV =
-                                                                        cascade_product.kinetic_energy_MeV;
-                                                                    cascade_child.pos_x_mm = child_x;
-                                                                    cascade_child.pos_y_mm = child_y;
-                                                                    cascade_child.pos_z_mm = child_z;
-                                                                    cascade_child.dir_x =
-                                                                        cascade_direction.x;
-                                                                    cascade_child.dir_y =
-                                                                        cascade_direction.y;
-                                                                    cascade_child.dir_z =
-                                                                        cascade_direction.z;
-                                                                    cascade_child.weight = 1.0F;
-                                                                    cascade_child.parent_history =
-                                                                        global_history;
-                                                                    cascade_child.rng_stream =
-                                                                        rng::event_product_stream(
-                                                                            child_rng_stream,
-                                                                            child_step,
-                                                                            rng::branch_role_cascade_charged,
-                                                                            cascade_index);
-                                                                    // Copper generation is carried by
-                                                                    // this dedicated queue, not by the
-                                                                    // downstream water-generation field.
-                                                                    cascade_child.generation = 1U;
-                                                                    cascade_child.birth_region =
-                                                                        minibeam_birth_region_copper;
-                                                                    minibeam_copper_cascade_queue_device[
-                                                                        cascade_output] = cascade_child;
-                                                                } else {
-                                                                    sycl::atomic_ref<
-                                                                        std::uint64_t,
-                                                                        sycl::memory_order::relaxed,
-                                                                        sycl::memory_scope::device,
-                                                                        sycl::access::address_space::global_space>
-                                                                        overflow_count(
-                                                                            minibeam_event_counts_device[
-                                                                                minibeam_fragment_cascade_overflow_slot]);
-                                                                    overflow_count.fetch_add(1U);
-                                                                }
-                                                            }
-                                                            const auto untracked_keV =
-                                                                static_cast<std::uint64_t>(
-                                                                    sycl::fmax(
-                                                                        0.0F,
-                                                                        child_energy -
-                                                                            fragment_event
-                                                                                .process_local_deposit_MeV -
-                                                                            accounted_charged) *
-                                                                        1000.0F + 0.5F);
-                                                            sycl::atomic_ref<
-                                                                std::uint64_t,
-                                                                sycl::memory_order::relaxed,
-                                                                sycl::memory_scope::device,
-                                                                sycl::access::address_space::global_space>
-                                                                untracked_energy(
-                                                                    minibeam_event_counts_device[
-                                                                        minibeam_fragment_cascade_untracked_keV_slot]);
-                                                            untracked_energy.fetch_add(
-                                                                untracked_keV);
-                                                            const auto selected_input =
-                                                                fragment_lookup.selected_energy_MeV_per_u *
-                                                                static_cast<float>(product.a);
-                                                            const auto replay_output =
-                                                                sycl::fmax(0.0F, fragment_event.parent_energy_MeV) +
-                                                                sycl::fmax(
-                                                                    0.0F,
-                                                                    fragment_event.process_local_deposit_MeV) +
-                                                                replay_product_energy;
-                                                            const auto add_energy_counter =
-                                                                [&](const std::size_t slot,
-                                                                    const float value) {
-                                                                    sycl::atomic_ref<
-                                                                        std::uint64_t,
-                                                                        sycl::memory_order::relaxed,
-                                                                        sycl::memory_scope::device,
-                                                                        sycl::access::address_space::global_space>
-                                                                        counter(
-                                                                            minibeam_event_counts_device[
-                                                                                slot]);
-                                                                    counter.fetch_add(
-                                                                        static_cast<std::uint64_t>(
-                                                                            sycl::fmax(0.0F, value) *
-                                                                                1000.0F + 0.5F));
-                                                                };
-                                                            add_energy_counter(
-                                                                minibeam_fragment_actual_input_keV_slot,
-                                                                child_energy);
-                                                            add_energy_counter(
-                                                                minibeam_fragment_selected_input_keV_slot,
-                                                                selected_input);
-                                                            add_energy_counter(
-                                                                minibeam_fragment_replay_output_keV_slot,
-                                                                replay_output);
-                                                            add_energy_counter(
-                                                                minibeam_fragment_selection_mismatch_keV_slot,
-                                                                sycl::fabs(child_energy - selected_input));
-                                                            add_energy_counter(
-                                                                minibeam_fragment_closure_mismatch_keV_slot,
-                                                                sycl::fabs(selected_input - replay_output));
-                                                            const bool parent_survives =
-                                                                fragment_event.parent_energy_MeV > 0.0F;
-                                                            const auto copper_target_mass =
-                                                                fragment_event.target_a == 63
-                                                                    ? 58603.7301743F
-                                                                    : (fragment_event.target_a == 65
-                                                                           ? 60465.0342192F
-                                                                           : sycl::fmax(
-                                                                                 0.0F,
-                                                                                 static_cast<float>(
-                                                                                     fragment_event.target_a) *
-                                                                                         931.49410242F -
-                                                                                     29.0F * 0.51099895F));
-                                                            const auto mass_energy_in =
-                                                                selected_input +
-                                                                fragment_event.parent_rest_mass +
-                                                                copper_target_mass;
-                                                            const auto mass_energy_out =
-                                                                replay_output + replay_product_rest_mass +
-                                                                (parent_survives
-                                                                     ? fragment_event.parent_rest_mass
-                                                                     : 0.0F);
-                                                            add_energy_counter(
-                                                                minibeam_fragment_mass_energy_mismatch_keV_slot,
-                                                                sycl::fabs(mass_energy_in -
-                                                                           mass_energy_out));
-                                                            const auto input_a =
-                                                                static_cast<int>(product.a) +
-                                                                static_cast<int>(fragment_event.target_a);
-                                                            const auto output_a =
-                                                                replay_product_a +
-                                                                (parent_survives
-                                                                     ? static_cast<int>(
-                                                                           fragment_event.parent_a)
-                                                                     : 0);
-                                                            if (input_a != output_a) {
-                                                                sycl::atomic_ref<
-                                                                    std::uint64_t,
-                                                                    sycl::memory_order::relaxed,
-                                                                    sycl::memory_scope::device,
-                                                                    sycl::access::address_space::global_space>
-                                                                    baryon_miss(
-                                                                        minibeam_event_counts_device[
-                                                                            minibeam_fragment_baryon_mismatch_slot]);
-                                                                baryon_miss.fetch_add(1U);
-                                                            }
-                                                        } else {
-                                                            const auto miss_index =
-                                                                static_cast<std::size_t>(
-                                                                    fragment_lookup.status) - 1U;
-                                                            if (miss_index < 6U) {
-                                                                sycl::atomic_ref<
-                                                                    std::uint64_t,
-                                                                    sycl::memory_order::relaxed,
-                                                                    sycl::memory_scope::device,
-                                                                    sycl::access::address_space::global_space>
-                                                                    miss_count(
-                                                                        minibeam_event_counts_device[
-                                                                            minibeam_fragment_cascade_miss_slot +
-                                                                            miss_index]);
-                                                                miss_count.fetch_add(1U);
-                                                            }
-                                                            sycl::atomic_ref<
-                                                                std::uint64_t,
-                                                                sycl::memory_order::relaxed,
-                                                                sycl::memory_scope::device,
-                                                                sycl::access::address_space::global_space>
-                                                                generation_miss_count(
-                                                                    minibeam_event_counts_device[
-                                                                        minibeam_fragment_generation_miss_slot]);
-                                                            generation_miss_count.fetch_add(1U);
-                                                            sycl::atomic_ref<
-                                                                std::uint64_t,
-                                                                sycl::memory_order::relaxed,
-                                                                sycl::memory_scope::device,
-                                                                sycl::access::address_space::global_space>
-                                                                species_miss(
-                                                                    minibeam_event_counts_device[
-                                                                        minibeam_fragment_miss_species_slot +
-                                                                        child_species_category]);
-                                                            species_miss.fetch_add(1U);
-                                                            const auto miss_energy_u =
-                                                                child_energy /
-                                                                static_cast<float>(product.a);
-                                                            const auto miss_energy_bin =
-                                                                sycl::min(
-                                                                    15U,
-                                                                    static_cast<std::uint32_t>(
-                                                                        sycl::fmax(0.0F,
-                                                                                   miss_energy_u) /
-                                                                        25.0F));
-                                                            sycl::atomic_ref<
-                                                                std::uint64_t,
-                                                                sycl::memory_order::relaxed,
-                                                                sycl::memory_scope::device,
-                                                                sycl::access::address_space::global_space>
-                                                                energy_miss(
-                                                                    minibeam_event_counts_device[
-                                                                    minibeam_fragment_miss_energy_slot +
-                                                                    miss_energy_bin]);
-                                                            energy_miss.fetch_add(1U);
-                                                            if (minibeam_fragment_miss_joint_counts_device != nullptr &&
-                                                                miss_index < MinibeamDiagnostics::fragment_miss_reason_count) {
-                                                                const auto za_index =
-                                                                    product.z >= 0 && product.z <= 6 &&
-                                                                            product.a >= 0 && product.a <= 12
-                                                                        ? static_cast<std::size_t>(product.z) * 13U +
-                                                                              static_cast<std::size_t>(product.a)
-                                                                        : MinibeamDiagnostics::fragment_miss_za_count - 1U;
-                                                                const auto joint_energy_bin = sycl::min(
-                                                                    127U,
-                                                                    static_cast<std::uint32_t>(
-                                                                        sycl::fmax(0.0F, miss_energy_u) / 5.0F));
-                                                                const auto joint_index =
-                                                                    ((za_index *
-                                                                          MinibeamDiagnostics::fragment_miss_reason_count +
-                                                                      miss_index) *
-                                                                         MinibeamDiagnostics::fragment_miss_joint_energy_bin_count) +
-                                                                    joint_energy_bin;
-                                                                const auto block_entry_z =
-                                                                    minibeam_block_center_z -
-                                                                    0.5F * minibeam_block_thickness;
-                                                                const auto collision_depth_um =
-                                                                    static_cast<std::uint64_t>(sycl::fmax(
-                                                                        0.0F, child_z - block_entry_z) * 1000.0F + 0.5F);
-                                                                const auto path_to_plane = child_direction.z > 1.0e-8F
-                                                                    ? sycl::fmax(0.0F,
-                                                                          (block_exit_z - child_z) /
-                                                                              child_direction.z)
-                                                                    : 0.0F;
-                                                                const auto remaining_um =
-                                                                    static_cast<std::uint64_t>(
-                                                                        minibeam_straight_copper_path_to_plane(
-                                                                            child_x, child_y,
-                                                                            child_direction.x,
-                                                                            child_direction.y,
-                                                                            minibeam_cos, minibeam_sin,
-                                                                            minibeam_block_radius,
-                                                                            minibeam_slit_count,
-                                                                            minibeam_slit_width,
-                                                                            minibeam_slit_pitch,
-                                                                            0.5F * minibeam_slit_length,
-                                                                            minibeam_slit_offset,
-                                                                            path_to_plane) *
-                                                                            1000.0F +
-                                                                        0.5F);
-                                                                const auto energy_keV =
-                                                                    static_cast<std::uint64_t>(
-                                                                        sycl::fmax(0.0F, child_energy) *
-                                                                            1000.0F +
-                                                                        0.5F);
-                                                                sycl::atomic_ref<std::uint64_t,
-                                                                    sycl::memory_order::relaxed,
-                                                                    sycl::memory_scope::device,
-                                                                    sycl::access::address_space::global_space>(
-                                                                        minibeam_fragment_miss_joint_counts_device[joint_index])
-                                                                    .fetch_add(1U);
-                                                                sycl::atomic_ref<std::uint64_t,
-                                                                    sycl::memory_order::relaxed,
-                                                                    sycl::memory_scope::device,
-                                                                    sycl::access::address_space::global_space>(
-                                                                        minibeam_fragment_miss_joint_energy_device[joint_index])
-                                                                    .fetch_add(energy_keV);
-                                                                sycl::atomic_ref<std::uint64_t,
-                                                                    sycl::memory_order::relaxed,
-                                                                    sycl::memory_scope::device,
-                                                                    sycl::access::address_space::global_space>(
-                                                                        minibeam_fragment_miss_joint_depth_device[joint_index])
-                                                                    .fetch_add(collision_depth_um);
-                                                                sycl::atomic_ref<std::uint64_t,
-                                                                    sycl::memory_order::relaxed,
-                                                                    sycl::memory_scope::device,
-                                                                    sycl::access::address_space::global_space>(
-                                                                        minibeam_fragment_miss_joint_remaining_device[joint_index])
-                                                                    .fetch_add(remaining_um);
-                                                            }
-                                                        }
-                                                    }
-                                                    if (minibeam_fragment_phase_space_device != nullptr) {
-                                                    sycl::atomic_ref<
-                                                        std::uint64_t,
-                                                        sycl::memory_order::relaxed,
-                                                        sycl::memory_scope::device,
-                                                        sycl::access::address_space::global_space>
-                                                        absorbed_count(
-                                                            minibeam_event_counts_device[
-                                                                21U + child_species_category]);
-                                                    absorbed_count.fetch_add(1U);
-                                                    const auto absorbed_energy_keV =
-                                                        static_cast<std::uint64_t>(
-                                                            sycl::fmax(0.0F, child_energy) *
-                                                                1000.0F + 0.5F);
-                                                    sycl::atomic_ref<
-                                                        std::uint64_t,
-                                                        sycl::memory_order::relaxed,
-                                                        sycl::memory_scope::device,
-                                                        sycl::access::address_space::global_space>
-                                                        absorbed_energy(
-                                                            minibeam_event_counts_device[
-                                                                30U + child_species_category]);
-                                                    absorbed_energy.fetch_add(
-                                                        absorbed_energy_keV);
-                                                    const auto path_to_downstream_plane =
-                                                        sycl::fmax(
-                                                            0.0F,
-                                                            (block_exit_z - child_z) /
-                                                                child_direction.z);
-                                                    const auto straight_copper_path_um =
-                                                        static_cast<std::uint64_t>(
-                                                            minibeam_straight_copper_path_to_plane(
-                                                                child_x, child_y,
-                                                                child_direction.x,
-                                                                child_direction.y,
-                                                                minibeam_cos, minibeam_sin,
-                                                                minibeam_block_radius,
-                                                                minibeam_slit_count,
-                                                                minibeam_slit_width,
-                                                                minibeam_slit_pitch,
-                                                                0.5F * minibeam_slit_length,
-                                                                minibeam_slit_offset,
-                                                                path_to_downstream_plane) *
-                                                                1000.0F + 0.5F);
-                                                    sycl::atomic_ref<
-                                                        std::uint64_t,
-                                                        sycl::memory_order::relaxed,
-                                                        sycl::memory_scope::device,
-                                                        sycl::access::address_space::global_space>
-                                                        straight_copper_path(
-                                                            minibeam_event_counts_device[
-                                                                39U + child_species_category]);
-                                                    straight_copper_path.fetch_add(
-                                                        straight_copper_path_um);
-                                                    }
-                                                    child_energy = 0.0F;
-                                                    break;
-                                                }
-                                            } else {
-                                                child_copper_segment_path = 0.0F;
-                                            }
-                                            ++child_step;
-                                        }
-                                        if (child_energy <= energy_cutoff_MeV ||
-                                            child_direction.z <= 1.0e-8F ||
-                                            child_step == 100000U) continue;
-                                        const auto to_water = -child_z / child_direction.z;
-                                        if (to_water < 0.0F) continue;
-                                        child_x += to_water * child_direction.x;
-                                        child_y += to_water * child_direction.y;
-                                        if (secondary_queue_device != nullptr) {
-                                            sycl::atomic_ref<
-                                                std::uint32_t,
-                                                sycl::memory_order::relaxed,
-                                                sycl::memory_scope::device,
-                                                sycl::access::address_space::global_space>
-                                                count_ref(*secondary_count_device);
-                                            const auto output = count_ref.fetch_add(1U);
-                                            if (output < max_secondaries) {
-                                                SecondaryParticle child{};
-                                                child.z = product.z;
-                                                child.a = product.a;
-                                                child.energy_MeV = child_energy;
-                                                child.pos_x_mm = child_x;
-                                                child.pos_y_mm = child_y;
-                                                child.pos_z_mm = 0.0F;
-                                                child.dir_x = child_direction.x;
-                                                child.dir_y = child_direction.y;
-                                                child.dir_z = child_direction.z;
-                                                child.weight = 1.0F;
-                                                child.parent_history = global_history;
-                                                child.rng_stream = rng::event_product_stream(
-                                                    rng_history, beamline_step,
-                                                    rng::branch_role_primary_charged,
-                                                    product_index);
-                                                child.birth_region =
-                                                    minibeam_birth_region_copper;
-                                                secondary_queue_device[output] = child;
-#if defined(CARBON_ENABLE_MINIBEAM)
-                                                if (minibeam_fragment_phase_space_device != nullptr) {
-                                                    sycl::atomic_ref<
-                                                        std::uint32_t,
-                                                        sycl::memory_order::relaxed,
-                                                        sycl::memory_scope::device,
-                                                        sycl::access::address_space::global_space>
-                                                        phase_count(
-                                                            *minibeam_fragment_phase_space_count_device);
-                                                    const auto phase_index =
-                                                        phase_count.fetch_add(1U);
-                                                    if (phase_index < max_secondaries) {
-                                                        MinibeamFragmentPhaseSpaceRecord record{};
-                                                        record.history = global_history;
-                                                        record.atomic_number = product.z;
-                                                        record.mass_number = product.a;
-                                                        record.kinetic_energy_MeV = child_energy;
-                                                        record.x_mm = child_x;
-                                                        record.y_mm = child_y;
-                                                        record.direction_x = child_direction.x;
-                                                        record.direction_y = child_direction.y;
-                                                        record.direction_z = child_direction.z;
-                                                        minibeam_fragment_phase_space_device[
-                                                            phase_index] = record;
-                                                    }
-                                                }
-#endif
-                                                queued_energy += child_energy;
-                                                sycl::atomic_ref<
-                                                    std::uint64_t,
-                                                    sycl::memory_order::relaxed,
-                                                    sycl::memory_scope::device,
-                                                    sycl::access::address_space::global_space>
-                                                    survivor_count(
-                                                        minibeam_event_counts_device[2]);
-                                                survivor_count.fetch_add(1U);
-                                                sycl::atomic_ref<
-                                                    std::uint64_t,
-                                                    sycl::memory_order::relaxed,
-                                                    sycl::memory_scope::device,
-                                                    sycl::access::address_space::global_space>
-                                                    species_count(
-                                                        minibeam_event_counts_device[
-                                                            3U + child_species_category]);
-                                                species_count.fetch_add(1U);
-                                                const auto energy_keV =
-                                                    static_cast<std::uint64_t>(
-                                                        sycl::fmax(0.0F, child_energy) *
-                                                            1000.0F + 0.5F);
-                                                sycl::atomic_ref<
-                                                    std::uint64_t,
-                                                    sycl::memory_order::relaxed,
-                                                    sycl::memory_scope::device,
-                                                    sycl::access::address_space::global_space>
-                                                    species_energy(
-                                                        minibeam_event_counts_device[
-                                                            12U + child_species_category]);
-                                                species_energy.fetch_add(energy_keV);
-                                            } else {
-                                                sycl::atomic_ref<
-                                                    std::uint32_t,
-                                                    sycl::memory_order::relaxed,
-                                                    sycl::memory_scope::device,
-                                                    sycl::access::address_space::global_space>
-                                                    overflow(*secondary_overflow_count_device);
-                                                overflow.fetch_add(1U);
-                                            }
-                                        }
-                                    }
-                                }
-                                removed_energy = sycl::fmax(
-                                    removed_energy,
-                                    incident_beamline_energy - queued_energy -
-                                    (beamline_air_loss_MeV-air_loss_at_block_entry));
-                                energy_MeV = 0.0F;
-                                break;
-                            }
-                        }
-                        ++beamline_step;
-                    }
-                    if (energy_MeV > 0.0F) {
-                        removed_energy = sycl::fmax(
-                            0.0F, incident_beamline_energy - energy_MeV -
-                            (beamline_air_loss_MeV-air_loss_at_block_entry));
-                    }
-                    beamline_removed_device[global_history] =
-                        minibeam_air_urban && !beamline_ever_in_copper_hist ? 0.0F :
-                        sycl::fmax(0.0F, removed_energy);
-                }
-                // Snapshot only: no RNG draws or transport-state changes.
-                auto record_primary_phase = [&]() {
-                    MinibeamPhaseSpaceRecord record{};
-                    record.history = global_history;
-                    record.slit = minibeam_source_slit;
-                    record.copper_touched = minibeam_hits_copper ? 1U : 0U;
-                    record.copper_elastic = minibeam_primary_elastic ? 1U : 0U;
-                    record.valid = 1U;
-                    // Versioned touch: legacy field frozen as initial-ray;
-                    // actual-touch observables below.
-                    record.initial_ray_hits_copper =
-                        minibeam_hits_copper ? 1U : 0U;
-                    record.ever_in_copper =
-                        beamline_ever_in_copper_hist ? 1U : 0U;
-                    record.cumulative_cu_true_path_mm =
-                        beamline_cu_true_path_hist_mm;
-                    record.cu_steps = beamline_cu_steps_hist;
-                    record.disp_below_min = beamline_disp_below_hist;
-                    record.disp_accept = beamline_disp_accept_hist;
-                    record.disp_reduce = beamline_disp_reduce_hist;
-                    record.disp_cancel = beamline_disp_cancel_hist;
-                    record.cth_eq_one = beamline_cth_one_hist;
-                    record.cu_g_sum_mm = beamline_g_sum_hist_mm;
-                    record.cu_t_sum_mm = beamline_t_sum_hist_mm;
-                    record.cu_delta_sum_mm = beamline_delta_sum_hist_mm;
-                    record.cu_raw_disp_sum2_mm2 = beamline_raw2_sum_hist_mm2;
-                    record.cu_acc_disp_sum2_mm2 = beamline_acc2_sum_hist_mm2;
-                    record.limit_user = beamline_limit_user_hist;
-                    record.limit_msc = beamline_limit_msc_hist;
-                    record.limit_geom = beamline_limit_geom_hist;
-                    record.limit_range = beamline_limit_range_hist;
-                    record.kinetic_energy_MeV = energy_MeV;
-                    record.x_mm = position_x_mm;
-                    record.y_mm = position_y_mm;
-                    record.direction_x = direction_x;
-                    record.direction_y = direction_y;
-                    record.direction_z = direction_z;
-                    minibeam_phase_space_device[global_history] = record;
-                };
-                if (kPrimaryStage != 5 && phase_at_copper_exit && minibeam_phase_space_device != nullptr &&
-                    energy_MeV > energy_cutoff_MeV && direction_z > 1.0e-8F &&
-                    sycl::fabs(position_z_mm-minibeam_block_exit_z) < 1.0e-3F) {
-                    record_primary_phase();
-                }
-                if (kPrimaryStage != 5 && minibeam_air_urban && energy_MeV>energy_cutoff_MeV) {
-                    if (!advance_air_to_plane(0.0F)) energy_MeV=0.0F;
-                }
-                if (kPrimaryStage != 5 && minibeam_copper_transport && !minibeam_air_urban &&
-                    energy_MeV > energy_cutoff_MeV &&
-                    direction_z > 1.0e-8F) {
-                    auto remaining_air_distance =
-                        -minibeam_block_exit_z / direction_z;
-                    if (!minibeam_hits_copper) {
-                        remaining_air_distance +=
-                            minibeam_block_thickness / direction_z;
-                    }
-                    std::uint32_t air_step = 0;
-                    while (remaining_air_distance > 0.0F &&
-                           energy_MeV > energy_cutoff_MeV &&
-                           air_step < 1024U) {
-                        const auto step_mm =
-                            sycl::fmin(1.0F, remaining_air_distance);
-                        const auto air_loss = sycl::fmin(
-                            energy_MeV,
-                            minibeam_linear_table(
-                                minibeam_air_sp_energies_device,
-                                minibeam_air_sp_values_device,
-                                minibeam_air_sp_count,
-                                energy_MeV * inverse_mass_number) *
-                                step_mm);
-                        energy_MeV -= air_loss;
-                        beamline_air_loss_MeV += air_loss;
-                        remaining_air_distance -= step_mm;
-                        ++air_step;
-                    }
-                    if (energy_MeV <= energy_cutoff_MeV) {
-                        energy_MeV = 0.0F;
-                    }
-                }
-                if (enable_minibeam) {
-                    beamline_air_loss_device[global_history] =
-                        beamline_air_loss_MeV;
-                }
-                if (enable_minibeam && energy_MeV > energy_cutoff_MeV) {
-                    beamline_primary_survivor_device[global_history] = energy_MeV;
-                }
-#endif
-
-                if (enable_tps_source) {
-                    auto t_enter = 0.0F;
-                    auto t_exit = 1.0e30F;
-                    auto hit = true;
-                    auto intersect_slab = [&](const float position, const float direction,
-                                              const float lower, const float upper) {
-                        if (sycl::fabs(direction) < 1.0e-8F) {
-                            if (position < lower || position >= upper) {
-                                hit = false;
-                            }
-                            return;
-                        }
-                        auto first = (lower - position) / direction;
-                        auto second = (upper - position) / direction;
-                        if (first > second) {
-                            const auto temporary = first;
-                            first = second;
-                            second = temporary;
-                        }
-                        t_enter = sycl::fmax(t_enter, first);
-                        t_exit = sycl::fmin(t_exit, second);
-                        if (t_exit < t_enter) {
-                            hit = false;
-                        }
-                    };
-                    if ((kProductionPrimaryPath || enable_voxel_scoring)) {
-                        intersect_slab(position_x_mm, direction_x, voxel_min_x_mm, voxel_max_x_mm);
-                        intersect_slab(position_y_mm, direction_y, voxel_min_y_mm, voxel_max_y_mm);
-                    }
-                    intersect_slab(position_z_mm, direction_z, 0.0F, phantom_length_mm);
-                    if (hit && t_exit >= t_enter) {
-                        const auto entry = t_enter + 1.0e-4F;
-                        position_x_mm += entry * direction_x;
-                        position_y_mm += entry * direction_y;
-                        position_z_mm += entry * direction_z;
-                    }
-                } else {
-                    if (position_z_mm < 0.0F && sycl::fabs(direction_z) > 1.0e-8F) {
-                        const auto t_plane = -position_z_mm / direction_z;
-                        position_x_mm += t_plane * direction_x;
-                        position_y_mm += t_plane * direction_y;
-                        position_z_mm = 0.0F;
-                    }
-                }
-
-#if defined(CARBON_ENABLE_MINIBEAM)
-                if (kPrimaryStage != 5 && !phase_at_copper_exit && minibeam_phase_space_device != nullptr &&
-                    energy_MeV > energy_cutoff_MeV &&
-                    position_z_mm >= 0.0F && position_z_mm < phantom_length_mm) {
-                    record_primary_phase();
-                }
-
-#endif
-
-                entry = {rng_history, spot_seed, global_history, spot_initial_energy_MeV, energy_MeV, sampled_initial_energy_MeVu, position_x_mm, position_y_mm, position_z_mm, direction_x, direction_y, direction_z};
-                }
+                PrimaryMediumEntryState entry{};
+#include "detail/sycl_primary_beamline.inc"
                 if constexpr (kPrimaryStage == 1 || kPrimaryStage == 3) {
                     std::size_t destination = lane;
                     if constexpr (kPrimaryStage == 3) {
@@ -6060,10 +4524,14 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 primary_entry_counts[active ? 0 : 1]).fetch_add(1U);
                         destination = active ? rank : chunk_count - 1 - rank;
                     }
-                    primary_water_entry[destination] = entry;
+                    primary_medium_entry[destination] = entry;
                 } else {
                     if constexpr (kPrimaryStage == 2 || kPrimaryStage == 4) {
-                        entry = primary_water_entry[lane];
+#if defined(CARBON_ENABLE_MINIBEAM)
+                        entry = primary_medium_entry[water_energy_order ? water_energy_order[lane] : lane];
+#else
+                        entry = primary_medium_entry[lane];
+#endif
                         global_history = entry.global_history;
                     }
                 const auto rng_history = entry.rng_history;
@@ -6915,17 +5383,23 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         count(0,1);
                         const double density_u=uniform(),birth_u=uniform();
                         const double along=uniform();
-                        const std::array<double,3> birth_position{
-                            position_x_mm+along*step_mm*direction_x,position_y_mm+along*step_mm*direction_y,
-                            position_z_mm+along*step_mm*direction_z};
                         const ElectronCtGeometry geometry{{ct_nx,ct_ny,ct_nz},{ct_origin_x,ct_origin_y,ct_origin_z},
                             {ct_spacing_x,ct_spacing_y,ct_spacing_z},ct_density_device,ct_material_device};
+                        const auto birth_position=electron_ct_birth_position(geometry,
+                            {position_x_mm,position_y_mm,position_z_mm},
+                            {direction_x,direction_y,direction_z},step_mm,along);
                         const auto birth_material=electron_ct_point_material(geometry,birth_position,
                             {direction_x,direction_y,direction_z});
                         MaterialElectronBirthDraw material_birth;
-                        if(birth_material.valid)material_birth=sample_material_electron_birth(birth_material.section,
-                            birth_material.density,energy_MeVu,density_u,birth_u,
-                            material_electron_views,material_electron_view_count);
+                        if(birth_material.valid) {
+                            if(defer_material_birth_sampling)
+                                material_birth=prepare_material_electron_birth(birth_material.section,
+                                    birth_material.density,energy_MeVu,density_u,birth_u,
+                                    material_electron_views,material_electron_view_count,material_electron_lookup);
+                            else material_birth=sample_material_electron_birth(birth_material.section,
+                                birth_material.density,energy_MeVu,density_u,birth_u,
+                                material_electron_views,material_electron_view_count,material_electron_lookup);
+                        }
                         const auto birth=material_birth.birth;
                         const auto ti=material_birth.table;
                         if(!birth.valid) {
@@ -6943,7 +5417,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             const float weight=deposited_MeV*static_cast<float>(birth.fraction);
                             local_voxel_deposit_MeV-=weight;forward_shifted_MeV+=weight;
                             if (defer_material_packets) {
-                                MaterialBirthTask task{birth,birth_position,{direction_x,direction_y,direction_z},
+                                MaterialBirthTask task{QueuedElectronBirth{birth,energy_MeVu,birth_u},birth_position,{direction_x,direction_y,direction_z},
                                     birth_material.density,packet_rng,global_history,static_cast<std::uint32_t>(steps),
                                     static_cast<std::uint32_t>(ti),weight};
                                 grouped_weight+=double(weight);
@@ -6982,7 +5456,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             for(unsigned j=0;j<4096 && packet.status==ElectronPacketStatus::active;++j) {
                                 previous=packet;previous_rng=packet_rng;
                                 packet=transport_electron_packet_step(packet,material_electron_views,
-                                    material_electron_view_count,geometry,uniform);
+                                    material_electron_view_count,geometry,uniform,material_electron_lookup);
                             }
                             count(6,1);
                             if(packet.status==ElectronPacketStatus::deposited) {
@@ -9251,7 +7725,20 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             {
                 if (use_water_primary_path)
                     return launch_primary_chunk(std::false_type{}, std::true_type{}, std::integral_constant<int, 5>{});
-                if (use_minibeam_primary_path) {
+                if (use_minibeam_primary_path || ct_minibeam_split) {
+                    const auto launch_minibeam_stage = [&](auto stage) {
+                        // The Cu/air stages share one compiled kernel for water
+                        // and CT. Only downstream transport selects a material
+                        // policy; never apply uniform-water substitutions to CT.
+                        if constexpr (decltype(stage)::value == 4) {
+                            if (ct_minibeam_split) {
+                                if (ct_queued_primary_specialize)
+                                    return launch_primary_chunk(std::false_type{}, std::false_type{}, std::integral_constant<int,11>{});
+                                return launch_primary_chunk(std::false_type{}, std::false_type{}, stage);
+                            }
+                        }
+                        return launch_primary_chunk(std::false_type{}, std::true_type{}, stage);
+                    };
 #if defined(CARBON_ENABLE_MINIBEAM)
                     if (beamline_order != nullptr) {
                         queue.fill(beamline_order_counts, 0U, 2);
@@ -9275,24 +7762,67 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 minibeam_slit_count, minibeam_slit_width, minibeam_slit_pitch,
                                 0.5F * minibeam_slit_length, minibeam_slit_thickness,
                                 minibeam_slit_offset);
+                            bool expensive=copper;
+                            if(copper_response_events && copper) {
+                                const auto u=minibeam_cos*(source_origin_x_mm+beam_ux_x*local_x+beam_uy_x*local_y)+
+                                    minibeam_sin*(source_origin_y_mm+beam_ux_y*local_x+beam_uy_y*local_y);
+                                float distance=1.e30F;
+                                for(int slit=-minibeam_slit_count/2;slit<=minibeam_slit_count/2;++slit)
+                                    distance=sycl::fmin(distance,sycl::fabs(u-minibeam_slit_offset-
+                                        slit*minibeam_slit_pitch)-.5F*minibeam_slit_width);
+                                if(distance>=1.F && distance<=1.55001F)expensive=false;
+                            }
                             const auto rank = sycl::atomic_ref<std::uint32_t,
                                 sycl::memory_order::relaxed, sycl::memory_scope::device,
                                 sycl::access::address_space::global_space>(
-                                    beamline_order_counts[copper ? 0 : 1]).fetch_add(1U);
-                            beamline_order[copper ? rank : chunk_count - 1 - rank] = lane;
+                                    beamline_order_counts[expensive ? 0 : 1]).fetch_add(1U);
+                            beamline_order[expensive ? rank : chunk_count - 1 - rank] = lane;
                         });
                     }
 #endif
                     if (split_minibeam_primary == 2) {
                         queue.fill(primary_entry_counts, std::uint64_t{0}, 2);
-                        primary_events.push_back(launch_primary_chunk(
-                            std::false_type{}, std::true_type{}, std::integral_constant<int, 3>{}));
-                        return launch_primary_chunk(
-                            std::false_type{}, std::true_type{}, std::integral_constant<int, 4>{});
+#if defined(CARBON_ENABLE_MINIBEAM)
+                        if(copper_response_events)primary_events.push_back(
+                            launch_primary_chunk(std::false_type{},std::true_type{},std::integral_constant<int,10>{}));
+                        else
+#endif
+                        primary_events.push_back(queue_copper_primary_children
+                            ? launch_minibeam_stage(std::integral_constant<int,9>{})
+                            : launch_minibeam_stage(std::integral_constant<int,3>{}));
+#if defined(CARBON_ENABLE_MINIBEAM)
+                        if (water_energy_order) {
+                            queue.fill(water_energy_counts,0U,water_energy_buckets+1);
+                            auto bucket=[=](float energy) {
+                                if(energy<=energy_cutoff_MeV)return water_energy_buckets;
+                                return sycl::min(water_energy_buckets-1,
+                                    static_cast<unsigned>(sycl::fmax(0.F,energy)/initial_energy_MeV*water_energy_buckets));
+                            };
+                            water_order_events.push_back(queue.parallel_for(sycl::range<1>(chunk_count),[=](sycl::id<1> index){
+                                const auto b=bucket(primary_medium_entry[index[0]].energy_MeV);
+                                sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>(water_energy_counts[b]).fetch_add(1U);
+                            }));
+                            water_order_events.push_back(queue.single_task([=]{
+                                unsigned offset=0;
+                                for(unsigned b=0;b<=water_energy_buckets;++b){
+                                    water_energy_offsets[b]=offset;offset+=water_energy_counts[b];water_energy_counts[b]=0;
+                                }
+                            }));
+                            water_order_events.push_back(queue.parallel_for(sycl::range<1>(chunk_count),[=](sycl::id<1> index){
+                                const auto b=bucket(primary_medium_entry[index[0]].energy_MeV);
+                                const auto rank=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>(water_energy_counts[b]).fetch_add(1U);
+                                water_energy_order[water_energy_offsets[b]+rank]=index[0];
+                            }));
+                        }
+#endif
+                        return launch_minibeam_stage(std::integral_constant<int, 4>{});
                     }
                     if (split_minibeam_primary) {
-                        primary_events.push_back(launch_primary_chunk(
-                            std::false_type{}, std::true_type{}, std::integral_constant<int, 1>{}));
+                        primary_events.push_back(queue_copper_primary_children
+                            ? launch_primary_chunk(std::false_type{},std::true_type{},std::integral_constant<int,8>{})
+                            : launch_primary_chunk(std::false_type{},std::true_type{},std::integral_constant<int,1>{}));
                         return launch_primary_chunk(
                             std::false_type{}, std::true_type{}, std::integral_constant<int, 2>{});
                     }
@@ -9365,21 +7895,39 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         sycl::atomic_ref<T,sycl::memory_order::relaxed,sycl::memory_scope::device,
                             sycl::access::address_space::global_space> a(*address);a.fetch_add(static_cast<T>(value));
                     };
+                    MaterialBirthTask task{};
+                    std::uint64_t packet_rng=0,previous_rng=0;
+                    ElectronEnergyPacket packet,previous;
+                    unsigned packet_steps=0;
+                    bool need_task=true;
+                    auto uniform=[&]() {packet_rng=packet_rng*6364136223846793005ULL+1442695040888963407ULL;
+                        return double(packet_rng>>11)*0x1.0p-53;};
+                    // One transaction per outer iteration lets finished lanes
+                    // refill while their warp peers continue longer packets.
                     for(;;) {
-                        const auto slot=consumed.fetch_add(1);if(slot>=count_host)break;
-                        const auto task=material_tasks[slot];auto packet_rng=task.rng;
-                        auto uniform=[&]() {packet_rng=packet_rng*6364136223846793005ULL+1442695040888963407ULL;
-                            return double(packet_rng>>11)*0x1.0p-53;};
-                        ElectronEnergyPacket packet;packet.weight_MeV=task.weight;packet.material_table_index=task.table;
-                        packet.cursor=bind_electron_birth(task.birth,material_electron_views[task.table],task.position,
-                            {task.direction[0],task.direction[1],task.direction[2]},uniform());
-                        packet.cursor.physical_density_g_cm3=task.density;
-                        packet.status=packet.cursor.valid?ElectronPacketStatus::active:ElectronPacketStatus::invalid;
-                        auto previous=packet;auto previous_rng=packet_rng;
-                        for(unsigned j=0;j<4096 && packet.status==ElectronPacketStatus::active;++j) {
+                        if(need_task) {
+                            const auto slot=consumed.fetch_add(1);if(slot>=count_host)break;
+                            task=material_tasks[slot];packet_rng=task.rng;
+                            packet=ElectronEnergyPacket{};
+                            packet.weight_MeV=task.weight;packet.material_table_index=task.table;
+                            const auto selected_birth=defer_material_birth_sampling
+                                ? resolve_prepared_electron_birth(task.birth.draw(),material_electron_views[task.table],
+                                    task.birth.energy,task.birth.uniform)
+                                : task.birth.draw();
+                            packet.cursor=bind_electron_birth(selected_birth,material_electron_views[task.table],task.position,
+                                {task.direction[0],task.direction[1],task.direction[2]},uniform());
+                            packet.cursor.physical_density_g_cm3=task.density;
+                            packet.status=packet.cursor.valid?ElectronPacketStatus::active:ElectronPacketStatus::invalid;
                             previous=packet;previous_rng=packet_rng;
-                            packet=transport_electron_packet_step(packet,material_electron_views,material_electron_view_count,geometry,uniform);
+                            packet_steps=0;need_task=false;
                         }
+                        if(packet.status==ElectronPacketStatus::active && packet_steps<4096) {
+                            previous=packet;previous_rng=packet_rng;
+                            packet=transport_electron_packet_step(packet,material_electron_views,material_electron_view_count,geometry,uniform,material_electron_lookup);
+                            ++packet_steps;
+                        }
+                        if(packet.status==ElectronPacketStatus::active && packet_steps<4096)continue;
+                        need_task=true;
                         const std::uint64_t work[3]={packet.advances,packet.source_restarts,packet.boundary_restarts};
                         for(unsigned k=0;k<3;++k) {
                             sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
@@ -9476,14 +8024,79 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                   << " histories (" << primary_events.size() << " launches)\n";
     }
 
-    if (primary_water_entry) mem_tracker.free(primary_water_entry);
+    if (primary_medium_entry) mem_tracker.free(primary_medium_entry);
     if (primary_entry_counts) mem_tracker.free(primary_entry_counts);
 #if defined(CARBON_ENABLE_MINIBEAM)
+    double water_order_seconds=0;
+    for(const auto& event:water_order_events)water_order_seconds+=event_duration_seconds(event);
+    if(water_energy_order)std::cout << "[water-energy-order] seconds=" << water_order_seconds << '\n';
+    if(water_energy_order)mem_tracker.free(water_energy_order);
+    if(water_energy_counts)mem_tracker.free(water_energy_counts);
+    if(water_energy_offsets)mem_tracker.free(water_energy_offsets);
     if (beamline_order) mem_tracker.free(beamline_order);
     if (beamline_order_counts) mem_tracker.free(beamline_order_counts);
+    std::array<std::uint64_t,6> copper_response_counts_host{};
+    if(copper_response_counts) {
+        queue.copy(copper_response_counts,copper_response_counts_host.data(),6).wait_and_throw();
+        std::cout << "[copper-response-counts] histories=" << copper_response_counts_host[0]
+                  << " empty_bin_native=" << copper_response_counts_host[1]
+                  << " domain_native=" << copper_response_counts_host[2]
+                  << " water_primary=" << copper_response_counts_host[3]
+                  << " charged=" << copper_response_counts_host[4]
+                  << " copper_neutron_births=" << copper_response_counts_host[5] << '\n';
+        mem_tracker.free(copper_response_events);mem_tracker.free(copper_response_charged);
+        mem_tracker.free(copper_response_neutrons);mem_tracker.free(copper_response_offsets);mem_tracker.free(copper_response_counts);
+    }
 #endif
 
 #if defined(CARBON_ENABLE_MINIBEAM)
+    double copper_primary_child_seconds=0;
+    if(copper_primary_child_tasks) {
+        std::uint32_t count=0;
+        queue.copy(copper_primary_child_counts,&count,1).wait_and_throw();
+        if(count>copper_primary_child_capacity)
+            throw std::runtime_error("Cu primary-child queue overflow; batch rejected without truncation");
+        if(count) {
+            const auto lanes=std::min<std::size_t>(count,17408);
+            auto event=queue.parallel_for(sycl::nd_range<1>{sycl::range<1>{((lanes+127)/128)*128},sycl::range<1>{128}},
+                [=](sycl::nd_item<1>) {
+                    for(;;) {
+                        const auto slot=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,
+                            sycl::memory_scope::device,sycl::access::address_space::global_space>
+                            (copper_primary_child_counts[1]).fetch_add(1U);
+                        if(slot>=count)break;
+                        const auto task=copper_primary_child_tasks[slot];
+                        const auto& product=minibeam_copper_products_device[task.flat_product_index];
+                        const auto product_index=task.product_index;
+                        const auto global_history=task.global_history;
+                        const auto rng_history=task.rng_history;
+                        const auto spot_seed=task.spot_seed;
+                        const auto beamline_step=task.beamline_step;
+                        const auto position_x_mm=task.x,position_y_mm=task.y,position_z_mm=task.z;
+                        const auto direction_x=task.dx,direction_y=task.dy,direction_z=task.dz;
+                        const auto event_cos=task.event_cos,event_sin=task.event_sin;
+                        const auto block_exit_z=minibeam_block_center_z+.5F*minibeam_block_thickness;
+                        // Started tasks are all finished when this event completes,
+                        // including the original stop/backward early-continue paths.
+                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,
+                            sycl::memory_scope::device,sycl::access::address_space::global_space>
+                            (copper_primary_child_counts[2]).fetch_add(1U);
+                        float queued_energy=0;
+#include "detail/sycl_copper_primary_child.inc"
+                        if(queued_energy>0)
+                            sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                sycl::access::address_space::global_space>(beamline_removed_device[global_history]).fetch_sub(queued_energy);
+                    }
+                });
+            event.wait_and_throw();copper_primary_child_seconds=event_duration_seconds(event);
+        }
+        std::uint32_t completed=0;
+        queue.copy(copper_primary_child_counts+2,&completed,1).wait_and_throw();
+        if(completed!=count)throw std::runtime_error("Cu primary-child queue drain mismatch");
+        std::cout << "[copper-primary-child-queue] seconds=" << copper_primary_child_seconds
+                  << " tasks=" << count << " completed=" << completed << " overflow=0\n";
+        free_device(copper_primary_child_tasks);free_device(copper_primary_child_counts);
+    }
     // Process-faithful fragment+Cu products are transported through the
     // remaining collimator in generation batches. Copper generation lives in
     // this dedicated queue and never consumes the downstream water budget.
@@ -10243,6 +8856,18 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     std::cout << "[secondary-schedule] group=" << group_secondaries
               << "; particle state and RNG identities preserved\n";
     std::vector<SecondaryParticle> birth_secondaries_host;
+#if defined(CARBON_ENABLE_MINIBEAM)
+    std::vector<SecondaryParticle> copper_capture_charged_host;
+    if(!copper_capture_path.empty() && secondary_count_device && secondary_queue_device) {
+        std::uint32_t count=0;
+        queue.copy(secondary_count_device,&count,1).wait_and_throw();
+        if(count>max_secondaries)throw std::runtime_error("Cu capture rejects secondary queue overflow");
+        std::vector<SecondaryParticle> particles(count);
+        if(count)queue.copy(secondary_queue_device,particles.data(),count).wait_and_throw();
+        for(const auto& particle:particles)
+            if(particle.birth_region==minibeam_birth_region_copper)copper_capture_charged_host.push_back(particle);
+    }
+#endif
     if (enable_secondary_transport &&
         secondary_count_device != nullptr && secondary_queue_device != nullptr) {
         uint32_t secondary_count_host = 0;
@@ -14075,6 +12700,16 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     std::vector<std::uint64_t> minibeam_fragment_miss_joint_depth_host;
     std::vector<std::uint64_t> minibeam_fragment_miss_joint_remaining_host;
     std::vector<MinibeamPhaseSpaceRecord> minibeam_phase_space_host;
+    std::vector<CopperHistoryDiagnostic> copper_diagnostic_host;
+    std::vector<PrimaryMediumEntryState> copper_capture_entry_host;
+    if(copper_capture_entry_device) {
+        copper_capture_entry_host.resize(number_of_histories);
+        queue.copy(copper_capture_entry_device,copper_capture_entry_host.data(),number_of_histories).wait_and_throw();
+    }
+    if (copper_diagnostic_device) {
+        copper_diagnostic_host.resize(number_of_histories);
+        queue.copy(copper_diagnostic_device,copper_diagnostic_host.data(),number_of_histories).wait_and_throw();
+    }
     std::vector<MinibeamWaterPrimaryPlaneRecord>
         minibeam_water_primary_plane_records_host;
     std::vector<MinibeamFragmentPhaseSpaceRecord>
@@ -14549,6 +13184,9 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     free_device(other_terminal_energy_device);
     free_device(cutoff_stopped_energy_device);
 #if defined(CARBON_ENABLE_MINIBEAM)
+    free_device(copper_diagnostic_device);
+    free_device(copper_capture_entry_device);
+    free_device(copper_history_mask_device);
     free_device(minibeam_phase_space_device);
     free_device(minibeam_water_primary_plane_depths_device);
     free_device(minibeam_water_primary_plane_records_device);
@@ -15239,7 +13877,36 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         schneider_inelastic_host;
     result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});
 
-    if((!BroadBeam && config.enable_neutron_transport)) transport_neutrons_experimental(queue,config,result);
+#if defined(CARBON_ENABLE_MINIBEAM)
+    if (!copper_diagnostic_path.empty())
+        write_copper_history_diagnostic(copper_diagnostic_path,copper_diagnostic_host,
+            beamline_primary_survivor_host,deposited_host,steps_host,copper_history_mask_host);
+    if(!copper_capture_path.empty()) {
+        const std::filesystem::path directory(copper_capture_path);
+        std::filesystem::create_directories(directory);
+        { std::ofstream signature(directory/"signature.txt");signature << copper_response_signature(config);
+          if(!signature)throw std::runtime_error("Cannot write Cu capture signature"); }
+        write_copper_capture_records(directory/"input.bin",copper_diagnostic_host);
+        write_copper_capture_records(directory/"water_primary.bin",copper_capture_entry_host);
+        write_copper_capture_records(directory/"removed.bin",beamline_removed_host);
+        write_copper_capture_records(directory/"air_loss.bin",beamline_air_loss_host);
+        write_copper_capture_records(directory/"water_charged.bin",copper_capture_charged_host);
+        std::vector<NeutronBirthRecord> copper_neutrons;
+        for(const auto& birth:result.neutron_birth_records)
+            if(birth.material_section==-2)copper_neutrons.push_back(birth);
+        write_copper_capture_records(directory/"copper_neutrons.bin",copper_neutrons);
+        std::cout << "[copper-response-capture] source_histories=" << number_of_histories
+                  << " charged_at_water=" << copper_capture_charged_host.size()
+                  << " copper_neutron_births=" << copper_neutrons.size()
+                  << " entry_bytes=" << sizeof(PrimaryMediumEntryState)
+                  << " charged_bytes=" << sizeof(SecondaryParticle)
+                  << " neutron_bytes=" << sizeof(NeutronBirthRecord) << '\n';
+    }
+#endif
+#if defined(CARBON_ENABLE_MINIBEAM)
+    result.conditional_copper_response_enabled=!copper_response_path.empty();
+#endif
+    if((!BroadBeam && config.enable_neutron_transport)) transport_neutrons_experimental(queue,config,result,&inputs);
     result.elapsed_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     result.primary_kernel_seconds = primary_kernel_seconds;

@@ -1,5 +1,6 @@
 #include "carbon/fe_moments.hpp"
 #include "carbon/neutron_transport.hpp"
+#include "carbon/input_dependencies.hpp"
 #include "carbon/neutron_package.hpp"
 #include "carbon/transport.hpp"
 #include "carbon/minibeam_collimator.hpp"
@@ -265,24 +266,41 @@ NeutronStopTables load_neutron_stop_tables(const TransportConfig& config){
  return {std::move(stop_records),std::move(stop_points),original_stops};
 }
 std::string neutron_stop_key(const TransportConfig& config){
- return config.elastic_recoil_stopping_file.string()+"|"+config.elastic_recoil_stopping_sha256+"|"+
-  config.particle_stopping_power_file.string()+"|"+config.minibeam_copper_ion_stopping_power_file.string()+"|"+
-  config.minibeam_air_stopping_power_file.string()+"|"+config.neutron_recoil_stopping_manifest.string();
+ std::string key;
+ if(!config.elastic_recoil_stopping_file.empty())
+  key=input_cache_key(config.elastic_recoil_stopping_file,config.elastic_recoil_stopping_sha256);
+ for(const auto& path:{config.particle_stopping_power_file,config.minibeam_copper_ion_stopping_power_file,
+                      config.minibeam_air_stopping_power_file})
+  key+="|"+input_cache_key(path);
+ if(!config.neutron_recoil_stopping_manifest.empty())
+  key+="|"+companion_input_key(config.neutron_recoil_stopping_manifest,{"file"});
+ return key;
 }
 HostPrefetch<NeutronPackage>& neutron_package_prefetch(){static HostPrefetch<NeutronPackage> registry;return registry;}
 HostPrefetch<NeutronStopTables>& neutron_stop_prefetch(){static HostPrefetch<NeutronStopTables> registry;return registry;}
 }
 
 // Parse the neutron bank and recoil stopping tables while primaries run.
-void prefetch_neutron_inputs(const TransportConfig& config){
+void prefetch_neutron_inputs(const TransportConfig& config,ImmutableInputCache* inputs){
  const auto package_file=config.neutron_package_file;
- neutron_package_prefetch().start(package_file.string(),[package_file]{return NeutronPackage::load(package_file,false);});
- neutron_stop_prefetch().start(neutron_stop_key(config),[config]{return load_neutron_stop_tables(config);});
+ const auto key=companion_input_key(package_file,{"binary"});
+ if(!inputs || !inputs->contains<NeutronPackage>(key))
+  neutron_package_prefetch().start(key,[package_file]{return NeutronPackage::load(package_file,false);});
+ const auto stop_key=neutron_stop_key(config);
+ if(!inputs || !inputs->contains<NeutronStopTables>(stop_key))
+  neutron_stop_prefetch().start(stop_key,[config]{return load_neutron_stop_tables(config);});
 }
 
-void transport_neutrons_experimental(sycl::queue& queue,const TransportConfig& config,TransportResult& result){
+void transport_neutrons_experimental(sycl::queue& queue,const TransportConfig& config,TransportResult& result,
+                                    ImmutableInputCache* session_inputs){
+ ImmutableInputCache local_inputs;auto& inputs=session_inputs?*session_inputs:local_inputs;
  std::cout<<"[neutron-experimental] draft rates/events; correlated energy rescaling; CSDA recoils, optional water Urban; photons/electrons unresolved\n";
- const auto package=neutron_package_prefetch().take(config.neutron_package_file.string(),[&]{return NeutronPackage::load(config.neutron_package_file,false);});
+ const auto key=companion_input_key(config.neutron_package_file,{"binary"});
+ const bool hit=inputs.contains<NeutronPackage>(key);
+ const auto& package=inputs.get<NeutronPackage>(key,[&] {
+  return neutron_package_prefetch().take(key,[&]{return NeutronPackage::load(config.neutron_package_file,false);});
+ });
+ std::cout<<"[neutron-package-cache] "<<(hit?"hit":"miss")<<'\n';
  const auto nb=result.neutron_birth_records.size();if(!nb)return;
  Allocation memory{queue,{}};
  auto rates=memory.upload(package.macroscopic_rates);auto events=memory.upload(package.events);auto products=memory.upload(package.products);
@@ -296,7 +314,10 @@ void transport_neutrons_experimental(sycl::queue& queue,const TransportConfig& c
  // Event indices continue referring to the original bank; ordered records only select events.
  auto nodes=memory.upload(ordered);std::array<Span,12> fine{};
  for(unsigned i=0;i<package.macroscopic_rates.size();++i){auto r=package.macroscopic_rates[i];auto& s=fine[r.material*4+(r.subtype-111)/10];if(!s.count)s.start=i;++s.count;}
- auto stop_tables=neutron_stop_prefetch().take(neutron_stop_key(config),[&]{return load_neutron_stop_tables(config);});
+ const auto stop_key=neutron_stop_key(config);
+ const auto& stop_tables=inputs.get<NeutronStopTables>(stop_key,[&] {
+  return neutron_stop_prefetch().take(stop_key,[&]{return load_neutron_stop_tables(config);});
+ });
  auto& stop_records=stop_tables.records;auto& stop_points=stop_tables.points;
  const unsigned original_stops=stop_tables.original;
  // Index candidate chains in original order: older tables retain priority,
@@ -317,7 +338,9 @@ void transport_neutrons_experimental(sycl::queue& queue,const TransportConfig& c
  UrbanMcsView urban{};int urban_water=-1;
  const bool use_water_urban=config.neutron_water_recoil_urban;
  if(use_water_urban){
-  auto package=UrbanMcsPackage::load(config.urban_mcs_package_file,config.urban_mcs_package_sha256);
+  const auto& package=inputs.get<UrbanMcsPackage>(input_cache_key(config.urban_mcs_package_file,config.urban_mcs_package_sha256),[&] {
+   return UrbanMcsPackage::load(config.urban_mcs_package_file,config.urban_mcs_package_sha256);
+  });
   urban_water=package.view().material(-1,float(config.water_density_g_per_cm3));
   if(urban_water<0)throw std::runtime_error("Neutron recoil Urban package lacks water");
   urban={memory.upload(package.materials),memory.upload(package.species),memory.upload(package.records),

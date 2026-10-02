@@ -887,7 +887,8 @@ void TransportConfig::validate() const {
     if(material_electron_execution_mode!="inline" && material_electron_execution_mode!="queue")
         throw std::invalid_argument("material_electron_execution_mode must be inline or queue");
     if(material_electron_queue_budget_MiB<1 || material_electron_queue_budget_MiB>4096 ||
-       material_electron_queue_chunk<1 || material_electron_queue_chunk>65536 ||
+       material_electron_queue_chunk<1 ||
+       material_electron_queue_chunk>(material_electron_group_size==32 ? 262144U : 65536U) ||
        material_electron_queue_lanes<1 || material_electron_queue_lanes>65536 ||
        material_electron_group_size<1 || material_electron_group_size>32 ||
        (material_electron_group_size & (material_electron_group_size-1)))
@@ -895,9 +896,11 @@ void TransportConfig::validate() const {
     if(material_electron_group_size>1 && material_electron_execution_mode!="queue")
         throw std::invalid_argument("Electron grouping requires queue execution");
     if(material_electron_response_cache_policy!="strict" && material_electron_response_cache_policy!="tiered" &&
-       material_electron_response_cache_policy!="tiered_indices")
-        throw std::invalid_argument("Material response cache policy must be strict, tiered or tiered_indices");
-    if((material_electron_response_cache_policy=="tiered" || material_electron_response_cache_policy=="tiered_indices") &&
+       material_electron_response_cache_policy!="tiered_indices" && material_electron_response_cache_policy!="tiered_small_first" &&
+       material_electron_response_cache_policy!="tiered_decoded" && material_electron_response_cache_policy!="tiered_small_decoded")
+        throw std::invalid_argument("Material response cache policy must be strict, tiered, tiered_indices tiered_small_first, tiered_decoded or tiered_small_decoded");
+    if((material_electron_response_cache_policy=="tiered" || material_electron_response_cache_policy=="tiered_indices" || material_electron_response_cache_policy=="tiered_small_first" ||
+        material_electron_response_cache_policy=="tiered_decoded" || material_electron_response_cache_policy=="tiered_small_decoded") &&
        (material_electron_response_index_file.empty() || material_electron_response_memory_mode!="host_mapped" ||
         material_electron_response_hot_device_budget_MiB<64))
         throw std::invalid_argument("Tiered material response requires a bank, host_mapped mode and hot budget >=64 MiB");
@@ -1453,10 +1456,17 @@ void TransportConfig::validate() const {
     if (spots_geometry_mode != "topas" && spots_geometry_mode != "beam_plus_z" &&
         spots_geometry_mode != "tps_90" &&
         spots_geometry_mode != "tps_gantry_y" &&
-        spots_geometry_mode != "minibeam_topas_y") {
+        spots_geometry_mode != "minibeam_topas_y" &&
+        spots_geometry_mode != "minibeam_pbs_y") {
         throw std::invalid_argument(
             "spots_geometry_mode must be topas, beam_plus_z, tps_90, "
-            "tps_gantry_y, or minibeam_topas_y");
+            "tps_gantry_y, minibeam_topas_y, or minibeam_pbs_y");
+    }
+    if (spots_geometry_mode == "minibeam_pbs_y" &&
+        (!enable_minibeam || enable_flat_source || device == "serial" ||
+         uses_fixed_patient_coordinates())) {
+        throw std::invalid_argument(
+            "minibeam_pbs_y requires SYCL minibeam emittance in canonical coordinates");
     }
     if (!minibeam_water_entry_secondary_replay_file.empty() &&
         !enable_minibeam) {
@@ -2816,7 +2826,7 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     if(const auto it=values.find("material_electron_queue_chunk");it!=values.end()) {
         std::size_t used=0;const auto value=std::stoull(it->second,&used);
-        if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value>65536)
+        if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value>262144)
             throw std::invalid_argument("Invalid material_electron_queue_chunk");
         config.material_electron_queue_chunk=static_cast<std::uint32_t>(value);
     }

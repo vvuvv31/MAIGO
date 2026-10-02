@@ -1,3 +1,4 @@
+#include "carbon/batch_run.hpp"
 #include "carbon/runtime_timing.hpp"
 #include "carbon/cli.hpp"
 #include "carbon/cross_section.hpp"
@@ -43,7 +44,8 @@ namespace {
 // transport work; it must not create directories or open files.
 std::vector<std::filesystem::path> shard_output_paths(
     const carbon::TransportConfig& config,
-    const std::filesystem::path& config_path) {
+    const std::filesystem::path& config_path,
+    const std::filesystem::path& batch_directory = {}) {
     std::vector<std::filesystem::path> paths;
     const auto add = [&](const std::filesystem::path& p) {
         if (!p.empty()) paths.push_back(p);
@@ -73,7 +75,10 @@ std::vector<std::filesystem::path> shard_output_paths(
     if (config.enable_voxel_scoring) add(config.voxel_dose_Gy_output_file);
     if (config.enable_voxel_scoring) add(config.voxel_dose_mhd_output_file);
     add(config.primary_voxel_fluence_mhd_output_file);
-    if (config.validation_scorers()) {
+    if (!batch_directory.empty()) {
+        paths.push_back(batch_directory / "quality_report.json");
+        paths.push_back(batch_directory / "energy_ledger.json");
+    } else if (config.validation_scorers()) {
         const auto dir = config.validation_output_directory.empty()
                              ? std::filesystem::path{"benchmark/scorer/results"}
                              : config.validation_output_directory;
@@ -257,19 +262,12 @@ int main(int argc, char* argv[]) {
         // Resolve and validate every shard before any transport work. Each
         // shard gets its own CLI state (histories_overridden is set by
         // apply_cli_overrides and must not leak between shards).
-        struct ResolvedShard {
-            std::filesystem::path config_path;
-            carbon::TransportConfig config;
-            bool histories_overridden{false};
-            bool plan_only{false};
-            bool sequential_spots{false};
-        };
-        std::vector<ResolvedShard> shards;
+        std::vector<carbon::RunShard> shards;
         shards.reserve(plan_config_paths.size());
         for (const auto& path : plan_config_paths) {
             carbon::CliState shard_cli = cli;
             shard_cli.histories_overridden = false;
-            ResolvedShard shard;
+            carbon::RunShard shard;
             shard.config_path = path;
             shard.config = carbon::runtime_call(
                 "config_load", [&] { return carbon::load_config(path); });
@@ -279,6 +277,15 @@ int main(int argc, char* argv[]) {
             shard.plan_only = shard_cli.plan_only;
             shard.sequential_spots = shard_cli.sequential_spots;
             shards.push_back(std::move(shard));
+        }
+        carbon::ImmutableInputCache session_inputs;
+        const bool repeated = cli.batch_count || cli.histories_per_batch || !cli.batch_output.empty();
+        if (repeated) {
+            if (shards.size()!=1) throw std::invalid_argument("Repeated batches need one base config");
+            shards=carbon::make_repeated_batches(shards.front(),cli,session_inputs);
+            std::cout<<"[repeat-batches] count="<<shards.size()<<" histories_per_batch="
+                     <<cli.histories_per_batch<<" total_histories="
+                     <<cli.histories_per_batch*cli.batch_count<<" output="<<cli.batch_output<<'\n';
         }
         // One manifest = one device selection. Reusing the first shard's queue
         // for a different requested device would silently ignore the request.
@@ -338,7 +345,7 @@ int main(int argc, char* argv[]) {
 
         // Reject cross-shard output collisions after resolving each shard's
         // actual output paths. No silent overwrite or automatic renaming.
-        if (shards.size() > 1) {
+        if (shards.size() > 1 || repeated) {
             if (!cli.canonical_config_output_path.empty()) {
                 throw std::invalid_argument(
                     "--write-canonical-config would be overwritten by every shard; "
@@ -346,8 +353,9 @@ int main(int argc, char* argv[]) {
             }
             std::map<std::string, std::size_t> output_owner;
             for (std::size_t i = 0; i < shards.size(); ++i) {
-                for (const auto& output : shard_output_paths(shards[i].config,
-                                                             shards[i].config_path)) {
+                auto outputs=shard_output_paths(shards[i].config,shards[i].config_path,
+                                                shards[i].output_directory);
+                for (const auto& output : outputs) {
                     const auto key = output.lexically_normal().string();
                     const auto [it, inserted] = output_owner.emplace(key, i);
                     if (!inserted) {
@@ -371,6 +379,7 @@ int main(int argc, char* argv[]) {
                       << "\" ok\n";
             return EXIT_SUCCESS;
         }
+        if(repeated && !shards.front().plan_only) carbon::write_batch_manifest(shards,cli);
         // One context per process: validated read-only physics data is cached
         // across shards. Per-shard dose, queues, counters and quality reports
         // are recreated inside the loop.
@@ -432,19 +441,23 @@ int main(int argc, char* argv[]) {
                           ? " (configured)\n"
                           : " (particle default; legacy C12 preserved)\n");
 
-        const auto stopping_power = carbon::StoppingPowerTable::from_csv(config.primary_stopping_power_file);
+        const auto& stopping_power = session_inputs.get<carbon::StoppingPowerTable>(
+            carbon::input_cache_key(config.primary_stopping_power_file),[&]{
+                return carbon::StoppingPowerTable::from_csv(config.primary_stopping_power_file);});
         std::optional<carbon::StoppingPowerTable> upstream_air_stopping_power;
         if (config.spots_enable_upstream_air_energy_loss) {
-            upstream_air_stopping_power = carbon::StoppingPowerTable::from_csv(
-                config.spots_upstream_air_stopping_power_file);
+            upstream_air_stopping_power = session_inputs.get<carbon::StoppingPowerTable>(
+                carbon::input_cache_key(config.spots_upstream_air_stopping_power_file),[&]{
+                    return carbon::StoppingPowerTable::from_csv(config.spots_upstream_air_stopping_power_file);});
         }
         const auto* upstream_air_stopping_power_ptr =
             upstream_air_stopping_power ? &*upstream_air_stopping_power : nullptr;
         carbon::CrossSectionTable cross_section;
         if (config.enable_inelastic) {
             if (!config.primary_inelastic_cross_section_file.empty()) {
-                cross_section = carbon::CrossSectionTable::from_csv(
-                    config.primary_inelastic_cross_section_file);
+                cross_section = session_inputs.get<carbon::CrossSectionTable>(
+                    carbon::input_cache_key(config.primary_inelastic_cross_section_file),[&]{
+                        return carbon::CrossSectionTable::from_csv(config.primary_inelastic_cross_section_file);});
             }
         }
         if (cross_section.energies().empty()) {
@@ -468,8 +481,7 @@ int main(int argc, char* argv[]) {
         }
 
 #ifdef CARBON_HAS_SYCL
-        if (sycl_context == nullptr && config.device != "serial" &&
-            (!spots_files.empty() || config.enable_tps_source || config.material_electron_retain_bank)) {
+        if (sycl_context == nullptr && config.device != "serial") {
             sycl_context_storage =
                 std::make_unique<carbon::SyclTransportContext>(config.device);
             sycl_context = sycl_context_storage.get();
@@ -480,7 +492,13 @@ int main(int argc, char* argv[]) {
         const auto base_seed = config.random_seed;
         std::cout << "Random seed: " << base_seed << '\n';
 
-        if (config.enable_tps_source) {
+        if (repeated) {
+            std::cout<<"[batch-source] histories="<<config.number_of_histories
+                     <<" spots="<<config.primary_spot_batch.size()<<" seed="<<config.random_seed<<'\n';
+            if(plan_only) continue;
+            runtime_inputs.finish();
+            result=carbon::run_transport(config,stopping_power,cross_section,sycl_context);
+        } else if (config.enable_tps_source) {
             if (config.device == "serial") {
                 throw std::invalid_argument(
                     "tpsSource=true requires a SYCL device (cpu/gpu/cuda/etc.)");
@@ -776,7 +794,7 @@ int main(int argc, char* argv[]) {
 
         runtime_inputs.finish();
         carbon::RuntimeScope runtime_outputs("quality_and_output");
-        const auto quality_directory = config.validation_scorers()
+        const auto quality_directory = repeated ? shards[plan_index].output_directory : config.validation_scorers()
                                            ? (config.validation_output_directory.empty()
                                                   ? std::filesystem::path{
                                                         "benchmark/scorer/results"}

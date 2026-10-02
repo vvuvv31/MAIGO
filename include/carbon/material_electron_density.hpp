@@ -1,5 +1,6 @@
 #pragma once
 #include "carbon/material_electron_response.hpp"
+#include "carbon/material_electron_lookup.hpp"
 
 namespace carbon {
 struct MaterialElectronDensityBracket {
@@ -9,11 +10,30 @@ struct MaterialElectronDensityBracket {
 // Candidate law: mix measured conditional path distributions, without scaling
 // coordinates, KE or yields. It is not a claim of exact microscopic physics.
 inline MaterialElectronDensityBracket material_electron_density_bracket(
-    int section,double density,const MaterialElectronResponseView* tables,std::size_t count) {
+    int section,double density,const MaterialElectronResponseView* tables,std::size_t count,
+    MaterialElectronLookupView lookup={}) {
     MaterialElectronDensityBracket out;
     if(!tables || !std::isfinite(density) || density<=0)return out;
     std::size_t low=count,high=count;
-    for(std::size_t i=0;i<count;++i) {
+    if(lookup.sections) {
+        // An enabled lookup belongs to this exact retained bank. Missing
+        // sections/densities remain coverage failures, never substitutions.
+        if(!lookup.entries || lookup.table_count!=count)return out;
+        const auto* range=lookup.find(section);
+        if(!range)return out;
+        double low_density=0,high_density=0;
+        for(auto j=range->begin;j<range->end;++j) {
+            const auto entry=lookup.entries[j];
+            const double r=entry.density;
+            if(!std::isfinite(r) || r<=0)return out;
+            if(r<=density && (low==count || r>low_density)) {
+                low=entry.table;low_density=r;
+            }
+            if(r>=density && (high==count || r<high_density)) {
+                high=entry.table;high_density=r;
+            }
+        }
+    } else for(std::size_t i=0;i<count;++i) {
         if(tables[i].section!=section)continue;
         const double r=tables[i].density_g_cm3;
         if(!std::isfinite(r) || r<=0)return out;
@@ -30,9 +50,10 @@ inline MaterialElectronDensityBracket material_electron_density_bracket(
 struct MaterialElectronBirthDraw {ElectronBirthDraw birth{};std::size_t table{};};
 inline MaterialElectronBirthDraw sample_material_electron_birth(
     int section,double density,double energy,double mix_u,double birth_u,
-    const MaterialElectronResponseView* tables,std::size_t count) {
+    const MaterialElectronResponseView* tables,std::size_t count,
+    MaterialElectronLookupView lookup={}) {
     MaterialElectronBirthDraw out;
-    const auto b=material_electron_density_bracket(section,density,tables,count);
+    const auto b=material_electron_density_bracket(section,density,tables,count,lookup);
     if(!b.valid || !std::isfinite(mix_u) || mix_u<0 || mix_u>=1)return out;
     auto draw=[&](std::size_t i) {
         const auto t=tables[i];return sample_electron_birth(energy,birth_u,t.birth_channels,
