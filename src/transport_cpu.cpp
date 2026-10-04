@@ -7,10 +7,7 @@
 
 namespace carbon {
 
-double TransportResult::topas_compat_discarded_kinetic_total_MeV() const noexcept {
-    return std::accumulate(cinel02_topas_compat_discarded_kinetic_MeV.begin(),
-                           cinel02_topas_compat_discarded_kinetic_MeV.end(), 0.0);
-}
+
 
 double TransportResult::physical_relative_energy_balance_error() const noexcept {
     if (initial_energy_MeV == 0.0) {
@@ -32,8 +29,7 @@ double TransportResult::relative_energy_balance_error() const noexcept {
                     electron_variance_reduction_weight_gain_MeV - total_deposited_energy_MeV -
                     escaped_energy_MeV - beamline_removed_energy_MeV -
                     untracked_nuclear_energy_MeV -
-                    primary_other_terminal_kinetic_MeV - material_electron_untracked_MeV -
-                    topas_compat_discarded_kinetic_total_MeV()) /
+                    primary_other_terminal_kinetic_MeV - material_electron_untracked_MeV) /
            initial_energy_MeV;
 }
 

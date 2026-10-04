@@ -6,17 +6,17 @@
 struct PreparedPiece {float low{},high{},value[4]{};unsigned polynomial{};};
 
 int main(int argc,char** argv){try{
-    if(argc!=3)throw std::runtime_error("usage: charged index SHA");
+    if(argc!=2)throw std::runtime_error("usage: charged index");
     namespace f=carbon::electron_fp32;namespace p=carbon::electron_rate_polynomial;
     const std::filesystem::path path=argv[1];
-    if(carbon::compute_file_sha256_hex(path)!=argv[2])throw std::runtime_error("index SHA");
+
     std::ifstream in(path);std::string magic;unsigned nodes;in>>magic>>nodes;
-    if(magic!="MAIECB01")throw std::runtime_error("index magic");
+    if(magic!="MAIECB02")throw std::runtime_error("index magic");
     std::uint64_t pieces=0,polynomial_pieces=0,points=0,support_changes=0,significant_support_changes=0,invalid=0;
     double max_absolute_to_majorant=0,max_relative=0,max_reference_error=0,max_candidate_error=0,max_bound_ratio=0;
     for(unsigned node=0;node<nodes;++node){
-        int section;double density;std::string file,pin;in>>section>>density>>file>>pin;
-        carbon::ChargedResponseData data(path.parent_path()/file,pin);
+        int section;double density;std::string file;in>>section>>density>>file;
+        carbon::ChargedResponseData data(path.parent_path()/file);
         if(!in||section!=data.section||density!=data.density)throw std::runtime_error("node metadata");
         for(unsigned process=0;process<2;++process){
             double bound=0;for(const auto& r:data.rate[process])for(double y:r.value)bound=std::max(bound,6*std::abs(y));

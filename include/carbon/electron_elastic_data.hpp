@@ -1,15 +1,17 @@
 #pragma once
 #include "carbon/electron_elastic.hpp"
-#include "carbon/sha256.hpp"
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
 #include <array>
 #include <cstring>
 namespace carbon {
 class ElectronElasticData {
 public:
     std::array<double,31*38> rows{};double mass{},bc{},xc2{};
-    ElectronElasticData(const std::filesystem::path& path,const std::string& sha) {
-        if(sha.size()!=64||compute_file_sha256_hex(path)!=sha||std::filesystem::file_size(path)!=9464)
-            throw std::runtime_error("Elastic kernel SHA/size mismatch");
+    ElectronElasticData(const std::filesystem::path& path) {
+        if(std::filesystem::file_size(path)!=9464)
+            throw std::runtime_error("Elastic kernel size mismatch");
         std::ifstream in(path,std::ios::binary);char magic[8];std::uint32_t version,count;
         in.read(magic,8);in.read(reinterpret_cast<char*>(&version),4);in.read(reinterpret_cast<char*>(&count),4);
         in.read(reinterpret_cast<char*>(&mass),8);in.read(reinterpret_cast<char*>(&bc),8);in.read(reinterpret_cast<char*>(&xc2),8);

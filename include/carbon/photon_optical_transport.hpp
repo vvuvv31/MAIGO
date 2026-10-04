@@ -1,4 +1,5 @@
 #pragma once
+#include "carbon/electron_material_registry.hpp"
 #include "carbon/electron_ct_boundary.hpp"
 #include <algorithm>
 
@@ -57,7 +58,7 @@ inline PhotonFlight transport_photon_optical_depth(const ElectronCtGeometry& g,
     for(std::uint64_t hop=0;hop<limit;++hop) {
         const auto index=(std::uint64_t(cell[2])*g.bins[1]+cell[1])*g.bins[0]+cell[0];
         out.section=g.section[index];out.density=g.density[index];
-        if(out.section>=25 || !std::isfinite(out.density) || out.density<=0)return out;
+        if(out.section>=kElectronMaterialCount || !std::isfinite(out.density) || out.density<=0)return out;
         const auto coefficient=rates(out.section,out.density,energy_MeV);
         if(!coefficient.valid) {out.status=PhotonFlightStatus::coverage_missing;return out;}
         if(!std::isfinite(coefficient.per_mm) || coefficient.per_mm<0)return out;

@@ -56,7 +56,7 @@ int main(int argc,char** argv) {
     base.config.random_seed=std::numeric_limits<std::uint64_t>::max();
     rejects([&]{make_repeated_batches(base,cli,inputs);});
     for (const auto path : {"config/proton_water_broadbeam.yaml", "config/carbon_water_broadbeam.yaml",
-                           "config/proton_ct_plan_fe.yaml", "config/carbon_ct_plan_fe_joint.yaml"}) {
+                           "config/proton_ct_broadbeam.yaml", "config/carbon_ct_broadbeam.yaml"}) {
         RunShard other;other.config_path=path;other.config=load_config(path);
         cli.batch_count=3;cli.histories_per_batch=7;
         const auto batches=make_repeated_batches(other,cli,inputs);

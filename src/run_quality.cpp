@@ -98,12 +98,12 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     if(config.em_model=="g4_material_joint_v1")
         report.approximations.push_back({"condensed_delta_partition_v1",
             "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition unless an explicit spatial response is enabled, configured combined mean-loss guard (default 1%); higher spectrum moments and patient BODY Gamma not validated",1.,0.});
-    if (config.minibeam_water_delta_response_model != "local") {
-        report.approximations.push_back({"minibeam_primary_electron_response",
-            "Primary EM loss is spatially partitioned using a source-pinned homogeneous-water "
-            "electron response; finite-library sampling, channel-averaged fractions and absorbing "
-            "slab boundaries remain approximations. Secondary-ion electron relocation, upstream "
-            "electron production and electron return from air are not included", 1., 0.});
+    if (config.enable_minibeam && !config.material_electron_charged_index_file.empty()) {
+        report.approximations.push_back({"minibeam_primary_electron_transport",
+            "Primary ionization loss is partitioned using projectile-specific electron births, "
+            "then transported with the shared FP32 charged/photon operators. Birth grouping and "
+            "channel-averaged yields remain approximations. Secondary-ion electron births and "
+            "upstream electron production are not included. Carbon minibeam dose acceptance is pending", 1., 0.});
     }
     if(config.em_primary_step_scale!=1.0)
         report.approximations.push_back({"em_primary_step_extension",
@@ -147,10 +147,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     if(config.fermi_eyges_gaussian_only)
         report.approximations.push_back({"gaussian_fermi_eyges_candidate",
             "Gaussian FE matches local angular/displacement second moments of the existing FE core+tail model; non-Gaussian tails and heterogeneous patient dose require independent validation",1.,0.});
-    if(config.ct_electron_joint_sample_probability != 1.0)
-        report.approximations.push_back({"joint_electron_packet_roulette",
-            "Research unbiased joint-response packet sampling; probability floored by nonlocal fraction to conserve nonnegative step dose; finite-statistics patient gamma requires validation",
-            config.ct_electron_joint_sample_probability,1.0});
     if(config.broadbeam_maximum_mean_loss_fraction != 0.01)
         report.approximations.push_back({"broadbeam_extended_mean_loss",
             "Research FE mean-loss cap relaxed; geometry faces, nuclear competition and sampled loss remain active; patient gamma requires validation",
@@ -173,18 +169,14 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         else if(config.broadbeam_electron_tracking)
             report.approximations.push_back({"broadbeam_empty_water_electron_selection",
                 "Low-density-plus-halo tracking is enabled, but uniform water exceeds the density threshold; no selected births, no electron bank loading, ionization remains local",config.broadbeam_electron_density_threshold,0.});
-        else if(config.ct_electron_joint_response_diagnostic_file.empty())
+        else
             report.approximations.push_back({"broadbeam_fast_local_electron_neutral_sink",
                 "Broad beam uses local ionization deposition and no neutron transport; nuclear neutral energy remains explicitly untransported. Field edges and tissue interfaces require dose validation",1.,0.});
-        else
-            report.approximations.push_back({"broadbeam_fast_joint_electron_neutral_sink",
-                "Broad beam uses the pinned C12 CT joint response for primary ionization; charged secondary electron losses remain local and nuclear neutral energy remains untransported. Patient accuracy is not validated",1.,0.});
     }
-    if(!config.material_electron_response_index_file.empty() || !config.material_electron_charged_index_file.empty()) {
+    if(!config.material_electron_charged_index_file.empty()) {
         // Research execution is explicitly requested; accuracy is still pending.
         // Lookup/geometry failures below remain fatal in every run mode.
         auto& scope_issues=config.run_mode==RunMode::research?report.approximations:report.failures;
-        if(config.material_electron_precision==4)
             scope_issues.push_back({"unvalidated_electron_fp32_transport","Independent electron birth/joint/charged/photon transport and CT geometry use FP32 with integer CDF sampling; precision-sensitive thresholds and local CT dose require separate validation",1.,0.});
         if(!config.material_electron_charged_index_file.empty())
             scope_issues.push_back({"unvalidated_independent_charged_response","Independent single-scattering/Urban/collision transport with native terminal rules, mass-response density interpolation and joint handoff; no legacy bank fallback. Full CT local-dose validation pending",1.,0.});
@@ -196,7 +188,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                 "Fresh proton birth-only bank; finite birth statistics and interface continuation need independent dose validation",1.,0.});
         if(!config.material_electron_joint_pilot_file.empty())
             scope_issues.push_back({"unvalidated_material_electron_joint_pilot","Experimental material joint operator (including optional density scaling); homogeneous screens do not certify CT dose accuracy",1.,0.});
-        if(config.material_electron_charged_index_file.empty())scope_issues.push_back({"unvalidated_material_electron_response","Research material response with finite birth/path bank and density interpolation; patient accuracy is not validated",1.,0.});
         if(config.enable_ct_grid && (config.enable_inelastic || config.enable_secondary_transport))
             report.approximations.push_back({"ct_nuclear_primary_electron_response_only",
                 "CT material electron response relocates primary-loop ionization loss only, before nuclear interactions; charged secondary electron losses remain local. This is a partial full-physics integration, not a complete electron transport model",1.,0.});
@@ -212,23 +203,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     if (config.unified_water_nuclear_transport)
         report.approximations.push_back({"water_topas_match_pending",
             "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",1.,0.});
-    if(!config.water_electron_response_diagnostic_file.empty()) {
-        report.failures.push_back({"unvalidated_water_electron_response","Independent water electron response pilot; finite-box photon remainder explicit, no production validation",1.,0.});
-        if(result.electron_joint_diagnostics.domain_misses || result.electron_joint_diagnostics.invalid_marches)
-            report.failures.push_back({"water_electron_lookup_or_geometry_failure","Water response lookup or ancestry failed",static_cast<double>(result.electron_joint_diagnostics.domain_misses+result.electron_joint_diagnostics.invalid_marches),0.});
-    }
-    if(!config.ct_electron_joint_response_diagnostic_file.empty()) {
-        report.failures.push_back({"unvalidated_electron_joint_response","Independent bulk response interface pilot; not patient/production validated",1.,0.});
-        if(result.electron_joint_diagnostics.domain_misses || result.electron_joint_diagnostics.invalid_marches)
-            report.failures.push_back({"electron_joint_lookup_or_geometry_failure","Joint response query or mass geometry failed",static_cast<double>(result.electron_joint_diagnostics.domain_misses+result.electron_joint_diagnostics.invalid_marches),0.});
-    }
-    if (!config.ct_schneider_delta_longitudinal_file.empty()) {
-        report.failures.push_back(
-            {"unvalidated_longitudinal_candidate",
-             "Diagnostic only: independent energy/density/interface validation is incomplete",
-             1.0, 0.0});
-    }
-
     // Keep the two closure equations explicit.  The physical residual omits
     // the intentional TOPAS compatibility sink; the accounting residual
     // includes it. No independent analytic-model residual bucket remains.
@@ -239,7 +213,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         result.untracked_nuclear_energy_MeV -
         result.material_electron_untracked_MeV;
     const auto accounting_raw_residual =
-        physical_raw_residual - result.topas_compat_discarded_kinetic_total_MeV();
+        physical_raw_residual;
     report.absolute_physical_energy_residual_MeV = std::abs(physical_raw_residual);
     report.physical_relative_energy_residual =
         result.physical_relative_energy_balance_error();
@@ -250,9 +224,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     // accounting closure.
     report.absolute_energy_residual_MeV = report.absolute_accounting_energy_residual_MeV;
     report.relative_energy_residual = report.accounting_relative_energy_residual;
-    report.topas_reference_energy_sink_active =
-        config.cinel02_topas_compatibility_mode &&
-        result.topas_compat_discarded_kinetic_total_MeV() > 0.0;
 
     const auto add_issue = [&](const QualityIssue& issue,
                                const bool production_failure) {
@@ -297,12 +268,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     add_overflow("neutral_queue_overflow", "neutral",
                  result.neutral_queue_overflow,
                  result.neutral_queue_overflow_energy_MeV);
-    add_overflow("electron_queue_overflow", "electron",
-                 result.electron_queue_overflow,
-                 result.electron_queue_overflow_energy_MeV);
-    add_overflow("electron_gamma_queue_overflow", "electron gamma",
-                 result.electron_gamma_queue_overflow,
-                 result.electron_gamma_queue_overflow_energy_MeV);
 
     {
         double voxel_sum_MeV = 0.0;
@@ -381,7 +346,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             result.escaped_energy_MeV,
             result.beamline_removed_energy_MeV,
             result.untracked_nuclear_energy_MeV,
-            result.topas_compat_discarded_kinetic_total_MeV(),
             result.generated_direct_secondary_energy_MeV,
             result.queued_secondary_energy_MeV,
             result.secondary_queue_overflow_energy_MeV,
@@ -404,16 +368,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             result.charged_from_neutral_energy_MeV,
             result.neutral_unsupported_product_energy_MeV,
             result.neutral_package_closure_residual_MeV,
-            result.queued_electron_energy_MeV,
-            result.electron_queue_overflow_energy_MeV,
-            result.electron_deposited_energy_MeV,
-            result.electron_escaped_energy_MeV,
-            result.electron_radiative_energy_MeV,
-            result.positron_annihilation_reserve_MeV,
-            result.electron_brems_gamma_energy_MeV,
-            result.positron_annihilation_gamma_energy_MeV,
-            result.electron_gamma_queue_overflow_energy_MeV,
-            result.electromagnetic_generation_residual_MeV,
             result.cascade_selection_energy_distance_sum_MeVu,
             result.cascade_selection_energy_distance_max_MeVu,
             result.elapsed_seconds,
@@ -486,12 +440,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         }
     }
 
-    if (report.topas_reference_energy_sink_active) {
-        add_issue({"topas_reference_energy_sink_active",
-                   "TOPAS compatibility mode discarded unsupported prompt-ion kinetic energy",
-                   result.topas_compat_discarded_kinetic_total_MeV(), 0.0},
-                  false);
-    }
+
 
 
 
@@ -508,8 +457,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         }
     }
 
-    if (std::isfinite(report.physical_relative_energy_residual) &&
-        !report.topas_reference_energy_sink_active) {
+    if (std::isfinite(report.physical_relative_energy_residual)) {
         if (report.physical_relative_energy_residual > config.quality_maximum_relative_energy_residual) {
             report.failures.push_back(
                 {"physical_energy_residual_exceeded",
@@ -787,8 +735,6 @@ void write_run_quality_report_json(const std::filesystem::path& path,
     write_json_number(output, report.absolute_energy_residual_MeV);
     output << ",\n  \"relative_energy_residual\": ";
     write_json_number(output, report.relative_energy_residual);
-    output << ",\n  \"topas_reference_energy_sink_active\": "
-           << (report.topas_reference_energy_sink_active ? "true" : "false");
     output
            << ",\n  \"queue_overflow_count\": " << report.queue_overflow_count
            << ",\n  \"queue_overflow_energy_MeV\": ";

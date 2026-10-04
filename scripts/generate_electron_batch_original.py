@@ -8,7 +8,7 @@ TARGET=ROOT/'include/carbon/electron_batch_original.hpp'
 
 def render():
     src=(ROOT/'include/carbon/electron_voxel_cache.hpp').read_text()
-    src=src[src.index('template<class Uniform,class Model>inline ChargedStep transport_step_face('):src.index('template<class Uniform,class Tally>')].strip()
+    src=src[src.index('template<class Uniform,class Model>inline ChargedStep transport_step_face('):src.index('template<class Uniform,class Tally,class Score=NoExpectedScore>')].strip()
     src=src.replace('transport_step_face(', 'original_prepared(',1)
     src=src.replace('const std::array<float,2>& hard_majorant,Uniform& uniform,', 'const std::array<float,2>& hard_majorant,const ChargedParameters& p,Uniform& uniform,',1)
     start=src.index('    #ifdef CARBON_ELECTRON_CERTIFIED_RATES')

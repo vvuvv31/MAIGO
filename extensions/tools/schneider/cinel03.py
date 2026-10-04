@@ -9,7 +9,6 @@ material section is NOT part of the event key.
 from __future__ import annotations
 
 import binascii
-import hashlib
 import json
 import math
 import struct

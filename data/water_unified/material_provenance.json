@@ -2,7 +2,6 @@
   "schema_version": 1,
   "status": "MATERIAL_PROPERTIES_ONLY_NOT_TRANSPORT_VALIDATED",
   "material_file": "data/water_unified/g4_water_material.json",
-  "material_sha256": "60be17929880fe18f1758edc02350b3fa7140b817ab0d21cb75bd87dbc891f31",
   "file_size_bytes": 389,
   "geant4_install": "/software/geant4-11.3.2",
   "topas_geant4_binding": "Geant4_DIR in pinned TOPAS CMakeCache.txt",

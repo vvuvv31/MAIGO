@@ -43,8 +43,8 @@ G4bool ElectronAlongStepDump::ProcessHits(G4Step* source,G4TouchableHistory*) {
     auto* electron=G4Electron::Electron();G4VEnergyLossProcess* process=nullptr;const auto* list=electron->GetProcessManager()->GetProcessList();
     for(std::size_t i=0;i<list->size();++i)if((*list)[i]->GetProcessName()=="eIoni")process=dynamic_cast<G4VEnergyLossProcess*>((*list)[i]);
     Require(process,"native ionization missing");
-    std::ifstream request("charged_operator.txt");std::string path,pin;unsigned samples;request>>path>>pin>>samples;Require(bool(request)&&samples>0,"operator request");
-    carbon::ChargedResponseData data(path,pin);const auto view=data.view();
+    std::ifstream request("charged_operator.txt");std::string path;unsigned samples;request>>path>>samples;Require(bool(request)&&samples>0,"operator request");
+    carbon::ChargedResponseData data(path);const auto view=data.view();
     std::ofstream meta("alongstep_options.txt");meta<<std::setprecision(17)<<"native_density="<<material->GetDensity()/(g/cm3)<<"\noperator_density="<<view.density<<"\nlowest_electron_energy="<<G4EmParameters::Instance()->LowestElectronEnergy()<<"\n";meta.close();
     Require(float(view.density)==float(material->GetDensity()/(g/cm3)),"material density identity");
     std::ofstream output("alongstep_checks.csv");output<<std::setprecision(17)<<"cell,energy,length,samples,native_m1,native_m2,portable_m1,portable_m2,native_stops,portable_stops,max_closure\n";

@@ -1,3 +1,4 @@
+#include "ElectronExtractionRange.hh"
 #include "PhotonResponseNtuple.hh"
 #include "TsParameterManager.hh"
 #include "G4Step.hh"
@@ -34,12 +35,12 @@ void PhotonResponseNtuple::DumpRates(const G4Step* step) {
     const auto* material=step->GetPreStepPoint()->GetMaterial();
     const auto* particle=step->GetTrack()->GetDefinition();
     std::set<double> energies;
-    for(int i=0;i<=4096;++i)energies.insert(1e-5*std::pow(.65/1e-5,double(i)/4096));
+    for(int i=0;i<=4096;++i)energies.insert(1e-5*std::pow(ElectronExtractionMaximumMeV()/1e-5,double(i)/4096));
     for(const auto* el:*material->GetElementVector()) {
         const int z=int(el->GetZ());
         for(int i=0;i<G4AtomicShells::GetNumberOfShells(z);++i){
             const double e=G4AtomicShells::GetBindingEnergy(z,i)/MeV;
-            for(double factor:{1-1e-6,1.,1+1e-6})if(e*factor>=1e-5&&e*factor<=.65)energies.insert(e*factor);
+            for(double factor:{1-1e-6,1.,1+1e-6})if(e*factor>=1e-5&&e*factor<=ElectronExtractionMaximumMeV())energies.insert(e*factor);
         }
     }
     G4EmCalculator calculator;

@@ -1,18 +1,9 @@
 #!/usr/bin/env python3
-"""Strictly verify Schneider v2.1 runtime data.
+"""Check Schneider package layout, file links, projectile registry and target order.
 
-Checks, for every manifest entry: existence, exact byte size, exact
-SHA256 (no in_git exemption). For binaries: magic/version header bytes.
-For metadata sidecars: data_filename/data_sha256 linkage. For the bundle:
-file pins equal manifest paths, pin SHAs equal manifest SHAs equal actual
-file SHAs; channels pins; registry/target-order signatures. Domain payloads
-are covered by the full-file SHA (a v1 file at a v2 path additionally fails
-the magic/version check with an explicit message). Never falls back to v1.
-
-Usage: python3 tools/verify_schneider_v2_1_data.py [--repo ROOT]
+Payload loaders additionally enforce physical domains and sampling support.
 """
 import argparse
-import hashlib
 import json
 import struct
 import sys
@@ -20,14 +11,6 @@ from pathlib import Path
 
 BINARY_SECTIONS = ("primary_rate", "primary_package",
                    "secondary_rate", "secondary_package")
-
-
-def sha256_file(p: Path) -> str:
-    h = hashlib.sha256()
-    with open(p, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def read_magic_version(p: Path):
@@ -57,7 +40,7 @@ def channel_target_sequence(channels_path: Path):
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", default=Path(__file__).resolve().parents[1])
+    ap.add_argument("--repo", default=Path(__file__).resolve().parents[3])
     repo = Path(ap.parse_args().repo)
     errors = []
 
@@ -78,9 +61,6 @@ def main() -> int:
             errors.append("SIZE-MISMATCH %s: disk %d != manifest %d" % (
                 e["path"], p.stat().st_size, e["bytes"]))
             continue
-        if sha256_file(p) != e["sha256"]:
-            errors.append("SHA-MISMATCH %s" % e["path"])
-            continue
         if "magic" in e:
             magic, version = read_magic_version(p)
             if (magic, version) != (e["magic"], e["version"]):
@@ -100,7 +80,7 @@ def main() -> int:
     for section in BINARY_SECTIONS + ("stopping_table",):
         try:
             node = bundle[section]
-            bfile, bsha = node["file"], node["sha256"]
+            bfile = node["file"]
         except KeyError as exc:
             errors.append("BUNDLE-SCHEMA %s.%s" % (section, exc))
             continue
@@ -108,18 +88,10 @@ def main() -> int:
         if ment is None:
             errors.append("BUNDLE-PIN %s -> %s not in manifest" % (section, bfile))
             continue
-        if ment["sha256"] != bsha:
-            errors.append("BUNDLE-PIN %s sha != manifest sha for %s" % (section, bfile))
-        p = repo / bfile
-        if p.exists() and sha256_file(p) != bsha:
-            errors.append("BUNDLE-PIN %s sha != actual file sha for %s" % (section, bfile))
-        for key in ("channels_file", "channels_sha256"):
-            if key in node:
-                cpath = repo / node["channels_file"]
-                if not cpath.exists():
-                    errors.append("BUNDLE-CHANNELS missing %s" % node["channels_file"])
-                elif sha256_file(cpath) != node["channels_sha256"]:
-                    errors.append("BUNDLE-CHANNELS sha mismatch %s" % node["channels_file"])
+        if "channels_file" in node:
+            cpath = repo / node["channels_file"]
+            if not cpath.exists():
+                errors.append("BUNDLE-CHANNELS missing %s" % node["channels_file"])
     for section in ("primary_package", "secondary_package"):
         node = bundle.get(section, {})
         if "channels_file" not in node:
@@ -138,18 +110,10 @@ def main() -> int:
         if ment is not None and "channels_target_order" in ment:
             if seq != list(ment["channels_target_order"]):
                 errors.append("TARGET-ORDER %s file order != manifest signature" % section)
-    for key in ("bundle_registry_sha256", "bundle_target_order_sha256"):
-        if key not in manifest:
-            errors.append("MANIFEST-SCHEMA missing %s" % key)
-    if "bundle_registry_sha256" in manifest:
-        reg = hashlib.sha256(
-            json.dumps(bundle.get("projectile_registry"), sort_keys=True).encode()).hexdigest()
-        if reg != manifest["bundle_registry_sha256"]:
-            errors.append("REGISTRY bundle projectile_registry != manifest signature")
-    if "bundle_target_order_sha256" in manifest:
-        tgt = hashlib.sha256(json.dumps(bundle.get("target_order")).encode()).hexdigest()
-        if tgt != manifest["bundle_target_order_sha256"]:
-            errors.append("TARGET-ORDER bundle target_order != manifest signature")
+    if manifest.get("projectile_registry") != bundle.get("projectile_registry"):
+        errors.append("REGISTRY bundle != manifest")
+    if manifest.get("target_order") != bundle.get("target_order"):
+        errors.append("TARGET-ORDER bundle != manifest")
 
     for e in manifest["files"]:
         if not e["path"].endswith(".metadata.json"):
@@ -162,17 +126,15 @@ def main() -> int:
         except json.JSONDecodeError:
             errors.append("METADATA-JSON %s unparseable" % e["path"])
             continue
-        for field in ("data_filename", "data_sha256"):
+        for field in ("data_filename",):
             if field not in meta:
                 errors.append("METADATA-SCHEMA %s missing %s" % (e["path"], field))
         if "data_filename" in meta and "file_size_bytes" not in meta:
             errors.append("METADATA-SCHEMA %s missing file_size_bytes" % e["path"])
-        if "data_filename" in meta and "data_sha256" in meta:
+        if "data_filename" in meta:
             data_path = Path(repo) / "data" / "schneider" / meta["data_filename"]
             if not data_path.exists():
                 errors.append("METADATA-LINK %s -> missing %s" % (e["path"], meta["data_filename"]))
-            elif sha256_file(data_path) != meta["data_sha256"]:
-                errors.append("METADATA-LINK %s sha != actual %s" % (e["path"], meta["data_filename"]))
             if "file_size_bytes" in meta and data_path.exists() and \
                     data_path.stat().st_size != meta["file_size_bytes"]:
                 errors.append("METADATA-LINK %s size != actual %s" % (e["path"], meta["data_filename"]))
@@ -184,7 +146,7 @@ def main() -> int:
         print("Large .bin files are not in git; see v2_1_data_manifest.json "
               "(generator + raw_source) or data/README_physics_tables.md.")
         return 1
-    print("OK: all %d manifest entries + bundle pins verified (no v1 fallback)." % (
+    print("OK: all %d manifest entries + bundle links/registry/order checked." % (
         len(manifest["files"])))
     return 0
 

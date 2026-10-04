@@ -1,5 +1,4 @@
 #include "carbon/unified_em_package.hpp"
-#include "carbon/sha256.hpp"
 #include <bit>
 #include <cmath>
 #include <cstring>
@@ -61,16 +60,8 @@ UnifiedEmPackage parse_unified_em(const std::filesystem::path& path) {
 }
 } // namespace
 
-UnifiedEmPackage UnifiedEmPackage::load(const std::filesystem::path& path,const std::string& sha) {
+UnifiedEmPackage UnifiedEmPackage::load(const std::filesystem::path& path) {
     if(std::endian::native!=std::endian::little)throw std::runtime_error("EMJOINT1 requires little endian");
-    if(sha.size()!=64)throw std::runtime_error("Unified EM SHA256 mismatch");
-    // Parse while the pinned digest may still be computing on a prefetch
-    // thread. The pin is enforced before the package is returned, and a
-    // mismatch is reported in preference to any parse error.
-    const auto verify=[&]{if(!file_sha256_matches(path,sha))throw std::runtime_error("Unified EM SHA256 mismatch");};
-    UnifiedEmPackage p;
-    try{p=parse_unified_em(path);}catch(...){verify();throw;}
-    verify();
-    return p;
+    return parse_unified_em(path);
 }
 } // namespace carbon

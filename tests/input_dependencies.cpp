@@ -22,6 +22,22 @@ int main() {
     write(dir/"bank.bin","changed bank");check(get()==3);
     fs::remove(dir/"bank.bin");rejected(get);
     write(dir/"index.json",R"({"binary":"../outside.bin"})");rejected(key);
+    write(dir/"operator.bin","operator");
+    write(dir/"electrons.txt","MAIECB02 1\n8 1.0 operator.bin\n");
+    auto electron_key=[&]{return electron_bank_input_key(dir/"electrons.txt","MAIECB02");};
+    const auto original_electrons=electron_key();
+    // Same-sized payload replacement must also invalidate the resident bank.
+    const auto old_time=fs::last_write_time(dir/"operator.bin");
+    write(dir/"operator.bin","modified");
+    fs::last_write_time(dir/"operator.bin",old_time+std::chrono::seconds(1));
+    check(electron_key()!=original_electrons);
+    fs::remove(dir/"operator.bin");rejected(electron_key);
+    write(dir/"electrons.txt","MAIECB02 1\n8 1.0 ../outside.bin\n");rejected(electron_key);
+    write(dir/"electrons.txt","MAIECB02 1\n8 -1.0 operator.bin\n");rejected(electron_key);
+    write(dir/"electrons.txt","MAIECB02 1\n");rejected(electron_key);
+    write(dir/"operator.bin","operator");
+    write(dir/"electrons.txt","MAIECB02 1\n8 1.0 operator.bin\nextra\n");rejected(electron_key);
+    write(dir/"electrons.txt","MAIPHB02 1\n8 1.0 operator.bin\n");rejected(electron_key);
     fs::create_directory(dir/"series");write(dir/"series/a.dcm","first");
     auto ct=[&]{return ct_input_key(dir/"series",{},"isocenter");};
     const auto one=ct();write(dir/"series/b.dcm","second");const auto two=ct();check(one!=two);

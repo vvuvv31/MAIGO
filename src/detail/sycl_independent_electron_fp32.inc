@@ -94,7 +94,7 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
             packet.weight_MeV=float(task.weight);packet.material_table_index=task.table;
             if(float_birth.nodes&&task.birth.source<float_birth.count){
                 const auto node=float_birth.nodes[task.birth.source];
-                const auto sample=f::sample_independent_electron_birth(node,float(task.birth.energy),f::Draw{task.birth.row});
+                const auto sample=f::sample_independent_electron_birth(node,float(task.birth.energy),f::Draw{task.birth.cdf_bits});
                 const auto parent=f::joint_math::unit({task.direction[0],task.direction[1],task.direction[2]});
                 const auto direction=f::independent_electron_direction(parent,sample.cosine,float(uniform()));
                 packet.cursor.position={f::Coordinate(task.position[0]),f::Coordinate(task.position[1]),f::Coordinate(task.position[2])};
@@ -221,17 +221,8 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
             const auto first=sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
                 sycl::access::address_space::global_space>(material_untracked_device[2]).fetch_add(1);
             if(first==0){
-                // Widen only for the shared host diagnostic record; no reference
-                // transport or FP64 geometric calculation runs on this path.
-                auto record=[](const f::ElectronEnergyPacket& x){ElectronEnergyPacket y;
-                    y.status=x.status;y.gap=x.gap;y.weight_MeV=x.weight_MeV;y.advances=x.advances;
-                    y.cursor.valid=x.cursor.valid;y.cursor.row=x.cursor.row;y.cursor.energy_MeV=x.cursor.energy_MeV;
-                    y.cursor.section=x.cursor.section;y.cursor.density_g_cm3=x.cursor.density_g_cm3;
-                    y.cursor.physical_density_g_cm3=x.cursor.physical_density_g_cm3;y.cursor.pdg=x.cursor.pdg;
-                    for(unsigned k=0;k<3;++k){y.cursor.position[k]=x.cursor.position[k];y.cursor.direction[k]=x.cursor.direction[k];y.deposit_position[k]=x.deposit_position[k];}
-                    return y;};
                 MaterialPacketFailure diagnostic;diagnostic.history=task.history;diagnostic.step=task.step;
-                diagnostic.rng=previous_rng;diagnostic.before=record(previous);diagnostic.after=record(packet);*material_failure_device=diagnostic;
+                diagnostic.rng=previous_rng;diagnostic.before=previous;diagnostic.after=packet;*material_failure_device=diagnostic;
             }
         }
         // Single ledger update per task: expected-value partial deposits plus

@@ -21,7 +21,7 @@ Outputs (new names; v1 untouched):
   data/schneider/schneider_inelastic_rates_v2_1.bin (+ .metadata.json)
 """
 import datetime
-import hashlib
+
 import json
 import os
 import struct
@@ -40,12 +40,7 @@ CHANNELS = "cinel03_c12_targets_v2_1.channels.json"
 DRY_RUN = "--dry-run" in sys.argv
 
 
-def sha256_file(p):
-    h = hashlib.sha256()
-    with open(p, "rb") as f:
-        for c in iter(lambda: f.read(1 << 20), b""):
-            h.update(c)
-    return h.hexdigest()
+
 
 
 def f32(x):
@@ -83,141 +78,104 @@ def c12_nulls():
 
 def main():
     d = json.load(open(DUMP))
-    assert (d["projectile_z"], d["projectile_a"]) == (6, 12)
-    assert d["process_provenance"]["process_name"] == "ionInelastic"
-    secs = d["sections"]
-    assert len(secs) == 25 and len(secs[0]["grid"]) == NE
+    assert (d['projectile_z'], d['projectile_a']) == (6, 12)
+    assert d['process_provenance']['process_name'] == 'ionInelastic'
+    secs = d['sections']
+    assert len(secs) == 25 and len(secs[0]['grid']) == NE
     doms = c12_domains()
     nulls = c12_nulls()
-    print("C12 domains:", len(doms), "null targets:", len(nulls))
-
+    print('C12 domains:', len(doms), 'null targets:', len(nulls))
     partial = {}
     zeroed_zero = zeroed_below = zeroed_above = 0
     need = []
     for s, sec in enumerate(secs):
-        for j, pt in enumerate(sec["grid"]):
+        for j, pt in enumerate(sec['grid']):
             e = EMIN + j * ESTEP
-            assert abs(pt["energy_mevu"] - e) < 1e-9, (s, j)
-            for el in pt["elements"]:
-                tz = el["target_z"]
-                xs = el["mass_partial_per_mm_at_1g_cm3"]
+            assert abs(pt['energy_mevu'] - e) < 1e-09, (s, j)
+            for el in pt['elements']:
+                tz = el['target_z']
+                xs = el['mass_partial_per_mm_at_1g_cm3']
                 flo, fhi = doms[tz]
                 keep = True
                 if xs == 0.0:
                     keep = False
                     zeroed_zero += 1
-                elif e > fhi + 1e-9:
+                elif e > fhi + 1e-09:
                     keep = False
                     zeroed_above += 1
-                elif e < flo - 1e-9:
-                    if e <= nulls.get(tz, -1.0) + 1e-9:
+                elif e < flo - 1e-09:
+                    if e <= nulls.get(tz, -1.0) + 1e-09:
                         keep = False
                         zeroed_below += 1
                     else:
                         need.append((tz, e, xs))
                 if not keep:
                     xs = 0.0
-                partial[(s, tz, j)] = xs
+                partial[s, tz, j] = xs
     total = {}
     for s in range(25):
         for j in range(NE):
             e = EMIN + j * ESTEP
             tot = 0.0
             for tz in CANON_Z:
-                xs = partial[(s, tz, j)]
+                xs = partial[s, tz, j]
                 flo, fhi = doms[tz]
                 if e < flo or e > fhi:
                     xs = 0.0
                 tot += xs
-            total[(s, j)] = tot
+            total[s, j] = tot
     probes = []
     seen = {}
     for tz, e, xs in sorted(need):
-        if e - seen.get(tz, -1e9) >= 1.9:
+        if e - seen.get(tz, -1000000000.0) >= 1.9:
             seen[tz] = e
-            probes.append({"target_Z": tz, "energy_MeV_per_u": round(e, 2),
-                           "xs": xs})
-    json.dump({"need_probes": probes},
-              open(V2 / "step28" / "c12_need_probes.json", "w"), indent=1)
-    print(f"C12 NEED: {len(probes)}; zeroed xs0={zeroed_zero} "
-          f"below-null={zeroed_below} above-emax={zeroed_above}")
+            probes.append({'target_Z': tz, 'energy_MeV_per_u': round(e, 2), 'xs': xs})
+    json.dump({'need_probes': probes}, open(V2 / 'step28' / 'c12_need_probes.json', 'w'), indent=1)
+    print(f'C12 NEED: {len(probes)}; zeroed xs0={zeroed_zero} below-null={zeroed_below} above-emax={zeroed_above}')
     if DRY_RUN:
-        print("dry-run: binaries NOT written")
+        print('dry-run: binaries NOT written')
         return
     if probes:
-        frozen = json.load(open(V2 / "step28" / "c12_need_frozen_v2_1.json"))["need_probes"]
-        if probes == frozen and "--accept-residual-need" in sys.argv:
-            print(f"accepting {len(probes)} frozen residual C12 NEED points")
+        frozen = json.load(open(V2 / 'step28' / 'c12_need_frozen_v2_1.json'))['need_probes']
+        if probes == frozen and '--accept-residual-need' in sys.argv:
+            print(f'accepting {len(probes)} frozen residual C12 NEED points')
         else:
-            raise RuntimeError(
-                f"refusing final compile with {len(probes)} unprobed C12 NEED points")
-
-    csv_path = REPO / "data/schneider/c12_schneider_inelastic_mass_xs_v2_1.csv"
-    out_bin = REPO / "data/schneider/schneider_inelastic_rates_v2_1.bin"
-    tmpdir = Path(tempfile.mkdtemp(prefix="priratv3_", dir=REPO / "data/schneider"))
+            raise RuntimeError(f'refusing final compile with {len(probes)} unprobed C12 NEED points')
+    csv_path = REPO / 'data/schneider/c12_schneider_inelastic_mass_xs_v2_1.csv'
+    out_bin = REPO / 'data/schneider/schneider_inelastic_rates_v2_1.bin'
+    tmpdir = Path(tempfile.mkdtemp(prefix='priratv3_', dir=REPO / 'data/schneider'))
     tmp_csv = tmpdir / csv_path.name
-    with open(tmp_csv, "w") as f:
-        f.write("energy_MeV_per_u," + ",".join(
-            f"section_{s:02d}_mass_xs_per_mm_at_1g_cm3" for s in range(25)) + "\n")
+    with open(tmp_csv, 'w') as f:
+        f.write('energy_MeV_per_u,' + ','.join((f'section_{s:02d}_mass_xs_per_mm_at_1g_cm3' for s in range(25))) + '\n')
         for j in range(NE):
             e = EMIN + j * ESTEP
-            f.write(f"{e:.6f}," + ",".join(f"{total[(s, j)]:.12e}" for s in range(25)) + "\n")
+            f.write(f'{e:.6f},' + ','.join((f'{total[s, j]:.12e}' for s in range(25))) + '\n')
     tmp = tmpdir / out_bin.name
-    with open(tmp, "wb") as f:
-        f.write(b"SCHNRATE")
-        f.write(struct.pack("<I", 3))  # version 3: domain block
-        f.write(struct.pack("<III", 25, 13, NE))
-        f.write(struct.pack("<ddd", EMIN, EMAX, ESTEP))
-        f.write(struct.pack("<13i", *CANON_Z))
+    with open(tmp, 'wb') as f:
+        f.write(b'SCHNRATE')
+        f.write(struct.pack('<I', 3))
+        f.write(struct.pack('<III', 25, 13, NE))
+        f.write(struct.pack('<ddd', EMIN, EMAX, ESTEP))
+        f.write(struct.pack('<13i', *CANON_Z))
         for s in range(25):
             for tz in CANON_Z:
                 for j in range(NE):
-                    f.write(struct.pack("<d", partial[(s, tz, j)]))
+                    f.write(struct.pack('<d', partial[s, tz, j]))
         for s in range(25):
             for j in range(NE):
-                f.write(struct.pack("<d", total[(s, j)]))
+                f.write(struct.pack('<d', total[s, j]))
         for tz in CANON_Z:
             flo, fhi = doms[tz]
-            f.write(struct.pack("<dd", flo, fhi))
-            f.write(struct.pack("<B", 1))
-            f.write(b"\x00" * 7)
-    bin_sha = sha256_file(tmp)
-    csv_sha = sha256_file(tmp_csv)
-    meta = {
-        "schema_version": 1, "format": "SCHNRATE", "binary_version": 3,
-        "data_filename": out_bin.name, "data_sha256": bin_sha,
-        "file_size_bytes": tmp.stat().st_size, "binary_magic": "SCHNRATE",
-        "target_order": CANON_Z,
-        "energy_grid": {"emin": EMIN, "emax": EMAX, "step": ESTEP, "count": NE},
-        "channel_domains": [
-            {"target_z": tz, "energy_min_mevu": doms[tz][0],
-             "energy_max_mevu": doms[tz][1], "has_support": True}
-            for tz in CANON_Z],
-        "companion_csv": {"filename": csv_path.name, "sha256": csv_sha,
-                          "note": "masked totals audit artifact; NOT loaded by v3 runtime"},
-        "topas_version": "4.2.p3", "geant4_version": "11.03.p02",
-        "physics_list": "FTFP_INCLXX",
-        "schneider_source_file": "data/HUtoMaterialSchneider.txt",
-        "schneider_sha256": sha256_file(REPO / "data/HUtoMaterialSchneider.txt"),
-        "zeroing_policy": ("zero iff XS==0, E <= per-target max-null-beam, "
-                           "or E > target emax; substantial-XS-without-nodes "
-                           "NEVER zeroed; totals = masked-at-node sums"),
-        "zeroed_xs0": zeroed_zero, "zeroed_below_null": zeroed_below,
-        "zeroed_above_emax": zeroed_above,
-        "units": "mm, MeV, ns, g/cm^3",
-        "generation_timestamp": datetime.datetime.now(
-            datetime.timezone.utc).isoformat(),
-        "compiler_commit": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=REPO).decode().strip(),
-        "compiler_command": "python3 tools/compile_primary_rates_v2_1.py " + " ".join(sys.argv[1:]),
-    }
+            f.write(struct.pack('<dd', flo, fhi))
+            f.write(struct.pack('<B', 1))
+            f.write(b'\x00' * 7)
+    meta = {'schema_version': 1, 'format': 'SCHNRATE', 'binary_version': 3, 'data_filename': out_bin.name, 'file_size_bytes': tmp.stat().st_size, 'binary_magic': 'SCHNRATE', 'target_order': CANON_Z, 'energy_grid': {'emin': EMIN, 'emax': EMAX, 'step': ESTEP, 'count': NE}, 'channel_domains': [{'target_z': tz, 'energy_min_mevu': doms[tz][0], 'energy_max_mevu': doms[tz][1], 'has_support': True} for tz in CANON_Z], 'companion_csv': {'filename': csv_path.name, 'note': 'masked totals audit artifact; NOT loaded by v3 runtime'}, 'topas_version': '4.2.p3', 'geant4_version': '11.03.p02', 'physics_list': 'FTFP_INCLXX', 'schneider_source_file': 'data/HUtoMaterialSchneider.txt', 'zeroing_policy': 'zero iff XS==0, E <= per-target max-null-beam, or E > target emax; substantial-XS-without-nodes NEVER zeroed; totals = masked-at-node sums', 'zeroed_xs0': zeroed_zero, 'zeroed_below_null': zeroed_below, 'zeroed_above_emax': zeroed_above, 'units': 'mm, MeV, ns, g/cm^3', 'generation_timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'compiler_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO).decode().strip(), 'compiler_command': 'python3 tools/compile_primary_rates_v2_1.py ' + ' '.join(sys.argv[1:])}
     tmp.replace(out_bin)
     tmp_csv.replace(csv_path)
-    (REPO / ("data/schneider/" + out_bin.stem + ".metadata.json")).write_text(
-        json.dumps(meta, indent=1))
+    (REPO / ('data/schneider/' + out_bin.stem + '.metadata.json')).write_text(json.dumps(meta, indent=1))
     import shutil
     shutil.rmtree(tmpdir)
-    print(f"compiled {out_bin} ({out_bin.stat().st_size/1e6:.1f} MB); csv {csv_path}")
+    print(f'compiled {out_bin} ({out_bin.stat().st_size / 1000000.0:.1f} MB); csv {csv_path}')
 
 
 if __name__ == "__main__":

@@ -1,15 +1,45 @@
 #pragma once
+#include "carbon/electron_material_registry.hpp"
 #include "carbon/immutable_input_cache.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/min_json.hpp"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <fstream>
 #include <initializer_list>
 #include <iterator>
 #include <string_view>
 
 namespace carbon {
+// Electron indices describe immutable material-node payloads. Include every
+// payload's file identity so a repeated batch never reuses a replaced operator.
+inline std::string electron_bank_input_key(const std::filesystem::path& index,
+                                           std::string_view expected_magic) {
+    auto key=input_cache_key(index);
+    std::ifstream in(index);
+    std::string magic;
+    unsigned count{};
+    if(!(in>>magic>>count) || magic!=expected_magic || count==0 || count>4096)
+        throw std::runtime_error("Invalid electron bank index: "+index.string());
+    for(unsigned i=0;i<count;++i) {
+        int section;
+        double density;
+        std::string name;
+        if(!(in>>section>>density>>name) || section < 0 || section>=int(kElectronMaterialCount) ||
+           !std::isfinite(density) || density<=0)
+            throw std::runtime_error("Invalid electron bank material row");
+        const std::filesystem::path relative(name);
+        if(relative.is_absolute())throw std::runtime_error("Absolute electron payload path");
+        for(const auto& part:relative)if(part=="..")
+            throw std::runtime_error("Electron payload path traversal");
+        key+="|"+input_cache_key(index.parent_path()/relative);
+    }
+    std::string extra;
+    if(in>>extra)throw std::runtime_error("Trailing electron bank index fields");
+    return key;
+}
+
 // Include companion payload identities, not only the small manifest. Reading
 // metadata/statting files is cheap; the validated payload loader runs on misses.
 inline std::string companion_input_key(const std::filesystem::path& manifest,

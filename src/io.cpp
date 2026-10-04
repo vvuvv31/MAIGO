@@ -1,7 +1,6 @@
 #include "carbon/io.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/particle.hpp"
-#include "carbon/sha256.hpp"
 #include "carbon/charged_species.hpp"
 
 
@@ -1924,22 +1923,7 @@ std::string schneider_rate_provenance_json(const std::filesystem::path& path,
     if (!in) {
         return "{\"present\": true, \"readable\": false}";
     }
-    std::string dom_sha = "absent";
-    if (version == 3 && nt > 0 && nt <= 64) {
-        const std::size_t dom_bytes =
-            static_cast<std::size_t>(np) * static_cast<std::size_t>(nt) * 24;
-        const auto fsz = std::filesystem::file_size(path);
-        if (fsz >= dom_bytes + 8) {
-            in.seekg(static_cast<std::streamoff>(fsz - dom_bytes));
-            std::vector<char> dom(dom_bytes);
-            in.read(dom.data(), static_cast<std::streamsize>(dom_bytes));
-            if (in) {
-                dom_sha = compute_sha256_hex(dom.data(), dom.size());
-            }
-        }
-    }
-    out << "{\"present\": true, \"path\": \"" << path.string() << "\", \"sha256\": \""
-        << file_sha256_for_report(path) << "\", \"binary_magic\": \"" << std::string(magic, 8)
+    out << "{\"present\": true, \"path\": \"" << path.string() << "\", \"binary_magic\": \"" << std::string(magic, 8)
         << "\", \"binary_version\": " << version << ", \"num_projectiles\": " << np
         << ", \"projectiles\": [";
     if (is_sec) {
@@ -1955,24 +1939,22 @@ std::string schneider_rate_provenance_json(const std::filesystem::path& path,
     }
     out << "], \"energy_grid\": {\"emin\": " << emin << ", \"emax\": " << emax
         << ", \"step\": " << estep << ", \"count\": " << ne
-        << "}, \"channel_domain_block_sha256\": \"" << dom_sha << "\"}";
+        << "}}";
     return out.str();
 }
 
 // JSON provenance object for one CINEL03 event package binary (+ channels
-// sidecar SHA when the <stem>.channels.json sibling is present).
+// sidecar when the <stem>.channels.json sibling is present).
 std::string schneider_package_provenance_json(const std::filesystem::path& path) {
     std::ostringstream out;
     if (path.empty() || !std::filesystem::exists(path)) {
         return "{\"present\": false}";
     }
-    out << "{\"present\": true, \"path\": \"" << path.string() << "\", \"sha256\": \""
-        << file_sha256_for_report(path) << "\"";
+    out << "{\"present\": true, \"path\": \"" << path.string() << "\"";
     const std::filesystem::path sidecar =
         path.parent_path() / (path.stem().string() + ".channels.json");
     if (std::filesystem::exists(sidecar)) {
-        out << ", \"channels_file\": \"" << sidecar.string() << "\", \"channels_sha256\": \""
-            << file_sha256_for_report(sidecar) << "\"";
+        out << ", \"channels_file\": \"" << sidecar.string() << "\"";
     }
     out << "}";
     return out.str();
@@ -2136,7 +2118,6 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"E_material_electron_untracked_MeV\": " << result.material_electron_untracked_MeV << ",\n"
            << "  \"E_material_photon_untracked_MeV\": " << result.material_electron_photon_untracked_MeV << ",\n"
            << "  \"E_electron_variance_reduction_gain_MeV\": " << result.electron_variance_reduction_weight_gain_MeV << ",\n"
-           << "  \"E_topas_compat_discarded_kinetic_MeV\": " << result.topas_compat_discarded_kinetic_total_MeV() << ",\n"
            << "  \"E_queue_lost_MeV\": "
            << result.secondary_queue_overflow_energy_MeV +
                   result.neutral_queue_overflow_energy_MeV
@@ -2159,39 +2140,20 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"ct_secondary_exact_faces_diagnostic\": " << (config.ct_secondary_exact_faces_diagnostic ? "true" : "false") << ",\n"
            << "  \"ct_secondary_mcs_off_diagnostic\": " << (config.ct_secondary_mcs_off_diagnostic ? "true" : "false") << ",\n"
            << "  \"upstream_air_mcs_file\": \"" << config.spots_upstream_air_mcs_file.string() << "\",\n"
-           << "  \"upstream_air_mcs_sha256\": \"" << config.spots_upstream_air_mcs_sha256 << "\",\n"
            << "  \"ct_schneider_primary_rate_file\": \"" << config.ct_schneider_primary_rate_file.string() << "\",\n"
            << "  \"ct_schneider_primary_cinel03_file\": \"" << config.ct_schneider_primary_cinel03_file.string() << "\",\n"
            << "  \"ct_schneider_secondary_rate_file\": \"" << config.ct_schneider_secondary_rate_file.string() << "\",\n"
            << "  \"ct_schneider_secondary_cinel03_file\": \"" << config.ct_schneider_secondary_cinel03_file.string() << "\",\n"
            << "  \"ct_schneider_cross_section_file\": \"" << config.ct_schneider_cross_section_file.string() << "\",\n"
-           << "  \"ct_schneider_delta_tail_file\": \"" << config.ct_schneider_delta_tail_file.string() << "\",\n"
-           << "  \"ct_schneider_delta_longitudinal_file\": \"" << config.ct_schneider_delta_longitudinal_file.string() << "\",\n"
-           << "  \"E_schneider_primary_delta_tail_moved_MeV\": "
-           << result.schneider_primary_delta_tail_moved_MeV << ",\n"
-           << "  \"E_schneider_primary_delta_tail_fallback_MeV\": "
-           << result.schneider_primary_delta_tail_fallback_MeV << ",\n"
-           << "  \"E_schneider_primary_delta_tail_escaped_scorer_MeV\": "
-           << result.schneider_primary_delta_tail_escaped_scorer_MeV << ",\n"
-           << "  \"E_schneider_primary_delta_longitudinal_moved_MeV\": "
-           << result.schneider_primary_delta_longitudinal_moved_MeV << ",\n"
-           << "  \"E_schneider_primary_delta_longitudinal_fallback_MeV\": "
-           << result.schneider_primary_delta_longitudinal_fallback_MeV << ",\n"
-           << "  \"E_schneider_primary_delta_longitudinal_escaped_scorer_MeV\": "
-           << result.schneider_primary_delta_longitudinal_escaped_scorer_MeV << ",\n"
            << "  \"ct_schneider_physics_bundle_file\": \"" << config.ct_schneider_physics_bundle_file.string() << "\",\n";
-    output << "  \"ct_electron_segment_transport\": "
-           << (!config.ct_electron_joint_response_diagnostic_file.empty() ? "true" : "false") << ",\n";
     output << "  \"unified_water_nuclear_transport\": " << (config.unified_water_nuclear_transport ? "true" : "false") << ",\n";
     output << "  \"all_ion_primary_elastic_interactions\": " << result.primary_elastic_interactions << ",\n"
            << "  \"all_ion_secondary_elastic_interactions\": " << result.secondary_elastic_interactions << ",\n"
            << "  \"elastic_post_em_null_collisions\": " << result.elastic_post_em_null_collisions << ",\n";
     output << "  \"all_ion_elastic_file\": \"" << config.all_ion_elastic_file.string() << "\",\n"
-           << "  \"all_ion_elastic_sha256\": \"" << config.all_ion_elastic_sha256 << "\",\n"
-           << "  \"elastic_recoil_stopping_sha256\": \"" << config.elastic_recoil_stopping_sha256 << "\",\n";
+           << "  \"elastic_recoil_stopping_file\": \"" << config.elastic_recoil_stopping_file.string() << "\",\n";
     if (config.unified_water_nuclear_transport) {
-        output << "  \"unified_water_material_sha256\": \"" << config.unified_water_material_sha256 << "\",\n"
-               << "  \"nuclear_recoil_reference_grid_file\": \"" << config.primary_stopping_power_file.string() << "\",\n"
+        output << "  \"nuclear_recoil_reference_grid_file\": \"" << config.primary_stopping_power_file.string() << "\",\n"
                << "  \"unified_water_material_id_note\": \"255 is a diagnostic sentinel, not a Schneider section; rate uses a separate water row\",\n";
     }
     output << "  \"broadbeam_electron_tracking\": " << (config.broadbeam_electron_tracking ? "true" : "false") << ",\n"
@@ -2202,7 +2164,6 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"broadbeam_electron_external_air_local\": " << (config.broadbeam_electron_external_air_local?"true":"false") << ",\n"
            << "  \"broadbeam_electron_external_air_margin_mm\": " << config.broadbeam_electron_external_air_margin_mm << ",\n"
            << "  \"broadbeam_electron_body_mask_file\": \"" << config.broadbeam_electron_body_mask_file.string() << "\",\n"
-           << "  \"broadbeam_electron_body_mask_sha256\": \"" << config.broadbeam_electron_body_mask_sha256 << "\",\n"
            << "  \"broadbeam_electron_region_diagnostics\": " << (config.broadbeam_electron_region_diagnostics?"true":"false") << ",\n"
            << "  \"broadbeam_electron_low_density_survival\": " << config.broadbeam_electron_low_density_survival << ",\n"
            << "  \"broadbeam_electron_expected_scoring\": " << (config.broadbeam_electron_expected_scoring?"true":"false") << ",\n"
@@ -2217,14 +2178,11 @@ void write_energy_ledger_json(const std::filesystem::path& path,
         output << result.fe_sampling_counts[i];
     }
     output << "],\n";
-    if(!config.material_electron_response_index_file.empty() || !config.material_electron_charged_index_file.empty()) {
+    if(!config.material_electron_charged_index_file.empty()) {
         output<<"  \"independent_charged_legacy_loading_disabled\": "<<(config.material_electron_charged_index_file.empty()?"false":"true")<<",\n";
         const auto& d=result.electron_joint_diagnostics;
         output<<"  \"material_electron_response\": {\"status\": \"unvalidated_main_kernel_integration\", "
               <<"\"density_sampling\": \""<<(config.enable_ct_grid?"candidate_same_section_density_mixture_birth_energy_packets":"deposited_fraction_weighted_brackets_no_coordinate_scaling")<<"\", "
-              <<"\"index_sha256\": \""<<(config.material_electron_charged_index_file.empty()?config.material_electron_response_index_sha256:config.material_electron_charged_index_sha256)<<"\", "
-              <<"\"memory_mode\": \""<<config.material_electron_response_memory_mode<<"\", "
-              <<"\"execution_mode\": \""<<config.material_electron_execution_mode<<"\", "
               <<"\"group_size\": "<<config.material_electron_group_size<<", "
               <<"\"queue_budget_MiB\": "<<config.material_electron_queue_budget_MiB<<", "
               <<"\"queue_chunk\": "<<config.material_electron_queue_chunk<<", "
@@ -2238,79 +2196,6 @@ void write_energy_ledger_json(const std::filesystem::path& path,
               <<", \"invalid_paths\": "<<d.invalid_marches<<", \"path_replays\": "<<d.ordered_path_replays
               <<", \"voxel_redistributed_MeV\": "<<d.redistributed_MeV
               <<", \"outside_packet_MeV\": "<<d.escaped_MeV<<"},\n";
-    }
-    if(!config.water_electron_response_diagnostic_file.empty()) {
-        const auto& d=result.electron_joint_diagnostics;
-        output<<"  \"water_electron_response\": {\"status\": \""
-              <<(config.water_electron_nuclear_diagnostic ? "unvalidated_water_nuclear_diagnostic" : "unvalidated_water_em_diagnostic")<<"\", "
-              <<"\"nuclear_diagnostic\": "<<(config.water_electron_nuclear_diagnostic ? "true" : "false")<<", "
-              <<"\"data_sha256\": \""<<config.water_electron_response_sha256<<"\", "
-              <<"\"metadata_sha256\": \""<<config.water_electron_response_metadata_sha256<<"\", "
-              <<"\"unresolved_photon_policy\": \"explicit_escape_bound_not_validated\", "
-              <<"\"queries\": "<<d.queries<<", \"domain_misses\": "<<d.domain_misses
-              <<", \"invalid_paths\": "<<d.invalid_marches<<", \"path_replays\": "<<d.ordered_path_replays
-              <<", \"voxel_redistributed_MeV\": "<<d.redistributed_MeV
-              <<", \"physical_or_scorer_outside_packet_MeV\": "<<d.escaped_MeV
-              <<", \"lookup_retained_MeV\": "<<d.domain_retained_MeV<<"},\n";
-    }
-    if(!config.ct_electron_joint_response_diagnostic_file.empty()) {
-        const auto& d=result.electron_joint_diagnostics;
-        output<<"  \"electron_joint_response\": {\"status\": \"unvalidated_interface_diagnostic\", "
-              <<"\"patient_experiment\": "<<(config.ct_electron_joint_patient_experiment ? "true" : "false")<<", "
-              <<"\"data_sha256\": \""<<config.ct_electron_joint_response_sha256<<"\", "
-              <<"\"metadata_sha256\": \""<<config.ct_electron_joint_response_metadata_sha256<<"\", "
-              <<"\"ordered_path_sha256\": \""<<result.electron_ordered_path_sha256<<"\", "
-              <<"\"ordered_path_replays\": "<<d.ordered_path_replays<<", "
-              <<"\"replaces_transverse_tail\": true, \"queries\": "<<d.queries
-              <<", \"domain_misses\": "<<d.domain_misses<<", \"invalid_marches\": "<<d.invalid_marches
-              <<", \"redistributed_MeV\": "<<d.redistributed_MeV<<", \"escaped_MeV\": "<<d.escaped_MeV
-              <<", \"domain_retained_MeV\": "<<d.domain_retained_MeV<<"},\n";
-    }
-    if (!config.ct_schneider_delta_longitudinal_file.empty()) {
-        const auto& file = config.ct_schneider_delta_longitudinal_file;
-        const auto metadata = file.parent_path() / (file.stem().string() + ".metadata.json");
-        const auto manifest = file.parent_path() / (file.stem().string() + ".candidate.json");
-        output << "  \"longitudinal_candidate\": {\"status\": \"unvalidated_diagnostic\", "
-               << "\"scale\": " << config.ct_schneider_delta_longitudinal_scale
-               << ", \"homogeneous_density_diagnostic\": "
-               << (config.ct_longitudinal_homogeneous_density_diagnostic ? "true" : "false")
-               << ", \"interface_mass_diagnostic\": "
-               << (config.ct_longitudinal_interface_mass_diagnostic ? "true" : "false")
-               << ", \"runtime_kernel\": \""
-               << (config.ct_longitudinal_interface_mass_diagnostic
-                       ? "interface_mass_column_uniform_birth_diagnostic_v2" : config.ct_longitudinal_homogeneous_density_diagnostic
-                       ? "homogeneous_mass_thickness_diagnostic_v1"
-                       : "homogeneous_reference_density_v1")
-               << "\", \"kernel_density_g_cm3\": "
-               << result.longitudinal_diagnostic_density_g_cm3
-               << ", \"data_sha256\": \"" << file_sha256_for_report(file)
-               << "\", \"metadata_sha256\": \"" << file_sha256_for_report(metadata)
-               << "\", \"manifest_sha256\": \"" << file_sha256_for_report(manifest)
-               << "\", \"out_of_domain_queries\": "
-               << result.schneider_primary_delta_longitudinal_domain_queries
-               << ", \"out_of_domain_local_energy_MeV\": "
-               << result.schneider_primary_delta_longitudinal_domain_energy_MeV
-               << ", \"invalid_marches\": "
-               << result.schneider_primary_delta_longitudinal_invalid_marches
-               << "},\n";
-        if (config.ct_longitudinal_homogeneous_density_diagnostic || config.ct_longitudinal_interface_mass_diagnostic) {
-            output << "  \"longitudinal_domain_log\": {\"capacity\": "
-                   << kLongitudinalDomainLogCap << ", \"truncated\": "
-                   << (result.schneider_primary_delta_longitudinal_domain_queries >
-                       result.longitudinal_domain_log.size() ? "true" : "false")
-                   << ", \"records\": [";
-            for (std::size_t i=0; i<result.longitudinal_domain_log.size(); ++i) {
-                const auto& r = result.longitudinal_domain_log[i];
-                if (i) output << ',';
-                output << "{\"history\":" << r.history << ",\"step\":" << r.step
-                       << ",\"initial_energy_MeVu\":" << r.initial_energy_MeVu
-                       << ",\"query_energy_MeVu\":" << r.query_energy_MeVu
-                       << ",\"step_start_z_mm\":" << r.step_start_z_mm
-                       << ",\"step_length_mm\":" << r.step_length_mm
-                       << ",\"retained_MeV\":" << r.retained_MeV << '}';
-            }
-            output << "]},\n";
-        }
     }
     write_schneider_physics_provenance(output, config);
     write_validation_scope(output, config);
@@ -2421,48 +2306,7 @@ void write_energy_ledger_json(const std::filesystem::path& path,
     }
     output << "],\n";
     write_out_of_scope_isotope_summary(output, result);
-    output << "  \"cinel02_reference_compatibility\": {\n"
-           << "    \"mode\": \""
-           << (config.cinel02_topas_compatibility_mode
-                   ? "geant4_11_3_2_topas_4_2_p3"
-                   : "native_transport")
-           << "\",\n"
-           << "    \"unsupported_prompt_ion_policy\": \""
-           << (config.cinel02_topas_compatibility_mode
-                   ? "topas_compat_kill"
-                   : "stable_for_transport")
-           << "\",\n"
-           << "    \"policy_species\": [\"6Be\"],\n"
-           << "    \"produced_be6_count\": " << generated_be6_count << ",\n"
-           << "    \"produced_be6_kinetic_MeV\": " << generated_be6_kinetic_MeV << ",\n"
-           << "    \"queued_be6_count\": " << queued_be6_count << ",\n"
-           << "    \"queued_be6_kinetic_MeV\": " << queued_be6_kinetic_MeV << ",\n"
-           << "    \"topas_compat_discarded_counts\": [";
-    for (std::size_t i = 0;
-         i < result.cinel02_topas_compat_discarded_counts.size(); ++i) {
-        output << (i == 0 ? "" : ", ")
-               << result.cinel02_topas_compat_discarded_counts[i];
-    }
-    const auto discarded_kinetic_total = std::accumulate(
-        result.cinel02_topas_compat_discarded_kinetic_MeV.begin(),
-        result.cinel02_topas_compat_discarded_kinetic_MeV.end(), 0.0);
-    const auto discarded_count_total = std::accumulate(
-        result.cinel02_topas_compat_discarded_counts.begin(),
-        result.cinel02_topas_compat_discarded_counts.end(), std::uint64_t{0});
-    output << "],\n"
-           << "    \"topas_compat_discarded_kinetic_MeV\": [";
-    for (std::size_t i = 0;
-         i < result.cinel02_topas_compat_discarded_kinetic_MeV.size(); ++i) {
-        output << (i == 0 ? "" : ", ")
-               << result.cinel02_topas_compat_discarded_kinetic_MeV[i];
-    }
-    output << "],\n"
-           << "    \"topas_compat_discarded_count_total\": "
-           << discarded_count_total << ",\n"
-           << "    \"topas_compat_discarded_kinetic_total_MeV\": "
-           << discarded_kinetic_total << "\n"
-           << "  },\n"
-           << "  \"cinel02_replay_handoff_layout\": "
+    output << "  \"cinel02_replay_handoff_layout\": "
               "{\"species\": [\"1H\",\"2H\",\"3H\",\"3He\",\"4He\",\"6He\","
               "\"6Li\",\"7Li\",\"7Be\",\"9Be\",\"10Be\",\"8B\","
               "\"10B\",\"11B\",\"10C\",\"11C\",\"12C\",\"6Be\"],"

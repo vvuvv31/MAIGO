@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Run proton CT minibeam batches in one process, retaining validated physics data."""
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -30,7 +29,6 @@ def main():
         (output / name).symlink_to(ROOT / name, target_is_directory=True)
     config = yaml.safe_load((ROOT / 'config/proton_ct_minibeam.yaml').read_text())
     names = []
-    hashes = {}
     for i, seed in enumerate(args.seeds):
         case = dict(config, number_of_histories=args.histories, random_seed=seed,
                     material_electron_retain_bank=True)
@@ -38,15 +36,13 @@ def main():
         path = output / name
         path.write_text(yaml.safe_dump(case, sort_keys=False))
         names.append(name)
-        hashes[name] = hashlib.sha256(path.read_bytes()).hexdigest()
     (output / 'manifest.txt').write_text('\n'.join(names) + '\n')
     environment = os.environ.copy()
     compiler = Path(environment.get('CXX', '/home/wuwei/sycl_workspace/llvm/build/install/bin/icpx'))
     environment['LD_LIBRARY_PATH'] = str(compiler.parent.parent / 'lib') + ':' + environment.get('LD_LIBRARY_PATH', '')
     environment['CARBON_RUNTIME_BREAKDOWN'] = '1'
     command = [str(executable), '--plan-manifest', 'manifest.txt']
-    result = {'command': command, 'binary_sha256': hashlib.sha256(executable.read_bytes()).hexdigest(),
-              'config_sha256': hashes, 'histories_per_batch': args.histories, 'seeds': args.seeds,
+    result = {'command': command, 'binary': str(executable), 'configs': names, 'histories_per_batch': args.histories, 'seeds': args.seeds,
               'environment': {k:v for k,v in environment.items() if k.startswith('CARBON_')}}
     summary = output / 'execution.json'
     summary.write_text(json.dumps(result, indent=2) + '\n')
@@ -57,7 +53,7 @@ def main():
     text = (output / 'gpu.log').read_text()
     result['actual_histories'] = [int(n) for n in re.findall(r'^Histories: (\d+)$', text, re.M)]
     result['batch_seconds'] = [float(n) for n in re.findall(r'\[batch-wall\].*?seconds=([\d.eE+-]+)', text)]
-    result['electron_bank_cache_hits'] = text.count('[electron-bank-cache] hit')
+    result['electron_bank_cache_hits'] = text.count('[independent-fp32-bank] cache=hit')
     result['quality'] = []
     for name in names:
         path = output / 'out' / Path(name).stem / 'quality_report.json'

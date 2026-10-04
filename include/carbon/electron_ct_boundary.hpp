@@ -1,4 +1,5 @@
 #pragma once
+#include "carbon/electron_material_registry.hpp"
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -32,7 +33,7 @@ inline ElectronCtPointMaterial electron_ct_point_material(const ElectronCtGeomet
     }
     const auto i=(std::uint64_t(cell[2])*g.bins[1]+cell[1])*g.bins[0]+cell[0];
     const auto rho=g.density[i];const auto section=g.section[i];
-    if(section>=25 || !std::isfinite(rho) || rho<=0)return {};
+    if(section>=kElectronMaterialCount || !std::isfinite(rho) || rho<=0)return {};
     return {true,rho,section};
 }
 struct ElectronCtBoundary {
@@ -71,7 +72,7 @@ inline ElectronCtBoundary first_electron_ct_boundary(const ElectronCtGeometry& g
     }
     const auto index=[&]() {return (std::uint64_t(cell[2])*g.bins[1]+cell[1])*g.bins[0]+cell[0];};
     out.from_section=g.section[index()];out.from_density=g.density[index()];
-    if(out.from_section>=25 || !std::isfinite(out.from_density) || out.from_density<=0)return out;
+    if(out.from_section>=kElectronMaterialCount || !std::isfinite(out.from_density) || out.from_density<=0)return out;
     const auto finish=[&](ElectronCtBoundaryStatus status,double t) {
         out.status=status;out.fraction=t;
         for(unsigned k=0;k<3;++k)out.position[k]=a[k]+t*(b[k]-a[k]);
@@ -97,7 +98,7 @@ inline ElectronCtBoundary first_electron_ct_boundary(const ElectronCtGeometry& g
         for(unsigned k=0;k<3;++k)if(next[k]==t) {cell[k]+=sign[k];next[k]+=delta[k];}
         for(unsigned k=0;k<3;++k)if(cell[k]<0 || cell[k]>=g.bins[k])return finish_crossing(ElectronCtBoundaryStatus::escaped);
         out.to_section=g.section[index()];out.to_density=g.density[index()];
-        if(out.to_section>=25 || !std::isfinite(out.to_density) || out.to_density<=0)return out;
+        if(out.to_section>=kElectronMaterialCount || !std::isfinite(out.to_density) || out.to_density<=0)return out;
         if(out.to_section!=out.from_section || out.to_density!=out.from_density)
             return finish_crossing(ElectronCtBoundaryStatus::material_change);
     }

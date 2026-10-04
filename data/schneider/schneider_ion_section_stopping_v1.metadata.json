@@ -2,7 +2,6 @@
   "schema_version": 1,
   "format": "binary",
   "data_filename": "schneider_ion_section_stopping_v1.bin",
-  "data_sha256": "ef87ad19bd0b0552d846a6c4e23eb635746e375432a40f40fb79b202235dec20",
   "data_size_bytes": 216007448,
   "sections_count": 25,
   "species_count": 18,
@@ -243,10 +242,6 @@
   ],
   "campaign": {
     "binary": "/home/wuwei/topas/ion-section-stopping-build-20260911/topas",
-    "binary_sha256": "1b099ec155d095787819423594a4044c1c5c0574738dbd5dbee56e49fcd827dd",
-    "run_sha256": "604311ba28417ae766394b7bf2a4250b2fa417a9fdad42ed1dfc74ec6284a30a",
-    "hu_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
-    "source_sha256": "9b2ff4bd7a7d9e193309db371fe2755239a331451991e5bf2be92fd53b1eb417",
     "dicom": {
       "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image000.dcm": "4aa894d6c57efe8ceb865a040ab0da671d8664884060d77418ad256b5d3b44c6",
       "/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box/image001.dcm": "38402b2197b6ee05f1ced89b9c61625b850c3b326a41aea33b4434bd24cde0e5",
@@ -291,14 +286,10 @@
   },
   "raw_csv": "/mnt/sda/wuwei/ion_section_stopping_20260911_extended/raw/topas_ion_schneider_stopping.csv",
   "raw_json": "/mnt/sda/wuwei/ion_section_stopping_20260911_extended/raw/topas_ion_schneider_stopping.json",
-  "raw_csv_sha256": "811376924f66597f978710394757a279039e126b2f5165f7c8e52a02444e52da",
-  "raw_json_sha256": "8e63e1ecd90e789bf20bd82f35ff9d99785a637ade66c21ee5c0b22333f5f1fa",
-  "compiler_sha256": "512ace3998cd9539678661e1d15d7a1e84bfe4c9ffcf84c0a2628688430ff1de",
   "c12_cross_check": {
     "minimum_energy_MeVu": 5,
     "tolerance": 0.02,
     "max_relative_difference": 0.0006214279573980282,
-    "low_energy_max_relative_difference": 0.1193279579982006,
-    "reference_sha256": "9786dba071f61e660fcc5940a844e8109c4e480ccb603d7929d2fcfaae152c2f"
+    "low_energy_max_relative_difference": 0.1193279579982006
   }
 }

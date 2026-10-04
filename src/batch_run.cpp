@@ -60,7 +60,7 @@ std::vector<RunShard> make_repeated_batches(const RunShard& original,const CliSt
         throw std::invalid_argument("Total batch history count overflows");
     const auto total=h*n;
     auto base=original.config;
-    if(!base.minibeam_water_entry_secondary_replay_file.empty() || !base.primary_spot_batch.empty())
+    if(!base.primary_spot_batch.empty())
         throw std::invalid_argument("Repeated batches do not accept an existing primary/secondary replay batch");
     std::vector<PrimarySpotBatchEntry> prototypes;
     std::vector<long double> weights;
@@ -119,7 +119,7 @@ std::vector<RunShard> make_repeated_batches(const RunShard& original,const CliSt
         auto shard=original;shard.config=base;shard.output_directory=root/name.str();
         auto& c=shard.config;c.number_of_histories=h;c.random_seed=base.random_seed+i*streams*spot_stride;
         if (c.device!="serial" && c.enable_ct_grid &&
-            (!c.material_electron_response_index_file.empty() || !c.material_electron_charged_index_file.empty()) && c.run_mode==RunMode::research)
+            (!c.material_electron_charged_index_file.empty()) && c.run_mode==RunMode::research)
             c.material_electron_retain_bank=true;
         std::uint64_t begin=0;
         for(std::size_t s=0;s<counts.size();++s) {

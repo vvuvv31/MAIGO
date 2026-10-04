@@ -30,7 +30,7 @@ Outputs (new names; v1 untouched):
   data/schneider/secondary_inelastic_rates_v2_1.bin (.metadata.json)
 """
 import datetime
-import hashlib
+
 import json
 import os
 import struct
@@ -53,12 +53,7 @@ PROJ_ZA = {"b11": (5, 11), "b10": (5, 10), "be9": (4, 9), "be7": (4, 7),
 CANON_Z = [1, 6, 7, 8, 12, 15, 16, 17, 18, 20, 11, 19, 22]
 
 
-def sha256_file(p):
-    h = hashlib.sha256()
-    with open(p, "rb") as f:
-        for c in iter(lambda: f.read(1 << 20), b""):
-            h.update(c)
-    return h.hexdigest()
+
 
 
 def f32(x):
@@ -107,8 +102,7 @@ def null_evidence():
 def main():
     doms = package_domains()
     maxnull = null_evidence()
-    print(f"support map: {len(doms)} channels; null channels: {len(maxnull)}")
-
+    print(f'support map: {len(doms)} channels; null channels: {len(maxnull)}')
     partial = {}
     zeroed_below = 0
     zeroed_zero = 0
@@ -116,43 +110,42 @@ def main():
     escalate = []
     targets_order = None
     for pid in PID_ORDER:
-        d = json.load(open(DUMP_RAW / f"{pid}_dump.json"))
+        d = json.load(open(DUMP_RAW / f'{pid}_dump.json'))
         pz, pa = PROJ_ZA[pid]
-        assert (d["projectile_z"], d["projectile_a"]) == (pz, pa), pid
-        secs = d["sections"]
+        assert (d['projectile_z'], d['projectile_a']) == (pz, pa), pid
+        secs = d['sections']
         assert len(secs) == 25, pid
-        grid0 = secs[0]["grid"]
+        grid0 = secs[0]['grid']
         assert len(grid0) == NE, (pid, len(grid0))
         if targets_order is None:
-            targets_order = [el["target_z"] for el in grid0[0]["elements"]]
-        assert targets_order == CANON_Z, f"{pid} dump target order != canonical"
+            targets_order = [el['target_z'] for el in grid0[0]['elements']]
+        assert targets_order == CANON_Z, f'{pid} dump target order != canonical'
         for s, sec in enumerate(secs):
-            assert len(sec["grid"]) == NE
-            for j, pt in enumerate(sec["grid"]):
+            assert len(sec['grid']) == NE
+            for j, pt in enumerate(sec['grid']):
                 e = EMIN + j * ESTEP
-                assert abs(pt["energy_mevu"] - e) < 1e-9, (pid, s, j)
-                for el in pt["elements"]:
-                    tz = el["target_z"]
-                    xs = el["mass_partial_per_mm_at_1g_cm3"]
-                    flo, fhi = doms[(pz, pa, tz)]
+                assert abs(pt['energy_mevu'] - e) < 1e-09, (pid, s, j)
+                for el in pt['elements']:
+                    tz = el['target_z']
+                    xs = el['mass_partial_per_mm_at_1g_cm3']
+                    flo, fhi = doms[pz, pa, tz]
                     keep = True
                     if xs == 0.0:
                         keep = False
                         zeroed_zero += 1
-                    elif e > fhi + 1e-9:
+                    elif e > fhi + 1e-09:
                         keep = False
                         zeroed_above += 1
-                    elif e < flo - 1e-9:
+                    elif e < flo - 1e-09:
                         nul = maxnull.get((pz, pa, tz), -1.0)
-                        if e <= nul + 1e-9:
+                        if e <= nul + 1e-09:
                             keep = False
                             zeroed_below += 1
                         else:
                             escalate.append((pz, pa, tz, e, xs, flo))
                     if not keep:
                         xs = 0.0
-                    partial[(pid, s, tz, j)] = xs
-    # Masked totals in ascending-target order (bitwise contract with loader).
+                    partial[pid, s, tz, j] = xs
     total = {}
     for pi, pid in enumerate(PID_ORDER):
         for s in range(25):
@@ -160,112 +153,63 @@ def main():
                 e = EMIN + j * ESTEP
                 tot = 0.0
                 for tz in CANON_Z:
-                    xs = partial[(pid, s, tz, j)]
+                    xs = partial[pid, s, tz, j]
                     flo, fhi = doms[PROJ_ZA[pid] + (tz,)]
                     if e < flo or e > fhi:
                         xs = 0.0
                     tot += xs
-                total[(pid, s, j)] = tot
-    # Gate BEFORE any binary is written.
+                total[pid, s, j] = tot
     need = []
     seen = {}
     for pz, pa, tz, e, xs, flo in sorted(escalate):
-        if e - seen.get((pz, pa, tz), -1e9) >= 1.9:
-            seen[(pz, pa, tz)] = e
-            need.append({"projectile_Z": pz, "projectile_A": pa, "target_Z": tz,
-                         "energy_MeV_per_u": round(e, 2), "xs": xs,
-                         "channel_floor": flo})
-    json.dump({"need_probes": need},
-              open(V2 / "step28" / "need_probes.json", "w"), indent=1)
-    print(f"NEED probes: {len(need)}; zeroed xs0={zeroed_zero} "
-          f"below-null={zeroed_below} above-emax={zeroed_above}")
+        if e - seen.get((pz, pa, tz), -1000000000.0) >= 1.9:
+            seen[pz, pa, tz] = e
+            need.append({'projectile_Z': pz, 'projectile_A': pa, 'target_Z': tz, 'energy_MeV_per_u': round(e, 2), 'xs': xs, 'channel_floor': flo})
+    json.dump({'need_probes': need}, open(V2 / 'step28' / 'need_probes.json', 'w'), indent=1)
+    print(f'NEED probes: {len(need)}; zeroed xs0={zeroed_zero} below-null={zeroed_below} above-emax={zeroed_above}')
     if DRY_RUN:
-        print("dry-run: binaries NOT written")
+        print('dry-run: binaries NOT written')
         return
-    # Residual-NEED policy (campaigns frozen): final compile accepts ONLY the
-    # frozen residual list (bitwise match to need_frozen_v2_1.json) via
-    # --accept-residual-need. Any NEW need point refuses. Frozen points are
-    # kept raw and runtime-masked (partial exactly 0 below floor).
     if need:
-        frozen = json.load(open(V2 / "step28" / "need_frozen_v2_1.json"))["need_probes"]
-        if need == frozen and "--accept-residual-need" in sys.argv:
-            print(f"accepting {len(need)} frozen residual NEED points "
-                  f"(runtime-masked, see need_frozen_v2_1.json)")
+        frozen = json.load(open(V2 / 'step28' / 'need_frozen_v2_1.json'))['need_probes']
+        if need == frozen and '--accept-residual-need' in sys.argv:
+            print(f'accepting {len(need)} frozen residual NEED points (runtime-masked, see need_frozen_v2_1.json)')
         else:
-            raise RuntimeError(
-                f"refusing final compile with {len(need)} unprobed NEED points; "
-                f"run probe fills first")
-    out_bin = REPO / "data/schneider/secondary_inelastic_rates_v2_1.bin"
-    tmpdir = Path(tempfile.mkdtemp(prefix="secratv3_", dir=REPO / "data/schneider"))
-    tmp = tmpdir / "secondary_inelastic_rates_v2_1.bin"
-    with open(tmp, "wb") as f:
-        f.write(b"SCHN2RAT")
-        f.write(struct.pack("<I", 3))  # version 3: 14 proj + domain block
-        f.write(struct.pack("<IIII", 14, 25, 13, NE))
-        f.write(struct.pack("<ddd", EMIN, EMAX, ESTEP))
+            raise RuntimeError(f'refusing final compile with {len(need)} unprobed NEED points; run probe fills first')
+    out_bin = REPO / 'data/schneider/secondary_inelastic_rates_v2_1.bin'
+    tmpdir = Path(tempfile.mkdtemp(prefix='secratv3_', dir=REPO / 'data/schneider'))
+    tmp = tmpdir / 'secondary_inelastic_rates_v2_1.bin'
+    with open(tmp, 'wb') as f:
+        f.write(b'SCHN2RAT')
+        f.write(struct.pack('<I', 3))
+        f.write(struct.pack('<IIII', 14, 25, 13, NE))
+        f.write(struct.pack('<ddd', EMIN, EMAX, ESTEP))
         for pid in PID_ORDER:
-            f.write(struct.pack("<ii", *PROJ_ZA[pid]))
-        f.write(struct.pack("<13i", *CANON_Z))
+            f.write(struct.pack('<ii', *PROJ_ZA[pid]))
+        f.write(struct.pack('<13i', *CANON_Z))
         for pid in PID_ORDER:
             for s in range(25):
                 for tz in CANON_Z:
                     for j in range(NE):
-                        f.write(struct.pack("<d", partial[(pid, s, tz, j)]))
+                        f.write(struct.pack('<d', partial[pid, s, tz, j]))
         for pid in PID_ORDER:
             for s in range(25):
                 for j in range(NE):
-                    f.write(struct.pack("<d", total[(pid, s, j)]))
+                    f.write(struct.pack('<d', total[pid, s, j]))
         for pid in PID_ORDER:
             pz, pa = PROJ_ZA[pid]
             for tz in CANON_Z:
-                flo, fhi = doms[(pz, pa, tz)]
-                f.write(struct.pack("<dd", flo, fhi))
-                f.write(struct.pack("<B", 1))
-                f.write(b"\x00" * 7)
-    bin_sha = sha256_file(tmp)
-    meta = {
-        "schema_version": 1, "format": "SCHN2RAT", "binary_version": 3,
-        "data_filename": "secondary_inelastic_rates_v2_1.bin",
-        "data_sha256": bin_sha,
-        "file_size_bytes": tmp.stat().st_size,
-        "binary_magic": "SCHN2RAT",
-        "num_projectiles": 14,
-        "projectiles": [{"z": PROJ_ZA[pid][0], "a": PROJ_ZA[pid][1]} for pid in PID_ORDER],
-        "target_order": CANON_Z,
-        "energy_grid": {"emin": EMIN, "emax": EMAX, "step": ESTEP, "count": NE},
-        "channel_domains": [
-            {"projectile_z": PROJ_ZA[pid][0], "projectile_a": PROJ_ZA[pid][1],
-             "target_z": tz,
-             "energy_min_mevu": doms[PROJ_ZA[pid] + (tz,)][0],
-             "energy_max_mevu": doms[PROJ_ZA[pid] + (tz,)][1],
-             "has_support": True}
-            for pid in PID_ORDER for tz in CANON_Z],
-        "topas_version": "4.2.p3", "geant4_version": "11.03.p02",
-        "physics_list": "g4em-standard_opt4 + g4ion-binarycascade",
-        "schneider_source_file": "data/HUtoMaterialSchneider.txt",
-        "schneider_sha256": sha256_file(REPO / "data/HUtoMaterialSchneider.txt"),
-        "zeroing_policy": ("zero iff XS==0 (model threshold), E <= "
-                           "per-channel max-null-beam (dynamic Geant4 nulls), "
-                           "or E > channel emax (package is the support map); "
-                           "substantial-XS-without-nodes NEVER zeroed; "
-                           "totals = masked-at-node sums, ascending-target order"),
-        "zeroed_xs0": zeroed_zero, "zeroed_below_null": zeroed_below,
-        "zeroed_above_emax": zeroed_above,
-        "units": "mm, MeV, ns, g/cm^3",
-        "generation_timestamp": datetime.datetime.now(
-            datetime.timezone.utc).isoformat(),
-        "compiler_commit": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=REPO).decode().strip(),
-        "compiler_command": "python3 tools/compile_rates_v2_1.py " + " ".join(sys.argv[1:]),
-    }
-    (tmpdir / "secondary_inelastic_rates_v2_1.metadata.json").write_text(
-        json.dumps(meta, indent=1))
+                flo, fhi = doms[pz, pa, tz]
+                f.write(struct.pack('<dd', flo, fhi))
+                f.write(struct.pack('<B', 1))
+                f.write(b'\x00' * 7)
+    meta = {'schema_version': 1, 'format': 'SCHN2RAT', 'binary_version': 3, 'data_filename': 'secondary_inelastic_rates_v2_1.bin', 'file_size_bytes': tmp.stat().st_size, 'binary_magic': 'SCHN2RAT', 'num_projectiles': 14, 'projectiles': [{'z': PROJ_ZA[pid][0], 'a': PROJ_ZA[pid][1]} for pid in PID_ORDER], 'target_order': CANON_Z, 'energy_grid': {'emin': EMIN, 'emax': EMAX, 'step': ESTEP, 'count': NE}, 'channel_domains': [{'projectile_z': PROJ_ZA[pid][0], 'projectile_a': PROJ_ZA[pid][1], 'target_z': tz, 'energy_min_mevu': doms[PROJ_ZA[pid] + (tz,)][0], 'energy_max_mevu': doms[PROJ_ZA[pid] + (tz,)][1], 'has_support': True} for pid in PID_ORDER for tz in CANON_Z], 'topas_version': '4.2.p3', 'geant4_version': '11.03.p02', 'physics_list': 'g4em-standard_opt4 + g4ion-binarycascade', 'schneider_source_file': 'data/HUtoMaterialSchneider.txt', 'zeroing_policy': 'zero iff XS==0 (model threshold), E <= per-channel max-null-beam (dynamic Geant4 nulls), or E > channel emax (package is the support map); substantial-XS-without-nodes NEVER zeroed; totals = masked-at-node sums, ascending-target order', 'zeroed_xs0': zeroed_zero, 'zeroed_below_null': zeroed_below, 'zeroed_above_emax': zeroed_above, 'units': 'mm, MeV, ns, g/cm^3', 'generation_timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'compiler_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO).decode().strip(), 'compiler_command': 'python3 tools/compile_rates_v2_1.py ' + ' '.join(sys.argv[1:])}
+    (tmpdir / 'secondary_inelastic_rates_v2_1.metadata.json').write_text(json.dumps(meta, indent=1))
     tmp.replace(out_bin)
-    (REPO / "data/schneider/secondary_inelastic_rates_v2_1.metadata.json").write_text(
-        json.dumps(meta, indent=1))
+    (REPO / 'data/schneider/secondary_inelastic_rates_v2_1.metadata.json').write_text(json.dumps(meta, indent=1))
     import shutil
     shutil.rmtree(tmpdir)
-    print(f"compiled {out_bin} ({out_bin.stat().st_size/1e6:.1f} MB)")
+    print(f'compiled {out_bin} ({out_bin.stat().st_size / 1000000.0:.1f} MB)')
 
 
 if __name__ == "__main__":

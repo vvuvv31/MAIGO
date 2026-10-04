@@ -9,7 +9,6 @@
 #include "carbon/min_json.hpp"
 #include "carbon/plan_run.hpp"
 #include "carbon/run_quality.hpp"
-#include "carbon/sha256.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/topas_spots.hpp"
 #include "carbon/tps_source.hpp"
@@ -96,156 +95,10 @@ std::vector<std::filesystem::path> shard_output_paths(
     return paths;
 }
 
-// Large input files named by the shard configs, plus files named inside the
-// JSON manifests they reference. Their pinned SHA256 digests are computed on
-// background threads while configs are validated and tables are built; each
-// loader still verifies its pin through compute_file_sha256_hex().
-std::vector<std::filesystem::path> sha256_prefetch_candidates(
-    const std::vector<std::filesystem::path>& config_paths) {
-    namespace fs = std::filesystem;
-    constexpr std::uintmax_t minimum_bytes = std::uintmax_t{1} << 20;
-    constexpr std::uintmax_t maximum_manifest_bytes = std::uintmax_t{8} << 20;
-    std::vector<std::pair<std::uintmax_t, fs::path>> files;
-    std::vector<fs::path> manifests;
-    const auto existing = [](const fs::path& value, const fs::path& base) -> fs::path {
-        std::error_code error;
-        if (value.empty()) return {};
-        if (value.is_absolute()) return fs::is_regular_file(value, error) ? value : fs::path{};
-        if (fs::is_regular_file(value, error)) return value;
-        for (auto directory = fs::absolute(base, error).parent_path(); !directory.empty();
-             directory = directory.parent_path()) {
-            if (fs::is_regular_file(directory / value, error)) return directory / value;
-            if (directory == directory.parent_path()) break;
-        }
-        return {};
-    };
-    const auto consider = [&](const fs::path& path, bool expand_manifest = true) {
-        std::error_code error;
-        const auto size = fs::file_size(path, error);
-        if (error) return;
-        if (expand_manifest && path.extension() == ".json" && size <= maximum_manifest_bytes) manifests.push_back(path);
-        if (size >= minimum_bytes) files.emplace_back(size, path);
-    };
-    const auto trim = [](std::string text) {
-        const auto first = text.find_first_not_of(" \t\r\"'");
-        const auto last = text.find_last_not_of(" \t\r\"'");
-        return first == std::string::npos ? std::string{} : text.substr(first, last - first + 1);
-    };
-    for (const auto& config_path : config_paths) {
-        std::ifstream in(config_path);
-        // Raw manifests may still name packages removed by profile expansion.
-        // Only prefetch direct, retained inputs for this profile. Nested raw
-        // manifests are left to effective-config loaders so an unused bank
-        // cannot be reached indirectly through a manifest.
-        bool broadbeam_fast = false,independent_charged=false;
-        bool tracking_declared=false,tracking_requested=false,legacy_independent=false,ct_grid=false;
-        for (std::string line; std::getline(in, line);) {
-            line = line.substr(0, line.find('#'));
-            const auto colon = line.find(':');
-            if(colon!=std::string::npos) {
-                const auto key=trim(line.substr(0,colon));
-                auto value=trim(line.substr(colon+1));
-                std::transform(value.begin(),value.end(),value.begin(),[](unsigned char c){return char(std::tolower(c));});
-                const bool yes=value=="true" || value=="yes" || value=="1";
-                if(key=="broadbeam_electron_tracking"){tracking_declared=true;tracking_requested=yes;}
-                if(key=="broadbeam_independent_electrons")legacy_independent=yes;
-                if(key=="enable_ct_grid")ct_grid=yes;
-            }
-            if(colon!=std::string::npos && trim(line.substr(0,colon))=="material_electron_charged_index_file" && !trim(line.substr(colon+1)).empty())independent_charged=true;
-            if (colon != std::string::npos &&
-                trim(line.substr(0, colon)) == "transport_profile")
-                broadbeam_fast = trim(line.substr(colon + 1)) == "broadbeam_fast";
-        }
-        in.clear();
-        in.seekg(0);
-        for (std::string line; std::getline(in, line);) {
-            const auto colon = line.find(':');
-            if (colon == std::string::npos || line.find('#') < colon) continue;
-            const auto key = trim(line.substr(0, colon));
-            if(independent_charged && key=="material_electron_response_index_file")continue;
-            if (key == "ct_schneider_stopping_power_file" ||
-                key == "ct_secondary_ion_section_stopping_file" ||
-                key == "energy_straggling_package_file" ||
-                key == "ct_hu_stopping_power_lut_file" ||
-                key == "ct_water_stopping_power_file" || key == "ct_air_stopping_power_file" ||
-                key == "ct_lung_stopping_power_file" || key == "ct_soft_tissue_stopping_power_file" ||
-                key == "ct_bone_stopping_power_file" || key == "ct_lung_particle_stopping_power_file" ||
-                key == "ct_soft_tissue_particle_stopping_power_file" || key == "ct_bone_particle_stopping_power_file") continue;
-            if (broadbeam_fast) {
-                const bool shared_selected=(tracking_declared?tracking_requested:legacy_independent)&&ct_grid;
-                if(!shared_selected && (key.starts_with("material_electron_birth_") ||
-                   key.starts_with("material_electron_joint_pilot_") || key.starts_with("material_electron_charged_") ||
-                   key.starts_with("material_photon_response_")))continue;
-                if((tracking_declared || legacy_independent) &&
-                   (key=="ct_schneider_delta_tail_file" || key=="ct_schneider_delta_longitudinal_file"))continue;
-                if (key == "urban_mcs_package_file" ||
-                    key == "broadbeam_electron_body_mask_file" ||
-                    key == "material_electron_response_index_file" ||
-                    key == "water_electron_response_diagnostic_file" ||
-                    key == "ct_electron_joint_response_diagnostic_file" ||
-                    key == "neutron_package_file" ||
-                    key == "neutron_recoil_stopping_manifest" ||
-                    key == "electron_transport_data_file") continue;
-            }
-            const auto value = trim(line.substr(colon + 1));
-            if (value.empty() || value.find('/') == std::string::npos) continue;
-            if (const auto path = existing(value, config_path); !path.empty())
-                consider(path, !broadbeam_fast);
-        }
-    }
-    for (std::size_t i = 0; i < manifests.size(); ++i) {
-        std::ifstream in(manifests[i]);
-        const std::string text((std::istreambuf_iterator<char>(in)), {});
-        // Bundles retain the archived stopping_table metadata. It no longer
-        // belongs to the effective physics inputs, so never hash its binary.
-        try {
-            const auto manifest = carbon::minjson::Parser(text).parse();
-            const bool nuclear_bundle = manifest.contains("primary_rate") &&
-                                        manifest.contains("secondary_rate");
-            const auto visit = [&](const auto& self, const carbon::minjson::Value& node,
-                                   bool is_root) -> void {
-                using Type = carbon::minjson::Value::Type;
-                if (node.type == Type::Object) {
-                    for (const auto& [key, child] : node.obj) {
-                        if (is_root && nuclear_bundle && key == "stopping_table") continue;
-                        self(self, child, false);
-                    }
-                } else if (node.type == Type::Array) {
-                    for (const auto& child : node.arr) self(self, child, false);
-                } else if (node.type == Type::String) {
-                    const auto& value = node.str;
-                    if (value.empty() || value.size() > 4096 || value.find('\n') != std::string::npos) return;
-                    fs::path candidate(value);
-                    if (!candidate.is_absolute()) candidate = manifests[i].parent_path() / candidate;
-                    std::error_code error;
-                    if (fs::is_regular_file(candidate, error) && candidate.extension() != ".json") consider(candidate);
-                }
-            };
-            visit(visit, manifest, true);
-        } catch (const std::exception&) {
-            // Prefetch is optional; the effective loader reports invalid input.
-        }
-    }
-
-    std::sort(files.begin(), files.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
-    std::vector<fs::path> ordered;
-    ordered.reserve(files.size());
-    for (auto& file : files) ordered.push_back(std::move(file.second));
-    return ordered;
-}
 
 }  // namespace
 
 int main(int argc, char* argv[]) {
-#if CARBON_DISABLE_INTEGRITY_CHECKS
-    std::cerr << "[integrity-checks] DISABLED: file SHA256 content checks and provenance hashing are skipped\n";
-#endif
-    // Hashing helper threads must finish before static teardown, whichever
-    // way main() returns.
-    carbon::initialize_sha256_backend();
-    struct JoinSha256Prefetch {
-        ~JoinSha256Prefetch() { carbon::join_file_sha256_prefetch(); }
-    } join_sha256_prefetch;
     carbon::RuntimeScope runtime_main("process_main");
     // Independent wall clock from process start to the point every result file
     // has been written. Unlike TransportResult::elapsed_seconds it includes
@@ -272,12 +125,7 @@ int main(int argc, char* argv[]) {
         } else {
             plan_config_paths.push_back(cli.config_path);
         }
-        if constexpr (carbon::file_integrity_checks_enabled) {
-            unsigned threads = 8;
-            if (const char* value = std::getenv("CARBON_SHA256_PREFETCH_THREADS"))
-                threads = static_cast<unsigned>(std::strtoul(value, nullptr, 10));
-            carbon::prefetch_file_sha256(sha256_prefetch_candidates(plan_config_paths), threads);
-        }
+
 
         // Resolve and validate every shard before any transport work. Each
         // shard gets its own CLI state (histories_overridden is set by
@@ -418,15 +266,7 @@ int main(int argc, char* argv[]) {
         std::cout << "[plan-shard] " << (plan_index + 1) << "/"
                   << shards.size() << " config=" << active_config_path
                   << '\n';
-#ifdef CARBON_DOSE_FP32
-        if (!config.ct_schneider_delta_longitudinal_file.empty()) {
-            throw std::runtime_error(
-                "ct_schneider_delta_longitudinal_file requires an FP64 dose build "
-                "(CARBON_DOSE_FP32=OFF): the distributed forward shares are far below "
-                "FP32 atomic granularity at clinical per-bin totals and would be "
-                "silently dropped, failing energy closure");
-        }
-#endif
+
         if (!cli.canonical_config_output_path.empty()) {
             const auto parent = cli.canonical_config_output_path.parent_path();
             if (!parent.empty()) {

@@ -25,7 +25,6 @@
     {
       "energy_MeV_per_u": 150.0,
       "path": "/mnt/sda/wuwei/delta_section0/energy_scan/topas_hu_n1000_e150.csv",
-      "sha256": "16d476780962e9a482b3e306234ba7d2c3f473057c1436603bec6638b81e0d59",
       "center_index": [
         49.501404953519845,
         49.499170656213884
@@ -35,7 +34,6 @@
     {
       "energy_MeV_per_u": 200.0,
       "path": "/mnt/sda/wuwei/delta_section0/topas_dose3d_hu_n1000_em.csv",
-      "sha256": "7952721c41cc6c8980aad8985019f495883b3ea3d0743cdaf982b529fa9c47f7",
       "center_index": [
         49.501432606054024,
         49.49924583736575
@@ -45,7 +43,6 @@
     {
       "energy_MeV_per_u": 225.0,
       "path": "/mnt/sda/wuwei/delta_section0/energy_scan/topas_hu_n1000_e225.csv",
-      "sha256": "c33eb98ac72eb73ee316fd73711784851d88b683be890f4d1fae4912ff47c56b",
       "center_index": [
         49.5014081777272,
         49.50038294245926
@@ -54,7 +51,6 @@
     }
   ],
   "data_file": "data/schneider/schneider_section0_c12_delta_tail_v1.csv",
-  "data_sha256": "ff6140f13dcfb4c6f739d6efe56941da6af4749d311e29182601f310a1184aa5",
   "data_size_bytes": 9778,
   "data_filename": "schneider_section0_c12_delta_tail_v1.csv",
   "file_size_bytes": 9778

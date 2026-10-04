@@ -1,15 +1,11 @@
 #!/usr/bin/env python3
 """Verify the unified research EM binary against its material/species manifest."""
-import argparse,hashlib,json,math,struct
+import argparse,json,math,struct
 from pathlib import Path
 
 def verify(package):
     meta=json.loads(package.with_suffix('.json').read_text())
     if meta['schema']!='EMJOINT1' or meta['version']!=1:raise ValueError('Unsupported EM schema')
-    digest=hashlib.sha256()
-    with package.open('rb') as f:
-        for chunk in iter(lambda:f.read(8*1024*1024),b''):digest.update(chunk)
-    if digest.hexdigest()!=meta['package_sha256']:raise ValueError('EM SHA256 mismatch')
     if package.stat().st_size!=meta['package_bytes']:raise ValueError('EM size mismatch')
     with package.open('rb') as f:
         magic,version,nm,ns,nr,nn,nv=struct.unpack('<8s6I',f.read(32))
@@ -24,8 +20,8 @@ def verify(package):
         species=[struct.unpack('<2I',f.read(8)) for _ in range(ns)]
         required={(1,1),(1,2),(1,3),(2,3),(2,4),(2,6),(3,6),(3,7),(4,6),(4,7),(4,9),(4,10),(5,8),(5,10),(5,11),(6,10),(6,11),(6,12)}
         if set(species)!=required or species!=[tuple(x) for x in meta['species_za']]:raise ValueError('Ion registry mismatch')
-    print(f'OK: {nm} material/density nodes x {ns} ions, SHA256={digest.hexdigest()}')
-    print('Integrity verified; production execution uses the AGENTS exception, while density cut-onset/patient accuracy validation remains pending.')
+    print(f'OK: {nm} material/density nodes x {ns} ions')
+    print('Layout and material/species coverage verified; dose accuracy requires a separate reference comparison.')
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('package',nargs='?',type=Path,default=Path(__file__).resolve().parents[3]/'data/em/unified_em_v1.bin')

@@ -4,10 +4,10 @@
 #include <chrono>
 int main(int argc,char** argv) {
     try {
-        if(argc!=3)throw std::runtime_error("usage: index sha256");
+        if(argc!=2)throw std::runtime_error("usage: index");
         sycl::queue q{sycl::gpu_selector_v};
         const auto start=std::chrono::steady_clock::now();
-        carbon::PhotonResponseBankDevice data(q,argv[1],argv[2]);
+        carbon::PhotonResponseBankDevice data(q,argv[1]);
         const double load=std::chrono::duration<double>(std::chrono::steady_clock::now()-start).count();
         const auto bank=data.view;constexpr unsigned n=262400;
         auto* results=sycl::malloc_shared<carbon::IndependentPhotonResult>(n,q);

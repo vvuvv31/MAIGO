@@ -1,6 +1,6 @@
 #pragma once
 #include "carbon/electron_joint_sampling.hpp"
-#include "carbon/electron_packet_transport.hpp"
+#include "carbon/electron_packet_state.hpp"
 
 namespace carbon {
 struct ElectronJointPilotView {
@@ -30,22 +30,22 @@ inline bool joint_homogeneous(const ElectronCtGeometry& g,const std::array<doubl
 // deposited, escaped, photon gap, invalid. W stays with the original packet.
 template<class Uniform,class Tally,class Score=NoExpectedScore>
 inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
-    ElectronJointPilotView pilot,const MaterialElectronResponseView& legacy,
-    const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally,bool independent_photons=false,bool independent_charged=false,
+    ElectronJointPilotView pilot,const ElectronMaterialIdentity& material,
+    const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally,
     Score&& score=Score{},double expected_density=-1.,double expected_min_energy=0.) {
     using namespace electron_joint_research;
     if(pilot.sections) {
-        if(legacy.section<0 || unsigned(legacy.section)>=pilot.section_count)return packet;
-        pilot=pilot.sections[legacy.section];
+        if(material.section<0 || unsigned(material.section)>=pilot.section_count)return packet;
+        pilot=pilot.sections[material.section];
     }
-    const double scale=pilot.density_scaling?pilot.density/legacy.density_g_cm3:1.;
+    const double scale=pilot.density_scaling?pilot.density/material.density_g_cm3:1.;
     // The bank uses the lowest indexed density per composition. Unsupported
     // nodes never enlarge the source support or silently extrapolate.
     if(!(scale>0 && scale<=1.0000001))return packet;
     const double radius=pilot.radius*scale;
     const auto m=pilot.model;
     if(!m.steps || packet.status!=ElectronPacketStatus::active ||
-       legacy.section!=pilot.section || (!pilot.density_scaling && legacy.density_g_cm3!=pilot.density) ||
+       material.section!=pilot.section || (!pilot.density_scaling && material.density_g_cm3!=pilot.density) ||
        packet.cursor.energy_MeV>m.edges[m.bins]*(1+1e-7))return packet;
     tally(0,1);
     if(!joint_homogeneous(geometry,packet.cursor.position,pilot.section,
@@ -69,7 +69,7 @@ inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
             if(std::uint32_t(cursor)>=m.graph_count)return invalid();
             g=m.graph+cursor;pdg=g->pdg;
             d=rotate(target,project(original,pilot.pre[cursor]));
-            if(pdg==22 && independent_photons) {
+            if(pdg==22) {
                 state();packet.cursor.row=kElectronContinuationEnd;
                 return packet; // physical photon state, no native source flight replay
             }
@@ -84,8 +84,7 @@ inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
         if(pdg==11 && (!joint_homogeneous(geometry,{p.x,p.y,p.z},pilot.section,
               packet.cursor.physical_density_g_cm3,radius) || energy>m.edges[m.bins]*(1+1e-7))) {
             state();tally(3,1);
-            if(independent_charged){packet.cursor.row=kElectronContinuationEnd;return packet;}
-            return resume_electron_packet(packet,legacy,uniform,packet.cursor.physical_density_g_cm3);
+            packet.cursor.row=kElectronContinuationEnd;return packet;
         }
         V delta;const double* f;
         if(exact) {delta=rotate(target,project(original,g->delta));f=g->fraction;}
@@ -173,13 +172,13 @@ inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
     return invalid(); // iteration cap is a failure, never local deposition
 }
 // This overload needs only the physical material identity; it never binds a
-// legacy continuation record on leaving homogeneous joint support.
+// material continuation record on leaving homogeneous joint support.
 template<class Uniform,class Tally,class Score=NoExpectedScore>
 inline ElectronEnergyPacket transport_joint_independent(ElectronEnergyPacket packet,
     ElectronJointPilotView pilot,const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally,
     Score&& score=Score{},double expected_density=-1.,double expected_min_energy=0.){
-    MaterialElectronResponseView identity{};identity.section=packet.cursor.section;
+    ElectronMaterialIdentity identity{};identity.section=packet.cursor.section;
     identity.density_g_cm3=packet.cursor.physical_density_g_cm3;
-    return transport_joint_pilot(packet,pilot,identity,geometry,uniform,tally,true,true,score,expected_density,expected_min_energy);
+    return transport_joint_pilot(packet,pilot,identity,geometry,uniform,tally,score,expected_density,expected_min_energy);
 }
 } // namespace carbon

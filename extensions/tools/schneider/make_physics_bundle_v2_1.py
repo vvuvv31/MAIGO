@@ -9,7 +9,7 @@ Cross-consistency is verified AT GENERATION (fail-closed):
 The C++ startup check re-verifies SHAs + registry + domains at load.
 """
 import datetime
-import hashlib
+
 import json
 import os
 import struct
@@ -29,12 +29,7 @@ FILES = {
 }
 
 
-def sha256_file(p):
-    h = hashlib.sha256()
-    with open(p, "rb") as f:
-        for c in iter(lambda: f.read(1 << 20), b""):
-            h.update(c)
-    return h.hexdigest()
+
 
 
 def read_rate_keys(path, magic, nkeys):
@@ -75,59 +70,23 @@ def read_rate_keys(path, magic, nkeys):
 
 def main():
     for name, fn in FILES.items():
-        assert (D / fn).exists(), f"missing {fn}"
-    sec_keys, sec_doms = read_rate_keys(D / FILES["secondary_rate"], b"SCHN2RAT", 14)
-    _, pri_doms = read_rate_keys(D / FILES["primary_rate"], b"SCHNRATE", 0)
-
-    sec_ch = json.load(open(D / "cinel03_secondary_targets_v2_1_14p.channels.json"))["channels"]
-    sec_pkg = {(c["projectile_z"], c["projectile_a"], c["target_element_z"]):
-               (c["energy_min_MeV_per_u"], c["energy_max_MeV_per_u"]) for c in sec_ch}
+        assert (D / fn).exists(), f'missing {fn}'
+    sec_keys, sec_doms = read_rate_keys(D / FILES['secondary_rate'], b'SCHN2RAT', 14)
+    _, pri_doms = read_rate_keys(D / FILES['primary_rate'], b'SCHNRATE', 0)
+    sec_ch = json.load(open(D / 'cinel03_secondary_targets_v2_1_14p.channels.json'))['channels']
+    sec_pkg = {(c['projectile_z'], c['projectile_a'], c['target_element_z']): (c['energy_min_MeV_per_u'], c['energy_max_MeV_per_u']) for c in sec_ch}
     assert len(sec_pkg) == 182, len(sec_pkg)
-    assert sorted(set(k[:2] for k in sec_pkg)) == sorted(sec_keys), "registry != package projectiles"
-    assert sec_doms == sec_pkg, "secondary rate domains != package bounds"
-
-    pri_ch = json.load(open(D / "cinel03_c12_targets_v2_1.channels.json"))["channels"]
-    pri_pkg = {(c["projectile_z"], c["projectile_a"], c["target_element_z"]):
-               (c["energy_min_MeV_per_u"], c["energy_max_MeV_per_u"]) for c in pri_ch}
+    assert sorted(set((k[:2] for k in sec_pkg))) == sorted(sec_keys), 'registry != package projectiles'
+    assert sec_doms == sec_pkg, 'secondary rate domains != package bounds'
+    pri_ch = json.load(open(D / 'cinel03_c12_targets_v2_1.channels.json'))['channels']
+    pri_pkg = {(c['projectile_z'], c['projectile_a'], c['target_element_z']): (c['energy_min_MeV_per_u'], c['energy_max_MeV_per_u']) for c in pri_ch}
     assert len(pri_pkg) == 13
-    assert pri_doms == pri_pkg, "primary rate domains != package bounds"
-
-    bundle = {
-        "schema_version": 1,
-        "bundle_name": "schneider_physics_bundle_v2_1",
-        "primary_rate": {"file": "data/schneider/" + FILES["primary_rate"],
-                         "sha256": sha256_file(D / FILES["primary_rate"])},
-        "primary_package": {"file": "data/schneider/" + FILES["primary_package"],
-                            "sha256": sha256_file(D / FILES["primary_package"]),
-                            "channels_file": "data/schneider/cinel03_c12_targets_v2_1.channels.json",
-                            "channels_sha256": sha256_file(
-                                D / "cinel03_c12_targets_v2_1.channels.json")},
-        "secondary_rate": {"file": "data/schneider/" + FILES["secondary_rate"],
-                           "sha256": sha256_file(D / FILES["secondary_rate"])},
-        "secondary_package": {"file": "data/schneider/" + FILES["secondary_package"],
-                              "sha256": sha256_file(D / FILES["secondary_package"]),
-                              "channels_file": "data/schneider/cinel03_secondary_targets_v2_1_14p.channels.json",
-                              "channels_sha256": sha256_file(
-                                  D / "cinel03_secondary_targets_v2_1_14p.channels.json")},
-        "stopping_table": {"file": "data/schneider/" + FILES["stopping_table"],
-                           "sha256": sha256_file(D / FILES["stopping_table"])},
-        "schneider_source": {"file": "data/HUtoMaterialSchneider.txt",
-                             "sha256": sha256_file(REPO / "data/HUtoMaterialSchneider.txt")},
-        "projectile_registry": [{"z": z, "a": a} for z, a in sec_keys],
-        "target_order": CANON_Z,
-        "energy_grid": {"emin": 0.1, "emax": 460.1, "step": 0.5, "count": 921},
-        "physics_list_primary": "FTFP_INCLXX",
-        "physics_list_secondary": "g4em-standard_opt4 + g4ion-binarycascade",
-        "topas_version": "4.2.p3", "geant4_version": "11.03.p02",
-        "generator_commit": subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=REPO).decode().strip(),
-        "generation_timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
-    }
-    out = D / "schneider_physics_bundle_v2_1.json"
+    assert pri_doms == pri_pkg, 'primary rate domains != package bounds'
+    bundle = {'schema_version': 1, 'bundle_name': 'schneider_physics_bundle_v2_1', 'primary_rate': {'file': 'data/schneider/' + FILES['primary_rate']}, 'primary_package': {'file': 'data/schneider/' + FILES['primary_package'], 'channels_file': 'data/schneider/cinel03_c12_targets_v2_1.channels.json'}, 'secondary_rate': {'file': 'data/schneider/' + FILES['secondary_rate']}, 'secondary_package': {'file': 'data/schneider/' + FILES['secondary_package'], 'channels_file': 'data/schneider/cinel03_secondary_targets_v2_1_14p.channels.json'}, 'stopping_table': {'file': 'data/schneider/' + FILES['stopping_table']}, 'schneider_source': {'file': 'data/HUtoMaterialSchneider.txt'}, 'projectile_registry': [{'z': z, 'a': a} for z, a in sec_keys], 'target_order': CANON_Z, 'energy_grid': {'emin': 0.1, 'emax': 460.1, 'step': 0.5, 'count': 921}, 'physics_list_primary': 'FTFP_INCLXX', 'physics_list_secondary': 'g4em-standard_opt4 + g4ion-binarycascade', 'topas_version': '4.2.p3', 'geant4_version': '11.03.p02', 'generator_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO).decode().strip(), 'generation_timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    out = D / 'schneider_physics_bundle_v2_1.json'
     out.write_text(json.dumps(bundle, indent=1))
-    print(f"bundle written: {out}")
-    print(f"  registry: {len(sec_keys)} projectiles; domains verified: "
-          f"{len(sec_doms)} secondary + {len(pri_doms)} primary")
+    print(f'bundle written: {out}')
+    print(f'  registry: {len(sec_keys)} projectiles; domains verified: {len(sec_doms)} secondary + {len(pri_doms)} primary')
 
 
 if __name__ == "__main__":

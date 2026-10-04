@@ -37,7 +37,6 @@ device: cuda
 em_model: g4_material_joint_v1
 em_delta_moments_file: data/em/unified_em_delta_moments_v2.bin
 em_package_file: data/em/unified_em_v1.bin
-em_package_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
 enable_energy_straggling: true
 enable_secondary_energy_straggling: true
 ct_secondary_exact_faces: true
@@ -48,10 +47,7 @@ history_chunk_size: 262144
 secondary_queue_capacity: 8000000
 secondary_species_grouping: false
 secondary_step_chunking: false
-em_delta_moments_sha256: c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc
-em_delta_moments_source_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
 urban_mcs_package_file: data/ct_urban/ct_copper_52.bin
-urban_mcs_package_sha256: 2e9937f9a239e6b4a8e7adab60d154768244599dbdd13e4b6b0e768d8497f684
 urban_water_half_width_mm: 2000
 secondary_local_deposit_cutoff_MeV: 0.1
 enable_flat_source: true
@@ -90,9 +86,7 @@ minibeam_copper_fragment_enable_energy_straggling: true
 minibeam_copper_fragment_straggling_scale: 1.0
 minibeam_copper_fragment_cascade_generations: 3
 minibeam_copper_enable_nuclear_attenuation: true
-minibeam_water_primary_mcs_model: legacy_highland
 minibeam_water_primary_stopping_power_scale: 1.0
-minibeam_water_low_energy_mcs_transition_MeVu: 0.0
 minibeam_copper_stopping_power_file: data/proton_copper_20260926/proton_copper_stopping.csv
 minibeam_air_stopping_power_file: data/proton_copper_20260926/proton_air_stopping.csv
 minibeam_copper_cross_section_file: data/proton_copper_20260926/proton_copper_inelastic_rate.csv
@@ -101,14 +95,11 @@ minibeam_copper_inclxx_file: data/proton_copper_20260926/copper_cascade.cinpkg
 minibeam_copper_ion_stopping_power_file: data/proton_copper_20260926/ion_copper_stopping.csv
 minibeam_copper_ion_cross_section_file: data/ion_cross_sections_copper_geant4_11_3_2.csv
 minibeam_diagnostics: true
-minibeam_water_delta_response_model: local
 minibeam_air_mcs_model: urban_v2
 minibeam_air_urban_package_file: data/air_urban_v2_20260926/urban_mcs_v2.bin
-minibeam_air_urban_package_sha256: 1c969cfd42ed22555352f728d54fcdd254e8413dbebfa51dde579180ee236a30
 minibeam_copper_proton_straggling_model: g4_universal_delta
 minibeam_phase_space_at_copper_exit: false
 minibeam_air_ionization_rate_file: data/proton_air_ionization_20260927/air_ionization_rate.csv
-minibeam_air_ionization_rate_sha256: c6d44902f91479f452716c3978893c91e42d8960be1c4c925e0f1dd1851c2517
 enable_charged_origin_voxel_scoring: false
 minibeam_copper_primary_native_mean_loss: false
 enable_neutron_transport: false
@@ -120,17 +111,9 @@ urban_ct_density_scaling: true
 enable_nuclear_elastic: false
 enable_ct_material_mcs: true
 ct_schneider_file: data/HUtoMaterialSchneider.txt
-material_electron_response_memory_mode: host_mapped
-material_electron_response_host_budget_MiB: 65536
-material_electron_response_hot_device_budget_MiB: 0
 all_ion_elastic_file: data/proton_therapy_20260926/all_ion_elastic_proton_v1.bin
-all_ion_elastic_sha256: 9469d877111b4c96c91711353d9271630d816b46b82e454aa512e076a2a8a273
 elastic_recoil_stopping_file: data/proton_therapy_20260926/elastic_recoil_stopping_water75.bin
-elastic_recoil_stopping_sha256: 71fb7f4db63f1655579ce87a1d2f9b9fb0bf6d835cb9bc0b8e5a5bdf8728a435
-material_electron_response_cache_policy: strict
-material_electron_execution_mode: queue
 # Full FP32 electron baseline; 0 explicitly selects reference arithmetic.
-material_electron_precision: 4
 material_electron_group_size: 32
 material_electron_queue_chunk: 262144
 material_electron_queue_lanes: 16384
@@ -140,11 +123,7 @@ material_electron_retain_bank: true
 # Independent electron runtime; research dose screen, not production acceptance.
 # No legacy birth, continuation or photon library is loaded.
 # See docs/electron_charged_runtime_20261003.md.
-material_electron_birth_file: data/ct_electron/proton_independent_v1/birth_bank.bin
-material_electron_birth_sha256: a6215fb92e70dd67eb12d5118727ff23acf5191fca34c0ab53b02673bc808979
-material_electron_joint_pilot_file: data/ct_electron/shared_independent_v1/schneider_joint.bin
-material_electron_joint_pilot_sha256: 6691f05ca5fcf986e326b2f3ce433a751543b0fa20b0e3d0ca008d94747a1dcb
-material_photon_response_index_file: data/ct_electron/shared_independent_v1/photon/index.txt
-material_photon_response_index_sha256: a91b1e7b6301e3d07b4fd70f1bb2cc9c7dfc4cdea6c7cad789ab831b6427ba41
-material_electron_charged_index_file: data/ct_electron/shared_independent_v1/charged/index.txt
-material_electron_charged_index_sha256: ad86b286de05aff663667793c241826e3f46472c992d4687be02a50fc9fe2e14
+material_electron_birth_file: data/electrons/proton/birth_bank.bin
+material_electron_joint_pilot_file: data/electrons/shared/joint.bin
+material_photon_response_index_file: data/electrons/shared/photon/index.txt
+material_electron_charged_index_file: data/electrons/shared/charged/index.txt

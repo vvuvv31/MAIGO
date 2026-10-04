@@ -4,16 +4,16 @@
 #include <iostream>
 #include <iomanip>
 int main(int argc,char** argv){try{
-    if(argc!=3)throw std::runtime_error("usage: charged-index sha256");
+    if(argc!=2)throw std::runtime_error("usage: charged-index");
     const std::filesystem::path index=argv[1];
-    if(carbon::compute_file_sha256_hex(index)!=argv[2])throw std::runtime_error("Index SHA mismatch");
+
     std::ifstream in(index);std::string magic;unsigned nodes;in>>magic>>nodes;
-    if(magic!="MAIECB01")throw std::runtime_error("Index format");
+    if(magic!="MAIECB02")throw std::runtime_error("Index format");
     std::uint64_t samples=0,invalid=0,selection_changes=0;
     double sum_reference=0,sum_candidate=0,max_norm_error=0,max_rotation_error=0,max_cell_relative=0;
     for(unsigned node=0;node<nodes;++node){
-        int section;double density;std::string file,pin;in>>section>>density>>file>>pin;
-        carbon::ChargedResponseData data(index.parent_path()/file,pin);const auto view=data.view().elastic;
+        int section;double density;std::string file;in>>section>>density>>file;
+        carbon::ChargedResponseData data(index.parent_path()/file);const auto view=data.view().elastic;
         for(double energy:{.00010001,.0003,.001,.003,.01,.03,.1,.3,.6499999}){
             double cell_reference=0,cell_candidate=0;
             for(unsigned j=0;j<4096;++j){

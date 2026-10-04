@@ -247,32 +247,6 @@ struct MinibeamDiagnostics {
     double direction_y_squared_sum{0.0};
 };
 
-enum class Cinel02UnstableIonPolicy : std::uint8_t {
-    StableForTransport = 0,
-    RejectUnsupported = 1,
-    TopasCompatKill = 2,
-    PromptDecayKernel = 3,
-};
-
-// Table-driven policy for product identities whose lifetime/data semantics are
-// not represented by the normal condensed-history transport tables.  Keep the
-// default transport behavior stable for every identity except the explicitly
-// classified Be-6 reference case.
-constexpr Cinel02UnstableIonPolicy cinel02_unstable_ion_policy(
-    const int atomic_number, const int mass_number) noexcept {
-    return atomic_number == 4 && mass_number == 6
-        ? Cinel02UnstableIonPolicy::TopasCompatKill
-        : Cinel02UnstableIonPolicy::StableForTransport;
-}
-
-constexpr bool cinel02_should_topas_compat_kill(
-    const bool compatibility_mode, const int atomic_number,
-    const int mass_number) noexcept {
-    return compatibility_mode &&
-           cinel02_unstable_ion_policy(atomic_number, mass_number) ==
-               Cinel02UnstableIonPolicy::TopasCompatKill;
-}
-
 // Diagnostic-only track-local reduction. No values feed particle transport or
 // dose scorers. Commit once after the stepping loop, including replay breaks.
 struct ContinuousSpeciesTrackTally {
@@ -707,29 +681,17 @@ struct SchneiderUnsupportedTrack {
 };
 static_assert(sizeof(SchneiderUnsupportedTrack) == 24, "unsupported-track layout");
 
-struct LongitudinalDomainRecord {
-    std::uint64_t history;
-    std::uint32_t step;
-    float initial_energy_MeVu;
-    float query_energy_MeVu;
-    float step_start_z_mm;
-    float step_length_mm;
-    float retained_MeV;
-};
 struct ElectronJointDiagnostics {
     std::uint64_t queries{},domain_misses{},invalid_marches{};
     double redistributed_MeV{},escaped_MeV{},domain_retained_MeV{};
     std::uint64_t ordered_path_replays{};
 };
-inline constexpr std::size_t kLongitudinalDomainLogCap = 4096;
 
 struct TransportResult {
     bool conditional_copper_response_enabled{false};
     bool fe_sampling_diagnostics_enabled{false};
     std::array<std::uint64_t, 8> fe_sampling_counts{};
-    std::vector<LongitudinalDomainRecord> longitudinal_domain_log{};
     ElectronJointDiagnostics electron_joint_diagnostics{};
-    std::string electron_ordered_path_sha256{};
     EnergyAccountingLedger energy_ledger{};
     SchneiderNuclearDiagnostics schneider_diagnostics{};
     // Bounded per-record logs (empty on water path / when logging disabled).
@@ -748,25 +710,6 @@ struct TransportResult {
     static constexpr std::size_t species_ledger_metric_count =
         Cinel02SpeciesLedgerSchema::metric_count;
     std::vector<double> deposited_energy_MeV;
-    // Informational subset of deposited energy redistributed by the optional
-    // Schneider section-0 primary delta-tail proxy. The fallback term stayed
-    // at the production voxel because the sampled endpoint left section 0.
-    double schneider_primary_delta_tail_moved_MeV{0.0};
-    double schneider_primary_delta_tail_fallback_MeV{0.0};
-    // Sampled delta-tail energy whose endpoint left the aligned 3-D scorer.
-    double schneider_primary_delta_tail_escaped_scorer_MeV{0.0};
-    // Informational subset redistributed by the optional longitudinal
-    // (forward) supplement: moved along the beam and distributed over the
-    // march voxels (air or tissue) inside the scorer, kept locally when a
-    // march share falls inside the scorer but outside the CT grid, escaped
-    // when it leaves the scorer.
-    double schneider_primary_delta_longitudinal_moved_MeV{0.0};
-    double schneider_primary_delta_longitudinal_fallback_MeV{0.0};
-    double schneider_primary_delta_longitudinal_escaped_scorer_MeV{0.0};
-    std::uint64_t schneider_primary_delta_longitudinal_domain_queries{0};
-    double schneider_primary_delta_longitudinal_domain_energy_MeV{0.0};
-    std::uint64_t schneider_primary_delta_longitudinal_invalid_marches{0};
-    double longitudinal_diagnostic_density_g_cm3{0.0};
     std::vector<double> voxel_deposited_energy_MeV;
     // Primary track length accumulated per scorer voxel (mm).
     std::vector<double> primary_voxel_track_length_mm;
@@ -894,13 +837,6 @@ struct TransportResult {
                species_ledger_species_count *
                    Cinel02SpeciesLedgerSchema::terminal_reason_count>
         cinel02_species_terminal_reason_counts{};
-    // Explicit sink used only by TOPAS/Geant4 compatibility mode for
-    // unsupported prompt-unstable products (currently Be-6).  This is not
-    // dose, local nuclear deposit, reaction export, or physical escape.
-    std::array<std::uint64_t, species_ledger_species_count>
-        cinel02_topas_compat_discarded_counts{};
-    std::array<double, species_ledger_species_count>
-        cinel02_topas_compat_discarded_kinetic_MeV{};
     // Signed package/runtime incident-energy handoff diagnostics. The sums
     // are in MeV/u and are keyed by the projectile isotope of each valid
     // CINEL02 replay. Positive/negative counts classify the signed delta.
@@ -1008,23 +944,6 @@ struct TransportResult {
     double charged_from_neutral_energy_MeV{0.0};
     double neutral_unsupported_product_energy_MeV{0.0};
     double neutral_package_closure_residual_MeV{0.0};
-    std::uint64_t queued_electrons{0};
-    std::uint64_t electron_queue_overflow{0};
-    std::uint64_t transported_electrons{0};
-    std::uint64_t transported_positrons{0};
-    std::uint64_t electron_transport_steps{0};
-    double queued_electron_energy_MeV{0.0};
-    double electron_queue_overflow_energy_MeV{0.0};
-    double electron_deposited_energy_MeV{0.0};
-    double electron_escaped_energy_MeV{0.0};
-    double electron_radiative_energy_MeV{0.0};
-    double positron_annihilation_reserve_MeV{0.0};
-    std::uint64_t electron_generated_gammas{0};
-    std::uint64_t electron_gamma_queue_overflow{0};
-    double electron_brems_gamma_energy_MeV{0.0};
-    double positron_annihilation_gamma_energy_MeV{0.0};
-    double electron_gamma_queue_overflow_energy_MeV{0.0};
-    double electromagnetic_generation_residual_MeV{0.0};
     std::uint64_t total_steps{0};
     double elapsed_seconds{0.0};
     double primary_kernel_seconds{0.0};
@@ -1041,7 +960,6 @@ struct TransportResult {
     // physical closure intentionally excludes those sinks so a reference
     // model defect cannot be mistaken for deposited or escaped energy.
     [[nodiscard]] double physical_relative_energy_balance_error() const noexcept;
-    [[nodiscard]] double topas_compat_discarded_kinetic_total_MeV() const noexcept;
     [[nodiscard]] double relative_energy_balance_error() const noexcept;
 };
 

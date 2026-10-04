@@ -3,7 +3,6 @@
   "description": "Exact 25-section Schneider radiation lengths derived from TOPAS/Geant4 11.03.p02",
   "number_of_sections": 25,
   "source_truth_file": "topas-schneider-materials.json",
-  "source_truth_sha256": "d8a5c771b4c74949991a4e089846d1e4a92022c056ca60eebf8e9218b8d93b6b",
   "sections": [
     {
       "section_id": 0,

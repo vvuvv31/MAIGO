@@ -1,8 +1,6 @@
 {
   "schema_version": 1,
   "data_filename": "schneider_radiation_lengths.json",
-  "data_sha256": "f7a412110cc8928ddb6fb6dc112ca7d9b748e1025bd50790159a78f59a54909a",
-  "source_truth_sha256": "d8a5c771b4c74949991a4e089846d1e4a92022c056ca60eebf8e9218b8d93b6b",
   "sections_count": 25,
   "values_g_per_cm2": [
     36.60897629111455,

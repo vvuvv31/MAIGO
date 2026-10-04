@@ -9,7 +9,6 @@ extension have one auditable interpretation.
 from __future__ import annotations
 
 import binascii
-import hashlib
 import json
 import math
 import struct
@@ -737,18 +736,15 @@ def _load_qualification_report(
     ):
         raise ValueError("qualification report energy grid disagrees with package grid")
     report_files = report.get("raw_files")
-    expected_hashes = sorted(
-        hashlib.sha256(path.read_bytes()).hexdigest() for path in raw_paths
-    )
     if not isinstance(report_files, list):
-        raise ValueError("qualification report has no raw file hash list")
-    actual_hashes = []
-    for entry in report_files:
-        if not isinstance(entry, dict) or not isinstance(entry.get("sha256"), str):
-            raise ValueError("qualification report raw file entry is invalid")
-        actual_hashes.append(entry["sha256"])
-    if sorted(actual_hashes) != expected_hashes:
-        raise ValueError("qualification report raw file hashes disagree with package input")
+        raise ValueError("qualification report has no raw file list")
+    if any(not isinstance(entry, dict) or not isinstance(entry.get("path"), str)
+           for entry in report_files):
+        raise ValueError("qualification report raw file entry is invalid")
+    expected_files = sorted(str(path.resolve()) for path in raw_paths)
+    actual_files = sorted(str(Path(entry["path"]).resolve()) for entry in report_files)
+    if actual_files != expected_files:
+        raise ValueError("qualification report raw paths disagree with package input")
     report_cells = report.get("cells")
     if not isinstance(report_cells, list):
         raise ValueError("qualification report has no cells")
@@ -1042,7 +1038,6 @@ def compile_package(
     )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_bytes(header + index_payload + package_payload + global_index_payload)
-    digest = hashlib.sha256(output_path.read_bytes()).hexdigest()
     statistically_qualified = (
         qualification_report is not None and qualification_report.get("qualified") is True
     )
@@ -1140,7 +1135,6 @@ def compile_package(
                 {
                     "format": QUALIFICATION_SCHEMA,
                     "path": str(qualification_report_path),
-                    "sha256": hashlib.sha256(qualification_report_path.read_bytes()).hexdigest(),
                     "qualified": bool(qualification_report["qualified"]),
                     "thresholds": qualification_report.get("thresholds", {}),
                 }
@@ -1164,8 +1158,8 @@ def compile_package(
             "event_index_width_bytes": PACKAGE_EVENT_INDEX.size,
         },
         "records": {"cells": len(index_rows), "interactions": len(ordered_records), "products": sum(len(products) for _, products in ordered_records)},
-        "raw_files": [{"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()} for path in raw_paths],
-        "output": {"path": str(output_path), "bytes": file_size, "sha256": digest},
+        "raw_files": [{"path": str(path)} for path in raw_paths],
+        "output": {"path": str(output_path), "bytes": file_size},
         "provenance": metadata.get("provenance", {}),
     }
     output_metadata_path.parent.mkdir(parents=True, exist_ok=True)

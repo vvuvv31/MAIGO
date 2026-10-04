@@ -1,10 +1,11 @@
 #pragma once
-#include "carbon/electron_birth_sampling.hpp"
+#include "carbon/electron_material_registry.hpp"
 #include "carbon/electron_joint_sampling.hpp"
 #include <array>
 #include <cstdint>
 #include <limits>
 namespace carbon {
+struct ElectronBirthChannel {double low{},high{},fraction{};std::uint64_t offset{},count{};};
 struct ElectronBirthStateSample {double cdf{},energy{},cosine{};};
 struct ElectronBirthNodeView {
     int section{-1};double density{};
@@ -29,7 +30,7 @@ inline const ElectronBirthChannel* electron_birth_channel(const ElectronBirthNod
 inline IndependentElectronBirthDraw prepare_independent_electron_birth(
     ElectronBirthBankView bank,int section,double density,double energy,double mix) {
     IndependentElectronBirthDraw out;
-    if(!bank.nodes||!bank.section_offsets||section<0||section>=25||!std::isfinite(density)||density<=0||!std::isfinite(mix)||mix<0||mix>=1)return out;
+    if(!bank.nodes||!bank.section_offsets||section<0||section>=kElectronMaterialCount||!std::isfinite(density)||density<=0||!std::isfinite(mix)||mix<0||mix>=1)return out;
     const auto first=bank.section_offsets[section],end=bank.section_offsets[section+1];
     if(first>=end||end>bank.count||density<bank.nodes[first].density||density>bank.nodes[end-1].density)return out;
     unsigned hi=first;while(hi+1<end&&bank.nodes[hi].density<density)++hi;

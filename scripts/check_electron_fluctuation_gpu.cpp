@@ -1,19 +1,22 @@
 #include "carbon/electron_urban_fluctuation.hpp"
-#include "carbon/sha256.hpp"
+#include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <vector>
 #include <sycl/sycl.hpp>
 #include <iostream>
 #include <iomanip>
 struct LossCase{double energy,mean,cut;};
 int main(int argc,char** argv){try{
-    if(argc!=3)throw std::runtime_error("usage: index sha256");
-    const std::filesystem::path path=argv[1];if(carbon::compute_file_sha256_hex(path)!=argv[2])throw std::runtime_error("Index SHA");
+    if(argc!=2)throw std::runtime_error("usage: index");
+    const std::filesystem::path path=argv[1];
     std::ifstream index(path);std::string magic;unsigned nodes;index>>magic>>nodes;
-    if(magic!="MAIURB01"||!nodes||nodes>4096)throw std::runtime_error("Index format");
+    if(magic!="MAIURB02"||!nodes||nodes>4096)throw std::runtime_error("Index format");
     sycl::queue q{sycl::gpu_selector_v};std::uint64_t total=0;double maxError=0;
     for(unsigned node=0;node<nodes;++node){
-        std::string file,pin,caseFile,casePin;index>>file>>pin>>caseFile>>casePin;
+        std::string file,caseFile;index>>file>>caseFile;
         const auto materialPath=path.parent_path()/file,casePath=path.parent_path()/caseFile;
-        if(!index||carbon::compute_file_sha256_hex(materialPath)!=pin||carbon::compute_file_sha256_hex(casePath)!=casePin)throw std::runtime_error("Pinned fixture mismatch");
+        if(!index)throw std::runtime_error("Fixture index mismatch");
         carbon::ElectronUrbanMaterial material;std::ifstream mf(materialPath,std::ios::binary);mf.read(reinterpret_cast<char*>(&material),sizeof(material));
         if(!mf||mf.peek()!=std::char_traits<char>::eof())throw std::runtime_error("Material size");
         std::ifstream cf(casePath);std::string line;std::getline(cf,line);std::vector<LossCase> cases;

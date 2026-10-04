@@ -307,29 +307,6 @@ inline void score_exponential_voxel_depth(
     }
 }
 
-// Energy-dependent electronic delta fraction (0 at low E → full scale at 400 MeV/u).
-inline float electronic_buildup_fraction_at_energy(
-    const float energy_MeVu, const float fraction_at_400) noexcept {
-    if (fraction_at_400 <= 0.0F) {
-        return 0.0F;
-    }
-    const auto scale = energy_MeVu > 0.0F ? energy_MeVu / 400.0F : 0.0F;
-    const auto clamped = scale < 1.0F ? scale : 1.0F;
-    return fraction_at_400 * clamped;
-}
-
-// The maximum transferable delta-electron energy, and therefore its range,
-// falls with projectile velocity. Keep the configured MFP as the 400 MeV/u
-// reference instead of applying the same transport length near the Bragg peak.
-inline float electronic_buildup_mfp_at_energy(
-    const float energy_MeVu, const float mfp_at_400_mm) noexcept {
-    if (mfp_at_400_mm <= 0.0F || energy_MeVu <= 0.0F) {
-        return 0.0F;
-    }
-    return mfp_at_400_mm * sycl::fmin(energy_MeVu / 400.0F, 1.0F);
-}
-
-// Kerma fraction: f0 for E<=200 MeV/u; linear ramp to f0*high_scale at E>=400.
 inline float neutral_kerma_fraction_at_energy(const float energy_MeVu,
                                                const float f0,
                                                const float high_scale) noexcept {

@@ -1,7 +1,7 @@
 #pragma once
 #include "carbon/electron_charged_bank.hpp"
 #include "carbon/electron_charged_step.hpp"
-#include "carbon/electron_packet_transport.hpp"
+#include "carbon/electron_packet_state.hpp"
 namespace carbon {
 template<class Uniform,class Tally,class Score=NoExpectedScore>
 inline ElectronEnergyPacket transport_independent_charged_packet(ElectronEnergyPacket packet,

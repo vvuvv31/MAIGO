@@ -1,6 +1,9 @@
 #pragma once
+#include "carbon/electron_material_registry.hpp"
 #include "carbon/photon_response.hpp"
-#include "carbon/sha256.hpp"
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
 #include <filesystem>
 #include <fstream>
 #include <vector>
@@ -16,13 +19,12 @@ public:
     std::vector<PhotonRateRow> rates;std::vector<double> edges;
     std::vector<PhotonChannel> channels;std::vector<PhotonOutcome> outcomes;
     int section{};double density{};std::uint64_t bytes{};
-    PhotonResponseData(const std::filesystem::path& path,const std::string& sha) {
-        require(sha.size()==64&&compute_file_sha256_hex(path)==sha,"Photon response SHA mismatch");
+    PhotonResponseData(const std::filesystem::path& path) {
         bytes=std::filesystem::file_size(path);std::ifstream f(path,std::ios::binary);
         char magic[8];std::uint32_t version,nrate,nbin;std::uint64_t nout;
         read(f,magic,8);read(f,&version);read(f,&section);read(f,&density);read(f,&nrate);read(f,&nbin);read(f,&nout);
         static_assert(sizeof(PhotonRateRow)==32&&sizeof(PhotonOutcome)==32&&sizeof(PhotonChannel)==16);
-        require(!std::memcmp(magic,"MAIPHN01",8)&&version==1&&section>=0&&section<25&&std::isfinite(density)&&density>0,"Photon response header");
+        require(!std::memcmp(magic,"MAIPHN01",8)&&version==1&&section>=0&&section<kElectronMaterialCount&&std::isfinite(density)&&density>0,"Photon response header");
         require(nrate>=2&&nrate<=1000000&&nbin>0&&nbin<=4096&&nout>0&&nout<=bytes/32,"Photon response counts");
         require(bytes==40ull+32ull*nrate+8ull*(nbin+1)+16ull*3*nbin+32ull*nout,"Photon response size");
         rates.resize(nrate);edges.resize(nbin+1);channels.resize(3*nbin);outcomes.resize(nout);

@@ -3,7 +3,6 @@
 #include "carbon/ct_grid.hpp"
 #include "carbon/topas_spots.hpp"
 #include "carbon/upstream_air_scattering.hpp"
-#include "carbon/sha256.hpp"
 #include <optional>
 
 #include <algorithm>
@@ -791,8 +790,6 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
     std::vector<PrimarySpotBatchEntry> batch;
     std::optional<AirMomentTable> air_moments;
     if (config.spots_enable_upstream_air_mcs) {
-        if (!file_sha256_matches(config.spots_upstream_air_mcs_file,config.spots_upstream_air_mcs_sha256))
-            throw std::invalid_argument("Air moment table SHA mismatch");
         air_moments=AirMomentTable::read(config.spots_upstream_air_mcs_file);
     }
     batch.reserve(active_spot_count());

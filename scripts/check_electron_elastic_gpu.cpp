@@ -4,17 +4,17 @@
 #include <iomanip>
 struct Reference {std::uint64_t seed;double energy,cosine;std::uint64_t calls;};
 int main(int argc,char** argv){try{
-    if(argc!=3)throw std::runtime_error("usage: index sha256");
-    const std::filesystem::path path=argv[1];if(carbon::compute_file_sha256_hex(path)!=argv[2])throw std::runtime_error("Index SHA");
+    if(argc!=2)throw std::runtime_error("usage: index");
+    const std::filesystem::path path=argv[1];
     std::ifstream index(path);std::string magic;unsigned nodes;index>>magic>>nodes;
-    if(magic!="MAIELB01"||!nodes||nodes>4096)throw std::runtime_error("Index format");
+    if(magic!="MAIELB02"||!nodes||nodes>4096)throw std::runtime_error("Index format");
     sycl::queue q{sycl::gpu_selector_v};std::uint64_t total=0;double maxCosineError=0;
     for(unsigned node=0;node<nodes;++node){
-        std::string file,pin,refFile,refPin;unsigned count;index>>file>>pin>>refFile>>refPin>>count;
+        std::string file,refFile;unsigned count;index>>file>>refFile>>count;
         if(!index||!count||count>10000000)throw std::runtime_error("Index row");
-        carbon::ElectronElasticData data(path.parent_path()/file,pin);
+        carbon::ElectronElasticData data(path.parent_path()/file);
         const auto reference=path.parent_path()/refFile;
-        if(carbon::compute_file_sha256_hex(reference)!=refPin||std::filesystem::file_size(reference)!=32ull*count)throw std::runtime_error("Reference SHA/size");
+        if(std::filesystem::file_size(reference)!=32ull*count)throw std::runtime_error("Reference size");
         auto* refs=sycl::malloc_shared<Reference>(count,q);auto* rows=sycl::malloc_shared<double>(31*38,q);
         auto* output=sycl::malloc_shared<carbon::ElectronElasticDraw>(count,q);auto* calls=sycl::malloc_shared<std::uint64_t>(count,q);
         auto* score=sycl::malloc_shared<float>(1,q);if(!refs||!rows||!output||!calls||!score)throw std::bad_alloc();

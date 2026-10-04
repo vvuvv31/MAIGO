@@ -66,12 +66,6 @@ inline PrimaryIonDefinition make_primary_ion_definition(
     };
 }
 
-// First staged minibeam extension: proton only (not d/t), and every
-// transported helium isotope. Unsupported Urban package records fail closed.
-constexpr bool minibeam_urban_proton_or_helium(int z, int a) noexcept {
-    return (z == 1 && a == 1) || (z == 2 && a >= 2);
-}
-
 inline constexpr std::size_t charged_origin_category_count = 8;
 inline constexpr std::size_t primary_charged_origin_category = 0;
 inline constexpr std::size_t be_isotope_origin_category_count = 4;

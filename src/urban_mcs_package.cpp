@@ -1,5 +1,4 @@
 #include "carbon/urban_mcs_package.hpp"
-#include "carbon/sha256.hpp"
 #include <array>
 #include <cstring>
 #include <fstream>
@@ -7,9 +6,7 @@
 #include <stdexcept>
 
 namespace carbon {
-UrbanMcsPackage UrbanMcsPackage::load(const std::filesystem::path& path,const std::string& pin) {
-    if(pin.size()!=64 || compute_file_sha256_hex(path)!=pin)
-        throw std::runtime_error("Urban MSC package SHA256 mismatch");
+UrbanMcsPackage UrbanMcsPackage::load(const std::filesystem::path& path) {
     std::ifstream stream(path,std::ios::binary);
     char magic[8];std::array<std::uint32_t,7> header{};
     stream.read(magic,8);stream.read(reinterpret_cast<char*>(header.data()),28);

@@ -1,6 +1,9 @@
 #pragma once
+#include "carbon/electron_material_registry.hpp"
 #include "carbon/electron_charged_response.hpp"
-#include "carbon/sha256.hpp"
+#include <filesystem>
+#include <fstream>
+#include <stdexcept>
 #include <array>
 #include <vector>
 #include <cstring>
@@ -13,13 +16,12 @@ public:
     std::vector<double> edges;std::vector<ChargedChannel> channels;std::vector<ChargedOutcome> outcomes;
     std::array<double,31*38> elastic_rows{};double mass{},bc{},xc2{};
     ElectronUrbanMaterial urban{};int section{};double density{},electron_cut{},photon_cut{},lowest{},linear{};std::uint64_t bytes{};
-    ChargedResponseData(const std::filesystem::path& path,const std::string& pin){
-        require(pin.size()==64&&compute_file_sha256_hex(path)==pin,"Charged response SHA mismatch");
+    ChargedResponseData(const std::filesystem::path& path){
         bytes=std::filesystem::file_size(path);std::ifstream f(path,std::ios::binary);
         char magic[8];unsigned version,npar,nbin,nrate[2];std::uint64_t nout;
         read(f,magic,8);read(f,&version);read(f,&section);read(f,&density);read(f,&npar);read(f,&nbin);read(f,nrate,2);read(f,&nout);
         read(f,&electron_cut);read(f,&photon_cut);read(f,&lowest);read(f,&linear);
-        require(!std::memcmp(magic,"MAIECH02",8)&&version==2&&section>=0&&section<25&&std::isfinite(density)&&density>0,"Charged response header");
+        require(!std::memcmp(magic,"MAIECH02",8)&&version==2&&section>=0&&section<kElectronMaterialCount&&std::isfinite(density)&&density>0,"Charged response header");
         require(npar>=2&&npar<=1000000&&nbin>0&&nbin<=4096&&nrate[0]>0&&nrate[0]<=1000000&&nrate[1]>0&&nrate[1]<=1000000&&nout>0&&nout<=bytes/32,"Charged response counts");
         require(bytes==9600ull+48ull*(npar+nrate[0]+nrate[1])+8ull*(nbin+1)+32ull*nbin+32ull*nout,"Charged response size");
         require(std::isfinite(electron_cut)&&electron_cut>0&&std::isfinite(photon_cut)&&photon_cut>0&&std::isfinite(lowest)&&std::abs(lowest-.0001)<1e-18&&linear==.01,"Charged response cuts/native terminal rules");
@@ -28,6 +30,8 @@ public:
         for(double x:elastic_rows)require(std::isfinite(x),"Charged elastic row");
         const double uv[]={urban.mass,urban.excitation,urban.e0,urban.e1,urban.e2,urban.f1,urban.f2};
         for(unsigned j=0;j<7;++j)require(std::isfinite(uv[j])&&(j<5?uv[j]>0:uv[j]>=0),"Charged Urban constants");
+        if(section==int(kElectronWaterSection))
+            require(density==1.0&&std::abs(urban.excitation-75e-6)<1e-14,"Water electron operator requires Water_75eV at unit density");
         parameters.resize(npar);for(unsigned p=0;p<2;++p)rate[p].resize(nrate[p]);edges.resize(nbin+1);channels.resize(2*nbin);outcomes.resize(nout);
         read(f,parameters.data(),npar);for(unsigned p=0;p<2;++p)read(f,rate[p].data(),nrate[p]);read(f,edges.data(),edges.size());read(f,channels.data(),channels.size());read(f,outcomes.data(),outcomes.size());
         require(f.peek()==std::char_traits<char>::eof(),"Charged response trailing data");

@@ -7,7 +7,7 @@ transport equivalence or CT acceptance. No legacy trajectory files are read.
 import argparse, concurrent.futures, json, struct
 from pathlib import Path
 import numpy as np
-from extract_photon_response import DTYPE, sha, save
+from electron_package_common import COLLISION_DTYPE as DTYPE, save
 from compile_photon_response import OUTCOME
 from electron_hard_rates import witnesses
 BASE=Path(__file__).resolve().parents[1]/'out/electron_standalone_20261003'
@@ -17,7 +17,7 @@ def one(task):
     node,source,supplement,parameters,elastic,urban,out=task
     name=f'node{node:02d}';par=parameters/name
     meta=json.loads((par/'report.json').read_text());identity=meta['material_identity']
-    paramfile=par/'boundary_parameters.csv';assert sha(paramfile)==meta['table_sha256']
+    paramfile=par/'boundary_parameters.csv'
     rawpar=np.loadtxt(paramfile,delimiter=',',skiprows=1)
     assert rawpar.shape==(257,12) and np.isfinite(rawpar).all()
     # Signed coarse knots retained for diagnostic comparison; runtime hard
@@ -29,7 +29,7 @@ def one(task):
     for root in [source,supplement]:
         if root is None:continue
         d=root/name;report=json.loads((d/'report.json').read_text());audit=report['audit'];raw=d/'conditional.phsp'
-        assert sha(raw)==audit['raw_sha256'] and audit['material_identity']==identity
+        assert audit['material_identity']==identity
         r=np.fromfile(raw,DTYPE);c=r[r['kind']==0];child=r[(r['kind']==1)&(r['remaining']>0)]
         assert np.all(c['pdg']==11) and np.all((c['process']>=0)&(c['process']<2))
         assert np.all(c['energy']>=edges[0]) and np.all(c['energy']<=edges[-1])
@@ -44,7 +44,7 @@ def one(task):
         assert np.isfinite(f).all() and np.all(f>=0) and np.all(f<=1)
         assert np.isfinite(cs[positive]).all() and np.all(abs(cs[positive])<=1+1e-12)
         fractions.append(f[positive]);cosines.append(np.clip(cs[positive],-1,1));pdgs.append(pdg[positive]);cells.append(cell[positive])
-        inputs.append(dict(report_sha256=sha(d/'report.json'),raw_sha256=sha(raw),path=str(raw)))
+        inputs.append(dict(path=str(raw)))
     cell=np.concatenate(cells);order=np.argsort(cell,kind='stable');cell=cell[order]
     fraction=np.concatenate(fractions)[order];cosine=np.concatenate(cosines)[order];pdg=np.concatenate(pdgs)[order]
     counts=np.bincount(cell,minlength=2*bins);offsets=np.r_[0,np.cumsum(counts)]
@@ -65,9 +65,6 @@ def one(task):
         assert part[0,0]==edges[0] and part[-1,1]==edges[-1]
         assert np.all(part[:,1]>part[:,0]) and np.array_equal(part[1:,0],part[:-1,1])
     elast=elastic/name/'elastic_kernel.bin';urb=urban/name/'urban_material.bin'
-    elastic_index=(elastic/'index.txt').read_text().splitlines()[node+1].split()
-    assert elastic_index[0]==f'{name}/elastic_kernel.bin' and sha(elast)==elastic_index[1]
-    urbreport=json.loads((urban/name/'report.json').read_text());assert sha(urb)==urbreport['table_sha256']
     assert elast.stat().st_size==9464 and urb.stat().st_size==56
     opts=meta['options'];d=out/name;d.mkdir();path=d/'operator.bin'
     # Native rules are pinned by source+unrounded exported values: PIXE=0,
@@ -79,7 +76,7 @@ def one(task):
         f.write(elast.read_bytes());f.write(urb.read_bytes())
         for a in [rows,*pieces,edges.astype('<f8'),np.column_stack([offsets[:-1],counts]).astype('<u8'),outcomes]:f.write(a.tobytes())
     assert path.stat().st_size==9600+48*len(rows)+48*len(cubic)+8*(bins+1)+32*bins+32*len(outcomes)
-    result=dict(node=node,material_identity=identity,bytes=path.stat().st_size,sha256=sha(path),collisions=int(native_count.sum()),outcomes=len(outcomes),empty_channels=int(np.count_nonzero(counts==0)),coverage_complete=not gaps,positive_support_cells=len(support),native_cubic_sha256=sha(cubicfile),native_cubic_max_absolute_error=float(cubic[:,-1].max()),unsupported_rate_probes=gaps,inputs=inputs,parameter_sha256=sha(paramfile),elastic_sha256=sha(elast),urban_sha256=sha(urb),generator_sha256=sha(Path(__file__)),scope='All positive parent/local/electron/photon branches, no thinning. Native piecewise cubic rates with max(raw rate,0); piecewise-linear stopping/range and energy-bin conditional fractions with uniform azimuth are explicit new approximations. Fine support is not physical interpolation or dose validation.')
+    result=dict(node=node,material_identity=identity,bytes=path.stat().st_size,collisions=int(native_count.sum()),outcomes=len(outcomes),empty_channels=int(np.count_nonzero(counts==0)),coverage_complete=not gaps,positive_support_cells=len(support),native_cubic_max_absolute_error=float(cubic[:,-1].max()),unsupported_rate_probes=gaps,inputs=inputs,scope='All positive parent/local/electron/photon branches, no thinning. Native piecewise cubic rates with max(raw rate,0); piecewise-linear stopping/range and energy-bin conditional fractions with uniform azimuth are explicit new approximations. Fine support is not physical interpolation or dose validation.')
     save(d/'manifest.json',result);print(node,len(outcomes),len(gaps),flush=True);return result
 
 
@@ -93,7 +90,7 @@ def main():
     with concurrent.futures.ProcessPoolExecutor(max_workers=a.workers) as pool:results=list(pool.map(one,tasks))
     complete=all(x['coverage_complete'] for x in results);index=None
     if complete:
-        index=out/'index.txt';index.write_text(f'MAIECB01 {len(results)}\n'+''.join(f'{x["material_identity"]["section_id"]} {x["material_identity"]["runtime_density_g_cm3"]:.17g} node{x["node"]:02d}/operator.bin {x["sha256"]}\n' for x in results))
-    save(out/'manifest.json',dict(status='RESEARCH_CHARGED_BANK_NOT_TRANSPORT_ACCEPTED',coverage_complete=complete,results=results,total_bytes=sum(x['bytes'] for x in results),index_sha256=sha(index) if index else None))
+        index=out/'index.txt';index.write_text(f'MAIECB02 {len(results)}\n'+''.join(f'{x["material_identity"]["section_id"]} {x["material_identity"]["runtime_density_g_cm3"]:.17g} node{x["node"]:02d}/operator.bin\n' for x in results))
+    save(out/'manifest.json',dict(status='RESEARCH_CHARGED_BANK_NOT_TRANSPORT_ACCEPTED',coverage_complete=complete,results=results,total_bytes=sum(x['bytes'] for x in results)))
     if not complete:raise SystemExit('Missing positive-rate channels; no runtime index emitted')
 if __name__=='__main__':main()

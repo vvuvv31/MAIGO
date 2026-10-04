@@ -2,7 +2,6 @@
 run_mode: research
 scorer_mode: production
 unified_water_material_file: data/water_unified/g4_water_material.json
-unified_water_material_sha256: 60be17929880fe18f1758edc02350b3fa7140b817ab0d21cb75bd87dbc891f31
 enable_ct_grid: false
 number_of_histories: 10000
 initial_energy_MeVu: 200
@@ -34,7 +33,6 @@ enable_secondary_transport: true
 cinel02_max_secondary_inelastic_generations: 2
 secondary_out_of_scope_nuclear_policy: em_only
 primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-use_particle_specific_stopping_power: true
 particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
 ct_schneider_primary_rate_file: data/schneider/schneider_inelastic_rates_v2_1.bin
 ct_schneider_secondary_rate_file: data/schneider/secondary_inelastic_rates_v2_1.bin
@@ -49,7 +47,6 @@ device: cuda
 em_model: g4_material_joint_v1
 em_delta_moments_file: data/em/unified_em_delta_moments_v2.bin
 em_package_file: data/em/unified_em_v1.bin
-em_package_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
 enable_energy_straggling: true
 enable_secondary_energy_straggling: true
 ct_secondary_exact_faces: true

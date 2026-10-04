@@ -3,6 +3,7 @@
 #include "carbon/delta_moments_data.hpp"
 #include "carbon/inelastic_package_v3.hpp"
 #include "carbon/unified_em_package.hpp"
+#include "carbon/immutable_input_cache.hpp"
 
 #include <filesystem>
 #include <functional>
@@ -85,20 +86,16 @@ struct LoadedUnifiedEm {
 
 struct UnifiedEmRequest {
     std::filesystem::path package_file;
-    std::string package_sha256;
     std::filesystem::path delta_file;
-    std::string delta_sha256;
-    std::string delta_source_sha256;
 
     [[nodiscard]] std::string key() const {
-        return package_file.string() + "|" + package_sha256 + "|" + delta_file.string() + "|" +
-               delta_sha256 + "|" + delta_source_sha256;
+        return input_cache_key(package_file) + "|" + input_cache_key(delta_file);
     }
     [[nodiscard]] LoadedUnifiedEm load() const {
         auto package = std::make_shared<const UnifiedEmPackage>(
-            UnifiedEmPackage::load(package_file, package_sha256));
+            UnifiedEmPackage::load(package_file));
         auto delta = std::make_shared<const std::vector<float>>(load_delta_moments(
-            delta_file, package_sha256, package->nodes.size(), delta_sha256, delta_source_sha256));
+            delta_file, package->nodes.size()));
         return {std::move(package), std::move(delta)};
     }
 };

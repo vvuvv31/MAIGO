@@ -1,4 +1,5 @@
 #pragma once
+#include "carbon/electron_material_registry.hpp"
 #include "carbon/electron_charged_density.hpp"
 #include "carbon/electron_ct_boundary.hpp"
 namespace carbon {
@@ -27,7 +28,7 @@ inline ChargedFace next_charged_face(const ElectronCtGeometry& g,
     if(std::abs(norm-1)>1e-9)return out;
     if(outward){out.valid=out.escaped=true;return out;}
     out.voxel=(std::uint64_t(cell[2])*g.bins[1]+cell[1])*g.bins[0]+cell[0];out.section=g.section[out.voxel];out.density=g.density[out.voxel];
-    if(out.section>=25||!std::isfinite(out.density)||out.density<=0)return out;
+    if(out.section>=kElectronMaterialCount||!std::isfinite(out.density)||out.density<=0)return out;
     out.distance=std::min(next[0],std::min(next[1],next[2]));if(!std::isfinite(out.distance)||out.distance<=0)return out;
     for(unsigned k=0;k<3;++k)out.position[k]=next[k]==out.distance?face[k]:position[k]+out.distance*direction[k];
     out.valid=true;return out;

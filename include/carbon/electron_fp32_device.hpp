@@ -1,4 +1,5 @@
 #pragma once
+#include "carbon/electron_material_registry.hpp"
 #include "carbon/electron_fp32.hpp"
 #include "carbon/electron_birth_bank_device.hpp"
 #include "carbon/electron_charged_bank_device.hpp"
@@ -12,7 +13,7 @@
 namespace carbon {
 namespace electron_fp32_convert {
 // These conversions run once at loading, never in the transport kernel. File
-// parsing and SHA/content validation remain with the original disk readers.
+// parsing and physical schema validation remain with the disk readers.
 inline electron_fp32::Probability probability(double x){
     return {x<=0?0:x>=1?UINT64_MAX:static_cast<std::uint64_t>(std::ldexp(x,64))};
 }
@@ -79,30 +80,30 @@ public:
     std::vector<std::pair<int,float>> birth_materials;
     std::uint64_t bytes{},mapped_bytes{},source_bytes{};
     IndependentElectronFloatDevice(sycl::queue q,
-        const std::filesystem::path& birth_path,const std::string& birth_sha,
-        const std::filesystem::path& joint_path,const std::string& joint_sha,
-        const std::filesystem::path& charged_path,const std::string& charged_sha,
-        const std::filesystem::path& photon_path,const std::string& photon_sha,
+        const std::filesystem::path& birth_path,
+        const std::filesystem::path& joint_path,
+        const std::filesystem::path& charged_path,
+        const std::filesystem::path& photon_path,
         unsigned projectile_z=1,unsigned projectile_a=1):queue_(q){try{
         // Release each source device bank before loading the next component;
         // do not keep both full representations resident across batches.
         {
-            ElectronBirthBankDevice source(q,birth_path,birth_sha,projectile_z,projectile_a);source_bytes+=source.bytes;
+            ElectronBirthBankDevice source(q,birth_path,projectile_z,projectile_a);source_bytes+=source.bytes;
             std::vector<electron_fp32::ElectronBirthNodeView> nodes;
             for(const auto& x:source.host_nodes){electron_fp32::ElectronBirthNodeView y{};
                 y.section=x.section;y.density=x.density;y.sample_count=x.sample_count;y.channel_count=x.channel_count;
                 y.channels=convert(x.channels,x.channel_count);y.samples=convert(x.samples,x.sample_count);nodes.push_back(y);birth_materials.emplace_back(y.section,y.density);}
-            birth.nodes=upload(nodes);birth.count=nodes.size();birth.section_offsets=copy(source.view.section_offsets,26);
+            birth.nodes=upload(nodes);birth.count=nodes.size();birth.section_offsets=copy(source.view.section_offsets,kElectronMaterialCount+1);
         }
         {
-            ElectronJointPilotDevice source(q,joint_path,joint_sha,{});source_bytes+=source.bytes;
+            ElectronJointPilotDevice source(q,joint_path);source_bytes+=source.bytes;
             if(source.view.sections){std::vector<ElectronJointPilotView> raw(source.view.section_count);
                 q.copy(source.view.sections,raw.data(),raw.size()).wait_and_throw();std::vector<electron_fp32::ElectronJointPilotView> nodes;
                 for(auto x:raw)nodes.push_back(joint_node(x));joint.sections=upload(nodes);joint.section_count=nodes.size();
             }else joint=joint_node(source.view);
         }
         {
-            ChargedBankDevice source(q,charged_path,charged_sha);source_bytes+=source.bytes;
+            ChargedBankDevice source(q,charged_path);source_bytes+=source.bytes;
 #ifdef CARBON_ELECTRON_CERTIFIED_RATES
             std::vector<std::array<double,2>> certified_raw_bound(source.host_nodes.size());
             q.copy(source.view.majorants,certified_raw_bound.data(),certified_raw_bound.size()).wait_and_throw();
@@ -131,7 +132,7 @@ public:
                 y.section=x.section;y.density=x.density;y.electron_cut=x.electron_cut;y.photon_cut=x.photon_cut;y.lowest_energy=x.lowest_energy;y.linear_loss_limit=x.linear_loss_limit;
                 charged_nodes.push_back(y);
             }
-            charged.nodes=upload(charged_nodes);charged.count=charged_nodes.size();charged.node_order=copy(source.view.node_order,charged.count);charged.section_offsets=copy(source.view.section_offsets,26);
+            charged.nodes=upload(charged_nodes);charged.count=charged_nodes.size();charged.node_order=copy(source.view.node_order,charged.count);charged.section_offsets=copy(source.view.section_offsets,kElectronMaterialCount+1);
             std::vector<std::array<double,2>> raw(charged.count);q.copy(source.view.majorants,raw.data(),raw.size()).wait_and_throw();
             std::vector<std::array<float,2>> bound(raw.size());for(unsigned i=0;i<raw.size();++i)for(unsigned p=0;p<2;++p)
                 bound[i][p]=std::nextafter(float(raw[i][p]),INFINITY);
@@ -142,12 +143,12 @@ public:
 #endif
         }
         {
-            PhotonResponseBankDevice source(q,photon_path,photon_sha);source_bytes+=source.bytes;
+            PhotonResponseBankDevice source(q,photon_path);source_bytes+=source.bytes;
             std::vector<electron_fp32::PhotonResponseView> nodes;
             for(const auto& x:source.host_nodes){electron_fp32::PhotonResponseView y{};
                 y.rates=convert(x.rates,x.rate_count);y.rate_count=x.rate_count;y.edges=convert(x.edges,x.bins+1);y.bins=x.bins;
                 y.channels=convert(x.channels,3*x.bins);y.outcomes=convert(x.outcomes,x.outcome_count,true);y.outcome_count=x.outcome_count;y.section=x.section;y.density=x.density;nodes.push_back(y);}
-            photon.nodes=upload(nodes);photon.count=nodes.size();photon.section_offsets=copy(source.view.section_offsets,26);
+            photon.nodes=upload(nodes);photon.count=nodes.size();photon.section_offsets=copy(source.view.section_offsets,kElectronMaterialCount+1);
         }
     }catch(...){for(auto* p:allocations_)sycl::free(p,queue_);throw;}}
     ~IndependentElectronFloatDevice(){for(auto* p:allocations_)sycl::free(p,queue_);}

@@ -1,5 +1,5 @@
 #include "carbon/electron_birth_bank.hpp"
-#include "carbon/material_electron_birth_prepare.hpp"
+#include "carbon/electron_birth_task.hpp"
 #include <cassert>
 #include <iostream>
 using namespace carbon;
@@ -7,7 +7,7 @@ int main(){
     ElectronBirthStateSample samples[]={{.25,.1,0},{1.,.3,1.}};
     ElectronBirthChannel low[]={{0,250,.2,0,2}},high[]={{0,250,.6,0,2}};
     ElectronBirthNodeView nodes[]={{6,1.,low,samples,2,1},{6,3.,high,samples,2,1}};
-    unsigned offsets[26]{};for(unsigned i=7;i<=25;++i)offsets[i]=2;
+    unsigned offsets[kElectronMaterialCount+1]{};for(unsigned i=7;i<=kElectronMaterialCount;++i)offsets[i]=2;
     ElectronBirthBankView bank{nodes,2,offsets};
     auto a=prepare_independent_electron_birth(bank,6,2,100,.1);
     assert(a.valid&&a.node==0&&std::abs(a.fraction-.4)<1e-14);
@@ -25,6 +25,6 @@ int main(){
     low[0].fraction=0;low[0].count=0;
     a=prepare_independent_electron_birth(bank,6,1,10,.5);assert(a.valid&&a.fraction==0);
     a=prepare_independent_electron_birth(bank,6,2,10,0);assert(a.valid&&a.node==1&&std::abs(a.fraction-.3)<1e-14);
-    static_assert(sizeof(QueuedElectronBirth)==48);
-    std::cout<<"independent birth: energy-weighted density mixing, correlated CDF, support, zero yield, rotation and unchanged queue size PASS\n";
+    static_assert(sizeof(QueuedElectronBirth)==24);
+    std::cout<<"independent birth: energy-weighted density mixing, correlated CDF, support, zero yield, rotation and independent queue state PASS\n";
 }

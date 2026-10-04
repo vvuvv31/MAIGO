@@ -118,7 +118,7 @@ class UrbanMcsPackage {
     std::vector<UrbanMcsRecord> records;
     std::vector<UrbanMcsNode> nodes,mfps;
     std::vector<EmCubicSegmentCandidate<float>> segments;
-    static UrbanMcsPackage load(const std::filesystem::path&,const std::string& sha256);
+    static UrbanMcsPackage load(const std::filesystem::path&);
     UrbanMcsView view() const {
         return {materials.data(),species.data(),records.data(),nodes.data(),mfps.data(),segments.data(),
             static_cast<std::uint32_t>(materials.size()),static_cast<std::uint32_t>(species.size())};

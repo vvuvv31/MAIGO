@@ -8,10 +8,9 @@
 
 namespace carbon {
 // Read-only parsed inputs, owned by one run session. Particle state never enters
-// this cache. A changed path, pin, file size or timestamp requires a fresh load.
-inline std::string input_cache_key(const std::filesystem::path& path,
-                                   const std::string& pin = {}) {
-    auto key = std::filesystem::absolute(path).lexically_normal().string() + "|" + pin;
+// this cache. A changed path, file size or timestamp requires a fresh load.
+inline std::string input_cache_key(const std::filesystem::path& path) {
+    auto key = std::filesystem::absolute(path).lexically_normal().string();
     const auto append = [&](const std::filesystem::path& p) {
         key += "|" + std::to_string(std::filesystem::file_size(p)) + ":" +
             std::to_string(std::filesystem::last_write_time(p).time_since_epoch().count());

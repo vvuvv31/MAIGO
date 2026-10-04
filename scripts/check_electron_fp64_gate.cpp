@@ -3,15 +3,15 @@
 #include <iostream>
 #include <iomanip>
 int main(int argc,char** argv){try{
-    if(argc!=3)throw std::runtime_error("usage: charged index SHA");
-    const std::filesystem::path path=argv[1];if(carbon::compute_file_sha256_hex(path)!=argv[2])throw std::runtime_error("SHA");
-    std::ifstream input(path);std::string magic;unsigned nodes;input>>magic>>nodes;if(magic!="MAIECB01")throw std::runtime_error("index");
+    if(argc!=2)throw std::runtime_error("usage: charged index");
+    const std::filesystem::path path=argv[1];
+    std::ifstream input(path);std::string magic;unsigned nodes;input>>magic>>nodes;if(magic!="MAIECB02")throw std::runtime_error("index");
     namespace f=carbon::electron_fp32;
     std::uint64_t samples=0,invalid=0,baseline_gate_mismatches=0,gate_mismatches=0;
     double maximum_baseline_error=0,maximum_gate_error=0;unsigned cases=0;
     for(unsigned node=0;node<nodes;++node){
-        int section;double density;std::string file,sha;input>>section>>density>>file>>sha;
-        carbon::ChargedResponseData data(path.parent_path()/file,sha);const auto native=data.view();
+        int section;double density;std::string file;input>>section>>density>>file;
+        carbon::ChargedResponseData data(path.parent_path()/file);const auto native=data.view();
         const auto u=native.urban;const f::ElectronUrbanMaterial p{float(u.mass),float(u.excitation),float(u.e0),float(u.e1),float(u.e2),float(u.f1),float(u.f2)};
         // Reference uses the same represented FP32 material/energy inputs,
         // but exact FP64 product and original double Urban equations. This

@@ -2,7 +2,6 @@
 run_mode: research
 scorer_mode: production
 unified_water_material_file: data/water_unified/g4_water_material.json
-unified_water_material_sha256: 60be17929880fe18f1758edc02350b3fa7140b817ab0d21cb75bd87dbc891f31
 enable_ct_grid: false
 number_of_histories: 100000
 initial_energy_MeV: 170
@@ -34,7 +33,6 @@ enable_secondary_transport: true
 cinel02_max_secondary_inelastic_generations: 2
 secondary_out_of_scope_nuclear_policy: em_only
 primary_stopping_power_file: data/proton_therapy_20260926/proton_water_stopping.csv
-use_particle_specific_stopping_power: true
 particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
 ct_schneider_primary_rate_file: data/proton_therapy_20260926/proton_rates.bin
 ct_schneider_primary_cinel03_file: data/proton_therapy_20260926/proton_cinel03.bin
@@ -50,19 +48,14 @@ device: cuda
 em_model: g4_material_joint_v1
 em_delta_moments_file: data/em/unified_em_delta_moments_v2.bin
 em_package_file: data/em/unified_em_v1.bin
-em_package_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
 enable_energy_straggling: true
 enable_secondary_energy_straggling: true
 ct_secondary_exact_faces: true
 history_chunk_size: 98304
 secondary_species_grouping: true
 secondary_step_chunking: true
-em_delta_moments_sha256: c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc
-em_delta_moments_source_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44855
 all_ion_elastic_file: data/proton_therapy_20260926/all_ion_elastic_proton_v1.bin
-all_ion_elastic_sha256: 9469d877111b4c96c91711353d9271630d816b46b82e454aa512e076a2a8a273
 elastic_recoil_stopping_file: data/proton_therapy_20260926/elastic_recoil_stopping_water75.bin
-elastic_recoil_stopping_sha256: 71fb7f4db63f1655579ce87a1d2f9b9fb0bf6d835cb9bc0b8e5a5bdf8728a435
 urban_water_half_width_mm: 2000
 secondary_local_deposit_cutoff_MeV: 0.1
 enable_flat_source: true

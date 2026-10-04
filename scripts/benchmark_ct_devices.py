@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""Reproducible FP32 CT device comparison; retain known research failures unchanged."""
+"""Reproducible FP32 comparison of the four CT presets; runtime audits are mandatory."""
 from pathlib import Path
-import argparse,csv,hashlib,json,os,re,subprocess,time
+import argparse,csv,json,os,re,subprocess,time
 import numpy as np
 import yaml
 
-CASES={'proton_broadbeam':'proton_ct_plan_fe','carbon_broadbeam':'carbon_ct_plan_fe_joint','proton_minibeam':'proton_ct_minibeam'}
-def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+CASES={'proton_broadbeam':'proton_ct_broadbeam','carbon_broadbeam':'carbon_ct_broadbeam','proton_minibeam':'proton_ct_minibeam','carbon_minibeam':'carbon_ct_minibeam'}
 def save(p,x):
  tmp=p.with_suffix('.tmp');tmp.write_text(json.dumps(x,indent=2)+'\n');tmp.replace(p)
 def run(root,binary,lib,out,name,repeat,smoke=False):
@@ -14,7 +13,7 @@ def run(root,binary,lib,out,name,repeat,smoke=False):
  for folder in ['data','inputs']:(d/folder).symlink_to(root/folder,target_is_directory=True)
  cfg=yaml.safe_load((root/'config'/f'{CASES[name]}.yaml').read_text())
  cfg['random_seed']=1001600000+repeat
- if name=='proton_minibeam':cfg['number_of_histories']=20000 if smoke else 2000000
+ if name.endswith('_minibeam'):cfg['number_of_histories']=20000 if smoke else 2000000
  elif smoke:
   with (root/cfg['tps_spots_file']).open() as f:
    rr=csv.DictReader(f);fields=rr.fieldnames;row=next(r for r in rr if float(r['weight'])>0)
@@ -37,16 +36,14 @@ def run(root,binary,lib,out,name,repeat,smoke=False):
  qpath=d/'out/case/quality_report.json';q=json.loads(qpath.read_text()) if qpath.exists() else {}
  stages={key:float(value) for key,value in re.findall(r'\[runtime-stage\] (\S+) seconds=([\d.eE+-]+)',text)}
  failures=[a['code'] for a in q.get('failures',[])]
- # Carbon's shipped joint-response preset is explicitly quality-rejected.
- # Allow its completed diagnostic timing to be recorded, never label it accepted.
- diagnostic=(name=='carbon_broadbeam' and failures==['unvalidated_electron_joint_response'] and code==1)
+ diagnostic=(name=='carbon_minibeam') # Dose-accuracy gate is deferred, runtime audits are not.
  actual=int(hist[-1]) if hist else None
  audits=re.findall(r'^\[unified-em-audit\] (.*)$',text,re.M)
  runtime_ok=(bool(q) and actual==expected and q.get('queue_overflow_count')==0 and
              bool(audits) and all(int(a.split()[0])==0 for a in audits) and
-             ((code==0 and q.get('accepted')) or diagnostic))
+             (code==0 and q.get('accepted') and not failures))
  loop=stages.get('transport_loop_including_scoring_and_queue_transfers')
- r=dict(case=name,repeat=repeat,smoke=smoke,seed=cfg['random_seed'],requested_histories=expected,actual_histories=actual,binary_sha256=sha(binary),config_sha256=sha(d/'case.yaml'),exit_code=code,wall_seconds=elapsed,transport_seconds=loop,runtime_checks_pass=runtime_ok,quality_accepted=bool(q.get('accepted')),diagnostic_only=diagnostic,quality=q,stages=stages,em_audits=audits,end_to_end_histories_per_second=expected/elapsed if runtime_ok else None,transport_histories_per_second=expected/loop if runtime_ok and loop else None)
+ r=dict(case=name,repeat=repeat,smoke=smoke,seed=cfg['random_seed'],requested_histories=expected,actual_histories=actual,binary=str(binary),config=str(d/'case.yaml'),exit_code=code,wall_seconds=elapsed,transport_seconds=loop,runtime_checks_pass=runtime_ok,quality_accepted=bool(q.get('accepted')),diagnostic_only=diagnostic,quality=q,stages=stages,em_audits=audits,end_to_end_histories_per_second=expected/elapsed if runtime_ok else None,transport_histories_per_second=expected/loop if runtime_ok and loop else None)
  if runtime_ok:
   dose=np.memmap(d/'out/case/dose.raw',np.float32,'r');assert np.isfinite(dose).all() and (dose>=0).all()
   r['dose_sum']=float(dose.sum(dtype=float));r['dose_max']=float(dose.max())

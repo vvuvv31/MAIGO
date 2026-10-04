@@ -6,7 +6,7 @@ namespace carbon::electron_fp32::elastic_batch_reference {
 template<class Uniform,class Model>inline ChargedStep original_prepared(const Model& model,
     const ChargedFace& face,Position start,std::array<float,3> direction,
     float energy,const std::array<float,2>& hard_majorant,const ChargedParameters& p,Uniform& uniform,
-    float maximum_step=.05f,float mean_loss_fraction=.005f) {
+    float maximum_step=.05f,float mean_loss_fraction=.005f,bool expected=false) {
     ChargedStep out;out.position=start;out.direction=direction;out.energy=energy;
     if(!std::isfinite(energy)||energy<=0||!std::isfinite(maximum_step)||maximum_step<=0||maximum_step>.25f||!std::isfinite(mean_loss_fraction)||mean_loss_fraction<=0||mean_loss_fraction>.01f)return out;
     if(!face.valid)return out;
@@ -45,10 +45,16 @@ template<class Uniform,class Model>inline ChargedStep original_prepared(const Mo
     if(!loss.valid){out.status=ChargedStepStatus::coverage_missing;return out;}
     out.raw_loss=loss.raw;out.physical_deposit=loss.deposit;out.stopped=loss.stopped;
     const auto branch=uniform();if(!std::isfinite(branch)||branch<0||branch>=1)return out;
-    if(branch<loss.deposit/energy||loss.stopped){
+    if((!expected&&branch<loss.deposit/energy)||loss.stopped){
         const float along=uniform();if(!std::isfinite(along)||along<0||along>=1)return out;
         for(unsigned k=0;k<3;++k)out.position[k]=start[k]+along*out.length*direction[k];
         out.status=ChargedStepStatus::deposited;return out;
+    }
+    if(expected){
+        // Expected-value scoring of the packet branch: the unconditioned branch
+        // draw is the uniform along-step point; all later draws are unchanged.
+        out.ev_fraction=loss.deposit/energy;
+        for(unsigned k=0;k<3;++k)out.ev_position[k]=start[k]+branch*out.length*direction[k];
     }
     out.energy=loss.remaining;
     if(out.length!=flight||out.face){out.status=ChargedStepStatus::continued;return out;}

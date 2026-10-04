@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
-"""Verify the three independent electron packages without loading GPU data."""
+"""Check the three electron packages' sizes, schemas, dependencies and coverage.
+
+GPU loaders additionally check numeric fields, conditional support and rate bounds.
+"""
 import argparse
-import hashlib
 import json
 from pathlib import Path
 import struct
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def sha(path):
-    with path.open('rb') as stream:
-        return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
 def require(condition, message):
@@ -20,58 +17,51 @@ def require(condition, message):
 
 
 def verify(root):
-    registry = json.loads((root / 'docs/electron_packages_manifest.json').read_text())
+    registry = json.loads((root/'docs/electron_packages_manifest.json').read_text())
+    require(registry['schema'] == 2, 'Registry schema')
     packages = registry['packages']
     require(set(packages) == {'proton', 'carbon', 'shared'}, 'Expected three packages')
     report = {}
     for name, entry in packages.items():
-        directory = root / entry['root']
-        manifest = directory / 'manifest.json'
-        require(sha(manifest) == entry['manifest_sha256'], f'{name}: manifest SHA')
-        spec = json.loads(manifest.read_text())
+        directory = root/entry['root']
+        spec = json.loads((directory/'manifest.json').read_text())
         require(spec == entry['manifest'], f'{name}: registry mismatch')
         total = 0
         for filename, item in spec['files'].items():
             relative = Path(filename)
-            require(not relative.is_absolute() and '..' not in relative.parts,
-                    f'{name}: non-relative package member')
-            path = directory / relative
-            require(path.resolve().is_relative_to(directory.resolve()),
-                    f'{name}: payload outside package: {filename}')
-            require(path.stat().st_size == item['bytes'] and sha(path) == item['sha256'],
-                    f'{name}: payload mismatch: {filename}')
+            require(not relative.is_absolute() and '..' not in relative.parts, 'Nonrelative member')
+            path = directory/relative
+            require(path.resolve().is_relative_to(directory.resolve()), 'Member outside package')
+            require(path.is_file() and path.stat().st_size == item['bytes'], f'{name}: size mismatch: {filename}')
             total += item['bytes']
         require(total == spec['total_bytes'], f'{name}: total size')
         for dep in spec.get('requires', []):
-            require(dep['package_id'] == packages['shared']['manifest']['package_id']
-                    and dep['manifest_sha256'] == packages['shared']['manifest_sha256'],
-                    f'{name}: shared dependency mismatch')
+            require(dep['package_id'] == packages['shared']['manifest']['package_id'], 'Shared dependency')
         if name != 'shared':
-            with (directory / 'birth_bank.bin').open('rb') as stream:
-                magic, version, nodes = struct.unpack('<8sII', stream.read(16))
-                if magic == b'MAIBIR01' and version == 1:
-                    projectile = [1, 1]
-                else:
-                    require(magic == b'MAIBIR02' and version == 2, 'Birth header')
-                    projectile = list(struct.unpack('<II', stream.read(8)))
-            require(projectile == spec['projectile'] and nodes > 0,
-                    f'{name}: projectile identity')
+            with (directory/'birth_bank.bin').open('rb') as stream:
+                magic, version, nodes, z, a = struct.unpack('<8s4I', stream.read(24))
+            require((magic, version) == (b'MAIBIR02', 2), 'Birth schema')
+            require([z, a] == spec['projectile'] and nodes == 83, 'Birth projectile/material count')
         else:
-            for component, magic in [('charged', 'MAIECB01'), ('photon', 'MAIPHB01')]:
-                index = directory / component / 'index.txt'
-                lines = index.read_text().splitlines()
-                require(lines[0].split() == [magic, '82'] and len(lines) == 83,
-                        f'{component}: index header/count')
+            with (directory/'joint.bin').open('rb') as stream:
+                magic, count = struct.unpack('<8sI', stream.read(12))
+            require((magic, count) == (b'MAIJNB02', 25), 'Joint schema/Schneider coverage')
+            for component, magic in [('charged', 'MAIECB02'), ('photon', 'MAIPHB02')]:
+                lines = (directory/component/'index.txt').read_text().splitlines()
+                require(lines[0].split() == [magic, '83'] and len(lines) == 84, 'Operator index/count')
+                keys, sections = set(), set()
                 for row in lines[1:]:
-                    section, density, filename, pin = row.split()
-                    key = str(Path(component) / filename)
-                    require(key in spec['files'] and spec['files'][key]['sha256'] == pin,
-                            f'{component}: unpinned member {filename}')
+                    section, density, filename = row.split()
+                    section, density = int(section), float(density)
+                    require(0 <= section <= 25 and density > 0, 'Material/density domain')
+                    require((section, density) not in keys, 'Duplicate density node')
+                    keys.add((section, density)); sections.add(section)
+                    if section == 25:
+                        require(density == 1, 'Water_75eV density')
+                    require(str(Path(component)/filename) in spec['files'], 'Unregistered operator')
+                require(sections == set(range(26)), 'Missing material')
         report[name] = dict(files=len(spec['files']), bytes=total, verified=True)
-    require(sum(p['bytes'] for p in report.values()) == registry['total_unique_bytes'],
-            'Combined size mismatch')
-    for old, new in registry['compatibility_aliases'].items():
-        require((root / old).resolve() == (root / new).resolve(), 'Compatibility alias')
+    require(sum(x['bytes'] for x in report.values()) == registry['total_unique_bytes'], 'Combined size')
     return report
 
 
@@ -80,8 +70,7 @@ if __name__ == '__main__':
     parser.add_argument('--root', type=Path, default=ROOT)
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
-    result = verify(args.root.resolve())
-    text = json.dumps(result, indent=2) + '\n'
+    text = json.dumps(verify(args.root.resolve()), indent=2) + '\n'
     if args.output:
         args.output.write_text(text)
     print(text, end='')

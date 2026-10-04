@@ -1,3 +1,4 @@
+#include "ElectronExtractionRange.hh"
 #include "ElectronBoundaryProbe.hh"
 #include "TsParameterManager.hh"
 #include "G4Step.hh"
@@ -57,7 +58,7 @@ G4bool ElectronBoundaryProbe::ProcessHits(G4Step* source,G4TouchableHistory*) {
     // cut's SCP. CrossSectionPerVolume alone omits SCP; GetTransportMeanFreePath
     // instead requires hidden GS stepping state, unavailable to this probe.
     for(unsigned i=0;i<=256;++i){
-        const double e=1e-5*std::pow(.65/1e-5,double(i)/256),pt2=e*(e+2*electron_mass_c2),beta2=pt2/(pt2+electron_mass_c2*electron_mass_c2);
+        const double e=1e-5*std::pow(ElectronExtractionMaximumMeV()/1e-5,double(i)/256),pt2=e*(e+2*electron_mass_c2),beta2=pt2/(pt2+electron_mass_c2*electron_mass_c2);
         const int index=material->GetIndex();double scr=1,q1=1,g2=1,scp=1;
         if(gs->GetOptionMottCorrection()){
             table->GetMottCorrectionFactors(std::log(e),beta2,index,scr,q1,g2);
@@ -88,11 +89,11 @@ G4bool ElectronBoundaryProbe::ProcessHits(G4Step* source,G4TouchableHistory*) {
     G4VEnergyLossProcess* processes[]={ion,brem};
     for(int p=0;p<2;++p){
         auto* table=processes[p]->LambdaTable();Require(table,"missing native lambda table");
-        std::vector<double> edges{1e-5,.65};
+        std::vector<double> edges{1e-5,ElectronExtractionMaximumMeV()};
         // Include all material vectors' knots: redundant subdivisions are
         // harmless, and avoid assuming currentCouple==basedCoupleIndex.
         for(auto* v:*table)if(v)for(std::size_t j=0;j<v->GetVectorLength();++j){
-            const double e=v->Energy(j)/MeV;if(e>1e-5&&e<.65)edges.push_back(e);
+            const double e=v->Energy(j)/MeV;if(e>1e-5&&e<ElectronExtractionMaximumMeV())edges.push_back(e);
         }
         std::sort(edges.begin(),edges.end());edges.erase(std::unique(edges.begin(),edges.end()),edges.end());
         const double ts[]={.125,.375,.625,.875};

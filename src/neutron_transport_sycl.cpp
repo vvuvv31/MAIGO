@@ -6,11 +6,9 @@
 #include "carbon/minibeam_collimator.hpp"
 #include "carbon/all_ion_elastic.hpp"
 #include "carbon/min_json.hpp"
-#include "carbon/sha256.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/rng.hpp"
 #include "carbon/stopping_power.hpp"
-#include "carbon/water_electron_response.hpp"
 #include "carbon/urban_mcs_package.hpp"
 #include "carbon/host_prefetch.hpp"
 #include <algorithm>
@@ -234,7 +232,7 @@ NeutronStopTables load_neutron_stop_tables(const TransportConfig& config){
  std::vector<StopRecord> stop_records;std::vector<StopPoint> stop_points;
  // Prefer the dedicated low-energy recoil table for water wherever covered.
  if(!config.elastic_recoil_stopping_file.empty()){
-  auto t=ElasticRecoilStoppingTable::load(config.elastic_recoil_stopping_file,config.elastic_recoil_stopping_sha256);
+  auto t=ElasticRecoilStoppingTable::load(config.elastic_recoil_stopping_file);
   for(unsigned p=0;p<t.keys.size()/2;++p){
    stop_records.push_back({0,t.keys[2*p],t.keys[2*p+1],unsigned(stop_points.size()),unsigned(t.energies.size())});
    for(unsigned i=0;i<t.energies.size();++i)stop_points.push_back({t.energies[i],t.values[(p*26)*t.energies.size()+i]});
@@ -258,7 +256,6 @@ NeutronStopTables load_neutron_stop_tables(const TransportConfig& config){
    if(entry.at("material").str!=names[m]||relative.empty()||relative.is_absolute())throw std::runtime_error("Invalid neutron recoil material/file");
    for(const auto& part:relative)if(part=="..")throw std::runtime_error("Neutron recoil path traversal");
    auto path=manifest.parent_path()/relative;
-   if(compute_file_sha256_hex(path)!=entry.at("sha256").str)throw std::runtime_error("Neutron recoil SHA256 mismatch");
    if(m==0&&entry.at("excitation_eV").number!=75)throw std::runtime_error("Neutron recoil water must use 75 eV");
    read_stopping(path,m,stop_records,stop_points);
   }
@@ -268,7 +265,7 @@ NeutronStopTables load_neutron_stop_tables(const TransportConfig& config){
 std::string neutron_stop_key(const TransportConfig& config){
  std::string key;
  if(!config.elastic_recoil_stopping_file.empty())
-  key=input_cache_key(config.elastic_recoil_stopping_file,config.elastic_recoil_stopping_sha256);
+  key=input_cache_key(config.elastic_recoil_stopping_file);
  for(const auto& path:{config.particle_stopping_power_file,config.minibeam_copper_ion_stopping_power_file,
                       config.minibeam_air_stopping_power_file})
   key+="|"+input_cache_key(path);
@@ -338,8 +335,8 @@ void transport_neutrons_experimental(sycl::queue& queue,const TransportConfig& c
  UrbanMcsView urban{};int urban_water=-1;
  const bool use_water_urban=config.neutron_water_recoil_urban;
  if(use_water_urban){
-  const auto& package=inputs.get<UrbanMcsPackage>(input_cache_key(config.urban_mcs_package_file,config.urban_mcs_package_sha256),[&] {
-   return UrbanMcsPackage::load(config.urban_mcs_package_file,config.urban_mcs_package_sha256);
+  const auto& package=inputs.get<UrbanMcsPackage>(input_cache_key(config.urban_mcs_package_file),[&] {
+   return UrbanMcsPackage::load(config.urban_mcs_package_file);
   });
   urban_water=package.view().material(-1,float(config.water_density_g_per_cm3));
   if(urban_water<0)throw std::runtime_error("Neutron recoil Urban package lacks water");

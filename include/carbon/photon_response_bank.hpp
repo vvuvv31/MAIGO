@@ -1,4 +1,5 @@
 #pragma once
+#include "carbon/electron_material_registry.hpp"
 #include "carbon/photon_response.hpp"
 namespace carbon {
 struct PhotonResponseBankView {
@@ -8,7 +9,7 @@ struct PhotonResponseBankView {
 struct PhotonDensityBracket {bool valid{};unsigned low{},high{};double upper_weight{};};
 inline PhotonDensityBracket photon_density_bracket(PhotonResponseBankView bank,int section,double density) {
     PhotonDensityBracket out;
-    if(!bank.nodes||!bank.section_offsets||section<0||section>=25||!std::isfinite(density)||density<=0)return out;
+    if(!bank.nodes||!bank.section_offsets||section<0||section>=kElectronMaterialCount||!std::isfinite(density)||density<=0)return out;
     const auto first=bank.section_offsets[section],end=bank.section_offsets[section+1];
     if(first>=end||end>bank.count||density<bank.nodes[first].density||density>bank.nodes[end-1].density)return out;
     unsigned hi=first;while(hi+1<end&&bank.nodes[hi].density<density)++hi;

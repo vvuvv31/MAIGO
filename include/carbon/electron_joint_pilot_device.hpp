@@ -1,6 +1,5 @@
 #pragma once
 #include "carbon/electron_joint_pilot.hpp"
-#include "carbon/sha256.hpp"
 #include <sycl/sycl.hpp>
 #include <fstream>
 #include <vector>
@@ -8,8 +7,7 @@
 #include <stdexcept>
 #include <cstring>
 namespace carbon {
-// Opt-in artifacts: the original independently screened lung model or the
-// explicitly experimental, SHA/index-pinned Schneider density-scaled bank.
+// Shared material-specific spatial steps with density scaling.
 class ElectronJointPilotDevice {
     sycl::queue queue_;std::vector<void*> allocations_;
     static void require(bool ok,const char* message) {if(!ok)throw std::runtime_error(message);}
@@ -72,34 +70,20 @@ class ElectronJointPilotDevice {
 public:
     ElectronJointPilotView view;
     std::uint64_t bytes{};unsigned model_count{1};bool density_scaling{};
-    ElectronJointPilotDevice(sycl::queue q,const std::filesystem::path& path,
-                             const std::string& sha,const std::string& index):queue_(q) {
+    ElectronJointPilotDevice(sycl::queue q,const std::filesystem::path& path):queue_(q) {
         try {
-            require(sha.size()==64 && compute_file_sha256_hex(path)==sha,"Joint pilot SHA mismatch");
             bytes=std::filesystem::file_size(path);
-            std::ifstream f(path,std::ios::binary);char magic[8],index_sha[64];read(f,magic,8);
-            if(!std::memcmp(magic,"MAIJNB01",8)) {
-                read(f,&model_count);read(f,index_sha,64);
-                require(model_count==25 && (index.empty() || std::string(index_sha,64)==index),"Joint Schneider bank scope mismatch");
-                std::vector<ElectronJointPilotView> views(model_count);
-                for(unsigned i=0;i<model_count;++i) {
-                    std::uint32_t section;std::uint64_t payload;auto& v=views[i];
-                    read(f,&section);read(f,&v.density);read(f,&v.radius);read(f,&payload);
-                    require(section==i && std::isfinite(v.density)&&v.density>0&&v.radius==.05&&payload<=bytes,"Joint Schneider model scope");
-                    v.section=i;v.radius=.050001;v.density_scaling=true;model(f,v,payload);
-                }
-                view.sections=upload(views);view.section_count=model_count;density_scaling=true;
-            }else {
-                require(!std::memcmp(magic,"MAIJNT01",8)&&sha=="a20883e9f73e9bba5b09bf88654bcd2b9c54a6e8fac76990188d006b52751a73","Joint original artifact pin");
-                std::uint32_t section;char model_sha[64];
-                read(f,&section);read(f,&view.density);read(f,&view.radius);read(f,index_sha,64);read(f,model_sha,64);
-                const std::string base_index(index_sha,64);
-                // Verified unchanged 63 original entries in the RT 82-node extension.
-                const bool extension=base_index=="0e9c0343f53ad729e856a23238875f9e61ce1d97e1493ca9155b14221defaadb" &&
-                    index=="86197f718d1409d1b8de89e4e29df318b4d7aa22162b69bbe84d864c0a341bbe";
-                require((base_index==index||extension)&&section==1&&view.radius==.05,"Joint pilot scope mismatch");
-                view.section=section;view.radius=.050001;model(f,view,bytes-156);
+            std::ifstream f(path,std::ios::binary);char magic[8];read(f,magic,8);
+            read(f,&model_count);
+            require(!std::memcmp(magic,"MAIJNB02",8)&&model_count==25,"Joint material bank header");
+            std::vector<ElectronJointPilotView> views(model_count);
+            for(unsigned i=0;i<model_count;++i) {
+                std::uint32_t section;std::uint64_t payload;auto& v=views[i];
+                read(f,&section);read(f,&v.density);read(f,&v.radius);read(f,&payload);
+                require(section==i&&std::isfinite(v.density)&&v.density>0&&v.radius==.05&&payload<=bytes,"Joint material model scope");
+                v.section=i;v.radius=.050001;v.density_scaling=true;model(f,v,payload);
             }
+            view.sections=upload(views);view.section_count=model_count;density_scaling=true;
             require(f.peek()==std::char_traits<char>::eof(),"Joint pilot trailing bytes");
         }catch(...){for(auto p:allocations_)sycl::free(p,queue_);throw;}
     }

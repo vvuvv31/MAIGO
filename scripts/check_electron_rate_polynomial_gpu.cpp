@@ -16,15 +16,15 @@ template<class Piece>float lookup(const Piece* rows,unsigned count,float energy)
     const auto& r=rows[lo];return p::evaluate(r,(energy-r.low)/(r.high-r.low));
 }
 int main(int argc,char** argv){try{
-    if(argc!=3)throw std::runtime_error("usage: charged index SHA");
+    if(argc!=2)throw std::runtime_error("usage: charged index");
     const std::filesystem::path path=argv[1];
-    if(carbon::compute_file_sha256_hex(path)!=argv[2])throw std::runtime_error("index SHA");
+
     std::ifstream in(path);std::string magic;unsigned nodes;in>>magic>>nodes;
-    if(magic!="MAIECB01")throw std::runtime_error("index magic");
+    if(magic!="MAIECB02")throw std::runtime_error("index magic");
     std::vector<Row> host;std::vector<Lookup> queries;
     for(unsigned i=0;i<nodes;++i){
-        int section;double density;std::string file,pin;in>>section>>density>>file>>pin;
-        carbon::ChargedResponseData data(path.parent_path()/file,pin);
+        int section;double density;std::string file;in>>section>>density>>file;
+        carbon::ChargedResponseData data(path.parent_path()/file);
         if(!in||section!=data.section||density!=data.density)throw std::runtime_error("node metadata");
         for(unsigned process=0;process<2;++process){
             double bound=0;for(const auto& r:data.rate[process])for(double y:r.value)bound=std::max(bound,6*std::abs(y));

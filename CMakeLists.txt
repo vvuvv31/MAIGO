@@ -45,9 +45,6 @@ add_library(carbon_core
     src/ct_dicom.cpp
     src/io.cpp
     src/plan_run.cpp
-    src/electron_transport.cpp
-    src/electron_joint_response.cpp
-    src/water_electron_response.cpp
     src/neutron_package.cpp
     src/unified_em_package.cpp
     src/urban_mcs_package.cpp
@@ -59,7 +56,6 @@ add_library(carbon_core
     src/all_ion_elastic.cpp
     src/schneider_rate_table.cpp
     src/material_nuclear_rates.cpp
-    src/schneider_delta_tail.cpp
     src/schneider_target_sampler.cpp
     src/secondary_rate_table.cpp
     src/topas_spots.cpp
@@ -68,37 +64,6 @@ add_library(carbon_core
 )
 
 target_include_directories(carbon_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
-
-# Bind prepared electron artifacts to all host compiler/validator algorithms.
-# Reconfigure automatically if a dependency changes; no stale physics cache.
-set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "scripts/material_prepared_sources.txt")
-file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/material_prepared_sources.txt" material_prepared_sources)
-find_path(ZSTD_INCLUDE_DIR NAMES zstd.h REQUIRED)
-find_library(ZSTD_LIBRARY NAMES zstd REQUIRED)
-target_include_directories(carbon_core PUBLIC ${ZSTD_INCLUDE_DIR})
-target_link_libraries(carbon_core PUBLIC ${ZSTD_LIBRARY})
-set(material_prepared_fingerprint "")
-foreach(source IN LISTS material_prepared_sources)
-    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
-    file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/${source}" source_sha)
-    string(APPEND material_prepared_fingerprint "${source}:${source_sha}\n")
-endforeach()
-string(SHA256 material_prepared_version "${material_prepared_fingerprint}")
-target_compile_definitions(carbon_core PRIVATE CARBON_MATERIAL_PREPARED_VERSION="${material_prepared_version}")
-
-# These options are consumed by the electron transport headers as well as
-# the SYCL backend. Presence-tested macros must stay undefined when OFF.
-option(CARBON_ELECTRON_REPLAY_REUSE "Reuse checked electron genealogy within a packet transaction" OFF)
-option(CARBON_ELECTRON_CROSSING_ROWS32 "Use lossless 32-bit electron crossing row IDs when representable" OFF)
-option(CARBON_CT_ELECTRON_QUEUE "Build separate CT electron packet execution" OFF)
-foreach(feature ELECTRON_REPLAY_REUSE ELECTRON_CROSSING_ROWS32 CT_ELECTRON_QUEUE)
-    if(CARBON_${feature})
-        target_compile_definitions(carbon_core PRIVATE CARBON_${feature}=1)
-    endif()
-endforeach()
-option(CARBON_FE_JOINT_QUEUE "Build separate selected FE joint-response replays" OFF)
-target_compile_definitions(carbon_core PRIVATE
-    CARBON_FE_JOINT_QUEUE=$<BOOL:${CARBON_FE_JOINT_QUEUE}>)
 
 option(CARBON_EM_EXACT_INDEX "Narrow EM searches with exact exponent buckets" ON)
 target_compile_definitions(carbon_core PUBLIC CARBON_EM_EXACT_INDEX=$<BOOL:${CARBON_EM_EXACT_INDEX}>)
@@ -129,23 +94,6 @@ target_compile_definitions(carbon_core PUBLIC
     CARBON_EM_SEARCH_KEY_AUDIT=$<BOOL:${CARBON_EM_SEARCH_KEY_AUDIT}>
     CARBON_EM_INTERVAL_WIDTH_AUDIT=$<BOOL:${CARBON_EM_INTERVAL_WIDTH_AUDIT}>
     CARBON_EM_PAIR_PREPARE=$<BOOL:${CARBON_EM_PAIR_PREPARE}>)
-option(CARBON_USE_OPENSSL_SHA256 "Use OpenSSL accelerated file SHA256 when available" ON)
-option(CARBON_DISABLE_INTEGRITY_CHECKS
-    "Skip file SHA256 content checks and provenance hashing" OFF)
-target_compile_definitions(carbon_core PUBLIC
-    CARBON_DISABLE_INTEGRITY_CHECKS=$<BOOL:${CARBON_DISABLE_INTEGRITY_CHECKS}>)
-if(CARBON_DISABLE_INTEGRITY_CHECKS)
-    message(WARNING "CARBON_DISABLE_INTEGRITY_CHECKS=ON: file content hashes are not verified")
-endif()
-if(CARBON_USE_OPENSSL_SHA256)
-    find_package(OpenSSL QUIET COMPONENTS Crypto)
-    if(OpenSSL_FOUND)
-        target_link_libraries(carbon_core PUBLIC OpenSSL::Crypto)
-        target_compile_definitions(carbon_core PUBLIC CARBON_OPENSSL_SHA256=1)
-    else()
-        message(STATUS "OpenSSL unavailable: using portable SHA256 with full verification")
-    endif()
-endif()
 # Compile-time ablations; no runtime branches in particle steps.
 foreach(feature MATERIAL_CACHE STEP_CACHE LOCAL_AUDIT)
     set(em_feature_default ON)

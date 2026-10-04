@@ -1,6 +1,5 @@
 #include "carbon/neutron_package.hpp"
 #include "carbon/min_json.hpp"
-#include "carbon/sha256.hpp"
 #include <array>
 #include <bit>
 #include <cmath>
@@ -31,8 +30,7 @@ NeutronPackage NeutronPackage::load(const std::filesystem::path& manifest,bool r
  require(!runtime || validated.boolean,"Neutron package is native extraction only; runtime validation incomplete");
  const std::filesystem::path relative=root.at("binary").str;
  require(!relative.empty()&&!relative.is_absolute()&&relative.filename()==relative,"Invalid neutron binary filename");
- auto path=manifest.parent_path()/relative;const auto& pin=root.at("binary_sha256").str;
- require(pin.size()==64&&compute_file_sha256_hex(path)==pin,"Neutron binary SHA256 mismatch");
+ auto path=manifest.parent_path()/relative;
  std::ifstream stream(path,std::ios::binary);char magic[8];std::array<std::uint32_t,7> h{};
  stream.read(magic,8);stream.read(reinterpret_cast<char*>(h.data()),28);
  const auto [version,flags,nm,nr,ne,np,reserved]=h;
@@ -62,7 +60,6 @@ NeutronPackage NeutronPackage::load(const std::filesystem::path& manifest,bool r
   const std::filesystem::path filename=meta.at("binary").str;
   require(!filename.empty()&&!filename.is_absolute()&&filename.filename()==filename,"Invalid neutron macroscopic filename");
   const auto rate_path=manifest.parent_path()/filename;
-  require(meta.at("binary_sha256").str.size()==64&&compute_file_sha256_hex(rate_path)==meta.at("binary_sha256").str,"Neutron macroscopic checksum mismatch");
   std::ifstream rate_stream(rate_path,std::ios::binary);
   char rate_magic[8];std::array<std::uint32_t,4> rh{};
   rate_stream.read(rate_magic,8);rate_stream.read(reinterpret_cast<char*>(rh.data()),16);

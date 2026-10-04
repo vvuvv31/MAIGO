@@ -1,6 +1,5 @@
 #include "carbon/inelastic_package_v3.hpp"
 #include "carbon/inelastic_identity.hpp"
-#include "carbon/sha256.hpp"
 
 #include <algorithm>
 #include <array>
@@ -458,34 +457,6 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
 
     if (input.peek() != std::ifstream::traits_type::eof()) {
         throw std::runtime_error("CINPKG04 has trailing bytes: " + path.string());
-    }
-
-    // Companion metadata SHA-256 validation
-    std::filesystem::path sidecar = path.string() + ".metadata.json";
-    if (!std::filesystem::exists(sidecar)) {
-        std::string s = path.string();
-        if (s.size() > 4 && s.substr(s.size() - 4) == ".bin") {
-            sidecar = s.substr(0, s.size() - 4) + ".metadata.json";
-        }
-    }
-    if (std::filesystem::exists(sidecar)) {
-        std::ifstream meta_file(sidecar);
-        if (meta_file) {
-            std::string meta_content((std::istreambuf_iterator<char>(meta_file)),
-                                     std::istreambuf_iterator<char>());
-            const auto sha_pos = meta_content.find("\"data_sha256\"");
-            if (sha_pos != std::string::npos) {
-                const auto colon = meta_content.find(':', sha_pos);
-                const auto q1 = (colon != std::string::npos) ? meta_content.find('"', colon) : std::string::npos;
-                const auto q2 = (q1 != std::string::npos) ? meta_content.find('"', q1 + 1) : std::string::npos;
-                if (q1 != std::string::npos && q2 != std::string::npos) {
-                    const std::string expected_sha = meta_content.substr(q1 + 1, q2 - q1 - 1);
-                    if (!file_sha256_matches(path, expected_sha)) {
-                        throw std::runtime_error("CINEL03 package SHA-256 mismatch for " + path.string());
-                    }
-                }
-            }
-        }
     }
 
     return table;

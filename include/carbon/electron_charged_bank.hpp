@@ -1,4 +1,5 @@
 #pragma once
+#include "carbon/electron_material_registry.hpp"
 #include "carbon/electron_charged_density.hpp"
 namespace carbon {
 struct ChargedBankView {
@@ -7,7 +8,7 @@ struct ChargedBankView {
 };
 struct ChargedDensityBracket {bool valid{};unsigned low{},high{};double fraction{};};
 inline ChargedDensityBracket charged_density_bracket(ChargedBankView bank,int section,double density){
-    if(!bank.nodes||!bank.node_order||!bank.section_offsets||section<0||section>=25||!std::isfinite(density)||density<=0)return {};
+    if(!bank.nodes||!bank.node_order||!bank.section_offsets||section<0||section>=kElectronMaterialCount||!std::isfinite(density)||density<=0)return {};
     const auto first=bank.section_offsets[section],end=bank.section_offsets[section+1];
     if(first>=end||end>bank.count||density<bank.nodes[bank.node_order[first]].density||density>bank.nodes[bank.node_order[end-1]].density)return {};
     unsigned hi=first;while(hi+1<end&&bank.nodes[bank.node_order[hi]].density<density)++hi;

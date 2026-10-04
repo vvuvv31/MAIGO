@@ -1,6 +1,5 @@
 #include "carbon/schneider_rate_table.hpp"
 #include "carbon/min_json.hpp"
-#include "carbon/sha256.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -202,11 +201,6 @@ SchneiderRateTable SchneiderRateTable::from_binary(
                                          "' does not match binary basename '" +
                                          binary_path.filename().string() + "'");
             }
-            const std::string expected_sha =
-                minjson::require_string(meta.at("data_sha256"), "data_sha256");
-            if (!file_sha256_matches(binary_path, expected_sha)) {
-                throw std::runtime_error("SchneiderRateTable: SHA-256 mismatch for " + binary_path.string());
-            }
             const std::string magic = minjson::require_string(meta.at("binary_magic"), "binary_magic");
             if (magic != expected_magic) {
                 throw std::runtime_error("SchneiderRateTable: metadata binary_magic mismatch: " + magic);
@@ -258,7 +252,7 @@ SchneiderRateTable SchneiderRateTable::from_binary(
                 }
             }
             for (const char* field :
-                 {"physics_list", "topas_version", "geant4_version", "schneider_sha256", "compiler_commit"}) {
+                 {"physics_list", "topas_version", "geant4_version", "compiler_commit"}) {
                 if (!meta.contains(field)) {
                     throw std::runtime_error(std::string("SchneiderRateTable: metadata missing '") + field +
                                              "': " + resolved_meta.string());

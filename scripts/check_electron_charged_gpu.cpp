@@ -5,15 +5,15 @@
 #include <iomanip>
 struct Record {unsigned status{},steps{},elastic{},hard{},faces{};double length{},closure{};};
 int main(int argc,char** argv){try{
-    if(argc!=3)throw std::runtime_error("usage: index sha256");
-    const std::filesystem::path path=argv[1];if(carbon::compute_file_sha256_hex(path)!=argv[2])throw std::runtime_error("Index SHA mismatch");
+    if(argc!=2)throw std::runtime_error("usage: index");
+    const std::filesystem::path path=argv[1];
     std::ifstream index(path);std::string magic;unsigned nodes;index>>magic>>nodes;
-    if(magic!="MAIECB01"||!nodes||nodes>82)throw std::runtime_error("Index format");
+    if(magic!="MAIECB02"||!nodes||nodes>83)throw std::runtime_error("Index format");
     sycl::queue q{sycl::gpu_selector_v};std::uint64_t counts[7]{},elastic=0,hard=0,steps=0,faces=0,total=0,bytes=0;double maxLength=0,maxClosure=0;
     constexpr unsigned n=2048;
     for(unsigned node=0;node<nodes;++node){
-        int section;double density;std::string file,pin;index>>section>>density>>file>>pin;if(!index)throw std::runtime_error("Index row");
-        carbon::ChargedResponseData data(path.parent_path()/file,pin);if(data.section!=section||data.density!=density)throw std::runtime_error("Index identity");bytes+=data.bytes;
+        int section;double density;std::string file;index>>section>>density>>file;if(!index)throw std::runtime_error("Index row");
+        carbon::ChargedResponseData data(path.parent_path()/file);if(data.section!=section||data.density!=density)throw std::runtime_error("Index identity");bytes+=data.bytes;
         auto view=data.view();std::vector<void*> allocations;
         auto upload=[&]<class T>(const T* source,std::size_t size){auto* ptr=sycl::malloc_shared<T>(size,q);if(!ptr)throw std::bad_alloc();std::copy(source,source+size,ptr);allocations.push_back(ptr);return ptr;};
         view.parameters=upload(view.parameters,view.parameter_count);

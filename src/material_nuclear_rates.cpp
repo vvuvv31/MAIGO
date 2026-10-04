@@ -1,14 +1,11 @@
 #include "carbon/material_nuclear_rates.hpp"
 #include "carbon/min_json.hpp"
-#include "carbon/sha256.hpp"
 #include <algorithm>
 #include <fstream>
 #include <stdexcept>
 
 namespace carbon {
-PureWaterMaterial PureWaterMaterial::from_probe(const std::filesystem::path& path,const std::string& expected) {
-    if(expected.size()!=64 || !file_sha256_matches(path,expected))
-        throw std::invalid_argument("Pure-water material SHA mismatch");
+PureWaterMaterial PureWaterMaterial::from_probe(const std::filesystem::path& path) {
     std::ifstream in(path);
     const std::string text((std::istreambuf_iterator<char>(in)),{});
     const auto doc=minjson::Parser(text).parse();

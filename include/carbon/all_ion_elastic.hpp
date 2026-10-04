@@ -50,7 +50,7 @@ struct AllIonElasticView {
 struct AllIonElasticTable {
  std::vector<float> energies,rates;std::vector<ElasticSample> samples;
  std::array<double,18> masses{};std::uint32_t nq{};
- static AllIonElasticTable load(const std::filesystem::path&,const std::string& sha256);
+ static AllIonElasticTable load(const std::filesystem::path&);
  AllIonElasticView view()const{return {energies.data(),rates.data(),samples.data(),masses.data(),static_cast<std::uint32_t>(energies.size()),nq};}
 };
 }
@@ -68,6 +68,6 @@ struct ElasticRecoilStoppingView {
 };
 struct ElasticRecoilStoppingTable {
  std::vector<std::int32_t> keys;std::vector<float> energies,values;
- static ElasticRecoilStoppingTable load(const std::filesystem::path&,const std::string&);
+ static ElasticRecoilStoppingTable load(const std::filesystem::path&);
 };
 }

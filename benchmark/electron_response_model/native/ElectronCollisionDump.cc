@@ -1,3 +1,4 @@
+#include "ElectronExtractionRange.hh"
 #include "ElectronCollisionDump.hh"
 #include "TsParameterManager.hh"
 #include "G4Step.hh"
@@ -55,7 +56,7 @@ G4bool ElectronCollisionDump::ProcessHits(G4Step* source,G4TouchableHistory*) {
     audit<<std::setprecision(17)<<"cell,process,energy_MeV,rate_per_mm,requested,accepted,null_collisions,max_energy_residual_MeV\n";
     int cell,proc,count,event=0;double energy;
     while(requests>>cell>>proc>>energy>>count) {
-        Require(cell>=0&&proc>=0&&proc<2&&std::isfinite(energy)&&energy>0&&energy<=.65&&count>0,"invalid request");
+        Require(cell>=0&&proc>=0&&proc<2&&std::isfinite(energy)&&energy>0&&energy<=ElectronExtractionMaximumMeV()&&count>0,"invalid request");
         G4Step step;auto* pre=step.GetPreStepPoint();auto* post=step.GetPostStepPoint();
         pre->SetMaterial(const_cast<G4Material*>(material));post->SetMaterial(const_cast<G4Material*>(material));
         pre->SetMaterialCutsCouple(couple);post->SetMaterialCutsCouple(couple);

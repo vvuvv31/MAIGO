@@ -1,4 +1,5 @@
 #pragma once
+#include "carbon/electron_material_registry.hpp"
 #include "carbon/photon_response_data.hpp"
 #include "carbon/photon_response_bank.hpp"
 #include <sycl/sycl.hpp>
@@ -16,15 +17,14 @@ class PhotonResponseBankDevice {
 public:
     PhotonResponseBankView view{};std::vector<PhotonResponseView> host_nodes;
     std::uint64_t bytes{},mapped_bytes{};
-    PhotonResponseBankDevice(sycl::queue queue,const std::filesystem::path& index,const std::string& sha,bool mapped=true):queue_(queue) {
+    PhotonResponseBankDevice(sycl::queue queue,const std::filesystem::path& index,bool mapped=true):queue_(queue) {
         try {
-            require(sha.size()==64&&compute_file_sha256_hex(index)==sha,"Photon bank index SHA mismatch");
             std::ifstream input(index);std::string magic;unsigned count;
-            require(bool(input>>magic>>count)&&magic=="MAIPHB01"&&count>0&&count<=4096,"Photon bank index header");
+            require(bool(input>>magic>>count)&&magic=="MAIPHB02"&&count>0&&count<=4096,"Photon bank index header");
             for(unsigned i=0;i<count;++i) {
-                int section;double density;std::string file,pin;
-                require(bool(input>>section>>density>>file>>pin),"Photon bank index row");
-                PhotonResponseData data(index.parent_path()/file,pin);auto node=data.view();
+                int section;double density;std::string file;
+                require(bool(input>>section>>density>>file),"Photon bank index row");
+                PhotonResponseData data(index.parent_path()/file);auto node=data.view();
                 require(node.section==section&&node.density==density,"Photon bank identity");
                 node.rates=upload(data.rates);node.edges=upload(data.edges);node.channels=upload(data.channels);node.outcomes=upload(data.outcomes,mapped);
                 host_nodes.push_back(node);bytes+=data.bytes;if(mapped)mapped_bytes+=data.outcomes.size()*sizeof(PhotonOutcome);
@@ -32,7 +32,7 @@ public:
             std::string extra;require(!(input>>extra),"Photon bank trailing fields");
             std::sort(host_nodes.begin(),host_nodes.end(),[](auto a,auto b){return a.section<b.section||(a.section==b.section&&a.density<b.density);});
             for(unsigned i=1;i<count;++i)require(host_nodes[i].section!=host_nodes[i-1].section||host_nodes[i].density>host_nodes[i-1].density,"Photon duplicate node");
-            std::vector<unsigned> offsets(26);unsigned pos=0;for(unsigned s=0;s<=25;++s){while(pos<count&&host_nodes[pos].section<int(s))++pos;offsets[s]=pos;}
+            std::vector<unsigned> offsets(kElectronMaterialCount+1);unsigned pos=0;for(unsigned s=0;s<=kElectronMaterialCount;++s){while(pos<count&&host_nodes[pos].section<int(s))++pos;offsets[s]=pos;}
             view.nodes=upload(host_nodes);view.section_offsets=upload(offsets);view.count=count;
         }catch(...){for(auto* p:allocations_)sycl::free(p,queue_);throw;}
     }

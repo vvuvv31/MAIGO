@@ -1,7 +1,7 @@
 """Run only on the allocated cluster node; bounded all-ion active-step extraction."""
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-import hashlib
+
 import json
 import os
 import resource
@@ -22,33 +22,26 @@ def write_status(value):
 
 
 def run_one(phase, z, a, nodes, offset, env):
-    directory = CAMPAIGN / phase / ("z%d_a%d" % (z, a))
-    log_path = CAMPAIGN / "logs" / ("%s_z%d_a%d.log" % (phase, z, a))
+    directory = CAMPAIGN / phase / ('z%d_a%d' % (z, a))
+    log_path = CAMPAIGN / 'logs' / ('%s_z%d_a%d.log' % (phase, z, a))
     if directory.exists() or log_path.exists():
-        raise RuntimeError("Refusing to overwrite reference case: " + str(directory))
+        raise RuntimeError('Refusing to overwrite reference case: ' + str(directory))
     started = time.time()
-    with log_path.open("wb") as log:
-        process = subprocess.run(
-            [str(ROOT / "bin/extract_active_urban_mfp_edges_v4"), str(directory),
-             str(z), str(a), str(nodes), str(offset)],
-            env=env, stdout=log, stderr=subprocess.STDOUT,
-        )
-    log = log_path.read_text(errors="replace")
-    success = process.returncode == 0 and "ACTIVE_URBAN_ION_CONTEXT=PASS" in log
+    with log_path.open('wb') as log:
+        process = subprocess.run([str(ROOT / 'bin/extract_active_urban_mfp_edges_v4'), str(directory), str(z), str(a), str(nodes), str(offset)], env=env, stdout=log, stderr=subprocess.STDOUT)
+    log = log_path.read_text(errors='replace')
+    success = process.returncode == 0 and 'ACTIVE_URBAN_ION_CONTEXT=PASS' in log
     files = {}
     if success:
-        for material in [m+suffix for m in MATERIALS for suffix in ["", "_vectors", "_mfp", "_mfp_edges"]]:
-            path = directory / (material + ".csv")
+        for material in [m + suffix for m in MATERIALS for suffix in ['', '_vectors', '_mfp', '_mfp_edges']]:
+            path = directory / (material + '.csv')
             if not path.exists():
                 success = False
                 break
-            files[material] = {"path": str(path), "bytes": path.stat().st_size,
-                               "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
-    result = dict(z=z, a=a, phase=phase, nodes=nodes, offset=offset,
-                  returncode=process.returncode, accepted=success,
-                  elapsed_s=time.time()-started, files=files, log=str(log_path))
+            files[material] = {'path': str(path), 'bytes': path.stat().st_size}
+    result = dict(z=z, a=a, phase=phase, nodes=nodes, offset=offset, returncode=process.returncode, accepted=success, elapsed_s=time.time() - started, files=files, log=str(log_path))
     directory.mkdir(parents=True, exist_ok=True)
-    (directory / "status.json").write_text(json.dumps(result, indent=2) + "\n")
+    (directory / 'status.json').write_text(json.dumps(result, indent=2) + '\n')
     return result
 
 

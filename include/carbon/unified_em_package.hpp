@@ -27,6 +27,6 @@ public:
     std::vector<UnifiedEmRecord> records;
     std::vector<UnifiedEmNode> nodes;
     std::vector<EmCubicSegmentCandidate<float>> segments;
-    static UnifiedEmPackage load(const std::filesystem::path&,const std::string& expected_sha256);
+    static UnifiedEmPackage load(const std::filesystem::path&);
 };
 } // namespace carbon

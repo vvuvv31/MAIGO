@@ -152,11 +152,8 @@ struct TransportConfig {
     // The sole water/Schneider CT energy-loss model.
     std::string em_model{"g4_material_joint_v1"};
     std::filesystem::path em_package_file{};
-    std::string em_package_sha256{};
     // Empty selects unified_em_delta_moments_v2.bin next to em_package_file.
     std::filesystem::path em_delta_moments_file{};
-    std::string em_delta_moments_sha256{delta_moments_sha256};
-    std::string em_delta_moments_source_sha256{delta_moments_source_sha256};
     // Research-only step extension, applied away from stopping/cut-onset regions.
     double em_primary_step_scale{1.0};
     double em_secondary_step_scale{1.0};
@@ -229,7 +226,6 @@ struct TransportConfig {
     // Derived routing: native water material, shared CINEL03 framework. No legacy fallback.
     bool unified_water_nuclear_transport{true};
     std::filesystem::path unified_water_material_file{};
-    std::string unified_water_material_sha256{};
     std::filesystem::path water_reaction_rate_file{};
     std::filesystem::path ct_schneider_primary_cinel03_file{};
     std::filesystem::path ct_schneider_secondary_cinel03_file{};
@@ -238,7 +234,6 @@ struct TransportConfig {
     // C12 elastic rates on the Schneider grid (SCHNELXS v1, same layout as
     // SCHNRATE v3). Empty = elastic disabled (current production behavior).
     std::filesystem::path ct_elastic_section_rate_file{};
-    std::string ct_elastic_section_rate_sha256{};
     // Diagnostic master switch for section elastic (default off;
     // smoke-gated until halo/profile validation promotes it).
     bool ct_elastic_diagnostic{false};
@@ -247,9 +242,7 @@ struct TransportConfig {
     bool ct_elastic_all_targets{false};
     // Independent all-projectile TOPAS elastic bank; never uses the C12 isotropic fallback.
     std::filesystem::path all_ion_elastic_file{};
-    std::string all_ion_elastic_sha256{};
     std::filesystem::path elastic_recoil_stopping_file{};
-    std::string elastic_recoil_stopping_sha256{};
     // v2.1 physics bundle manifest (REQUIRED whenever any Schneider rate
     // file is binary version 3; REFUSED with v1 files: no mixing).
     std::filesystem::path ct_schneider_physics_bundle_file{};
@@ -259,72 +252,21 @@ struct TransportConfig {
     // and no default fallback exist (empty refuses startup).
     std::string secondary_out_of_scope_nuclear_policy{};
     std::filesystem::path ct_schneider_radiation_length_file{"data/schneider/schneider_radiation_lengths.json"};
-    // Optional TOPAS-derived primary C12 delta-electron transverse tail. Empty
-    // preserves the condensed local-deposit path exactly. Schneider section 0 only.
-    std::filesystem::path ct_schneider_delta_tail_file{};
-    // Optional TOPAS-derived primary C12 forward (longitudinal) delta kernel,
-    // supplementing the transverse tail. Requires ct_schneider_delta_tail_file;
-    // empty disables the forward move exactly. Schneider section 0 only.
-    std::filesystem::path ct_schneider_delta_longitudinal_file{};
-    // Frozen diagnostic only. Per-patient calibration is forbidden.
-    double ct_schneider_delta_longitudinal_scale{1.0};
-    // Explicit unvalidated 175 MeV/u uniform section-0 three-density experiment.
-    bool ct_longitudinal_homogeneous_density_diagnostic{false};
-    // Unvalidated 175 MeV/u EM-only air/soft-tissue mass-column experiment.
-    bool ct_longitudinal_interface_mass_diagnostic{false};
-    // Independent correlated bulk response, isolated EM-only interface pilot.
-    std::filesystem::path ct_electron_joint_response_diagnostic_file{};
-    bool ct_electron_joint_patient_experiment{false};
-    // Explicit opt-in: allow the joint patient experiment in research mode
-    // (smoke stays allowed as before; production stays forbidden). Quality
-    // still reports unvalidated_electron_joint_response, so runs remain
-    // non-accepting until the joint data passes production validation.
-    bool ct_electron_joint_allow_research{false};
-    // Production speed switch (default ON = current diagnostic behavior).
-    // false skips reporting-only joint diagnostic atomics (queries,
-    // redistributed/escaped/untracked energy, path replays). Miss/lookup
-    // counters stay always-on: they feed fail-closed quality gates.
-    // Skipped counters never feed transport, so dose is bit-identical.
+    // Electron queue diagnostics; coverage and completion are always audited.
     bool electron_joint_diagnostics{true};
-    double ct_electron_joint_sample_probability{1.0};
-    // Execution layout only; both modes use the pinned joint response and RNG.
-    // Queued replay requires the optional FE joint queue build and research CT.
-    std::string ct_electron_joint_execution_mode{"inline"};
-    std::string ct_electron_joint_response_sha256{};
-    std::string ct_electron_joint_response_metadata_sha256{};
-    // Unvalidated pure Water_75eV EM-only experiment; never a CT alias.
-    std::filesystem::path water_electron_response_diagnostic_file{};
-    std::string water_electron_response_sha256{};
-    bool water_electron_high_energy_diagnostic{false};
-    std::string water_electron_response_metadata_sha256{};
-    bool water_electron_nuclear_diagnostic{false};
-    std::filesystem::path material_electron_response_index_file{};
     // Nonempty selects the exact proton packed+prevalidated runtime artifact.
-    std::filesystem::path material_electron_packed_directory{};
     // Experimental material joint electron operator.
     std::filesystem::path material_electron_joint_pilot_file{};
-    std::string material_electron_joint_pilot_sha256{};
     std::filesystem::path material_electron_charged_index_file{};
-    std::string material_electron_charged_index_sha256{};
     std::filesystem::path material_electron_birth_file{};
-    std::string material_electron_birth_sha256{};
     std::filesystem::path material_photon_response_index_file{};
-    std::string material_photon_response_index_sha256{};
     // Exact C12 EM graph, shared-state records and crossing-bin storage.
-    std::filesystem::path material_electron_compact_directory{};
-    std::string material_electron_response_index_sha256{};
-    std::uint64_t material_electron_response_device_budget_MiB{8192};
-    std::uint64_t material_electron_response_hot_device_budget_MiB{0};
-    std::string material_electron_response_cache_policy{"strict"};
-    std::string material_electron_response_memory_mode{"device"};
     bool material_electron_retain_bank{false};
-    std::string material_electron_execution_mode{"inline"};
     std::uint32_t material_electron_queue_budget_MiB{576};
     std::uint32_t material_electron_queue_chunk{1024};
     std::uint32_t material_electron_queue_lanes{8192};
     std::uint32_t material_electron_group_size{1};
     // Independent electron arithmetic: 0=reference, 4=full FP32 runtime.
-    std::uint32_t material_electron_precision{0};
     // User selection; uniform water above the density threshold has no selected
     // region and needs no electron bank. The second flag is the effective CT path.
     bool broadbeam_electron_tracking{false};
@@ -336,7 +278,6 @@ struct TransportConfig {
     bool broadbeam_electron_external_air_local{false};
     double broadbeam_electron_external_air_margin_mm{0.0};
     std::filesystem::path broadbeam_electron_body_mask_file{};
-    std::string broadbeam_electron_body_mask_sha256{};
     // Unbiased variance reduction for low-density (density<=threshold) CT
     // broadbeam electrons. Survival<1 plays deterministic per-task Russian
     // roulette on low-density births (weight/=survival, signed ledger keeps
@@ -347,8 +288,6 @@ struct TransportConfig {
     bool broadbeam_electron_expected_scoring{false};
     double broadbeam_electron_expected_min_energy_MeV{0.0};
 
-    double material_electron_short_range_mm{0.0}; // research-only, zero disables
-    std::uint64_t material_electron_response_host_budget_MiB{98304};
 
     // Optional energy-dependent mass XS for every Schneider section. When set
     // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.
@@ -408,10 +347,6 @@ struct TransportConfig {
     bool enable_energy_straggling{false};
     // Smoke-only read-only primary query histogram; no RNG or physics changes.
     bool enable_primary_loss_query_audit{false};
-    // Deprecated compatibility key. Terminal-generation charged products now
-    // always receive EM transport; the generation cap suppresses only further
-    // nuclear reactions. The parser accepts this field but its value is ignored.
-    bool enable_terminal_generation_em_transport{false};
     // Toggle native Unified EM fluctuations for charged secondaries.
     bool enable_secondary_energy_straggling{false};
     // GPU generation-wise species ordering. Production YAML opts in explicitly.
@@ -441,10 +376,6 @@ struct TransportConfig {
     // replay. Zero restricts inelastic reactions to the primary projectile.
     // Validated production configurations are limited to at most two.
     std::uint32_t cinel02_max_secondary_inelastic_generations{0};
-    // Reproduce TOPAS/Geant4 behavior for unsupported prompt-unstable
-    // products. Currently this is only Be-6: count its generated kinetic
-    // energy as an explicit compatibility sink and do not queue it.
-    bool cinel02_topas_compatibility_mode{false};
     // Reject a run when a sampled collision has no valid replay event or the
     // hazard/outcome counters do not close.
     bool cinel02_strict_match{false};
@@ -465,14 +396,12 @@ struct TransportConfig {
     std::string multiple_scattering_model{"highland"};
     // Global Urban v2: exact material/cut couples, every transported charged ion.
     std::filesystem::path urban_mcs_package_file{};
-    std::string urban_mcs_package_sha256{};
     // Research-only same-composition density scaling; not a CT dose validation.
     bool urban_ct_density_scaling{false};
     // Physical water box outside the scored ROI (required in global water mode).
     double urban_water_half_width_mm{0.0};
     // Opt-in, water-only minibeam proton/helium Urban transport. "inherit"
     // preserves the existing MCS selection, including the dedicated C12 path.
-    std::string minibeam_water_proton_helium_mcs_model{"inherit"};
     // Staged selector: c12, c12_he4, c12_he4_pdt, or all_charged.
     // Non-C12 parameters currently reuse the generic charge/momentum scaling
     // and remain explicitly provisional until species-isolated validation.
@@ -519,7 +448,7 @@ struct TransportConfig {
     // but their global atomics are redundant in production dose runs. Beamline
     // removed energy is still accumulated for the global energy balance.
     bool enable_minibeam_diagnostics{true};
-    std::string minibeam_transport_mode{"absorbing_geometry"};
+    std::string minibeam_transport_mode{"copper_em"};
     std::string minibeam_material{"Copper"};
     // Cylindrical Copper collimator matching the TOPAS reference.  The legacy
     // width/length fields remain available for old rectangular-input files,
@@ -554,12 +483,10 @@ struct TransportConfig {
     std::filesystem::path minibeam_air_stopping_power_file{};
     // Native ionization proposal clock for primary air transport.
     std::filesystem::path minibeam_air_ionization_rate_file{};
-    std::string minibeam_air_ionization_rate_sha256{};
     // Primary beamline air transport, independent of the water MCS selector.
     std::string minibeam_air_mcs_model{"none"};
     double minibeam_air_slit_max_step_mm{1.0e6};
     std::filesystem::path minibeam_air_urban_package_file{};
-    std::string minibeam_air_urban_package_sha256{};
     // Restricted loss-range table for the Urban v2 C12/Cu couple
     // (theRangeTableForLoss semantics: E_total -> loss range -> restricted
     // dE/dx). Required when minibeam_copper_mcs_model == "urban_v2"; the
@@ -576,7 +503,7 @@ struct TransportConfig {
     // `fermi_eyges_tail` uses a local, step-invariant scattering power,
     // correlated displacement, and a path-length Poisson tail constrained by
     // the independent Geant4/Urban Copper-slab phase space.
-    std::string minibeam_copper_mcs_model{"highland"};
+    std::string minibeam_copper_mcs_model{"urban_v2"};
     // Extracted discrete General Ion Elastic interactions. Condensed Copper
     // electromagnetic MCS remains independent of this switch.
     bool minibeam_copper_enable_elastic{true};
@@ -620,61 +547,6 @@ struct TransportConfig {
     // Default 1.0; the minibeam value is frozen from a TOPAS/GPU primary-origin
     // R80 comparison after the water-entrance phase space has been matched.
     double minibeam_water_primary_stopping_power_scale{1.0};
-    // Optional low-energy correction to the projected Highland core in the
-    // downstream water phantom.  The scale approaches the configured value at
-    // zero energy and smoothly returns to one at transition_MeVu.  Primary
-    // C-12 continuations and charged fragments are kept separate because their
-    // distal lateral-dose sensitivities are different.  Defaults are neutral.
-    double minibeam_water_low_energy_mcs_transition_MeVu{0.0};
-    double minibeam_water_primary_low_energy_mcs_scale{1.0};
-    double minibeam_water_fragment_low_energy_mcs_scale{1.0};
-    // Optional C12+water development model. `fermi_eyges_tail` replaces (and
-    // never stacks with) the legacy per-step Highland, low-energy scale, and
-    // variance-preserving synthetic tail on the primary water path.
-    std::string minibeam_water_primary_mcs_model{"legacy_highland"};
-    double minibeam_water_primary_mcs_max_segment_mm{0.1};
-    // Research-only table-driven Geant4-11.3.2 Urban path for primary C12 in
-    // water (matches the TOPAS water MaxStepSize; NOT the FE max_segment).
-    double minibeam_water_primary_urban_max_step_mm{0.05};
-    // Research-only Unified-water delta spatial response. `local` is the
-    // current aggregate local deposition (bit-identical default).
-    // `water_response_v1` redistributes the step loss through the shared
-    // WaterElectronResponse helper; transport (loss/MCS/steps/RNG) is
-    // untouched, only scoring locations change. `water_response_v2` uses
-    // source-pinned tables in full-physics primary transport; secondary ions
-    // and upstream electron production are not included in this response.
-    std::string minibeam_water_delta_response_model{"local"};
-    // Response table for water_response_v1 (WaterElectronResponse schema with
-    // sha pins, same keys as the diagnostic file it replaces here).
-    std::filesystem::path minibeam_water_delta_response_table_file{};
-    // Restricted loss-range table for the Urban water couple (same schema as
-    // the copper table, plus # zeff / # radlen_mm / # density_g_per_cm3).
-    std::filesystem::path minibeam_water_urban_loss_range_file{};
-    // Development-only secondary C12 switch. Other fragments remain on the
-    // legacy species-dependent Highland path until independently validated.
-    // `urban_v2` routes water-borne secondary C12 through the shared
-    // Geant4-11.3.2 Urban sampler (same Water_75eV loss-range table as the
-    // primary path); research-only, default stays legacy_highland.
-    std::string minibeam_water_secondary_c12_mcs_model{"legacy_highland"};
-    double minibeam_water_secondary_c12_mcs_max_segment_mm{0.1};
-    // Diagnostic-only replica of the primary minibeam post-sampling loss
-    // scaling. One is neutral; formal secondary transport leaves it neutral.
-    double minibeam_water_secondary_c12_post_sample_loss_scale{1.0};
-    // Optional Moliere-like core/tail split for primary C-12 in downstream
-    // water. Tail probability is strength * step/X0, while tail width is in
-    // units of theta0/sqrt(step/X0). The core is narrowed to preserve the
-    // projected second moment. Zero strength preserves legacy Highland.
-    double minibeam_water_primary_mcs_tail_strength{0.0};
-    double minibeam_water_primary_mcs_tail_width{0.0};
-    // Optional entrance response for primary ion histories that touched the
-    // Copper collimator. The two smooth terms modify stopping (not scored dose),
-    // so retained kinetic energy continues downstream. Zero amplitudes are
-    // neutral and preserve all non-minibeam/default behaviour.
-    double minibeam_water_touched_primary_surface_boost{0.0};
-    double minibeam_water_touched_primary_surface_sigma_mm{0.8};
-    double minibeam_water_touched_primary_deficit{0.0};
-    double minibeam_water_touched_primary_deficit_center_mm{2.2};
-    double minibeam_water_touched_primary_deficit_sigma_mm{1.0};
     bool minibeam_copper_enable_nuclear_attenuation{false};
     std::filesystem::path minibeam_copper_cross_section_file{};
     // Copper-only TOPAS banks, loaded only by CARBON_ENABLE_MINIBEAM builds.
@@ -741,7 +613,6 @@ struct TransportConfig {
     bool ct_secondary_exact_faces{true};
     bool ct_secondary_mcs_off_diagnostic{false};
     std::filesystem::path spots_upstream_air_mcs_file{};
-    std::string spots_upstream_air_mcs_sha256{};
     std::filesystem::path spots_upstream_air_stopping_power_file{};
     // Keep all clinical geometry in the fixed DICOM LPS patient frame. This is
     // independent of the spot input format (TOPAS TimeFeature or TPS CSV).
@@ -826,33 +697,6 @@ struct TransportConfig {
     bool neutron_exact_plane_boundaries{true};
     std::filesystem::path neutron_proton_birth_output_file{};
     std::size_t neutron_proton_birth_capacity{2000000};
-    bool enable_electron_transport{false};
-    std::filesystem::path electron_transport_data_file{};
-    std::size_t electron_queue_capacity{0};
-    double electron_kinetic_cutoff_MeV{0.01};
-    std::uint32_t maximum_electromagnetic_generations{4};
-    double maximum_electron_step_mm{0.1};
-    double maximum_electron_relative_energy_loss{0.05};
-    // Short-range electronic build-up vs unrestricted CSDA local deposit.
-    // Of each continuous energy loss, fraction f is re-deposited along +z with
-    // MFP electronic_buildup_mfp_mm (delta-ray proxy). f scales with energy:
-    //   f(E) = electronic_buildup_fraction * clamp(E_MeVu / 400, 0, 1)
-    // so low-E beams are almost unchanged. 0 disables (legacy).
-    double electronic_buildup_fraction{0.0};
-    double electronic_buildup_mfp_mm{0.5};
-    // Minibeam validation can restrict the unresolved delta-electron proxy to
-    // primary ion. This avoids applying a carbon-derived energy fraction to
-    // fragment species whose restricted/unrestricted stopping split differs.
-    bool minibeam_electronic_buildup_primary_only{false};
-    // Optional transverse Gaussian sigma [mm] for the electronic fraction in
-    // the dense voxel scorer.  The deposited energy is moved stochastically,
-    // preserving expectation and using one voxel atomic per aggregated deposit.
-    // 0 keeps the legacy track-local voxel scoring.
-    double electronic_buildup_lateral_sigma_mm{0.0};
-    // Hard soft-cap on estimated SYCL device USM vs device global memory.
-    // Default 0.50: queues are scaled down to fit; allocation still aborts if over.
-    // Pair with a host watchdog (run scripts) that kills the process if live VRAM
-    // exceeds this fraction — prevents Arc driver lockups / host freezes.
     double max_device_memory_fraction{0.50};
     // Explicit tracked-USM allocation budget in GiB. 0 keeps the historical
     // unbounded behavior; a positive value makes the DeviceMemoryTracker reject
@@ -910,14 +754,6 @@ struct TransportConfig {
     // Diagnostic fragment-only water-entry replay. Records tagged `fragment`
     // are injected into the normal secondary transport queue at generation 0;
     // no primary histories are launched. number_of_histories remains the
-    // original incident-history normalization denominator.
-    std::filesystem::path minibeam_water_entry_secondary_replay_file{};
-    // Diagnostic-only: route a parent-0 C12 entrance sample through the
-    // secondary queue for same-source primary/secondary pure-EM validation.
-    bool minibeam_water_entry_secondary_replay_allow_primary_c12{false};
-    // Diagnostic-only replay of charged products born inside water. Such
-    // records retain their true z and may initially travel backward.
-    bool minibeam_water_entry_secondary_replay_allow_internal_births{false};
     // Optional charged fragments created in Copper and accepted into the
     // water secondary queue.  Kept separate from the one-record-per-primary
     // phase space because one source history can produce many fragments.

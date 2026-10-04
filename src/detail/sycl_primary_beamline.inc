@@ -264,88 +264,7 @@
                         minibeam_slit_thickness, minibeam_slit_offset);
                 auto minibeam_primary_elastic = false;
                 auto minibeam_source_slit = 0;
-                if constexpr(kKernelStage==10) {
-                    // One whole donor history, including zero output, all Cu
-                    // charged water entries and native Cu neutron births.
-                    if(copper_response_events && minibeam_hits_copper) {
-                        const auto u=minibeam_cos*position_x_mm+minibeam_sin*position_y_mm;
-                        float distance=1.0e30F;
-                        for(int slit=-minibeam_slit_count/2;slit<=minibeam_slit_count/2;++slit)
-                            distance=sycl::fmin(distance,sycl::fabs(u-minibeam_slit_offset-
-                                slit*minibeam_slit_pitch)-.5F*minibeam_slit_width);
-                        if(distance>=1.F && distance<=1.55001F) {
-                            auto add_response_count=[&](unsigned index,std::uint64_t value=1) {
-                                sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
-                                    sycl::memory_scope::device,sycl::access::address_space::global_space>
-                                    (copper_response_counts[index]).fetch_add(value);
-                            };
-                            const int ix=int(sycl::floor((position_x_mm+15.F)*10.F));
-                            const int iy=int(sycl::floor(position_y_mm+15.F));
-                            if(ix<0 || ix>=300 || iy<0 || iy>=30 ||
-                                sycl::fabs(direction_x)>1.e-4F || sycl::fabs(direction_y)>1.e-4F ||
-                                sycl::fabs(energy_MeV-170.F)>.01F) {
-                                add_response_count(2); // Unsupported history keeps the full native transport below.
-                            } else {
-                                const auto cell=ix+300*iy;
-                                const auto first=copper_response_offsets[cell];
-                                const auto count=copper_response_offsets[cell+1]-first;
-                                if(!count)add_response_count(1); // Empty conditional bin uses full native transport.
-                                else {
-                                    const auto uniform=rng::uniform01(spot_seed ^ 0xC017AC701B19EAD1ULL,rng_history,0,700);
-                                    const auto donor=first+sycl::min(count-1,static_cast<unsigned>(uniform*count));
-                                    const auto response=copper_response_events[donor];
-                                    entry=response.primary;
-                                    entry.global_history=global_history;entry.rng_history=rng_history;
-                                    entry.spot_seed=spot_seed;entry.spot_initial_energy_MeV=spot_initial_energy_MeV;
-                                    entry.sampled_initial_energy_MeVu=sampled_initial_energy_MeVu;
-                                    for(unsigned i=0;i<response.charged_count;++i) {
-                                        auto child=copper_response_charged[response.charged_begin+i];
-                                        child.parent_history=global_history;
-                                        child.rng_stream=rng::event_product_stream(rng_history,0xC0170000U,
-                                            rng::branch_role_primary_charged,i);
-                                        const auto slot=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,
-                                            sycl::memory_scope::device,sycl::access::address_space::global_space>
-                                            (*secondary_count_device).fetch_add(1U);
-                                        if(slot<max_secondaries)secondary_queue_device[slot]=child;
-                                        else {
-                                            sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,
-                                                sycl::memory_scope::device,sycl::access::address_space::global_space>
-                                                (*secondary_overflow_count_device).fetch_add(1U);
-                                            sycl::atomic_ref<float,sycl::memory_order::relaxed,
-                                                sycl::memory_scope::device,sycl::access::address_space::global_space>
-                                                (*secondary_overflow_energy_device).fetch_add(child.energy_MeV);
-                                        }
-                                    }
-                                    for(unsigned i=0;i<response.neutron_count;++i) {
-                                        auto birth=copper_response_neutrons[response.neutron_begin+i];
-                                        birth.history=global_history;
-                                        birth.rng_stream=rng::event_product_stream(rng_history,0xC0170000U,
-                                            rng::branch_role_primary_neutral,i);
-                                        const auto slot=sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
-                                            sycl::memory_scope::device,sycl::access::address_space::global_space>
-                                            (*neutron_birth_buffer.count).fetch_add(1U);
-                                        if(slot<neutron_birth_buffer.capacity)neutron_birth_buffer.records[slot]=birth;
-                                    }
-                                    beamline_removed_device[global_history]=response.removed;
-                                    beamline_air_loss_device[global_history]=response.air_loss;
-                                    beamline_primary_survivor_device[global_history]=entry.energy_MeV>energy_cutoff_MeV ? entry.energy_MeV : 0.F;
-                                    std::size_t destination=lane;
-                                    if constexpr(kPrimaryStage==3) {
-                                        const bool active=entry.energy_MeV>energy_cutoff_MeV;
-                                        const auto rank=sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
-                                            sycl::memory_scope::device,sycl::access::address_space::global_space>
-                                            (primary_entry_counts[active ? 0 : 1]).fetch_add(1U);
-                                        destination=active ? rank : chunk_count-1-rank;
-                                    }
-                                    primary_medium_entry[destination]=entry;
-                                    add_response_count(0);add_response_count(3,entry.energy_MeV>energy_cutoff_MeV ? 1 : 0);
-                                    add_response_count(4,response.charged_count);add_response_count(5,response.neutron_count);
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                }
+
                 // Versioned touch state (history scope): flushed to the
                 // phase-space record after transport.  Legacy copper_touched
                 // keeps the initial-ray meaning; ever_in_copper and the Cu
@@ -398,10 +317,7 @@
                     minibeam_source_slit = nearest_minibeam_slit(
                         slit_u, minibeam_slit_pitch);
                 }
-                if (minibeam_absorbing_geometry && minibeam_hits_copper) {
-                    beamline_removed_device[global_history] = energy_MeV;
-                    energy_MeV = 0.0F;
-                }
+
                 if (kPrimaryStage != 5 && minibeam_copper_transport && (minibeam_hits_copper || minibeam_air_urban) &&
                     direction_z > 1.0e-8F) {
                     const auto incident_beamline_energy = energy_MeV;
@@ -605,25 +521,6 @@
                                 urban_v2_at_boundary =
                                     correlated_scattering.boundary_crossed;
                                 urban_v2_prev_in_cu = true;
-                            } else if (minibeam_copper_urban_msc) {
-                                const auto copper_range_mm = stopping > 0.0F
-                                    ? energy_MeV / stopping
-                                    : 0.0F;
-                                correlated_scattering = copper_urban_msc_step(
-                                    pre_scatter_direction, energy_MeV,
-                                    primary_atomic_number, primary_mass_number,
-                                    transport_path, minibeam_copper_density,
-                                    minibeam_copper_radiation_length,
-                                    copper_range_mm, minibeam_copper_mcs_scale,
-                                    spot_seed, rng_history, beamline_step, 50);
-                            } else {
-                                correlated_scattering = copper_fermi_eyges_tail_step(
-                                    pre_scatter_direction, energy_MeV,
-                                    primary_atomic_number, primary_mass_number,
-                                    transport_path, minibeam_copper_density,
-                                    minibeam_copper_radiation_length,
-                                    minibeam_copper_mcs_scale, spot_seed,
-                                    rng_history, beamline_step, 50, primary_mcs_mass_override_MeV);
                             }
                         }
                         // R4: explicit step proposal/finalization contract for

@@ -2,7 +2,6 @@
 """Paired FP32 minibeam regression/timing, with isolated outputs and fixed seeds."""
 import argparse
 import csv
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -22,8 +21,6 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2) + "\n")
 
 
-def sha(path):
-    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def integer_fields(value, prefix=""):
@@ -82,8 +79,8 @@ def run(executable, preset, directory, histories, seed, shards, phase, short_sea
     command = [str(executable), "--config", "case.yaml"]
     if phase:
         command += ["--minibeam-phase-space-output", "entry.csv"]
-    metadata = dict(command=command, binary_sha256=sha(executable),
-                    config_sha256=sha(directory / "case.yaml"), histories=histories,
+    metadata = dict(command=command, binary=str(executable),
+                    config=str(directory / "case.yaml"), histories=histories,
                     seed=seed, shards=shards, short_search=short_search, preset=preset,
                     environment={k:v for k,v in env.items() if k.startswith("CARBON_")})
     save(directory / "execution.json", metadata)

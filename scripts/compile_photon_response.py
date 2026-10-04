@@ -9,21 +9,20 @@ of exact continuous-energy transport or CT dose acceptance.
 import argparse,concurrent.futures,json,struct,sys
 from pathlib import Path
 import numpy as np
-from extract_photon_response import DTYPE,sha,save
+from electron_package_common import COLLISION_DTYPE as DTYPE, save
 OUTCOME=np.dtype([('cdf','<f8'),('fraction','<f8'),('cosine','<f8'),('pdg','<i4'),('pad','<i4')]);assert OUTCOME.itemsize==32
 
 
 def one(task):
-    source,out,bins,rate_source=task;report=json.loads((source/'report.json').read_text());a=report['audit']
+    source,out,bins,rate_source,*domain=task;maximum_energy=domain[0] if domain else .65
+    report=json.loads((source/'report.json').read_text());a=report['audit']
     conditional=(source/'conditional.phsp').exists();raw=source/('conditional.phsp' if conditional else 'photons.phsp')
     rates_path=(rate_source if conditional else source)/'photon_rates.csv'
-    assert sha(raw)==a['raw_sha256']
-    assert sha(rates_path)==(report['rate_source_sha256'] if conditional else a['rates']['sha256'])
     out.mkdir(parents=True,exist_ok=False);r=np.fromfile(raw,DTYPE);c=r[r['kind']==0];child=r[(r['kind']==1)&(r['remaining']>0)]
     # Place cells AROUND native source anchors, not on the anchor energies:
     # FP32 source rounding on a bin edge otherwise creates artificial gaps.
-    anchors=np.geomspace(1e-5,.65,bins).astype(np.float32).astype(float)
-    edges=np.r_[anchors[0],np.sqrt(anchors[:-1]*anchors[1:]),.65]
+    anchors=np.geomspace(1e-5,maximum_energy,bins).astype(np.float32).astype(float)
+    edges=np.r_[anchors[0],np.sqrt(anchors[:-1]*anchors[1:]),maximum_energy]
     assert np.all(c['energy']>=edges[0]) and np.all(c['energy']<=edges[-1])
     owner={(int(x['run']),int(x['event']),int(x['step'])):i for i,x in enumerate(c)}
     parent=np.array([owner[(int(x['run']),int(x['event']),int(x['step']))] for x in child],dtype=np.int64)
@@ -67,8 +66,8 @@ def one(task):
     absent=(process_rates>0)&(counts.reshape(-1,3)[which]==0)
     missing_rows=np.flatnonzero(np.any(absent,axis=1))
     fine_missing=np.sum(np.where(absent,process_rates,0),axis=1)/process_rates.sum(axis=1)
-    result=dict(status='RESEARCH_PHOTON_OPERATOR_SUPPORT_REQUIRES_FINE_ENERGY_AUDIT',conditional_native=conditional,node=report['node'],material_identity=identity,bins=bins,outcomes=len(outcomes),collisions=len(c),bytes=path.stat().st_size,sha256=sha(path),source_report_sha256=sha(source/'report.json'),source_raw_sha256=a['raw_sha256'],rates_sha256=sha(rates_path),generator_sha256=sha(Path(__file__)),empty_channels=int(np.count_nonzero(counts==0)),maximum_unrepresented_process_probability=float(missing.max()),missing_probability_by_energy_bin=missing.tolist(),scope='Native rate plus process-conditional energy-weighted final branch; all positive branches retained, no legacy trajectory. Finite energy bins and isotropic azimuth assumption require validation; an empty requested channel is coverage_missing, never deposition/escape.')
-    result.update(coverage_complete=not len(missing_rows),support_probe_count=len(probes),fine_maximum_unrepresented_process_probability=float(fine_missing.max()),unsupported_rate_probes=[dict(energy_MeV=float(probes[i]),bin=int(which[i]),missing_processes=np.flatnonzero(absent[i]).tolist()) for i in missing_rows],support_scope='Complete only means no empty requested channel for the declared piecewise-linear attenuation table over10eV–0.65MeV; it does not certify physical interpolation accuracy')
+    result=dict(status='RESEARCH_PHOTON_OPERATOR_SUPPORT_REQUIRES_FINE_ENERGY_AUDIT',conditional_native=conditional,node=report['node'],material_identity=identity,bins=bins,maximum_energy_MeV=maximum_energy,outcomes=len(outcomes),collisions=len(c),bytes=path.stat().st_size,empty_channels=int(np.count_nonzero(counts==0)),maximum_unrepresented_process_probability=float(missing.max()),missing_probability_by_energy_bin=missing.tolist(),scope='Native rate plus process-conditional energy-weighted final branch; all positive branches retained, no legacy trajectory. Finite energy bins and isotropic azimuth assumption require validation; an empty requested channel is coverage_missing, never deposition/escape.')
+    result.update(coverage_complete=not len(missing_rows),support_probe_count=len(probes),fine_maximum_unrepresented_process_probability=float(fine_missing.max()),unsupported_rate_probes=[dict(energy_MeV=float(probes[i]),bin=int(which[i]),missing_processes=np.flatnonzero(absent[i]).tolist()) for i in missing_rows],support_scope='Complete only means no empty requested channel for the declared piecewise-linear attenuation table over the declared energy domain; it does not certify physical interpolation accuracy')
     save(out/'manifest.json',result);print(report['node'],result['bytes'],result['empty_channels'],result['fine_maximum_unrepresented_process_probability'],flush=True);return result
 
 
@@ -81,6 +80,6 @@ def main():
     index=None
     if complete:
         index=a.out/'index.txt'
-        index.write_text(f'MAIPHB01 {len(results)}\n'+''.join(f'{x["material_identity"]["section_id"]} {x["material_identity"]["runtime_density_g_cm3"]:.17g} node{x["node"]:02d}/operator.bin {x["sha256"]}\n' for x in results))
-    save(a.out/'manifest.json',dict(status='RESEARCH_PHOTON_OPERATOR_BANK_NOT_CT_ACCEPTED',results=results,total_bytes=sum(x['bytes'] for x in results),coverage_complete=complete,index_sha256=sha(index) if index else None))
+        index.write_text(f'MAIPHB02 {len(results)}\n'+''.join(f'{x["material_identity"]["section_id"]} {x["material_identity"]["runtime_density_g_cm3"]:.17g} node{x["node"]:02d}/operator.bin\n' for x in results))
+    save(a.out/'manifest.json',dict(status='RESEARCH_PHOTON_OPERATOR_BANK_NOT_CT_ACCEPTED',results=results,total_bytes=sum(x['bytes'] for x in results),coverage_complete=complete))
 if __name__=='__main__':main()

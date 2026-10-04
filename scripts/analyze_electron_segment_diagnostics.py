@@ -24,9 +24,9 @@ assert DT.itemsize == 88
 NODES = None
 
 
-def init(index, sha):
+def init(index):
     global NODES
-    NODES = read_nodes(Path(index), sha)
+    NODES = read_nodes(Path(index))
 
 
 def soft_probability(key):
@@ -54,7 +54,6 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('root', type=Path)
     p.add_argument('--index', type=Path, required=True)
-    p.add_argument('--sha256', required=True)
     p.add_argument('--workers', type=int, default=8)
     args = p.parse_args()
     files = sorted(args.root.glob('out/fresh*/electron_segment_samples.bin'))
@@ -68,7 +67,7 @@ def main():
     keys = [(int(n), float(e)) for n, e in zip(d['node'], d['energy'])]
     unique = list(dict.fromkeys(keys))
     with ProcessPoolExecutor(args.workers, initializer=init,
-                             initargs=(str(args.index), args.sha256)) as pool:
+                             initargs=(str(args.index),)) as pool:
         results = list(pool.map(soft_probability, unique, chunksize=128))
     lookup = dict(zip(unique, results))
     soft = np.array([lookup[k][0] for k in keys])

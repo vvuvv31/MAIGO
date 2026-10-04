@@ -10,7 +10,7 @@ namespace carbon {
 struct PureWaterMaterial {
     double density_g_cm3{}, radiation_length_g_cm2{}, mean_excitation_energy_eV{};
     double hydrogen_mass_fraction{};
-    static PureWaterMaterial from_probe(const std::filesystem::path&, const std::string& expected_sha256);
+    static PureWaterMaterial from_probe(const std::filesystem::path&);
 };
 // Material rows have no geometry identity: water is NOT a Schneider section.
 struct MaterialRateDomain { double minimum{}, maximum{}; bool supported{}; };

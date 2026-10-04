@@ -2,7 +2,7 @@
 // Method definitions are emitted only when CARBON_DEFINE_SYCL_CONTEXT=1.
 
 // Parsed, immutable Schneider/CINEL03 host tables shared across shards in one
-// process. Keyed by exact input paths + expected hashes. Device arrays are
+// process. Keyed by exact input paths + file size and modification time. Device arrays are
 // still uploaded per shard by upload_schneider_ct_device_context().
 struct SchneiderHostCache {
     bool valid{false};
@@ -87,7 +87,7 @@ struct SyclTransportContext::Impl {
     }
 
     // Persistent, validated, immutable host parse cache shared across shards in
-    // one process. Keyed by exact input path + expected hash (never by filename
+    // one process. Keyed by exact input path + size and modification time (never by filename
     // alone). Immutable device arrays may also remain in resident_em;
     // audits, failures and mutable transport state are always per-shard.
     struct CachedUnifiedEm {
@@ -98,7 +98,7 @@ struct SyclTransportContext::Impl {
         std::size_t package_node_count{0};
     };
     struct CachedElectronCt {
-        std::string geometry_key,bank_key,joint_key,birth_key,photon_key,charged_key,fp32_key;
+        std::string geometry_key,fp32_key;
         double electron_distance_threshold{-1};
         std::vector<float> electron_distance_mm;
         // Box-metric selected region before any BODY edit; reset with the grid.
@@ -108,12 +108,7 @@ struct SyclTransportContext::Impl {
         std::vector<std::uint8_t> electron_body_mask;
         std::vector<float> electron_body_distance_mm;
         std::shared_ptr<IndependentElectronFloatDevice> fp32;
-        std::shared_ptr<ElectronJointPilotDevice> joint;
-        std::shared_ptr<ElectronBirthBankDevice> birth;
-        std::shared_ptr<PhotonResponseBankDevice> photon;
-        std::shared_ptr<ChargedBankDevice> charged;
         std::shared_ptr<const CtGrid> grid;
-        std::shared_ptr<MaterialElectronDeviceBank> bank;
         float* density{};
         std::uint8_t* material{};
     };
