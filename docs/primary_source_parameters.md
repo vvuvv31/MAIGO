@@ -1,3 +1,5 @@
+> Historical implementation record. The source templates and digest-pinned configuration described below were retired on 2026-10-05. Use the eight current presets and [current methods](../mm.md); this document is not a current configuration recipe.
+
 **通用束源参数（2026-09-26）**
 
 非 minibeam 的 CUDA 统一 EM 路径按 YAML 源 Z/A 选择主粒子，允许配置 proton、C12 及包内覆盖的带电离子。切换粒子需要同时指定匹配的 EM、δ 矩、核反应、stopping 及可选弹性/散射数据包。加载器检查身份、质量、SHA 和能区；旧 C12 包不能作为质子主束包使用。minibeam 仍限定 C12。当前尚无新质子数据的端到端剂量验收结果。
@@ -59,7 +61,7 @@ minibeam 的 Cu/水 production cut 可分别用 `minibeam_copper_production_cut_
 - `multiple_scattering_model: highland` 按源 Z/A 和核质量计算；`urban_v2` 使用匹配的 SHA 固定数据包。FE 的非 C12 主束需 `fermi_eyges_parameter_set: species_water`；`fermi_eyges_species` 控制是否选择该物种，未选择者使用 Highland。现有模型名称不代表已实现或验证 TOPAS proton Wentzel 模型。
 - 旧碳束上游空气散射、电子响应、CSV attenuation、packaged fluctuation 与核弹性诊断仍限定原适用域。普通质子配置应关闭这些诊断，核弹性使用 `all_ion_elastic_file` 及匹配反冲 stopping 包。
 
-一个配置可以从现有非 minibeam 水/CT YAML 复制，再将源改为 `primary_particle: proton`、总动能 `initial_energy_MeV: 150`，替换所有相关 package 路径、SHA 与 bundle。完整的待填数据模板见 [proton_source_gpu.yaml.template](../config/proton_source_gpu.yaml.template)。本次接口/完整性检查不等于新质子包的数值或物理验收。
+一个配置可以从现有非 minibeam 水/CT YAML 复制，再将源改为 `primary_particle: proton`、总动能 `initial_energy_MeV: 150`，替换所有相关 package 路径、SHA 与 bundle。完整的待填数据模板见 历史 `proton_source_gpu.yaml.template`（已删除）。本次接口/完整性检查不等于新质子包的数值或物理验收。
 
 `load_primary_source_parameters()` 只描述源，不执行完整配置/物理验证；正式 `load_config()` 仍严格检查所有配置键并执行输运支持验证。新增 `primary_source_parameters` 测试使用 YAML 和合成元数据，检查单位、身份、质量、别名、兼容和拒绝行为，不以旧剂量或旧拟合数据证明质子物理正确。
 

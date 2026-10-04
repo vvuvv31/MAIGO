@@ -1,6 +1,5 @@
-# Filename retained for existing commands; old carbon_joint/tail packages are no longer used.
 # Default broadbeam: shared FP32 electron transport; RT07575 local 1%/1mm >99% accepted.
-# Use native repeated batches on 2080Ti; this is not the default broadbeam path.
+# RT07575 full plan: use native repeated batches on 2080Ti.
 run_mode: research
 scorer_mode: production
 number_of_histories: 6481909

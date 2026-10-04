@@ -41,10 +41,12 @@ em_package_file: data/em/unified_em_v1.bin
 enable_energy_straggling: true
 enable_secondary_energy_straggling: true
 ct_secondary_exact_faces: true
-history_chunk_size: 16384
+# RTX2080Ti: larger primary/electron chunks plus shared secondary scheduling.
+# Physics/RNG retained; see docs/ct_throughput_20261005.md.
+history_chunk_size: 131072
 secondary_queue_capacity: 8000000
-secondary_species_grouping: false
-secondary_step_chunking: false
+secondary_species_grouping: true
+secondary_step_chunking: true
 urban_mcs_package_file: data/ct_urban/ct_copper_52.bin
 urban_water_half_width_mm: 2000
 secondary_local_deposit_cutoff_MeV: 0.1
@@ -111,7 +113,7 @@ ct_schneider_file: data/HUtoMaterialSchneider.txt
 all_ion_elastic_file: data/schneider/all_ion_elastic_v1.bin
 elastic_recoil_stopping_file: data/schneider/elastic_recoil_stopping_v1.bin
 material_electron_group_size: 32
-material_electron_queue_chunk: 16384
+material_electron_queue_chunk: 131072
 material_electron_queue_lanes: 16384
 material_electron_queue_budget_MiB: 576
 material_electron_retain_bank: true

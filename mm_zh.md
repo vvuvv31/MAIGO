@@ -1,6 +1,6 @@
 # 材料与方法
 
-更新：2026-10-05。[English](mm.md)。本文描述八预设清理版；[清理验证记录](docs/repository_cleanup_20261005.md)与吞吐/剂量验收分别记录。后续 CT 吞吐优化尚未完成。历史测量只对应其记录的程序、束流、几何及统计量。
+更新：2026-10-05。[English](mm.md)。本文描述八预设清理及 CT 调度优化版，详见[清理验证](docs/repository_cleanup_20261005.md)与[CT 吞吐和验收记录](docs/ct_throughput_20261005.md)。两个 CT broadbeam 已通过指定门槛；肺 CT proton minibeam 仍未通过。历史测量只对应其记录的程序、束流、几何及统计量。
 
 ## 八个预设
 
@@ -8,10 +8,10 @@
 
 | 预设 | 离子多重散射 | 电子出生选区 | 当前验证状态 |
 |---|---|---|---|
-| `proton_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 历史剂量验收通过；清理回归通过 |
-| `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 历史剂量验收通过；清理回归通过 |
-| `proton_ct_minibeam.yaml` | Urban | CT 内全部 primary 电离损失 | 沿用已验证质子逻辑；清理回归通过 |
-| `carbon_ct_minibeam.yaml` | Urban | CT 内全部 primary 电离损失 | 输运审计通过；剂量尚未验收 |
+| `proton_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 当前三维 local 1%/1 mm 99.9254%，通过 |
+| `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 当前三维 local 1%/1 mm 99.8677%，通过 |
+| `proton_ct_minibeam.yaml` | Urban | CT 内全部 primary 电离损失 | 共用 Urban/FP32；肺 CT 尚未通过新 >99% 门槛 |
+| `carbon_ct_minibeam.yaml` | Urban | CT 内全部 primary 电离损失 | 调度提速1.946倍；输运审计通过；剂量待验收 |
 | `proton_water_broadbeam.yaml` | Gaussian Fermi–Eyges | 单位密度均匀水中选区为空 | 两批 smoke 通过；water 专项验证推迟 |
 | `carbon_water_broadbeam.yaml` | Gaussian Fermi–Eyges | 单位密度均匀水中选区为空 | 两批 smoke 通过；water 专项验证推迟 |
 | `proton_water_minibeam.yaml` | Urban | 水内全部 primary 电离损失 | 共用 worker smoke 通过；剂量待验收 |
@@ -84,7 +84,7 @@ cmake --build build -j 6
 python3 scripts/check_electron_packages.py
 ```
 
-其他 GPU 应选择相应架构。清理版已在 `out/repository_cleanup_20261004/build/carbon_mc` 完成测试，并安装到 `build/carbon_mc`。清理前的程序保存在 `out/repository_cleanup_20261004/before/carbon_mc`。
+其他 GPU 应选择相应架构。`build/carbon_mc` 已包含次级粒子弹性检查修复（`5cc096d`），冻结副本为 `out/ct_throughput_20261005/guard_fixed_carbon_mc`。清理前的程序保存在 `out/repository_cleanup_20261004/before/carbon_mc`。
 
 单进程连续批次：
 
@@ -98,22 +98,33 @@ build/carbon_mc --config config/proton_ct_minibeam.yaml \
 
 ## 验收和吞吐优化
 
-后续四个 CT 预设采用以下验收标准：
+四个 CT 预设采用以下验收标准：
 
 | CT 预设 | 剂量门槛 | Gamma 搜索步长 |
 |---|---|---|
-| Proton / carbon broadbeam | Local1%/1 mm **>99%** | 0.1 mm |
-| Proton minibeam | Local3%/0.2 mm **>99%** | 0.02 mm |
+| Proton / carbon broadbeam | Local 1%/1 mm **>99%** | 0.1 mm |
+| Proton minibeam | Local 3%/0.2 mm **>99%** | 0.02 mm |
 | Carbon minibeam | 暂不以剂量准确性为门槛 | 若计算则单独报告 |
 
-对比前固定参考、绝对剂量归一化、坐标映射、剂量阈值和评价 mask，并随结果报告。历史 RT07575 broadbeam 使用参考最大剂量10%以上的全3D评价区，未拟合剂量比例或配准。搜索步长变化不允许伴随评价区或分母改变。零 DTA gamma 保留为受蒙卡噪声影响的诊断。
+对比前固定参考、绝对剂量归一化、坐标映射、剂量阈值和评价 mask，并随结果报告。当前 RT07575 broadbeam 使用参考最大剂量10%以上的全三维评价区，未拟合剂量比例或配准。搜索步长变化不允许伴随评价区或分母改变。零 DTA gamma 保留为受蒙卡噪声影响的诊断。
 
-历史共用电子 RT07575 local1%/1 mm 为质子99.9120%、碳99.8677%，见[验收报告](docs/broadbeam_shared_electrons_20261004.md)。这些数值不自动验收后续每项调度或方差缩减改动。
+RTX2080Ti 最终结果，包含弹性检查修复：
 
-最新清理检查已覆盖八个预设、每个两批。八种场景的输运整数计数、EM 和电子审计完全一致，剂量相对 L1 差异最高1.45e-7。全部通过质量、能量、任务完成、覆盖及零溢出检查。小粒子 smoke 不是 gamma 或稳定吞吐测量。Water birth 提取每种粒子使用64个原生历史，后续仍需独立剂量/统计验证。
+| 预设 | 历史数 | 连续批次 primary/s | TOPAS local gamma |
+|---|---:|---:|---|
+| Proton CT broadbeam | 12,531,500 | 167,692 | 1%/1 mm：**99.9254%**，通过 |
+| Carbon CT broadbeam | 6,481,909 | 104,144 | 1%/1 mm：**99.8677%**，通过 |
+| Proton CT minibeam | 20,000,000 | 51,821 | 二维投影 3%/0.2 mm：**98.3183%**，未通过 |
+| Carbon CT minibeam | 两个种子，每个对照/优化组各3 × 200,000 | **10,048**，对照5,165 | 剂量准确性推迟验收 |
 
-计时应分开冷启动、首批及常驻批次，报告 primary/s、kernel 时间、任务量和峰值内存，并记录 GPU、编译器、束流、种子及粒子数。比较相同入射 primary 口径，不能用电子任务或穿过准直器的 primary 替换。每个候选前先查 [failed.md](failed.md)，只有满足记录中的新证据条件才能重试。FP32 原子累加顺序差异本身不否决调度改动，但输运/EM、能量、完成数和队列溢出审计仍必须通过。
+Proton minibeam 沿用历史 PyMedPhys 0.41.0 径向搜索（`interp_fraction=10`），比较肺 CT 的 BODY 投影剂量：|y|<15 mm、|x|<15 mm、参考最大值3%以上。它不是三维体素或 RT07575 full plan 验收。笛卡尔格点交叉检查在同样0.02 mm步距下为97.1013%，两种算法均未通过 >99%。PyMedPhys 峰/谷条带分别为99.9605%和99.0052%，不能替代全场门槛。本轮没有为 proton minibeam 启用新的性能候选。
 
-保留 TOPAS 参考和历史实验记录。下一轮吞吐优化以清理提交为基线；water 专项吞吐和剂量验证按要求推迟至 CT 之后。
+Carbon CT minibeam 的 `history_chunk_size`、`material_electron_queue_chunk` 改为131,072，并开启已有的按粒子分组及16步次级粒子续跑。Group32、16,384个电子 worker、576 MiB队列预算、物理步长及每历史随机数保持不变。相同程序、反向顺序的独立种子确认得到 **1.946倍**连续吞吐；每20万粒子批次的 primary kernel 从22.320降至7.565 s，secondary从6.917降至3.498 s。所比较的输运整数、EM、电子计数完全一致，剂量相对 L1 最大5.01e-8。该场景队列峰值3,798,118 / 5,807,497个任务。这是调度一致性验收，不代表 carbon minibeam 剂量已验收。
 
-较大统计量的 proton broadbeam 测试发现并修复了清理引入的次级粒子弹性散射检查分支错误。同一失败种子现已通过3,759,450个历史及全部运行审计；见[清理修正记录](docs/repository_cleanup_20261005.md#larger-statistics-correction)。
+增加共用 worker 数量、缩小错误诊断状态、C12主输运特化及缩小 secondary tail 的候选均未获得明确有效的收益，没有合入。实际 profiler 仍显示大量 local-memory 请求，每条已发射 warp 指令约11个活跃线程；仅降低静态寄存器数未提高运行速度。详见[完整报告](docs/ct_throughput_20261005.md)及[原始数值汇总](docs/ct_throughput_20261005.json)。
+
+当前程序与 YAML 已完成八预设各两批的最终回归。电子工作计数与保留的对照完全一致，剂量相对 L1 最大1.224e-7；质量、能量、完成数、覆盖及零溢出检查通过。小粒子 smoke 不是 water gamma 或稳定吞吐验证。Water birth 提取每种粒子使用64个原生历史，仍需独立剂量/统计验证。先前清理引入的分支错误及较大统计量修复验证见[清理修正记录](docs/repository_cleanup_20261005.md#larger-statistics-correction)。
+
+计时应分开冷启动、首批及常驻批次，报告 primary/s、kernel 时间、任务量和峰值内存，并记录 GPU、编译器、束流、种子及粒子数。比较相同入射 primary 口径，不能用电子任务或穿过准直器的 primary 替换。`scripts/benchmark_ct_devices.py` 已为四个 CT 预设统一使用原生连续批次，逐批检查，支持 `--smoke-only`；命令见 CT 报告。
+
+每个候选前先查 [failed.md](failed.md)，只有满足记录中的新证据条件才能重试。FP32 原子累加顺序差异本身不否决调度改动，但输运/EM、能量、完成数和队列溢出审计仍必须通过。保留 TOPAS 参考和历史实验记录。Water 专项吞吐与剂量验收仍按要求推迟至 CT 验证之后。
