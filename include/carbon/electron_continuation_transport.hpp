@@ -120,7 +120,7 @@ struct ElectronContinuationAdvance {
 class ElectronReplayCertificate {
 public:
     bool matches(const ElectronContinuationView& v,std::uint64_t row) const {
-        return ready_ && row_==row && source_.payload==v.payload && source_.decoded==v.decoded && source_.bytes==v.bytes &&
+        return ready_ && row_==row && source_.payload==v.payload && source_.decoded==v.decoded && source_.certified_child_energy==v.certified_child_energy && source_.bytes==v.bytes &&
             source_.next_rows==v.next_rows && source_.child_offsets==v.child_offsets &&
             source_.child_rows==v.child_rows && source_.child_count==v.child_count;
     }
@@ -242,8 +242,8 @@ inline ElectronContinuationCursor electron_continuation_child(
        !table.state_sources || parent.source>=table.state_source_count ||
        child_index<advance.children_begin || child_index>=advance.children_end)return child;
     const auto source=table.state_sources[parent.source].continuation();
-    if(!source.child_rows || child_index>=source.child_count)return child;
-    const auto row=source.child_rows[child_index];
+    if(!source.graph_valid() || child_index>=source.child_count)return child;
+    const auto row=source.child_at(child_index);
     const auto state=source.read(row);
     const auto parent_state=source.read(parent.row);
     if(!generated_by_electron_step(parent_state,state) || (state.pdg!=11 && state.pdg!=22) ||

@@ -299,6 +299,19 @@ struct TransportConfig {
     std::string water_electron_response_metadata_sha256{};
     bool water_electron_nuclear_diagnostic{false};
     std::filesystem::path material_electron_response_index_file{};
+    // Nonempty selects the exact proton packed+prevalidated runtime artifact.
+    std::filesystem::path material_electron_packed_directory{};
+    // Experimental material joint electron operator.
+    std::filesystem::path material_electron_joint_pilot_file{};
+    std::string material_electron_joint_pilot_sha256{};
+    std::filesystem::path material_electron_charged_index_file{};
+    std::string material_electron_charged_index_sha256{};
+    std::filesystem::path material_electron_birth_file{};
+    std::string material_electron_birth_sha256{};
+    std::filesystem::path material_photon_response_index_file{};
+    std::string material_photon_response_index_sha256{};
+    // Exact C12 EM graph, shared-state records and crossing-bin storage.
+    std::filesystem::path material_electron_compact_directory{};
     std::string material_electron_response_index_sha256{};
     std::uint64_t material_electron_response_device_budget_MiB{8192};
     std::uint64_t material_electron_response_hot_device_budget_MiB{0};
@@ -310,6 +323,29 @@ struct TransportConfig {
     std::uint32_t material_electron_queue_chunk{1024};
     std::uint32_t material_electron_queue_lanes{8192};
     std::uint32_t material_electron_group_size{1};
+    // Independent electron arithmetic: 0=reference, 4=full FP32 runtime.
+    std::uint32_t material_electron_precision{0};
+    // User selection; uniform water above the density threshold has no selected
+    // region and needs no electron bank. The second flag is the effective CT path.
+    bool broadbeam_electron_tracking{false};
+    bool broadbeam_independent_electrons{false};
+    double broadbeam_electron_density_threshold{0.1};
+    double broadbeam_electron_halo_mm{5.0};
+    std::string broadbeam_electron_region_metric{"box"};
+    bool broadbeam_electron_region_diagnostics{false};
+    bool broadbeam_electron_external_air_local{false};
+    double broadbeam_electron_external_air_margin_mm{0.0};
+    std::filesystem::path broadbeam_electron_body_mask_file{};
+    std::string broadbeam_electron_body_mask_sha256{};
+    // Unbiased variance reduction for low-density (density<=threshold) CT
+    // broadbeam electrons. Survival<1 plays deterministic per-task Russian
+    // roulette on low-density births (weight/=survival, signed ledger keeps
+    // energy accounting exact). Expected scoring replaces the single-point
+    // energy-packet deposit by its conditional expectation along each step
+    // while the electron is in such a voxel. Physics and RNG laws unchanged.
+    double broadbeam_electron_low_density_survival{1.0};
+    bool broadbeam_electron_expected_scoring{false};
+    double broadbeam_electron_expected_min_energy_MeV{0.0};
 
     double material_electron_short_range_mm{0.0}; // research-only, zero disables
     std::uint64_t material_electron_response_host_budget_MiB{98304};

@@ -16,7 +16,8 @@ double TransportResult::physical_relative_energy_balance_error() const noexcept 
     if (initial_energy_MeV == 0.0) {
         return 0.0;
     }
-    return std::abs(initial_energy_MeV + neutron_experimental.energy[NKineticGain] - total_deposited_energy_MeV -
+    return std::abs(initial_energy_MeV + neutron_experimental.energy[NKineticGain] +
+                    electron_variance_reduction_weight_gain_MeV - total_deposited_energy_MeV -
                     escaped_energy_MeV - beamline_removed_energy_MeV -
                     untracked_nuclear_energy_MeV -
                     primary_other_terminal_kinetic_MeV - material_electron_untracked_MeV) /
@@ -27,7 +28,8 @@ double TransportResult::relative_energy_balance_error() const noexcept {
     if (initial_energy_MeV == 0.0) {
         return 0.0;
     }
-    return std::abs(initial_energy_MeV + neutron_experimental.energy[NKineticGain] - total_deposited_energy_MeV -
+    return std::abs(initial_energy_MeV + neutron_experimental.energy[NKineticGain] +
+                    electron_variance_reduction_weight_gain_MeV - total_deposited_energy_MeV -
                     escaped_energy_MeV - beamline_removed_energy_MeV -
                     untracked_nuclear_energy_MeV -
                     primary_other_terminal_kinetic_MeV - material_electron_untracked_MeV -

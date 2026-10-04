@@ -1,0 +1,387 @@
+{
+  "primary_criterion": "local 1%/1 mm > 98%",
+  "threshold": "TOPAS dose >= 10% TOPAS maximum, full 3D grid",
+  "normalization": "Gy per incident primary; no fitted scaling or registration",
+  "reference_histories": 129638170,
+  "gpu_histories": 19445727,
+  "evaluated_voxels": 459684,
+  "runs": [
+    {
+      "seed": 1001800701,
+      "histories": 6481909,
+      "local_1pct_1mm_pct": 99.91494156855579,
+      "local_3pct_0mm_pct": 80.46723401293062,
+      "main_criterion_pass": true,
+      "dose": {
+        "voxels": 459684,
+        "dose_sum_bias_pct": -0.48172081521865584,
+        "mean_local_bias_pct": -0.47894203289317305,
+        "mean_absolute_local_error_pct": 1.9374748662288683,
+        "absolute_local_error_percentiles_pct": {
+          "p50": 1.4576022152317232,
+          "p90": 4.13394209649604,
+          "p95": 5.417871940858106,
+          "p99": 8.76945576558901,
+          "max": 23.72810539284648
+        },
+        "peak_normalized_max_error_pct": 7.708452698465498
+      }
+    },
+    {
+      "seed": 1001800702,
+      "histories": 6481909,
+      "local_1pct_1mm_pct": 99.87774210109554,
+      "local_3pct_0mm_pct": 80.4865951392696,
+      "main_criterion_pass": true,
+      "dose": {
+        "voxels": 459684,
+        "dose_sum_bias_pct": -0.492837174129257,
+        "mean_local_bias_pct": -0.5043517349039204,
+        "mean_absolute_local_error_pct": 1.9350713477908585,
+        "absolute_local_error_percentiles_pct": {
+          "p50": 1.4653922208080743,
+          "p90": 4.109327639758466,
+          "p95": 5.374368362831099,
+          "p99": 8.745686359846697,
+          "max": 27.623704363508438
+        },
+        "peak_normalized_max_error_pct": 10.09024773107217
+      }
+    },
+    {
+      "seed": 1001800703,
+      "histories": 6481909,
+      "local_1pct_1mm_pct": 99.81052201077262,
+      "local_3pct_0mm_pct": 79.90967708251756,
+      "main_criterion_pass": true,
+      "dose": {
+        "voxels": 459684,
+        "dose_sum_bias_pct": -0.4876592849462069,
+        "mean_local_bias_pct": -0.5034574340863192,
+        "mean_absolute_local_error_pct": 1.9675801834283535,
+        "absolute_local_error_percentiles_pct": {
+          "p50": 1.483902139967152,
+          "p90": 4.182063324172276,
+          "p95": 5.499059337172897,
+          "p99": 8.982659802600052,
+          "max": 26.47257175187674
+        },
+        "peak_normalized_max_error_pct": 8.300115362599112
+      }
+    }
+  ],
+  "gamma": {
+    "global_3pct_3mm": {
+      "pass_percent": 100.0,
+      "passed": 459684,
+      "evaluated": 459684,
+      "search_step_mm": 0.3,
+      "seconds": 0.021448347019031644
+    },
+    "local_3pct_3mm": {
+      "pass_percent": 100.0,
+      "passed": 459684,
+      "evaluated": 459684,
+      "search_step_mm": 0.3,
+      "seconds": 0.0356741760042496
+    },
+    "global_2pct_2mm": {
+      "pass_percent": 100.0,
+      "passed": 459684,
+      "evaluated": 459684,
+      "search_step_mm": 0.2,
+      "seconds": 0.039883401012048125
+    },
+    "local_2pct_2mm": {
+      "pass_percent": 99.99564918509238,
+      "passed": 459664,
+      "evaluated": 459684,
+      "search_step_mm": 0.2,
+      "seconds": 0.11825048999162391
+    },
+    "global_1pct_1mm": {
+      "pass_percent": 99.94583235439998,
+      "passed": 459435,
+      "evaluated": 459684,
+      "search_step_mm": 0.1,
+      "seconds": 0.29144875099882483
+    },
+    "local_1pct_1mm": {
+      "pass_percent": 99.82944805562082,
+      "passed": 458900,
+      "evaluated": 459684,
+      "search_step_mm": 0.1,
+      "seconds": 0.8095098290359601
+    },
+    "global_3pct_0mm": {
+      "pass_percent": 99.9077627239582,
+      "passed": 459260,
+      "evaluated": 459684,
+      "search_step_mm": 0.0,
+      "seconds": 0.006708877976052463
+    },
+    "local_3pct_0mm": {
+      "pass_percent": 92.75719842326467,
+      "passed": 426390,
+      "evaluated": 459684,
+      "search_step_mm": 0.0,
+      "seconds": 0.0051316500175744295
+    }
+  },
+  "dose": {
+    "voxels": 459684,
+    "dose_sum_bias_pct": -0.4874057580980362,
+    "mean_local_bias_pct": -0.4955837339611376,
+    "mean_absolute_local_error_pct": 1.255402538687617,
+    "absolute_local_error_percentiles_pct": {
+      "p50": 0.9586879132691979,
+      "p90": 2.6409919224575242,
+      "p95": 3.438705965479958,
+      "p99": 5.618481326916591,
+      "max": 16.975631190059445
+    },
+    "peak_normalized_max_error_pct": 5.107195167003396
+  },
+  "all_grid_dose_sum_bias_pct": -0.7360178084690916,
+  "limitations": [
+    "Single RT07575 broadbeam plan spectrum; not generic material/interface validation.",
+    "Finite trilinear gamma search lattice; supplementary half-step convergence below.",
+    "GPU primary dose scoring FP32; analysis and original TOPAS input use float64.",
+    "Three repeated GPU shards have small spot-rounding differences from full TOPAS plan."
+  ],
+  "main_gamma_convergence": {
+    "step_0p1mm_pct": 99.82944805562082,
+    "step_0p05mm_pct": 99.83749706319995,
+    "changed_voxels": 37
+  },
+  "scoped_dose_acceptance_pass": true,
+  "generic_package_validation_pass": false,
+  "mask_integral_bias_batch_sem_pp": 0.003414467553870479,
+  "subregions": {
+    "topas_10_20pct": {
+      "voxels": 92435,
+      "dose_sum_bias_pct": -0.6213372220561064,
+      "mean_local_bias_pct": -0.6320461540327068,
+      "mean_absolute_local_error_pct": 1.9048185411041398,
+      "absolute_local_error_percentiles_pct": {
+        "p50": 1.5063650002969986,
+        "p90": 4.0117772591173475,
+        "p95": 5.107983033049926,
+        "p99": 7.740125831505557,
+        "max": 16.975631190059445
+      },
+      "peak_normalized_max_error_pct": 2.2032115958221303
+    },
+    "topas_20_50pct": {
+      "voxels": 185942,
+      "dose_sum_bias_pct": -0.396455822348063,
+      "mean_local_bias_pct": -0.4151053926669825,
+      "mean_absolute_local_error_pct": 1.205453335897075,
+      "absolute_local_error_percentiles_pct": {
+        "p50": 0.9313121146350904,
+        "p90": 2.550662137933575,
+        "p95": 3.275833353050217,
+        "p99": 5.1292568161628695,
+        "max": 11.367840039180956
+      },
+      "peak_normalized_max_error_pct": 3.814153487376019
+    },
+    "topas_50_80pct": {
+      "voxels": 147001,
+      "dose_sum_bias_pct": -0.505290205527742,
+      "mean_local_bias_pct": -0.49223020716511545,
+      "mean_absolute_local_error_pct": 0.9544709431434265,
+      "absolute_local_error_percentiles_pct": {
+        "p50": 0.7944608525357012,
+        "p90": 1.955418415218659,
+        "p95": 2.3605604797292563,
+        "p99": 3.3094405356478673,
+        "max": 6.994520103428073
+      },
+      "peak_normalized_max_error_pct": 5.098157339235115
+    },
+    "topas_80_101pct": {
+      "voxels": 34306,
+      "dose_sum_bias_pct": -0.5788204107441852,
+      "mean_local_bias_pct": -0.5784663705303771,
+      "mean_absolute_local_error_pct": 1.0658185579990884,
+      "absolute_local_error_percentiles_pct": {
+        "p50": 0.913142489119358,
+        "p90": 2.16549742918832,
+        "p95": 2.550399111784689,
+        "p99": 3.328993202755636,
+        "max": 5.622889655532758
+      },
+      "peak_normalized_max_error_pct": 5.107195167003396
+    }
+  },
+  "source_commit": "13b7a7d860c4c78bfd84b10ee88a7005b9738d28",
+  "binary_sha256": "a29f19e23795c77d709b4c4593f16b516d14f6503faefcc4d4335bc2646a8cb0",
+  "preset": "config/carbon_ct_plan_fe_joint.yaml",
+  "dose_scoring": "FP32",
+  "reference_audit": {
+    "reference_histories": 129638170,
+    "reference_replicas": 5,
+    "original_reference_hashes": {
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1/OSMK_Dtotal_full_plan.bin": "c6279c28aa7b09ea0996bfbe315c6e64e2899758d3d7ff5e9c907cdcbd687748",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1/OSMK_Dtotal_full_plan.binheader": "187441e7aa07ec5ece4f4e908dc4c52def3f1e65c5bd90c61268464a90cf192a",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1/run_full_plan.txt": "fe1ec7837b8d20a77dc43845e09e9338dd224044f030c91371ac63fb9cdef800",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1/spots.csv": "4420af1508008db97ddc5ec31dc2bbb36af290ee7f38ccf905d5626e2d38ff95",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1/beam_model.csv": "00de6ff3e37ca8b2c15b01bd462a5264068512e27955e7aa8354a2ae5f88abac",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s2/OSMK_Dtotal_full_plan.bin": "0d0f0408f6d97bc3810ab4a9313b2e5640bf9edc7a49567607d83bd50ff14eac",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s2/OSMK_Dtotal_full_plan.binheader": "982354f0caad12ba40e892fe3fef34406bb3a930baab571a4ed34609a5e79eda",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s2/run_full_plan.txt": "c3668bbd53e7e7bd7d524e4744513cb5e77a9f64ce0cd880254553e26742ccbf",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s2/spots.csv": "4420af1508008db97ddc5ec31dc2bbb36af290ee7f38ccf905d5626e2d38ff95",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s2/beam_model.csv": "00de6ff3e37ca8b2c15b01bd462a5264068512e27955e7aa8354a2ae5f88abac",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s3/OSMK_Dtotal_full_plan.bin": "aac800934ae4709062776db843c7960a1ae5125bdfa4f1722b58dfba206bdfc8",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s3/OSMK_Dtotal_full_plan.binheader": "4be89497ff150709776d72e921b5b4167387428683f46499c12952ecb3ccbeb6",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s3/run_full_plan.txt": "9e362e609e3c6ede20d768b0a6824d94abe9535692dd74d0881d63bfd8192029",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s3/spots.csv": "4420af1508008db97ddc5ec31dc2bbb36af290ee7f38ccf905d5626e2d38ff95",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s3/beam_model.csv": "00de6ff3e37ca8b2c15b01bd462a5264068512e27955e7aa8354a2ae5f88abac",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s4/OSMK_Dtotal_full_plan.bin": "da1b12e108186c331c3f5b6797bf27da368d92705fa5681d8b83aaabcd158475",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s4/OSMK_Dtotal_full_plan.binheader": "642ef04c2f7b0333d08d3c58870fcd7e12728ae6dce5e60acb1658fd06067278",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s4/run_full_plan.txt": "d40c776399f1d1aacd3a2bd34e790f4b1755d59a7c16357ba756fd7bc40e68ad",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s4/spots.csv": "4420af1508008db97ddc5ec31dc2bbb36af290ee7f38ccf905d5626e2d38ff95",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s4/beam_model.csv": "00de6ff3e37ca8b2c15b01bd462a5264068512e27955e7aa8354a2ae5f88abac",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s5/OSMK_Dtotal_full_plan.bin": "f1a082b89460ca3adadc62cae09b03bbb8eb1b2d2d74839b0b7a4a8b18727641",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s5/OSMK_Dtotal_full_plan.binheader": "943c8f57cb41b6204ab327cbc1c164a45999ade0f6b90a8026b9a80e6b872049",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s5/run_full_plan.txt": "373f29596285ded43a33e501bfdc2c31fa6c122ef316e40203252ad4e63bc74b",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s5/spots.csv": "4420af1508008db97ddc5ec31dc2bbb36af290ee7f38ccf905d5626e2d38ff95",
+      "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s5/beam_model.csv": "00de6ff3e37ca8b2c15b01bd462a5264068512e27955e7aa8354a2ae5f88abac"
+    },
+    "reference_shape_zyx": [
+      35,
+      505,
+      417
+    ],
+    "spacing_zyx_mm": [
+      2.0,
+      0.5,
+      0.5
+    ],
+    "source_spots": 853,
+    "zero_weight_reference_spots": 64,
+    "source_normalized_weight_l1": 3.190163997349567e-05,
+    "source_note": "Same positions and energies; shipped GPU shard rounds individual spot counts. Normalization is histories only.",
+    "ct_header": [
+      1196704579,
+      3,
+      505,
+      35,
+      417,
+      -126.25,
+      -35.0,
+      0.0,
+      0.5,
+      2.0,
+      0.5
+    ],
+    "threshold_fraction": 0.1,
+    "threshold_voxels": 459684,
+    "topas_scoring_warnings": [
+      {
+        "path": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s1",
+        "unscored_steps": 1252333,
+        "unscored_energy_MeV": 0.0417302
+      },
+      {
+        "path": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s2",
+        "unscored_steps": 1252944,
+        "unscored_energy_MeV": 0.0405125
+      },
+      {
+        "path": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s3",
+        "unscored_steps": 1253057,
+        "unscored_energy_MeV": 0.0358494
+      },
+      {
+        "path": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s4",
+        "unscored_steps": 1253251,
+        "unscored_energy_MeV": 0.0371266
+      },
+      {
+        "path": "/mnt/sdb/wuwei/MAIGO/benchmark/topas10x/RT07575_pbs_s5",
+        "unscored_steps": 1252622,
+        "unscored_energy_MeV": 0.0352613
+      }
+    ],
+    "reference_reconstruction_float32_exact": true,
+    "gamma_source": "/mnt/sdb/wuwei/MAIGO/tools/evaluate_topas10x_gpu_gamma.py",
+    "gamma_source_sha256": "cd9668f29d77dd62e8a6421b681ec677b69677dc37875fb48a7fc69efcf8fb8c",
+    "gamma_frozen_sha256": "9c6bcc968f35e0c97556e158d096fceea8780839c95eb13e40efc6ee81cd60ef"
+  },
+  "package_audit": {
+    "metadata_sha256": "7bad691107bba70e771098886ee7248792e73bfdffecb09feb0dcc170ab9837c",
+    "data_sha256": "2f6c3321259eb07d336559e200a04c2a609b475fbf3ddafae75c2114e5572639",
+    "ordered_path_sha256": "c9b07452b73f4770834ed5af037c09f8ef8cdab695054888621d87a46f745d87",
+    "channels": 2500,
+    "sections": 25,
+    "energy_ceiling_MeVu": 500,
+    "projectile": [
+      6,
+      12
+    ],
+    "max_channel_energy_partition_relative_residual": 1.8701015527745604e-11,
+    "source_records": 28,
+    "package_status": "UNVALIDATED_INTERFACE_DIAGNOSTIC",
+    "limitations": [
+      "source-material electron scattering retained across interface",
+      "finite-box photon escape retained local",
+      "Monte Carlo compression requires sample/seed convergence; not a production package"
+    ]
+  },
+  "independent_gamma": {
+    "implementation": "pymedphys",
+    "version": "0.41.0",
+    "convention": "3D local 1%/1mm, 10% reference max threshold, interp_fraction=10, full mask",
+    "pass_percent": 99.81378512195334,
+    "evaluated": 459684,
+    "passed": 458828,
+    "lattice_pass_percent": 99.82944805562082,
+    "different_classifications": 94,
+    "seconds": 5.868334872007836,
+    "main_criterion_pass": true
+  },
+  "scripts_sha256": {
+    "run.py": "bf0a14ef2d729b524b8fa2996b4ebf8f8a52644dbc5dcc6893abc94c65f54568",
+    "harness.py": "9f03380e5378467c8c8314686bc63fabe3fa6a7cae97c3be0350cf0f8ad811db",
+    "analyze.py": "2572402d6ce51bd4b61dd650a37e9c4dd41df12c999ad227a85c6c74d1e8cc38",
+    "gamma_lattice.py": "9c6bcc968f35e0c97556e158d096fceea8780839c95eb13e40efc6ee81cd60ef",
+    "supplement.py": "77fedf91b899842cbb2ec647ae06b65e9876af4fe8e5f02785b94077815df380"
+  },
+  "runtime_summary": [
+    {
+      "seed": 1001800701,
+      "histories": 6481909,
+      "wall_seconds": 36.29605714598438,
+      "quality_accepted": false,
+      "quality_failures": [
+        "unvalidated_electron_joint_response"
+      ],
+      "energy_relative_residual": 3.49268238302e-06,
+      "queue_overflow_count": 0
+    },
+    {
+      "seed": 1001800702,
+      "histories": 6481909,
+      "wall_seconds": 36.23336105403723,
+      "quality_accepted": false,
+      "quality_failures": [
+        "unvalidated_electron_joint_response"
+      ],
+      "energy_relative_residual": 3.52058645813e-06,
+      "queue_overflow_count": 0
+    },
+    {
+      "seed": 1001800703,
+      "histories": 6481909,
+      "wall_seconds": 37.20789938303642,
+      "quality_accepted": false,
+      "quality_failures": [
+        "unvalidated_electron_joint_response"
+      ],
+      "energy_relative_residual": 3.55301907368e-06,
+      "queue_overflow_count": 0
+    }
+  ]
+}

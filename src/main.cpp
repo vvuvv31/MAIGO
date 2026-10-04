@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <chrono>
 #include <cstdio>
@@ -136,10 +137,21 @@ std::vector<std::filesystem::path> sha256_prefetch_candidates(
         // Only prefetch direct, retained inputs for this profile. Nested raw
         // manifests are left to effective-config loaders so an unused bank
         // cannot be reached indirectly through a manifest.
-        bool broadbeam_fast = false;
+        bool broadbeam_fast = false,independent_charged=false;
+        bool tracking_declared=false,tracking_requested=false,legacy_independent=false,ct_grid=false;
         for (std::string line; std::getline(in, line);) {
             line = line.substr(0, line.find('#'));
             const auto colon = line.find(':');
+            if(colon!=std::string::npos) {
+                const auto key=trim(line.substr(0,colon));
+                auto value=trim(line.substr(colon+1));
+                std::transform(value.begin(),value.end(),value.begin(),[](unsigned char c){return char(std::tolower(c));});
+                const bool yes=value=="true" || value=="yes" || value=="1";
+                if(key=="broadbeam_electron_tracking"){tracking_declared=true;tracking_requested=yes;}
+                if(key=="broadbeam_independent_electrons")legacy_independent=yes;
+                if(key=="enable_ct_grid")ct_grid=yes;
+            }
+            if(colon!=std::string::npos && trim(line.substr(0,colon))=="material_electron_charged_index_file" && !trim(line.substr(colon+1)).empty())independent_charged=true;
             if (colon != std::string::npos &&
                 trim(line.substr(0, colon)) == "transport_profile")
                 broadbeam_fast = trim(line.substr(colon + 1)) == "broadbeam_fast";
@@ -150,6 +162,7 @@ std::vector<std::filesystem::path> sha256_prefetch_candidates(
             const auto colon = line.find(':');
             if (colon == std::string::npos || line.find('#') < colon) continue;
             const auto key = trim(line.substr(0, colon));
+            if(independent_charged && key=="material_electron_response_index_file")continue;
             if (key == "ct_schneider_stopping_power_file" ||
                 key == "ct_secondary_ion_section_stopping_file" ||
                 key == "energy_straggling_package_file" ||
@@ -159,7 +172,14 @@ std::vector<std::filesystem::path> sha256_prefetch_candidates(
                 key == "ct_bone_stopping_power_file" || key == "ct_lung_particle_stopping_power_file" ||
                 key == "ct_soft_tissue_particle_stopping_power_file" || key == "ct_bone_particle_stopping_power_file") continue;
             if (broadbeam_fast) {
+                const bool shared_selected=(tracking_declared?tracking_requested:legacy_independent)&&ct_grid;
+                if(!shared_selected && (key.starts_with("material_electron_birth_") ||
+                   key.starts_with("material_electron_joint_pilot_") || key.starts_with("material_electron_charged_") ||
+                   key.starts_with("material_photon_response_")))continue;
+                if((tracking_declared || legacy_independent) &&
+                   (key=="ct_schneider_delta_tail_file" || key=="ct_schneider_delta_longitudinal_file"))continue;
                 if (key == "urban_mcs_package_file" ||
+                    key == "broadbeam_electron_body_mask_file" ||
                     key == "material_electron_response_index_file" ||
                     key == "water_electron_response_diagnostic_file" ||
                     key == "ct_electron_joint_response_diagnostic_file" ||

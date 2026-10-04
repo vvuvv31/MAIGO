@@ -715,7 +715,7 @@ void TransportConfig::validate() const {
             throw std::invalid_argument("Unified EM requires unified water or a Schneider CT grid, with LET off");
         if (!ct_secondary_exact_faces)
             throw std::invalid_argument("Unified EM requires exact CT faces and native unscaled fluctuations");
-        const bool ct_material_response = !material_electron_response_index_file.empty() &&
+        const bool ct_material_response = (!material_electron_response_index_file.empty() || !material_electron_charged_index_file.empty()) &&
             run_mode==RunMode::research && enable_ct_grid;
         // The pinned joint response replaces local primary deposition. Its
         // required transverse table is not applied when joint replay is active.
@@ -724,7 +724,7 @@ void TransportConfig::validate() const {
             ct_electron_joint_patient_experiment && ct_electron_joint_allow_research &&
             !ct_electron_joint_response_diagnostic_file.empty() &&
             material_electron_response_index_file.empty();
-        if ((!material_electron_response_index_file.empty() && !ct_material_response) || !water_electron_response_diagnostic_file.empty() ||
+        if (((!material_electron_response_index_file.empty() || !material_electron_charged_index_file.empty()) && !ct_material_response) || !water_electron_response_diagnostic_file.empty() ||
             (!ct_schneider_delta_tail_file.empty() && !ct_joint_response) || !ct_schneider_delta_longitudinal_file.empty() ||
             (!ct_electron_joint_response_diagnostic_file.empty() && !ct_joint_response) || enable_electron_transport)
             throw std::invalid_argument("Unified EM permits only exclusive research CT primary-ionization material or joint response; other electron response stacking is forbidden");
@@ -882,13 +882,13 @@ void TransportConfig::validate() const {
         material_electron_response_index_file.empty() || enable_let_scoring)))
         throw std::invalid_argument("Short-range electron candidate requires CT material response research, threshold 0..0.25 mm, no LET");
     if((material_electron_retain_bank || material_electron_execution_mode=="queue") &&
-       (device=="serial" || !enable_ct_grid || material_electron_response_index_file.empty() || run_mode!=RunMode::research))
+       (device=="serial" || !enable_ct_grid || (material_electron_response_index_file.empty() && material_electron_charged_index_file.empty()) || run_mode!=RunMode::research))
         throw std::invalid_argument("Electron queue/cache requires SYCL research CT material response");
     if(material_electron_execution_mode!="inline" && material_electron_execution_mode!="queue")
         throw std::invalid_argument("material_electron_execution_mode must be inline or queue");
     if(material_electron_queue_budget_MiB<1 || material_electron_queue_budget_MiB>4096 ||
        material_electron_queue_chunk<1 ||
-       material_electron_queue_chunk>(material_electron_group_size==32 ? 262144U : 65536U) ||
+       material_electron_queue_chunk>(material_electron_group_size==32 ? 1048576U : 65536U) ||
        material_electron_queue_lanes<1 || material_electron_queue_lanes>65536 ||
        material_electron_group_size<1 || material_electron_group_size>32 ||
        (material_electron_group_size & (material_electron_group_size-1)))
@@ -904,6 +904,91 @@ void TransportConfig::validate() const {
        (material_electron_response_index_file.empty() || material_electron_response_memory_mode!="host_mapped" ||
         material_electron_response_hot_device_budget_MiB<64))
         throw std::invalid_argument("Tiered material response requires a bank, host_mapped mode and hot budget >=64 MiB");
+    // C12 trial reuses electron propagation, with a separately tagged C12
+    // birth law. Keep the original proton preset and other carbon modes intact.
+    const bool carbon_independent_trial=primary_atomic_number==6&&primary_mass_number==12&&
+        material_electron_precision==4&&!material_electron_charged_index_file.empty()&&
+        material_electron_response_index_file.empty()&&material_electron_compact_directory.empty()&&
+        initial_energy_MeVu>0&&initial_energy_MeVu<=250&&beam_energy_spread==0&&
+        primary_spot_batch.empty()&&topas_spots_file.empty()&&topas_spots_files.empty();
+    if(broadbeam_electron_region_metric!="box" && broadbeam_electron_region_metric!="euclidean")
+        throw std::invalid_argument("broadbeam_electron_region_metric must be box or euclidean");
+    if(broadbeam_electron_region_diagnostics && !broadbeam_independent_electrons)
+        throw std::invalid_argument("Electron region diagnostics require enabled CT broadbeam tracking");
+    if(broadbeam_electron_region_diagnostics &&
+       (!broadbeam_electron_body_mask_file.empty() || !broadbeam_electron_body_mask_sha256.empty()) &&
+       (broadbeam_electron_body_mask_file.empty() || broadbeam_electron_body_mask_sha256.size()!=64))
+        throw std::invalid_argument("Anatomical electron region diagnostics require a pinned BODY mask");
+    if(broadbeam_electron_external_air_local && broadbeam_electron_tracking &&
+       (!broadbeam_independent_electrons || broadbeam_electron_body_mask_file.empty() ||
+        broadbeam_electron_body_mask_sha256.size()!=64 ||
+        !std::isfinite(broadbeam_electron_external_air_margin_mm) || broadbeam_electron_external_air_margin_mm<0 ||
+        broadbeam_electron_external_air_margin_mm>100))
+        throw std::invalid_argument("External-air electron localization requires CT tracking, a pinned BODY mask and margin 0..100 mm");
+    if(!std::isfinite(broadbeam_electron_low_density_survival) || broadbeam_electron_low_density_survival<=0 ||
+       broadbeam_electron_low_density_survival>1 || !std::isfinite(broadbeam_electron_expected_min_energy_MeV) ||
+       broadbeam_electron_expected_min_energy_MeV<0 || broadbeam_electron_expected_min_energy_MeV>1)
+        throw std::invalid_argument("broadbeam_electron_low_density_survival must be in (0,1] and expected min energy in [0,1] MeV");
+    if((broadbeam_electron_low_density_survival!=1 || broadbeam_electron_expected_scoring) &&
+       (!broadbeam_electron_tracking || !broadbeam_independent_electrons || !enable_ct_grid))
+        throw std::invalid_argument("Low-density electron variance reduction requires CT broadbeam shared-electron tracking");
+    if(broadbeam_electron_tracking) {
+        if(transport_profile!="broadbeam_fast" || enable_minibeam || run_mode!=RunMode::research ||
+           !std::isfinite(broadbeam_electron_density_threshold) || broadbeam_electron_density_threshold<=0 ||
+           !std::isfinite(broadbeam_electron_halo_mm) || broadbeam_electron_halo_mm<0 || broadbeam_electron_halo_mm>100)
+            throw std::invalid_argument("Broadbeam electron tracking requires research broadbeam_fast and valid density/halo selection");
+        if(enable_ct_grid && !broadbeam_independent_electrons)
+            throw std::invalid_argument("CT electron tracking requires the CT shared-electron preset and packages; a water-to-CT CLI override cannot disable tracking implicitly");
+        // This is an empty selection, not a Schneider surrogate for water. If
+        // water becomes eligible, require real Water_75eV electron data first.
+        if(!enable_ct_grid && (!is_water_mode() || enable_hetero_insert || !slab_layers.empty() ||
+           !std::isfinite(water_density_g_per_cm3) || water_density_g_per_cm3<=broadbeam_electron_density_threshold))
+            throw std::invalid_argument("Selected water electron tracking requires Water_75eV birth/transport data; only an empty uniform-water selection is supported");
+    }
+    const bool broadbeam_independent=broadbeam_independent_electrons && transport_profile=="broadbeam_fast";
+    if(broadbeam_independent_electrons &&
+       (!broadbeam_independent || enable_minibeam || !enable_ct_grid || !fermi_eyges_gaussian_only ||
+        material_electron_precision!=4 || material_electron_charged_index_file.empty() ||
+        !std::isfinite(broadbeam_electron_density_threshold) || broadbeam_electron_density_threshold<=0 ||
+        !std::isfinite(broadbeam_electron_halo_mm) || broadbeam_electron_halo_mm<0 || broadbeam_electron_halo_mm>100))
+        throw std::invalid_argument("Broadbeam independent electrons require FP32 Gaussian CT research queue and valid density/halo selection");
+    const bool independent_projectile=(primary_atomic_number==1&&primary_mass_number==1)||carbon_independent_trial||(broadbeam_independent&&primary_atomic_number==6&&primary_mass_number==12);
+    if(!material_electron_charged_index_file.empty() &&
+       (material_electron_charged_index_sha256.size()!=64 || material_electron_birth_file.empty() ||
+        material_photon_response_index_file.empty() || material_electron_joint_pilot_file.empty() ||
+        material_electron_execution_mode!="queue" || run_mode!=RunMode::research ||
+        !independent_projectile || (!enable_minibeam && !broadbeam_independent) || !enable_ct_grid ||
+        enable_let_scoring || material_electron_short_range_mm>0 || enable_charged_origin_voxel_scoring ||
+        !enable_voxel_scoring || !water_electron_response_diagnostic_file.empty() ||
+        !ct_electron_joint_response_diagnostic_file.empty() || !ct_schneider_delta_longitudinal_file.empty() ||
+        !ct_schneider_delta_tail_file.empty() || enable_electron_transport))
+        throw std::invalid_argument("Independent charged mode requires pinned projectile-matched birth/joint/photon CT minibeam research queue; C12 trial requires FP32 monoenergetic <=250 MeV/u, without LET/component/short-range scoring");
+    if(!material_photon_response_index_file.empty() &&
+       (material_electron_birth_file.empty() || material_photon_response_index_sha256.size()!=64))
+        throw std::invalid_argument("Independent photon bank requires a pinned index and independent electron birth/joint queue");
+    if(!material_electron_birth_file.empty() &&
+       (material_electron_joint_pilot_file.empty() || material_electron_birth_sha256.size()!=64 ||
+        material_electron_execution_mode!="queue" || run_mode!=RunMode::research ||
+        !independent_projectile || (!enable_minibeam && !broadbeam_independent) || !enable_ct_grid))
+        throw std::invalid_argument("Independent birth bank requires pinned projectile-matched research CT minibeam joint queue");
+    if(!material_electron_joint_pilot_file.empty() &&
+       (run_mode!=RunMode::research || !independent_projectile ||
+        !enable_ct_grid || (!enable_minibeam && !broadbeam_independent) || device=="serial" ||
+        material_electron_execution_mode!="queue" || (material_electron_response_index_file.empty() && material_electron_charged_index_file.empty()) ||
+        material_electron_joint_pilot_sha256.size()!=64 || (!broadbeam_independent && maximum_step_mm>.25)))
+        throw std::invalid_argument("Joint pilot requires research projectile-matched CT minibeam, queue, pinned bank and <=0.25 mm steps");
+    if(!material_electron_compact_directory.empty() &&
+       (run_mode!=RunMode::research || !enable_ct_grid || !enable_minibeam ||
+        primary_atomic_number!=6 || primary_mass_number!=12 || material_electron_short_range_mm>0 ||
+        (material_electron_response_cache_policy!="tiered_decoded" && material_electron_response_cache_policy!="tiered_small_decoded") ||
+        !material_electron_packed_directory.empty()))
+        throw std::invalid_argument("Compact electron artifact requires research C12 CT minibeam, decoded cache, no short-range cache and no proton packed directory");
+    if(!material_electron_packed_directory.empty() &&
+       (primary_atomic_number!=1 || primary_mass_number!=1 || !enable_minibeam || !enable_ct_grid ||
+        device=="serial" || run_mode!=RunMode::research || material_electron_response_index_file.empty() ||
+        material_electron_short_range_mm>0 ||
+        (material_electron_response_cache_policy!="tiered_decoded" && material_electron_response_cache_policy!="tiered_small_decoded")))
+        throw std::invalid_argument("Packed electron directory requires decoded proton CT minibeam research without short-range cache");
     if(!material_electron_response_index_file.empty()) {
         if(material_electron_response_memory_mode!="device" && material_electron_response_memory_mode!="host_mapped")
             throw std::invalid_argument("Material response memory mode must be device or host_mapped");
@@ -1145,7 +1230,7 @@ void TransportConfig::validate() const {
            enable_neutron_transport || enable_electron_transport ||
            !urban_mcs_package_file.empty() || !material_electron_response_index_file.empty() ||
            !water_electron_response_diagnostic_file.empty() ||
-           !neutron_package_file.empty() || material_electron_execution_mode!="inline" ||
+           !neutron_package_file.empty() || (!broadbeam_independent && material_electron_execution_mode!="inline") ||
            (!ct_schneider_delta_tail_file.empty() && ct_electron_joint_response_diagnostic_file.empty()) || !ct_schneider_delta_longitudinal_file.empty() ||
            (enable_ct_grid && (!enable_ct_material_mcs || ct_secondary_mcs_off_diagnostic)))
             throw std::invalid_argument("broadbeam_fast requires research unified EM, FE for all charged species, CT material MCS, no beamline/neutron transport; only pinned research C12 CT joint electron response is supported");
@@ -2431,10 +2516,29 @@ TransportConfig load_config(const std::filesystem::path& path) {
     // keys are still rejected; only named, supported inputs are removed.
     const auto profile_it=values.find("transport_profile");
     const std::string profile=profile_it==values.end()?"reference":profile_it->second;
+    const bool tracking_declared=values.contains("broadbeam_electron_tracking");
+    const bool legacy_independent=parse_bool(values,"broadbeam_independent_electrons",false);
+    const bool tracking_requested=parse_bool(values,"broadbeam_electron_tracking",legacy_independent);
+    if(tracking_declared && profile!="broadbeam_fast")
+        throw std::invalid_argument("broadbeam_electron_tracking is a broadbeam_fast setting");
+    if(tracking_declared && values.contains("broadbeam_independent_electrons") && tracking_requested!=legacy_independent)
+        throw std::invalid_argument("Conflicting broadbeam electron tracking selectors; use broadbeam_electron_tracking only");
+    const bool independent_profile=tracking_requested && parse_bool(values,"enable_ct_grid",false);
     if(profile=="broadbeam_fast") {
         if(parse_bool(values,"minibeam",false))
             throw std::invalid_argument("broadbeam_fast requires minibeam: false");
         values.try_emplace("fermi_eyges_gaussian_only", "true");
+        // The public switch is authoritative in either position. OFF must not
+        // silently re-enable a historical joint/tail model or open its files.
+        if(tracking_declared || tracking_requested) {
+            for(const char* key:{"ct_electron_joint_response_diagnostic_file",
+                "ct_electron_joint_response_sha256","ct_electron_joint_response_metadata_sha256",
+                "ct_electron_joint_patient_experiment","ct_electron_joint_allow_research",
+                "ct_electron_joint_sample_probability","ct_electron_joint_execution_mode",
+                "ct_schneider_delta_tail_file","ct_schneider_delta_longitudinal_file",
+                "ct_schneider_delta_longitudinal_scale","electron_joint_diagnostics"})values.erase(key);
+            values["ct_electron_segment_transport"]="false";
+        }
         // Preserve the joint response pins and explicit research opt-ins.
         // With replay explicitly OFF, its required tail table must not turn
         // into an independent transverse-response model.
@@ -2444,10 +2548,18 @@ TransportConfig load_config(const std::filesystem::path& path) {
         for(const char* key:{
             "urban_mcs_package_file","urban_mcs_package_sha256",
             "material_electron_response_index_file","material_electron_response_index_sha256",
+            "material_electron_charged_index_file", "material_electron_charged_index_sha256",
+            "material_photon_response_index_file", "material_photon_response_index_sha256",
+            "material_electron_birth_file", "material_electron_birth_sha256", "material_electron_joint_pilot_file", "material_electron_joint_pilot_sha256", "material_electron_packed_directory", "material_electron_compact_directory",
             "water_electron_response_diagnostic_file","water_electron_response_sha256",
             "water_electron_response_metadata_sha256",
             "neutron_package_file","neutron_recoil_stopping_manifest",
-            "electron_transport_data_file"})values.erase(key);
+            "electron_transport_data_file"}) {
+            const std::string_view name(key);
+            const bool shared=name.starts_with("material_electron_charged_") || name.starts_with("material_photon_response_") ||
+                name.starts_with("material_electron_birth_") || name.starts_with("material_electron_joint_pilot_");
+            if(!independent_profile || !shared)values.erase(key);
+        }
         for(const auto& setting:std::initializer_list<std::pair<const char*,const char*>>{
             {"multiple_scattering_model","fermi_eyges"},{"enable_multiple_scattering","true"},
             {"fermi_eyges_species","all_charged"},{"fermi_eyges_parameter_set","species_water"},
@@ -2457,14 +2569,40 @@ TransportConfig load_config(const std::filesystem::path& path) {
             {"urban_ct_density_scaling","false"},{"minibeam_water_proton_helium_mcs_model","inherit"},
             {"enable_neutron_transport","false"},{"neutron_water_recoil_urban","false"},
             {"enable_electron_transport","false"},{"electron_queue_capacity","0"},{"material_electron_retain_bank","false"},
-            {"material_electron_execution_mode","inline"},{"material_electron_group_size","1"},
+            {"material_electron_execution_mode","inline"},{"material_electron_group_size","1"},{"material_electron_precision","0"},
+            {"material_electron_queue_chunk","65536"},
             {"material_electron_short_range_mm","0"},{"material_electron_response_cache_policy","strict"},
             {"material_electron_response_hot_device_budget_MiB","0"},
             {"water_electron_high_energy_diagnostic","false"},{"water_electron_nuclear_diagnostic","false"}
-        })values[setting.first]=setting.second;
+        }) {
+            const std::string_view name(setting.first);
+            if(independent_profile && (name=="material_electron_retain_bank" || name=="material_electron_execution_mode" ||
+               name=="material_electron_group_size" || name=="material_electron_precision" ||
+               name=="material_electron_queue_chunk"))continue;
+            values[setting.first]=setting.second;
+        }
     }
     TransportConfig config;
     config.transport_profile=profile;
+    config.broadbeam_electron_tracking=tracking_requested;
+    config.broadbeam_independent_electrons=independent_profile;
+    config.broadbeam_electron_density_threshold=parse_number(values,"broadbeam_electron_density_threshold",config.broadbeam_electron_density_threshold);
+    config.broadbeam_electron_halo_mm=parse_number(values,"broadbeam_electron_halo_mm",config.broadbeam_electron_halo_mm);
+    if(const auto it=values.find("broadbeam_electron_region_metric");it!=values.end())config.broadbeam_electron_region_metric=it->second;
+    config.broadbeam_electron_region_diagnostics=parse_bool(values,"broadbeam_electron_region_diagnostics",false);
+    config.broadbeam_electron_external_air_local=parse_bool(values,"broadbeam_electron_external_air_local",false);
+    config.broadbeam_electron_external_air_margin_mm=parse_number(values,"broadbeam_electron_external_air_margin_mm",0.);
+    config.broadbeam_electron_body_mask_file=parse_path(values,"broadbeam_electron_body_mask_file",{});
+    if(const auto it=values.find("broadbeam_electron_body_mask_sha256");it!=values.end())config.broadbeam_electron_body_mask_sha256=it->second;
+    if((config.broadbeam_electron_external_air_local || config.broadbeam_electron_region_diagnostics) && tracking_requested)
+        config.broadbeam_electron_body_mask_file=resolve_input_path_from_config(config.broadbeam_electron_body_mask_file,path);
+    else {config.broadbeam_electron_body_mask_file.clear();config.broadbeam_electron_body_mask_sha256.clear();}
+    config.broadbeam_electron_low_density_survival=parse_number(values,"broadbeam_electron_low_density_survival",1.);
+    config.broadbeam_electron_expected_scoring=parse_bool(values,"broadbeam_electron_expected_scoring",false);
+    config.broadbeam_electron_expected_min_energy_MeV=parse_number(values,"broadbeam_electron_expected_min_energy_MeV",0.);
+    // Variance-reduction settings are inert when the master switch is off.
+    if(!tracking_requested){config.broadbeam_electron_low_density_survival=1;config.broadbeam_electron_expected_scoring=false;
+        config.broadbeam_electron_expected_min_energy_MeV=0;}
     // Eligible broad-beam full-physics runs benefit from the existing grouped
     // continuation scheduler. Preserve explicit opt-outs and EM-only inputs.
     if (profile == "broadbeam_fast" &&
@@ -2802,6 +2940,22 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.material_electron_response_cache_policy=it->second;
     config.material_electron_response_index_file=parse_path(values,"material_electron_response_index_file",config.material_electron_response_index_file);
     if(!config.material_electron_response_index_file.empty())config.material_electron_response_index_file=resolve_input_path_from_config(config.material_electron_response_index_file,path);
+    config.material_electron_compact_directory=parse_path(values,"material_electron_compact_directory",config.material_electron_compact_directory);
+    if(!config.material_electron_compact_directory.empty())config.material_electron_compact_directory=resolve_input_path_from_config(config.material_electron_compact_directory,path);
+    config.material_electron_charged_index_file=parse_path(values,"material_electron_charged_index_file",config.material_electron_charged_index_file);
+    if(!config.material_electron_charged_index_file.empty())config.material_electron_charged_index_file=resolve_input_path_from_config(config.material_electron_charged_index_file,path);
+    if(const auto it=values.find("material_electron_charged_index_sha256");it!=values.end())config.material_electron_charged_index_sha256=it->second;
+    config.material_electron_birth_file=parse_path(values,"material_electron_birth_file",config.material_electron_birth_file);
+    config.material_photon_response_index_file=parse_path(values,"material_photon_response_index_file",config.material_photon_response_index_file);
+    if(!config.material_photon_response_index_file.empty())config.material_photon_response_index_file=resolve_input_path_from_config(config.material_photon_response_index_file,path);
+    if(const auto it=values.find("material_photon_response_index_sha256");it!=values.end())config.material_photon_response_index_sha256=it->second;
+    if(!config.material_electron_birth_file.empty())config.material_electron_birth_file=resolve_input_path_from_config(config.material_electron_birth_file,path);
+    if(const auto it=values.find("material_electron_birth_sha256");it!=values.end())config.material_electron_birth_sha256=it->second;
+    config.material_electron_joint_pilot_file=parse_path(values,"material_electron_joint_pilot_file",config.material_electron_joint_pilot_file);
+    if(!config.material_electron_joint_pilot_file.empty())config.material_electron_joint_pilot_file=resolve_input_path_from_config(config.material_electron_joint_pilot_file,path);
+    if(const auto it=values.find("material_electron_joint_pilot_sha256");it!=values.end())config.material_electron_joint_pilot_sha256=it->second;
+    config.material_electron_packed_directory=parse_path(values,"material_electron_packed_directory",config.material_electron_packed_directory);
+    if(!config.material_electron_packed_directory.empty())config.material_electron_packed_directory=resolve_input_path_from_config(config.material_electron_packed_directory,path);
     if(const auto it=values.find("material_electron_response_index_sha256");it!=values.end())config.material_electron_response_index_sha256=it->second;
     if(const auto it=values.find("material_electron_response_device_budget_MiB");it!=values.end()) {
         std::size_t used=0;const auto value=std::stoull(it->second,&used);
@@ -2826,7 +2980,7 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     if(const auto it=values.find("material_electron_queue_chunk");it!=values.end()) {
         std::size_t used=0;const auto value=std::stoull(it->second,&used);
-        if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value>262144)
+        if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value>1048576)
             throw std::invalid_argument("Invalid material_electron_queue_chunk");
         config.material_electron_queue_chunk=static_cast<std::uint32_t>(value);
     }
@@ -2835,6 +2989,11 @@ TransportConfig load_config(const std::filesystem::path& path) {
         if(used!=it->second.size() || it->second.empty() || it->second[0]=='-' || value>65536)
             throw std::invalid_argument("Invalid material_electron_queue_lanes");
         config.material_electron_queue_lanes=static_cast<std::uint32_t>(value);
+    }
+    if(const auto it=values.find("material_electron_precision");it!=values.end()) {
+        std::size_t used=0;const auto value=std::stoul(it->second,&used);
+        if(used!=it->second.size() || (value!=0 && value!=4))throw std::invalid_argument("material_electron_precision must be 0 (reference) or 4 (full FP32)");
+        config.material_electron_precision=static_cast<std::uint32_t>(value);
     }
     if(const auto it=values.find("material_electron_group_size");it!=values.end()) {
         std::size_t used=0;const auto value=std::stoull(it->second,&used);

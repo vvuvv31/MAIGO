@@ -69,6 +69,23 @@ add_library(carbon_core
 
 target_include_directories(carbon_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# Bind prepared electron artifacts to all host compiler/validator algorithms.
+# Reconfigure automatically if a dependency changes; no stale physics cache.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "scripts/material_prepared_sources.txt")
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/scripts/material_prepared_sources.txt" material_prepared_sources)
+find_path(ZSTD_INCLUDE_DIR NAMES zstd.h REQUIRED)
+find_library(ZSTD_LIBRARY NAMES zstd REQUIRED)
+target_include_directories(carbon_core PUBLIC ${ZSTD_INCLUDE_DIR})
+target_link_libraries(carbon_core PUBLIC ${ZSTD_LIBRARY})
+set(material_prepared_fingerprint "")
+foreach(source IN LISTS material_prepared_sources)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source}")
+    file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/${source}" source_sha)
+    string(APPEND material_prepared_fingerprint "${source}:${source_sha}\n")
+endforeach()
+string(SHA256 material_prepared_version "${material_prepared_fingerprint}")
+target_compile_definitions(carbon_core PRIVATE CARBON_MATERIAL_PREPARED_VERSION="${material_prepared_version}")
+
 # These options are consumed by the electron transport headers as well as
 # the SYCL backend. Presence-tested macros must stay undefined when OFF.
 option(CARBON_ELECTRON_REPLAY_REUSE "Reuse checked electron genealogy within a packet transaction" OFF)
@@ -312,6 +329,56 @@ else()
 endif()
 
 if(CARBON_ENABLE_SYCL)
+    option(CARBON_ELECTRON_SEGMENT_DIAGNOSTICS "Sample unchanged charged states for condensed-segment feasibility (not for timing)" OFF)
+    if(CARBON_ELECTRON_SEGMENT_DIAGNOSTICS)
+        target_compile_definitions(carbon_core PRIVATE CARBON_ELECTRON_SEGMENT_DIAGNOSTICS=1)
+    endif()
+    option(CARBON_ELECTRON_RANGE_DIAGNOSTICS "Observe range-guard counterfactual dose without changing transport (not for timing)" OFF)
+    if(CARBON_ELECTRON_RANGE_DIAGNOSTICS)
+        target_compile_definitions(carbon_core PRIVATE CARBON_ELECTRON_RANGE_DIAGNOSTICS=1)
+    endif()
+    option(CARBON_ELECTRON_VOXEL_CACHE "Research exact-physics cross-step electron voxel/material cache" OFF)
+    if(CARBON_ELECTRON_VOXEL_CACHE)
+        target_compile_definitions(carbon_core PRIVATE CARBON_ELECTRON_VOXEL_CACHE=1)
+    endif()
+    option(CARBON_ELECTRON_FP64_GEOMETRY
+           "Precision ablation: FP64 electron positions and faces, FP32 physics/scoring" OFF)
+    if(CARBON_ELECTRON_FP64_GEOMETRY)
+        target_compile_definitions(carbon_core PRIVATE CARBON_ELECTRON_FP64_GEOMETRY=1)
+    endif()
+    option(CARBON_ELECTRON_FP64_LOSS_GATE
+           "Precision ablation: FP64 mean-product and Urban small-loss gate, FP32 sampling/scoring" OFF)
+    if(CARBON_ELECTRON_FP64_LOSS_GATE)
+        target_compile_definitions(carbon_core PRIVATE CARBON_ELECTRON_FP64_LOSS_GATE=1)
+    endif()
+    option(CARBON_ELECTRON_CERTIFIED_RATES
+           "Validate FP32 hard-rate majorants once before transport" OFF)
+    if(CARBON_ELECTRON_CERTIFIED_RATES)
+        target_compile_definitions(carbon_core PRIVATE CARBON_ELECTRON_CERTIFIED_RATES=1)
+    endif()
+    option(CARBON_ELECTRON_REUSE_PARAMETERS
+           "Reuse same-step FP32 electron material parameters" OFF)
+    if(CARBON_ELECTRON_REUSE_PARAMETERS)
+        target_compile_definitions(carbon_core PRIVATE CARBON_ELECTRON_REUSE_PARAMETERS=1)
+    endif()
+    option(CARBON_ELECTRON_STEP_DIAGNOSTICS
+           "Diagnostic-only FP32 electron energy/step-limiter histogram (not for timing)" OFF)
+    if(CARBON_ELECTRON_STEP_DIAGNOSTICS)
+        target_compile_definitions(carbon_core PRIVATE CARBON_ELECTRON_STEP_DIAGNOSTICS=1)
+    endif()
+    find_package(Python3 COMPONENTS Interpreter REQUIRED)
+    if(CARBON_ELECTRON_VOXEL_CACHE)
+        add_custom_target(carbon_electron_voxel_cache_generated_check
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_electron_voxel_cache.py --check
+            COMMENT "Checking exact-physics electron voxel-cache wrapper" VERBATIM)
+        add_dependencies(carbon_core carbon_electron_voxel_cache_generated_check)
+    endif()
+    add_custom_target(carbon_electron_fp32_generated_check
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_electron_fp32.py --check
+        COMMENT "Checking independent FP32 electron equations against their sources"
+        VERBATIM)
+    add_dependencies(carbon_core carbon_electron_fp32_generated_check)
     if(NOT CMAKE_CXX_COMPILER_ID MATCHES "IntelLLVM|Clang")
         message(FATAL_ERROR "CARBON_ENABLE_SYCL requires Intel oneAPI DPC++ / Clang (IntelLLVM or Clang).")
     endif()

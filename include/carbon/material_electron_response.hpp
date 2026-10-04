@@ -42,8 +42,10 @@ struct MaterialElectronStateSource {
     ElectronEnergyCrossingView crossings{};
     const double* short_range_lengths{}; // Optional immutable, raw-row indexed cache.
     const ElectronContinuationStep* decoded{};
+    const double* certified_child_energy{};
+    const ElectronCompactStateView* compact{};
     ElectronContinuationView continuation() const {
-        return {data,bytes,next_rows,child_offsets,child_rows,child_count,decoded};
+        return {data,bytes,next_rows,child_offsets,child_rows,child_count,decoded,certified_child_energy,compact};
     }
 };
 struct MaterialElectronResponseView {
@@ -106,7 +108,7 @@ inline ElectronEnergyCrossingDraw sample_material_electron_continuation(
             const auto view=source.crossings;const auto bin=view.bin(energy);
             const auto count=view.offsets[bin+1]-view.offsets[bin];
             if(pick>=count) {pick-=count;continue;}
-            auto candidate=inspect_electron_energy_crossing(source.continuation(),view.row_at(view.offsets[bin]+pick),energy);
+            auto candidate=inspect_electron_energy_crossing(source.continuation(),view.row_at_bin(bin,view.offsets[bin]+pick),energy);
             candidate.source=s;
             if(candidate.status!=ElectronCrossingStatus::rejected)return candidate;
             break;
@@ -120,7 +122,7 @@ inline ElectronEnergyCrossingDraw sample_material_electron_continuation(
         const auto& source=table.state_sources[s];
         const auto view=source.crossings;const auto bin=view.bin(energy);
         for(auto i=view.offsets[bin];i<view.offsets[bin+1];++i) {
-            auto candidate=inspect_electron_energy_crossing(source.continuation(),view.row_at(i),energy);
+            auto candidate=inspect_electron_energy_crossing(source.continuation(),view.row_at_bin(bin,i),energy);
             if(candidate.status==ElectronCrossingStatus::rejected)continue;
             if(candidate.status!=ElectronCrossingStatus::ready)return candidate;
             ++seen;

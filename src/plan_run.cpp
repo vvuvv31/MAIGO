@@ -143,6 +143,7 @@ void accumulate_transport_result(carbon::TransportResult& total,
         part.beamline_removed_energy_MeV;
     total.untracked_nuclear_energy_MeV += part.untracked_nuclear_energy_MeV;
     total.material_electron_untracked_MeV += part.material_electron_untracked_MeV;
+    total.electron_variance_reduction_weight_gain_MeV += part.electron_variance_reduction_weight_gain_MeV;
     total.material_electron_photon_untracked_MeV += part.material_electron_photon_untracked_MeV;
     total.electron_joint_diagnostics.queries += part.electron_joint_diagnostics.queries;
     total.electron_joint_diagnostics.domain_misses += part.electron_joint_diagnostics.domain_misses;

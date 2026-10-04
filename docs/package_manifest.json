@@ -11,22 +11,73 @@
     "proton_ct_minibeam": {
       "source": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/proton_minibeam_ct_urban_group32.yaml",
       "source_sha256": "195f593ab50c653127122e3adb671acfcbafa7ed1184bb8a080b26b8ea5ee807",
-      "physics_changes": {}
+      "physics_changes": {},
+      "independent_electron_runtime": {
+        "date": "2026-10-03",
+        "research_only": true,
+        "legacy_runtime_dependency": false,
+        "manifest": "docs/proton_independent_runtime_manifest.json",
+        "report": "docs/electron_charged_runtime_20261003.md",
+        "note": "The top-level files table retains initial relocation provenance including historical legacy data; active electron files are listed in this independent manifest."
+      }
     },
     "proton_water_broadbeam": {
       "source": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/proton_broadbeam_fast.yaml",
       "source_sha256": "42f0a510f5f1fdc359b3b18e97094bbda174609818da617a3538c2dda24d179a",
-      "physics_changes": {}
+      "physics_changes": {
+        "broadbeam_electron_tracking": true,
+        "broadbeam_electron_density_threshold": 0.1,
+        "broadbeam_electron_halo_mm": 5.0
+      },
+      "electron_tracking_default_update": {
+        "date": "2026-10-04",
+        "authorization": "User requested tracking defaults and confirmed low-density +5mm selection",
+        "effective": "empty_uniform_water_selection",
+        "report": "docs/broadbeam_tracking_defaults_20261004.md",
+        "previous_dose_acceptance": "docs/broadbeam_shared_electrons_20261004.md",
+        "legacy_joint_tail_used": false
+      }
     },
     "proton_ct_plan_fe": {
       "source": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/proton_rt07575_fe_fast_chunk69632.yaml",
       "source_sha256": "3d1c9cc6e9ba33819854d3ceecb2f3a430925fc1d950f472348ab492501ebb54",
-      "physics_changes": {}
+      "physics_changes": {
+        "fermi_eyges_gaussian_only": true,
+        "broadbeam_electron_tracking": true,
+        "broadbeam_electron_density_threshold": 0.1,
+        "broadbeam_electron_halo_mm": 5.0
+      },
+      "gaussian_default_update": {
+        "date": "2026-10-04",
+        "reason": "Explicit user request to remove FE tail and unify broadbeam Gaussian policy; not a demonstrated throughput improvement.",
+        "validation": "out/proton_ct_gaussian_default_20261004/",
+        "historical_note": "2026-09-30 Gaussian confirmation had no stable throughput gain; no new TOPAS dose acceptance claimed."
+      },
+      "electron_tracking_default_update": {
+        "date": "2026-10-04",
+        "authorization": "User requested tracking defaults and confirmed low-density +5mm selection",
+        "effective": "shared_fp32_primary_electrons",
+        "report": "docs/broadbeam_tracking_defaults_20261004.md",
+        "previous_dose_acceptance": "docs/broadbeam_shared_electrons_20261004.md",
+        "legacy_joint_tail_used": false
+      }
     },
     "carbon_ct_plan_fe_joint": {
       "source": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/carbon_rt07575_fe_joint_fast_queued.yaml",
       "source_sha256": "c340185e2457c6aa35457f1d138537d275dcd63c409b121a0ecb82cd175ed8d6",
-      "physics_changes": {}
+      "physics_changes": {
+        "broadbeam_electron_tracking": true,
+        "broadbeam_electron_density_threshold": 0.1,
+        "broadbeam_electron_halo_mm": 5.0
+      },
+      "electron_tracking_default_update": {
+        "date": "2026-10-04",
+        "authorization": "User requested tracking defaults and confirmed low-density +5mm selection",
+        "effective": "shared_fp32_primary_electrons",
+        "report": "docs/broadbeam_tracking_defaults_20261004.md",
+        "previous_dose_acceptance": "docs/broadbeam_shared_electrons_20261004.md",
+        "legacy_joint_tail_used": false
+      }
     },
     "carbon_water_broadbeam": {
       "source": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/config/unified_water_production.yaml",
@@ -37,7 +88,18 @@
         "multiple_scattering_model": "fermi_eyges",
         "fermi_eyges_species": "all_charged",
         "fermi_eyges_parameter_set": "species_water",
-        "fermi_eyges_gaussian_only": true
+        "fermi_eyges_gaussian_only": true,
+        "broadbeam_electron_tracking": true,
+        "broadbeam_electron_density_threshold": 0.1,
+        "broadbeam_electron_halo_mm": 5.0
+      },
+      "electron_tracking_default_update": {
+        "date": "2026-10-04",
+        "authorization": "User requested tracking defaults and confirmed low-density +5mm selection",
+        "effective": "empty_uniform_water_selection",
+        "report": "docs/broadbeam_tracking_defaults_20261004.md",
+        "previous_dose_acceptance": "docs/broadbeam_shared_electrons_20261004.md",
+        "legacy_joint_tail_used": false
       }
     },
     "carbon_water_minibeam": {
@@ -3464,5 +3526,26 @@
     "include/carbon/stopping_power.hpp": "3158c07b5d03a4fed3871d494ecd27cc07dee2b2916b6082fdfdd69f055d041b",
     "include/carbon/material_electron_response.hpp": "36dd9d20ae9a412a24ef222b1f5e2ca7024193a21933c9770728a5856e6106bc",
     "include/carbon/detail/device_memory_tracker.hpp": "7e7e5d6e9d7afdd43d30e8584c99c69e4e52fd156a2a0b1a538fb5b435a6e37e"
+  },
+  "independent_electron_packages": {
+    "manifest": "docs/electron_packages_manifest.json",
+    "report": "docs/electron_packages_20261004.md",
+    "date": "2026-10-04",
+    "scope": "Independent CT minibeam electron response",
+    "carbon_default_changed": false
+  },
+  "broadbeam_electron_tracking_defaults": {
+    "date": "2026-10-04",
+    "report": "docs/broadbeam_tracking_defaults_20261004.md",
+    "switch": "broadbeam_electron_tracking",
+    "default": true,
+    "density_threshold_g_cm3": 0.1,
+    "halo_mm": 5,
+    "water_selection": "empty at density1.0; no electron packages",
+    "proton_birth": "data/ct_electron/proton_independent_v1/birth_bank.bin",
+    "carbon_birth": "data/ct_electron/carbon_independent_v2/birth_bank.bin",
+    "shared": "data/ct_electron/shared_independent_v1",
+    "legacy_joint_tail_default": false,
+    "minibeam_defaults_changed": false
   }
 }

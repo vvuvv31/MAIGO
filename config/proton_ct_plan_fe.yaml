@@ -1,4 +1,5 @@
-# Relocated preset; provenance and changes in docs/package_manifest.json.
+# Default broadbeam: shared FP32 electron transport; RT07575 local 1%/1mm >99% accepted.
+# Use native repeated batches on 2080Ti; this is not the default broadbeam path.
 run_mode: research
 scorer_mode: production
 enable_ct_grid: true
@@ -49,7 +50,7 @@ em_package_sha256: 8c5d970b3b639bfca2f448730271bed4fc04721aba73100e2efbe09dffe44
 enable_energy_straggling: true
 enable_secondary_energy_straggling: true
 ct_secondary_exact_faces: true
-history_chunk_size: 69632
+history_chunk_size: 524288
 secondary_species_grouping: true
 secondary_step_chunking: true
 em_delta_moments_sha256: c551bc52fa30ff7e3ea229c8b89792e8ecd2b0fb12f18fcad50d1c6f206bc7cc
@@ -70,7 +71,7 @@ primary_mass_number: 1
 ct_grid_file: inputs/proton_rt07575/patient_packed.bin
 enable_ct_material_mcs: true
 ct_skip_homogeneous_face_clamp: true
-fermi_eyges_gaussian_only: false
+fermi_eyges_gaussian_only: true
 fermi_eyges_sampling: segmented
 tpsSource: true
 enable_tps_coordinate_system: true
@@ -96,3 +97,33 @@ ct_electron_segment_transport: false
 enable_flat_source: false
 tps_spots_file: inputs/proton_rt07575/part_01/spots.csv
 broadbeam_maximum_mean_loss_fraction: 0.02
+material_electron_response_memory_mode: host_mapped
+material_electron_response_host_budget_MiB: 65536
+material_electron_response_hot_device_budget_MiB: 0
+material_electron_response_cache_policy: strict
+material_electron_execution_mode: queue
+material_electron_precision: 4
+material_electron_group_size: 32
+material_electron_queue_chunk: 524288
+material_electron_queue_lanes: 16384
+material_electron_queue_budget_MiB: 576
+material_electron_retain_bank: true
+material_electron_birth_file: data/ct_electron/proton_independent_v1/birth_bank.bin
+material_electron_birth_sha256: a6215fb92e70dd67eb12d5118727ff23acf5191fca34c0ab53b02673bc808979
+material_electron_joint_pilot_file: data/ct_electron/shared_independent_v1/schneider_joint.bin
+material_electron_joint_pilot_sha256: 6691f05ca5fcf986e326b2f3ce433a751543b0fa20b0e3d0ca008d94747a1dcb
+material_photon_response_index_file: data/ct_electron/shared_independent_v1/photon/index.txt
+material_photon_response_index_sha256: a91b1e7b6301e3d07b4fd70f1bb2cc9c7dfc4cdea6c7cad789ab831b6427ba41
+material_electron_charged_index_file: data/ct_electron/shared_independent_v1/charged/index.txt
+material_electron_charged_index_sha256: ad86b286de05aff663667793c241826e3f46472c992d4687be02a50fc9fe2e14
+# true: primary-ionization electrons in density <= threshold plus halo; false: local deposition, no electron packages.
+# Charged nuclear-secondary ionization remains local in either mode.
+broadbeam_electron_tracking: true
+broadbeam_electron_density_threshold: 0.1
+broadbeam_electron_halo_mm: 5.0
+# Low-density (density <= threshold) electron births: unbiased per-task Russian roulette.
+# 0.5 (with 524288 chunks): RT07575 resident throughput x1.53 proton / x1.64 carbon, BODY noise
+# unchanged, external-air precision per unit time x1.04 / x0.91. 1.0 disables; see
+# docs/broadbeam_air_roulette_20261004.md.
+broadbeam_electron_low_density_survival: 0.5
+# RTX2080Ti full preset: use --batch-count 10 --histories-per-batch 1253150 --batch-output NEW_DIR.

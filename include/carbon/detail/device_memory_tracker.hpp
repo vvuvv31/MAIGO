@@ -38,6 +38,17 @@ struct DeviceMemoryTracker {
 
     bool unlimited() const noexcept { return limit_bytes == 0; }
 
+    // Session-owned immutable arrays remain resident when this shard exits.
+    // Account them against the same budget, without taking ownership.
+    void account_retained(std::size_t bytes) {
+        if (!unlimited() && bytes > limit_bytes - std::min(live_bytes, limit_bytes))
+            throw std::runtime_error("Device memory allocation budget exceeded by retained physics tables; no valid dose produced");
+        if (bytes > std::numeric_limits<std::size_t>::max() - live_bytes)
+            throw std::bad_alloc();
+        live_bytes += bytes;
+        peak_bytes = std::max(peak_bytes, live_bytes);
+    }
+
     template <typename T>
     T* allocate(std::size_t count) {
         if (count == 0) {

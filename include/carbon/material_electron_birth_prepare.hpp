@@ -10,7 +10,9 @@ struct QueuedElectronBirth {
     double fraction{}, energy{}, uniform{};
     std::uint64_t row{}, incoming_edge{std::numeric_limits<std::uint64_t>::max()};
     std::uint32_t source{};
-    bool valid{}, reference_valid{}, post{};
+    bool valid{}, reference_valid{}, post{}, independent{};
+    // independent=true retains parent energy/CDF uniform for the new bank;
+    // source identifies its density node. No old track row is sampled.
     QueuedElectronBirth() = default;
     QueuedElectronBirth(const ElectronBirthDraw& draw, double e, double u)
         : fraction(draw.fraction), energy(e), uniform(u), row(draw.reference.row),

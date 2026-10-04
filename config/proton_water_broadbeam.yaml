@@ -76,3 +76,10 @@ enable_charged_origin_voxel_scoring: false
 enable_neutron_transport: false
 water_primary_specialization: false
 transport_profile: broadbeam_fast
+
+# Same low-density-plus-halo policy as CT. Uniform Water_75eV at 1 g/cm3
+# has no selected region: local deposition, no electron bank loading.
+# false explicitly disables tracking. This does not enable all-water tracking.
+broadbeam_electron_tracking: true
+broadbeam_electron_density_threshold: 0.1
+broadbeam_electron_halo_mm: 5.0

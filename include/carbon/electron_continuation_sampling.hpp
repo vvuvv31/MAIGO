@@ -1,5 +1,6 @@
 #pragma once
 #include "carbon/electron_continuation_replay.hpp"
+#include "carbon/electron_bitmap_crossings.hpp"
 
 namespace carbon {
 // Buckets are proposal accelerators, NOT kinetic-energy quantization. Every
@@ -13,7 +14,11 @@ struct ElectronEnergyCrossingView {
     // Optional lossless per-source row IDs. Bucket offsets/counts stay 64 bit.
     // Exactly one row representation is populated for a nonempty index.
     const std::uint32_t* rows32{};
-    bool valid_rows() const {return count==0 || ((rows!=nullptr)!=(rows32!=nullptr));}
+    const ElectronBitmapCrossingsView* bitmap{};
+    std::uint64_t row_at_bin(std::size_t bin,std::uint64_t index) const {
+        return bitmap?bitmap->select(bin,index-offsets[bin]):row_at(index);
+    }
+    bool valid_rows() const {return count==0 || bitmap || ((rows!=nullptr)!=(rows32!=nullptr));}
     std::uint64_t row_at(std::uint64_t index) const {
         return rows32?static_cast<std::uint64_t>(rows32[index]):rows[index];
     }

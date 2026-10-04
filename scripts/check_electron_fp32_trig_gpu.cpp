@@ -1,0 +1,4 @@
+#include <sycl/sycl.hpp>
+#include "carbon/electron_fp32.hpp"
+#include <iostream>
+int main(){sycl::queue q{sycl::gpu_selector_v};constexpr unsigned n=1048577;auto* out=sycl::malloc_shared<std::array<float,2>>(n,q);q.parallel_for(sycl::range<1>(n),[=](sycl::id<1> id){const float x=6.2831853071795864769f*(float(id[0])/float(n-1));out[id[0]]={carbon::electron_fp32::sin32(x),carbon::electron_fp32::cos32(x)};}).wait_and_throw();double error=0,norm=0;for(unsigned i=0;i<n;++i){const float x=6.2831853071795864769f*(float(i)/float(n-1));error=std::max(error,std::abs(double(out[i][0])-std::sin(double(x))));error=std::max(error,std::abs(double(out[i][1])-std::cos(double(x))));norm=std::max(norm,std::abs(double(out[i][0])*out[i][0]+double(out[i][1])*out[i][1]-1));}sycl::free(out,q);std::cout<<"{\"samples\":"<<n<<",\"max_absolute_error\":"<<error<<",\"max_sin2_cos2_error\":"<<norm<<",\"passed\":"<<((error<5e-7&&norm<1e-6)?"true":"false")<<"}\n";return error>=5e-7||norm>=1e-6;}

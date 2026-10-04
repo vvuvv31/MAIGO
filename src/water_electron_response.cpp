@@ -41,9 +41,16 @@ WaterElectronResponseTable WaterElectronResponseTable::load(const std::filesyste
         m.at("data_filename").str==path.filename().string() && m.at("data_sha256").str==data_pin &&
         num(m.at("data_size_bytes"))==std::filesystem::file_size(path),"Wrong water response scope/identity");
     static_assert(sizeof(WaterElectronChannel)==40 && sizeof(WaterElectronSample)==56 && sizeof(WaterElectronPathNode)==32);
+    // C12 material extraction has more electron steps than the original water
+    // and proton pilots (the 300 MeV/u lung bank reaches 16.34M samples and
+    // 21.93M nodes). Keep bounded host allocations, uint32 index headroom, and
+    // all byte-count/SHA/graph checks; packet residency has its own budget.
+    const bool c12_material_bank = generic_material_schema && projectile_z==6 && projectile_a==12;
+    const std::uint32_t sample_limit = c12_material_bank ? 20000000U : 10000000U;
+    const std::uint32_t node_limit = c12_material_bank ? 25000000U : 20000000U;
     std::ifstream f(path,std::ios::binary);char magic[8];std::uint32_t version=0,nc=0,ns=0;
     f.read(magic,8);f.read(reinterpret_cast<char*>(&version),4);f.read(reinterpret_cast<char*>(&nc),4);f.read(reinterpret_cast<char*>(&ns),4);
-    require(f && std::memcmp(magic,material_schema ? "MELSEG01" : "WELSEG01",8)==0 && version==((schema==2 || material_schema) ? 1U : 2U) && nc==nominal_max/5 && ns>0 && ns<=10000000 &&
+    require(f && std::memcmp(magic,material_schema ? "MELSEG01" : "WELSEG01",8)==0 && version==((schema==2 || material_schema) ? 1U : 2U) && nc==nominal_max/5 && ns>0 && ns<=sample_limit &&
         std::filesystem::file_size(path)==20ULL+40ULL*nc+56ULL*ns && m.at("channels").arr.size()==nc,"Water response binary header");
     WaterElectronResponseTable out;out.projectile_z=projectile_z;out.projectile_a=projectile_a;out.channels.resize(nc);out.samples.resize(ns);
     out.reference_density_g_cm3=num(m.at("density_g_cm3"));out.material_name=m.at("material").str;
@@ -98,7 +105,7 @@ WaterElectronResponseTable WaterElectronResponseTable::load(const std::filesyste
         std::filesystem::file_size(companion)==num(m.at("path_size_bytes")),"Water path graph SHA/size");
     std::ifstream p(companion,std::ios::binary);std::uint32_t count=0,nodes=0;
     p.read(magic,8);p.read(reinterpret_cast<char*>(&version),4);p.read(reinterpret_cast<char*>(&count),4);p.read(reinterpret_cast<char*>(&nodes),4);
-    require(p && std::memcmp(magic,"WELPTH01",8)==0 && version==1 && count==ns && nodes>0 && nodes<=20000000 &&
+    require(p && std::memcmp(magic,"WELPTH01",8)==0 && version==1 && count==ns && nodes>0 && nodes<=node_limit &&
         nodes==num(m.at("path_nodes")) && std::filesystem::file_size(companion)==20ULL+4ULL*ns+32ULL*nodes,"Water path graph header");
     out.heads.resize(ns);out.nodes.resize(nodes);
     p.read(reinterpret_cast<char*>(out.heads.data()),4ULL*ns);p.read(reinterpret_cast<char*>(out.nodes.data()),32ULL*nodes);

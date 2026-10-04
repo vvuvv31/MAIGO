@@ -864,6 +864,9 @@ struct TransportResult {
     double untracked_nuclear_energy_MeV{0.0};
     double material_electron_untracked_MeV{0.0};
     double material_electron_photon_untracked_MeV{0.0}; // informational subset
+    // Signed statistical weight added by electron Russian roulette:
+    // survivors gain W(1/p-1), killed tasks lose W. Zero in expectation.
+    double electron_variance_reduction_weight_gain_MeV{0.0};
     std::uint64_t nuclear_interactions{0};
     // Step 12 primary-only & validation counters
     std::uint64_t primary_inelastic_terminated_count{0};

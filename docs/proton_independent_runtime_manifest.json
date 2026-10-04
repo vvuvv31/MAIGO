@@ -1,0 +1,853 @@
+{
+  "schema": 2,
+  "mode": "research independent proton CT minibeam",
+  "legacy_runtime_dependency": false,
+  "total_bytes": 4137523122,
+  "files": {
+    "data/ct_electron/proton_independent_v1/birth_bank.bin": {
+      "source": "out/electron_standalone_20261003/birth_bank64/birth_bank.bin",
+      "bytes": 328367136,
+      "sha256": "a6215fb92e70dd67eb12d5118727ff23acf5191fca34c0ab53b02673bc808979"
+    },
+    "data/ct_electron/shared_independent_v1/schneider_joint.bin": {
+      "source": "out/schneider_joint_density_20261003/schneider_joint.bin",
+      "bytes": 1423915852,
+      "sha256": "6691f05ca5fcf986e326b2f3ce433a751543b0fa20b0e3d0ca008d94747a1dcb"
+    },
+    "data/ct_electron/shared_independent_v1/charged/index.txt": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/index.txt",
+      "bytes": 8787,
+      "sha256": "ad86b286de05aff663667793c241826e3f46472c992d4687be02a50fc9fe2e14"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node00/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node00/operator.bin",
+      "bytes": 9601888,
+      "sha256": "498031cdc55b89f54fe2c522a816b961c3856bedc36e9e500fa953a5eb16b794"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node01/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node01/operator.bin",
+      "bytes": 9265056,
+      "sha256": "a25bccfcd277bc0c2fb5c8347158a495072ef3986c9c0a0229e15112a37991e7"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node02/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node02/operator.bin",
+      "bytes": 9201488,
+      "sha256": "335ee196fc63c4c6e485b917f77cc754c6bd3b359ceafa6889e467e506e59fba"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node03/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node03/operator.bin",
+      "bytes": 6395264,
+      "sha256": "acb59b84a5f624713a3274497a2f358be3b10f691bdb2082337a9c8a562a5952"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node04/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node04/operator.bin",
+      "bytes": 6395264,
+      "sha256": "9f36d36e3e476d94b45e8bf2d0462d06d5a860097d68ea118535205f72181fea"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node05/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node05/operator.bin",
+      "bytes": 6362496,
+      "sha256": "55ef289fe7ab9507c90b6e3444e476a94f892ac5f426c51935c8d30dfb17d849"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node06/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node06/operator.bin",
+      "bytes": 6362496,
+      "sha256": "98b54106b974b41197e04e9df7351db81231125396218f3dd4efc57cc7307357"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node07/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node07/operator.bin",
+      "bytes": 6362496,
+      "sha256": "4b33b53c65dd922b01a63d2b2ca66caad3e2fa289bcb438779c19f1f0307ee90"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node08/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node08/operator.bin",
+      "bytes": 6362496,
+      "sha256": "35d6f996b4177176b33c2615dc1160b5cfd506b88d43d451aa6a4debbf2302ff"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node09/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node09/operator.bin",
+      "bytes": 6362496,
+      "sha256": "afe7c3de9d62df71f15518a367c4420d444fd66b6b8cd9e536e234ae6f76939c"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node10/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node10/operator.bin",
+      "bytes": 6362496,
+      "sha256": "edac36ce2842918864cf04ca276bd609802db1b6364bf0696796dd7a5474f2d9"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node11/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node11/operator.bin",
+      "bytes": 6329728,
+      "sha256": "429f13158579d96f015f410d002ce8d74d1d4a4b044ed07a138137456704e2b8"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node12/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node12/operator.bin",
+      "bytes": 6329728,
+      "sha256": "4735eede8245bd318d5270160aec3511a6ed74deeca1a00c81668e8a72707a25"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node13/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node13/operator.bin",
+      "bytes": 6329728,
+      "sha256": "fa602eefbe47b202bad0b8169f6532c24bd40a739c25400a8d0876aaffce3073"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node14/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node14/operator.bin",
+      "bytes": 6329728,
+      "sha256": "2d2dd6d48300fc6a62086e613b1079c39f7ed2f105552cef1d55ea5efc964fce"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node15/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node15/operator.bin",
+      "bytes": 6329680,
+      "sha256": "4c8c1f333f2bc6f854d61b52bf3866d3215bac338bc1b9aef81f408d88557c35"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node16/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node16/operator.bin",
+      "bytes": 6329680,
+      "sha256": "3123afa5af265d1b3e3a7aa453518ad48672d956a6c4967572f58f4c392fb753"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node17/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node17/operator.bin",
+      "bytes": 6296912,
+      "sha256": "fce4bc2dd60bed2b77f1c6fb6c1813088a81ba2fe77fb7074b3535faff432519"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node18/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node18/operator.bin",
+      "bytes": 6296912,
+      "sha256": "1fb8c9c6433a0737fb5ee237040bedc0ea759429e647b5d7e4efe4056a530fe0"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node19/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node19/operator.bin",
+      "bytes": 6296912,
+      "sha256": "834c9fba8330c15c04c60f51f22e1c3b4abd8b41cfd39264d8eac4a98011341b"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node20/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node20/operator.bin",
+      "bytes": 6296912,
+      "sha256": "f2855a78bff1bdb6f3d996c76ffed33a35ac695a0fc6f7f35dc1a7307f521d65"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node21/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node21/operator.bin",
+      "bytes": 6264144,
+      "sha256": "a19a85d086e6bfa85370bb603a0e8e213ca5873805973dc6d72333ed7b231c03"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node22/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node22/operator.bin",
+      "bytes": 6264144,
+      "sha256": "64ae9a3512f06e55a45fdf87c9de500f28afae3ed84d376e3ee3e3ceb9407eb6"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node23/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node23/operator.bin",
+      "bytes": 6264144,
+      "sha256": "9534d8e80cb10796f71151356be05c11d196d299f7d45979b0a2909a2ccbea7d"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node24/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node24/operator.bin",
+      "bytes": 6264144,
+      "sha256": "b38d2c46f6f002cf83f48c6b189be97d6dee44b1ff78063ab79a9ac2629c805d"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node25/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node25/operator.bin",
+      "bytes": 6231376,
+      "sha256": "bebc58ac1d7418a0834caed5a3dcaf0079883bf606b7525250d57798ece87807"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node26/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node26/operator.bin",
+      "bytes": 6234112,
+      "sha256": "d819727b7c6854e382d10fb190075bf624a88ff815803c9518482b45e8234630"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node27/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node27/operator.bin",
+      "bytes": 6201296,
+      "sha256": "d75f154de4be65a6ee76c41676a9230721b006f6937fe063f22ada1be2450b89"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node28/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node28/operator.bin",
+      "bytes": 6201296,
+      "sha256": "8d2520e149a4963856567d97006238cfe85bbc2178afe0995aea78bed2e243cb"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node29/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node29/operator.bin",
+      "bytes": 6135712,
+      "sha256": "1b33ad79cff6bb844edf4dd3d688527a712833515edf4e38dc59df8a83bda475"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node30/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node30/operator.bin",
+      "bytes": 6135712,
+      "sha256": "688647dadd6438e991c959e983d4db3e2366c9770f0e00f0834166717c4af536"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node31/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node31/operator.bin",
+      "bytes": 6102944,
+      "sha256": "05d18bb6ef2e2c064a595c9cf2b6a2922173de8e39d909587704bb2af8b341e2"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node32/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node32/operator.bin",
+      "bytes": 6102944,
+      "sha256": "ddb3cc591030e75abb1a7699a4b8a3d8d4081482846474973e0082c688f17cf0"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node33/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node33/operator.bin",
+      "bytes": 6070176,
+      "sha256": "a0cf5f58764b231d59a7521b2efdd16f4a31ea3a4ad81633e2e22d897cb6e800"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node34/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node34/operator.bin",
+      "bytes": 6037408,
+      "sha256": "cd90f5082e508a48d5432214c6aec2a7a629c90b6e163a1029e37c4699a7d846"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node35/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node35/operator.bin",
+      "bytes": 6037408,
+      "sha256": "e4987a7af90d69659c77731df558ae5637a11f127bc1d14e22f4bbcbf068130c"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node36/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node36/operator.bin",
+      "bytes": 6037360,
+      "sha256": "fe9e3537afb7d088a7081c36ae373231a1cf7246f216bafa20bd9552db98aa3b"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node37/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node37/operator.bin",
+      "bytes": 6004592,
+      "sha256": "c3dba145dc4b27cbd0137bd758bb1a28138292b7479ff323ffdb956936c795f3"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node38/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node38/operator.bin",
+      "bytes": 5971776,
+      "sha256": "e97ee39cfe24e683536adc8865e9f8d28a8d589a31c7230daeec7c5cfe758c32"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node39/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node39/operator.bin",
+      "bytes": 5971776,
+      "sha256": "1e7bd07a0a6258081534eabd444faf3de0d90fc6d2ded5943cea13e7038c96d2"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node40/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node40/operator.bin",
+      "bytes": 9598208,
+      "sha256": "92605cf671e0b8a65d85db0f894d5440276481cad9da95421649dbc7a6312536"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node41/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node41/operator.bin",
+      "bytes": 9597312,
+      "sha256": "30b2bbdbfab762d82aff25f17b8c40122c00da15f258ce9b7db74cf72c4082c0"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node42/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node42/operator.bin",
+      "bytes": 9597376,
+      "sha256": "250d7ae51be6e350337947882a70c26fa2ad22147258c649f9f7ebd5d647b15b"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node43/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node43/operator.bin",
+      "bytes": 9599328,
+      "sha256": "8d45474d4d7e920b2edc1f7c1ccaaa7ae40efd65ed7f3774ef661d58f93dafaf"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node44/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node44/operator.bin",
+      "bytes": 9602144,
+      "sha256": "4cbbe59c332c72b8d89f2530d30a0e49cfe00b65f1e69fb16f873176ff695132"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node45/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node45/operator.bin",
+      "bytes": 9596352,
+      "sha256": "c133a0e7387ca84be92080dd1066823107ee8b9eaf61ffa5ccaf414b87c83eec"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node46/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node46/operator.bin",
+      "bytes": 9599040,
+      "sha256": "acaf2f1fd6137e7545d32cad4cf71331ef4bd622521d254b72103df8b193d7c2"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node47/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node47/operator.bin",
+      "bytes": 9600992,
+      "sha256": "3dad9265774e5007d80c753560d26f96f330bf313b94051d6e706f6ae50271a1"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node48/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node48/operator.bin",
+      "bytes": 9488464,
+      "sha256": "b793aa776aee1879ba01931747cf21271d14eb3ef02e92d4511233409b4eca17"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node49/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node49/operator.bin",
+      "bytes": 8943328,
+      "sha256": "3ec1e0b953a4314836dd0b3ca04cc796723603a87f9faa78ba5e7ddd2a88f80c"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node50/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node50/operator.bin",
+      "bytes": 8704112,
+      "sha256": "b27173362fb65e26039fd779572d0ab860fbd57480b6bc3cb1a8ea4351b917f6"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node51/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node51/operator.bin",
+      "bytes": 8438368,
+      "sha256": "cc357a0d84fb6660b849465f3b83a71955027e989e06ad73a80d3357bba44526"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node52/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node52/operator.bin",
+      "bytes": 8194960,
+      "sha256": "71cb1b8fbbb20ec4219d966340f820bbe3641129972bc31efdec3397cd77581c"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node53/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node53/operator.bin",
+      "bytes": 7949072,
+      "sha256": "1f7f7a736a97465dd895bed515ca6727a3ccdfe01195430b9aba79a481ee4049"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node54/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node54/operator.bin",
+      "bytes": 7671648,
+      "sha256": "0f15ea92a12f9a652e12eb4d35a7ba03d78ea08bd5fb2ae5b98cd7e61b0906d3"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node55/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node55/operator.bin",
+      "bytes": 7391056,
+      "sha256": "84fab4cf8f1ed574a123b2f0bd1774c62c635de791f7af32a4bb5d802dfaf5b8"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node56/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node56/operator.bin",
+      "bytes": 7209808,
+      "sha256": "305512fac161cb072d6f3ddef1ea368ede2d5fce93c1c3dd7a238ca519028b52"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node57/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node57/operator.bin",
+      "bytes": 6960336,
+      "sha256": "50370dfa7998cf813daa544771115fbe4d3dd36641c97e70d96eb7ec7128eff0"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node58/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node58/operator.bin",
+      "bytes": 6818736,
+      "sha256": "5b795736895763e95c9bddbcea4223a625170b3a2599a62a8b5263476fe41711"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node59/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node59/operator.bin",
+      "bytes": 6643936,
+      "sha256": "d45990d23e1bda640548f30b7837425c944144685100f061b901b072ab1b7f33"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node60/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node60/operator.bin",
+      "bytes": 6640208,
+      "sha256": "3467b8302c8772acfce5e5221a5aaf413ac9300725e0e2a3890f2f08eb4edf4f"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node61/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node61/operator.bin",
+      "bytes": 6466208,
+      "sha256": "87fe585bf6a484fb58ee04cb47cb51ed4e6bf1482de00ea70ce115150b29bc96"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node62/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node62/operator.bin",
+      "bytes": 6463120,
+      "sha256": "c266dc6d44f7eb6eeea637f531d8eb14990d377b1aa7a033020a336b7b6eafa7"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node63/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node63/operator.bin",
+      "bytes": 6135712,
+      "sha256": "3f5be7f582b62b02005b35f9c90fb80babe5e212f3577eab6d0a2337c8e622a8"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node64/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node64/operator.bin",
+      "bytes": 6102944,
+      "sha256": "e4c9d7876f6f75091a6ce71a3d26f0be7a126a32be01c4685f96bb55ff54a573"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node65/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node65/operator.bin",
+      "bytes": 6070176,
+      "sha256": "5f14901ac536fd20f85ba611046e26749ea010e16a061219a4ca84ee643a8085"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node66/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node66/operator.bin",
+      "bytes": 6037408,
+      "sha256": "743d754a13e5a80fa749ba96f09fe060973fc96f5755404f85fe0105fd4a256f"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node67/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node67/operator.bin",
+      "bytes": 6037360,
+      "sha256": "66974ca6d1ace8f27b218e876a4f972d62bc884b6de12acc1d97e4550afc1f51"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node68/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node68/operator.bin",
+      "bytes": 5971824,
+      "sha256": "92c250b9b61053b3297a46f1391c6a70049e3e2b2346ca66847257a8441ec6a4"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node69/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node69/operator.bin",
+      "bytes": 5971824,
+      "sha256": "d0d71a4dc25cef45cfea6b81345a06756727ce818cc1d002718ad9b0b556e50d"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node70/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node70/operator.bin",
+      "bytes": 5971776,
+      "sha256": "9334f3726c3b6b81782d120e5696742cf718b169a758e208938c07c29b8d0392"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node71/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node71/operator.bin",
+      "bytes": 5939008,
+      "sha256": "b0758bc75c5dacb8c50e6445d359d36a4a02261597ffd47b2ddd194553bdfadb"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node72/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node72/operator.bin",
+      "bytes": 5939008,
+      "sha256": "b06a26ce2830030bed41023425cfac86c4fe40f93315098fdf8bfcc56dc49429"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node73/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node73/operator.bin",
+      "bytes": 5939008,
+      "sha256": "66f7f1cfebc4067727e2be980cdb8f7e05f2234305faa7429488e93f82e1d776"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node74/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node74/operator.bin",
+      "bytes": 5873472,
+      "sha256": "4429869b169189c45b355c7e200938df2773e905c25d1ed459151c918adcfda4"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node75/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node75/operator.bin",
+      "bytes": 5873424,
+      "sha256": "20bbcad6ba6936779ecb0fc06c0c84f78de65c714138ebe96b75b3ddbc536828"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node76/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node76/operator.bin",
+      "bytes": 5873424,
+      "sha256": "78a7bedc1fe695b4bdb6a76f1ea8c98a014dcd9823129e7e7e9d46f4c01664f4"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node77/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node77/operator.bin",
+      "bytes": 5873424,
+      "sha256": "e269fc5f9fb3e062c234bfcfa30f7ad0770b715eff18cc780b2792c526d7eeef"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node78/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node78/operator.bin",
+      "bytes": 5742304,
+      "sha256": "8b3fc0d2797c3edbf0258b1cf8c5913fe2bf4d6ffbb83a80e3c0ce90787639de"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node79/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node79/operator.bin",
+      "bytes": 5676720,
+      "sha256": "eb0942bab939b152c168930316cb44a504b65586f5e09e42311e84ddd1b08d97"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node80/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node80/operator.bin",
+      "bytes": 5578368,
+      "sha256": "1905381fd1ada3c6871907b0035fa5e49ab514ac4df3c093f9660f6f6ea778fe"
+    },
+    "data/ct_electron/shared_independent_v1/charged/node81/operator.bin": {
+      "source": "out/electron_standalone_20261003/charged_complete512_v2/node81/operator.bin",
+      "bytes": 5021024,
+      "sha256": "34b09309888ed5608279129e6c9e983478498bfbd3213fbd935b9d77fb0c778a"
+    },
+    "data/ct_electron/shared_independent_v1/photon/index.txt": {
+      "source": "out/electron_standalone_20261003/photon_complete512/index.txt",
+      "bytes": 8787,
+      "sha256": "a91b1e7b6301e3d07b4fd70f1bb2cc9c7dfc4cdea6c7cad789ab831b6427ba41"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node00/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node00/operator.bin",
+      "bytes": 22296648,
+      "sha256": "0af117f96c4579f2b0e076f86c5dbea759bb8771815065fffe6081f5d6ac073f"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node01/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node01/operator.bin",
+      "bytes": 22290184,
+      "sha256": "4ec9f01db5ff40b0df37cbeecf60d725744b15070aa162369ec44872f0aca918"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node02/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node02/operator.bin",
+      "bytes": 22046888,
+      "sha256": "a4c12e5eaff608180c7430dd7ca80157e7576c86acccf22982afecd38d72c3c2"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node03/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node03/operator.bin",
+      "bytes": 22045384,
+      "sha256": "22bf07c5160a4e0644c51d72974014404421aade05dfd6d5d20ab831be12fc0a"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node04/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node04/operator.bin",
+      "bytes": 22093992,
+      "sha256": "aa566999439a704b5d7ff2a753e3ed263119d4dd5862167a3fd6b87fbb02ee68"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node05/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node05/operator.bin",
+      "bytes": 22094120,
+      "sha256": "f71c5167dd02317401b58d73629b47aac544d9d1a6fd3980d112d66ebc983031"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node06/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node06/operator.bin",
+      "bytes": 22081960,
+      "sha256": "059f8c96b390a8114cbe4599b55b54a69a0209d5a4ac119f6f19b70a6f9c6e58"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node07/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node07/operator.bin",
+      "bytes": 22084424,
+      "sha256": "3ef8e36d03fc47e9cb07d9b590d9dac96fa1b2732ef3328699671b9f5f82d37f"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node08/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node08/operator.bin",
+      "bytes": 22075592,
+      "sha256": "7ee947a3fc64d8c5e7d386f2cf2c70f0332aff73c051f9e8cff564c83ea3337f"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node09/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node09/operator.bin",
+      "bytes": 22082664,
+      "sha256": "ef6ae813f18f52b3f7a33eefa06e18f2b2c6a12ddf32f4040a33435b9cced49f"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node10/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node10/operator.bin",
+      "bytes": 22069000,
+      "sha256": "5c8ec4bd15f4499a7e7d5f705ec06ad5f77fce0a0d7933a8053ab8c97bc14649"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node11/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node11/operator.bin",
+      "bytes": 22068424,
+      "sha256": "819e3db8c29463f11da72fc6b00d3ccea6c94fd3f3f4be6e309efe2369cf3592"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node12/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node12/operator.bin",
+      "bytes": 22062088,
+      "sha256": "2f9bd5f11de1e6011eb224e8d64daa0529e09cc981bd434395052c999b17a5b6"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node13/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node13/operator.bin",
+      "bytes": 22065352,
+      "sha256": "9c016ddea3f58144ca550e50b649c8fc22e1100e9b7213d72f12abf244250320"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node14/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node14/operator.bin",
+      "bytes": 22044744,
+      "sha256": "73e499044f818727215789584b17c5557b32892ce93c0347ee0b072fb7565aec"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node15/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node15/operator.bin",
+      "bytes": 22052552,
+      "sha256": "d78d217bd38712719512767e749f46a95aec02f5d38ef533aea37f8660b1c809"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node16/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node16/operator.bin",
+      "bytes": 22067656,
+      "sha256": "20f4caf448cb7c1894a0cf98b4174dee2bbb1215c60f6264e0efc380928c2067"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node17/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node17/operator.bin",
+      "bytes": 22069800,
+      "sha256": "8ec8702a78dc5aed5d4781896124e841f5853935c893abe9841b510bbab20443"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node18/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node18/operator.bin",
+      "bytes": 22276616,
+      "sha256": "2d6c04c670a368c8f6d83c117f4914ce8e6947e67de553ea95e5251a822aaacd"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node19/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node19/operator.bin",
+      "bytes": 22271048,
+      "sha256": "986cce461538ad45f9bef15fd301d34d689d26a439e59f43a823add6e360b1f9"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node20/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node20/operator.bin",
+      "bytes": 22299656,
+      "sha256": "06e004ae84313b5fec642b0a2b9664237084877bff28a7564a4d83b6611b56bf"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node21/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node21/operator.bin",
+      "bytes": 22293800,
+      "sha256": "e4240cab0a976751dba77e13e5226f229ba4bdbd30ee03c6b392d3a55acb4653"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node22/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node22/operator.bin",
+      "bytes": 22318760,
+      "sha256": "90bbd10c59d5fa5e9994ff648c80996d03b23d86f8e417ca59d193cbc2f71277"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node23/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node23/operator.bin",
+      "bytes": 22309896,
+      "sha256": "cfb7c9f6d0f9f3fb9af96ca30927af075dde839e1fa1b3b9c7b63a2ccd8acc74"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node24/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node24/operator.bin",
+      "bytes": 22326568,
+      "sha256": "4095706038633e91d55529444bd200a338d03a2109fa7270e83e93e041437424"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node25/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node25/operator.bin",
+      "bytes": 22322632,
+      "sha256": "e23a19aa6044046717b03a3e7ce12074157ceca68072c758cc1bf747e9aebd01"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node26/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node26/operator.bin",
+      "bytes": 22333416,
+      "sha256": "64109284581aed79f24c18815ab90aea35a0088b8cd572d2f82cfd164c3930d6"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node27/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node27/operator.bin",
+      "bytes": 22325640,
+      "sha256": "f8ba25bec30a1cb7ec3b3c563c62a46ca2fd4348e296922a4f7b27fbc61307c0"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node28/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node28/operator.bin",
+      "bytes": 22351848,
+      "sha256": "4d90d9601dbab7fe1ead433494e8fbaf3a079b59f79a2a694e6351fcd7227960"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node29/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node29/operator.bin",
+      "bytes": 22338056,
+      "sha256": "200d9d9eea382d0a794ff003cb45fc18a8584d3384b892d0aeb2bc47cec24953"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node30/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node30/operator.bin",
+      "bytes": 22336904,
+      "sha256": "b12d96f465dbf0ed1cbf2719ae26c2d67eabb1ce816e1390e2138acb6fc62303"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node31/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node31/operator.bin",
+      "bytes": 22352232,
+      "sha256": "40131f0f21221773045dfe6d775d305b83fabef7fed2e642eedf41b888b1ffd4"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node32/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node32/operator.bin",
+      "bytes": 22362536,
+      "sha256": "7792de774d416bfba78fba3eaab023bf2a14f8ba94703c299e69e047e47903be"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node33/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node33/operator.bin",
+      "bytes": 22348840,
+      "sha256": "ea68d6c6a1b3140b16064bf45ee7e011a776e8e7c9a41dd142a58c5d97676ec2"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node34/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node34/operator.bin",
+      "bytes": 22365288,
+      "sha256": "0ba3eab512a01d8e98720b7b6424667957991c5af0e36cdf65ed0078f5b127ab"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node35/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node35/operator.bin",
+      "bytes": 22355816,
+      "sha256": "e88906c053662eab6e5ae333dbf298e4102f05c267d9ffde5e5d0f9151f70348"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node36/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node36/operator.bin",
+      "bytes": 22371496,
+      "sha256": "d539533d174cb8066841f6c19e68d857bf62a8864aacbc5e34dd1c6051acd916"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node37/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node37/operator.bin",
+      "bytes": 22370120,
+      "sha256": "7033ce0d19d896325e8cb8174517b586ba9bdf6d3c1a396d95f55d80a09e9e6b"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node38/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node38/operator.bin",
+      "bytes": 22377384,
+      "sha256": "a83d9a2dff25cf3c7bed4405cc43b4bf278d02808ed8259dcb05799de5303d44"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node39/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node39/operator.bin",
+      "bytes": 22373384,
+      "sha256": "6899a7394f3f4b2e038b270ca3004672ceb64ba6c4c4fec27dc8febb124c234d"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node40/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node40/operator.bin",
+      "bytes": 22291208,
+      "sha256": "1c720511b1707073a31b43d643068d8de01724c5f77cdab424db1d653eb046f9"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node41/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node41/operator.bin",
+      "bytes": 22294952,
+      "sha256": "d782bce3a76652e57bb5bcd5d575d6a45eabdd43a40ba89f0d814956e42bdb31"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node42/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node42/operator.bin",
+      "bytes": 22298856,
+      "sha256": "3ebe38c8af8e8f8d0798c6b1318ce4b23e17d01abfd352fedce1514a5f639f4a"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node43/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node43/operator.bin",
+      "bytes": 22296968,
+      "sha256": "5e2a2f7518377bc10dfff92f83ebf7aaea73b891094a2624d2deb5ee0dff7f9e"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node44/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node44/operator.bin",
+      "bytes": 22295528,
+      "sha256": "1547a542cd15228b107122e52efab0c45fa7c81aa55a8f8cdd72bd1249872029"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node45/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node45/operator.bin",
+      "bytes": 22294280,
+      "sha256": "c0e3258799a6b146741069812509370a8e2bd4469e14fbbdbbe46b8cf23da48f"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node46/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node46/operator.bin",
+      "bytes": 22289672,
+      "sha256": "a4ecc03b865f7bf5024aee6c5e7764e99afb82ddf9e841bcd49b5558bf6a6e76"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node47/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node47/operator.bin",
+      "bytes": 22289800,
+      "sha256": "304cbe1989f9824f04a20adeedede3e5c703be7552fcce58330e6bf0bc71ee9d"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node48/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node48/operator.bin",
+      "bytes": 22290568,
+      "sha256": "32eda66a73173ff1b70c7b1e5dbfdc4440737a4cfb01ded08548ceac1f043273"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node49/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node49/operator.bin",
+      "bytes": 22051048,
+      "sha256": "eb28ad1d82f23e588ebd412d6b883e55cf5463e75baab853e2813ac14f263cf4"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node50/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node50/operator.bin",
+      "bytes": 22054568,
+      "sha256": "ccf9e6359733c56729415fcf176b3fe6e10db3b8d8bde2175ac23fab54b373f5"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node51/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node51/operator.bin",
+      "bytes": 22051944,
+      "sha256": "f511a51e0c7aef8210801812ec0125ebfd3e18ae4920ef1fb70a6d195a1b9bf3"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node52/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node52/operator.bin",
+      "bytes": 22048392,
+      "sha256": "7ab064e8a9c063d225319b54cc3473c775e666a5811377f772851084c249c8e3"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node53/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node53/operator.bin",
+      "bytes": 22052872,
+      "sha256": "bbce4a1b699bcb3b216b0276adb1beb1e0fa99ccd5fb7c3e6dac2f7eadc71c9e"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node54/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node54/operator.bin",
+      "bytes": 22046408,
+      "sha256": "cdbefcd61ab114b1882b1e36a3a81211e5af731cd67114a9851f7a9caea98909"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node55/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node55/operator.bin",
+      "bytes": 22046024,
+      "sha256": "74f0d3747943c929306e822219ba73b368ed3d5102946fedd534253f0689faf9"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node56/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node56/operator.bin",
+      "bytes": 22047528,
+      "sha256": "57c69ae1cacc35880f2233441bf0f76f0e55da84bcefd5d5eb24a37ce32e935e"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node57/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node57/operator.bin",
+      "bytes": 22046152,
+      "sha256": "dd9f5a75b1cf6ea913cb2e8e2f18a8e20e194b5b722bb116140b9d75545316fb"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node58/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node58/operator.bin",
+      "bytes": 22051656,
+      "sha256": "b1ed7800726acca001d54c9417422901dc39bfabaa84de1cb2eef4dc6388e207"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node59/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node59/operator.bin",
+      "bytes": 22052008,
+      "sha256": "8e53d71bd1b2743ec9d3c00d71f0cfa68b3c5112ebe50a82e319f08b18c44620"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node60/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node60/operator.bin",
+      "bytes": 22045224,
+      "sha256": "969693c23c24e759adb40219f31370bfcca22afedf3d220814bdb5daa0855b0d"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node61/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node61/operator.bin",
+      "bytes": 22045832,
+      "sha256": "fd9596cca646209f61ec28885ea8f3c19dce87be6084ca2ad498b3b15c60fb75"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node62/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node62/operator.bin",
+      "bytes": 22058952,
+      "sha256": "804d779937318f2702498c13e12cce8622881aa98d9f51c0c484baa95df1c0c6"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node63/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node63/operator.bin",
+      "bytes": 22341800,
+      "sha256": "9736988ffaf7ea2edf209258c2c2c5000f26e091bb19cd1b57f97069f30d7c13"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node64/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node64/operator.bin",
+      "bytes": 22349704,
+      "sha256": "a9ec6e2da69c8b128b13c59f8de2e8410c89314e35c8b6a82bcfa48965743339"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node65/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node65/operator.bin",
+      "bytes": 22352520,
+      "sha256": "fe24455ea3c9b4429c157cbbd50fabd783fbaf8b6d55210a7b5b31766cff1e6e"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node66/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node66/operator.bin",
+      "bytes": 22361736,
+      "sha256": "082433124e5737b3782b6d6d6d6f0425836177df423622cace44ca7d1d9b9d51"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node67/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node67/operator.bin",
+      "bytes": 22369512,
+      "sha256": "6058687d94d148a6b422091c6d7d9e144acdc3fee18d3844a5722d2f3990e79a"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node68/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node68/operator.bin",
+      "bytes": 22372040,
+      "sha256": "7eed039e786e9134f8c80e7d67721d33f027c0ea20db80d256f532ec1fdee1db"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node69/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node69/operator.bin",
+      "bytes": 22368712,
+      "sha256": "250ce80e25a7e9d76fc014b7b8ff3f0a79458924734e06dba7f8c6d39665ca01"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node70/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node70/operator.bin",
+      "bytes": 22374120,
+      "sha256": "3fc8e56b5bf15e8467d06709b5ef157a7b47a21b44b99a2ca72f5d7fb38bbed5"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node71/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node71/operator.bin",
+      "bytes": 22382888,
+      "sha256": "f0ebaae8fa4d6c8e347d7fe809ce152921760b419714fa5e00b6b3535da8a276"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node72/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node72/operator.bin",
+      "bytes": 22378792,
+      "sha256": "a33eb90e77e924b442c1532014ec07e1b21b125cf44f5d48b1c14de4ec19d56a"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node73/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node73/operator.bin",
+      "bytes": 22389576,
+      "sha256": "21bcd9edb0ffe74cd819113922c05b00596c87645750805fdf01a0573efa9fe5"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node74/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node74/operator.bin",
+      "bytes": 22387176,
+      "sha256": "a7584f3b2dde9e7a06ce4eee546af06ace484709d94cb4a20fa6b18458951c00"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node75/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node75/operator.bin",
+      "bytes": 22383272,
+      "sha256": "f57aef3bc8ffed632dc3b86c80bb51ac0a9fc93dffb7ac6408544f6dc2171dbc"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node76/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node76/operator.bin",
+      "bytes": 22387144,
+      "sha256": "194e9ae99b5a131c9a68aaac375539d73dae2ed34f4a364330affcd77a388fce"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node77/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node77/operator.bin",
+      "bytes": 22401864,
+      "sha256": "1e5e41ae77200d258d7f3668a0f2276930fe7ac2567d9f2bda983c5ff18d997a"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node78/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node78/operator.bin",
+      "bytes": 22390312,
+      "sha256": "67c122d897dd16eb04849c0d73767f9c3e060dd557a21bd1652f86922b28fb23"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node79/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node79/operator.bin",
+      "bytes": 22392008,
+      "sha256": "13731aac57158d70cb6821ff0eed1826e8035d042f16f1790a4aba2deaba01fd"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node80/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node80/operator.bin",
+      "bytes": 22392616,
+      "sha256": "45600339e896cd8652e4a3ca023e756505c72d4b756d2cada2be0207d1664f16"
+    },
+    "data/ct_electron/shared_independent_v1/photon/node81/operator.bin": {
+      "source": "out/electron_standalone_20261003/photon_complete512/node81/operator.bin",
+      "bytes": 22898280,
+      "sha256": "4114aec117716ddea6f2b94af92ed4097d71855bab5bfc8f21196b8a061eb97f"
+    }
+  },
+  "packages": [
+    "proton_independent_v1",
+    "shared_independent_v1"
+  ],
+  "package_registry": "docs/electron_packages_manifest.json"
+}

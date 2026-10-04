@@ -2135,6 +2135,7 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"E_untracked_MeV\": " << result.untracked_nuclear_energy_MeV << ",\n"
            << "  \"E_material_electron_untracked_MeV\": " << result.material_electron_untracked_MeV << ",\n"
            << "  \"E_material_photon_untracked_MeV\": " << result.material_electron_photon_untracked_MeV << ",\n"
+           << "  \"E_electron_variance_reduction_gain_MeV\": " << result.electron_variance_reduction_weight_gain_MeV << ",\n"
            << "  \"E_topas_compat_discarded_kinetic_MeV\": " << result.topas_compat_discarded_kinetic_total_MeV() << ",\n"
            << "  \"E_queue_lost_MeV\": "
            << result.secondary_queue_overflow_energy_MeV +
@@ -2193,6 +2194,19 @@ void write_energy_ledger_json(const std::filesystem::path& path,
                << "  \"nuclear_recoil_reference_grid_file\": \"" << config.primary_stopping_power_file.string() << "\",\n"
                << "  \"unified_water_material_id_note\": \"255 is a diagnostic sentinel, not a Schneider section; rate uses a separate water row\",\n";
     }
+    output << "  \"broadbeam_electron_tracking\": " << (config.broadbeam_electron_tracking ? "true" : "false") << ",\n"
+           << "  \"broadbeam_independent_electrons\": " << (config.broadbeam_independent_electrons ? "true" : "false") << ",\n"
+           << "  \"broadbeam_electron_density_threshold\": " << config.broadbeam_electron_density_threshold << ",\n"
+           << "  \"broadbeam_electron_halo_mm\": " << config.broadbeam_electron_halo_mm << ",\n"
+           << "  \"broadbeam_electron_region_metric\": \"" << config.broadbeam_electron_region_metric << "\",\n"
+           << "  \"broadbeam_electron_external_air_local\": " << (config.broadbeam_electron_external_air_local?"true":"false") << ",\n"
+           << "  \"broadbeam_electron_external_air_margin_mm\": " << config.broadbeam_electron_external_air_margin_mm << ",\n"
+           << "  \"broadbeam_electron_body_mask_file\": \"" << config.broadbeam_electron_body_mask_file.string() << "\",\n"
+           << "  \"broadbeam_electron_body_mask_sha256\": \"" << config.broadbeam_electron_body_mask_sha256 << "\",\n"
+           << "  \"broadbeam_electron_region_diagnostics\": " << (config.broadbeam_electron_region_diagnostics?"true":"false") << ",\n"
+           << "  \"broadbeam_electron_low_density_survival\": " << config.broadbeam_electron_low_density_survival << ",\n"
+           << "  \"broadbeam_electron_expected_scoring\": " << (config.broadbeam_electron_expected_scoring?"true":"false") << ",\n"
+           << "  \"broadbeam_electron_expected_min_energy_MeV\": " << config.broadbeam_electron_expected_min_energy_MeV << ",\n";
     output << "  \"transport_profile\": \"" << config.transport_profile << "\",\n"
            << "  \"fermi_eyges_gaussian_only\": " << (config.fermi_eyges_gaussian_only ? "true" : "false") << ",\n";
     output << "  \"fermi_eyges_sampling\": \"" << config.fermi_eyges_sampling << "\",\n"
@@ -2203,11 +2217,12 @@ void write_energy_ledger_json(const std::filesystem::path& path,
         output << result.fe_sampling_counts[i];
     }
     output << "],\n";
-    if(!config.material_electron_response_index_file.empty()) {
+    if(!config.material_electron_response_index_file.empty() || !config.material_electron_charged_index_file.empty()) {
+        output<<"  \"independent_charged_legacy_loading_disabled\": "<<(config.material_electron_charged_index_file.empty()?"false":"true")<<",\n";
         const auto& d=result.electron_joint_diagnostics;
         output<<"  \"material_electron_response\": {\"status\": \"unvalidated_main_kernel_integration\", "
               <<"\"density_sampling\": \""<<(config.enable_ct_grid?"candidate_same_section_density_mixture_birth_energy_packets":"deposited_fraction_weighted_brackets_no_coordinate_scaling")<<"\", "
-              <<"\"index_sha256\": \""<<config.material_electron_response_index_sha256<<"\", "
+              <<"\"index_sha256\": \""<<(config.material_electron_charged_index_file.empty()?config.material_electron_response_index_sha256:config.material_electron_charged_index_sha256)<<"\", "
               <<"\"memory_mode\": \""<<config.material_electron_response_memory_mode<<"\", "
               <<"\"execution_mode\": \""<<config.material_electron_execution_mode<<"\", "
               <<"\"group_size\": "<<config.material_electron_group_size<<", "

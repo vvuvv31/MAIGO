@@ -3,6 +3,8 @@
 #include "carbon/material_electron_density.hpp"
 
 namespace carbon {
+// No-op scorer for callers without expected-value (track-length) scoring.
+struct NoExpectedScore {template<class P,class W>void operator()(const P&,W)const{}};
 // W is an energy-valued statistical packet, distinct from the sampled
 // particle's kinetic energy. Exactly one terminal bucket owns W. Pending
 // states retain the cursor and W; they are NOT dose or patient escape.

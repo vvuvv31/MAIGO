@@ -60,3 +60,10 @@ transport_profile: broadbeam_fast
 fermi_eyges_parameter_set: species_water
 fermi_eyges_gaussian_only: true
 ct_schneider_primary_cinel03_file: data/schneider/cinel03_c12_targets_v2_1.bin
+
+# Same low-density-plus-halo policy as CT. Uniform Water_75eV at 1 g/cm3
+# has no selected region: local deposition, no electron bank loading.
+# false explicitly disables tracking. This does not enable all-water tracking.
+broadbeam_electron_tracking: true
+broadbeam_electron_density_threshold: 0.1
+broadbeam_electron_halo_mm: 5.0

@@ -1,4 +1,10 @@
 #include "carbon/immutable_input_cache.hpp"
+#ifdef CARBON_ELECTRON_SEGMENT_DIAGNOSTICS
+#include "carbon/electron_segment_diagnostics.hpp"
+#endif
+#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
+#include "carbon/electron_range_guard.hpp"
+#endif
 #include "carbon/input_dependencies.hpp"
 #include "carbon/nuclear_collision.hpp"
 #include "carbon/fe_moments.hpp"
@@ -69,6 +75,9 @@
 #include "carbon/device.hpp"
 #include "carbon/electron_transport.hpp"
 #include "carbon/electron_joint_response.hpp"
+#include "carbon/broadbeam_electron_region.hpp"
+#include "carbon/broadbeam_electron_distance.hpp"
+#include "carbon/broadbeam_body_mask.hpp"
 #include "carbon/fe_joint_replay_task.hpp"
 #ifndef CARBON_FE_JOINT_QUEUE
 #define CARBON_FE_JOINT_QUEUE 0
@@ -78,6 +87,15 @@
 #include "carbon/material_electron_birth_prepare.hpp"
 #include "carbon/material_electron_device.hpp"
 #include "carbon/electron_packet_transport.hpp"
+#include "carbon/electron_joint_pilot_device.hpp"
+#include "carbon/electron_birth_bank_device.hpp"
+#include "carbon/electron_charged_bank_device.hpp"
+#include "carbon/electron_charged_packet.hpp"
+#include "carbon/electron_fp32_device.hpp"
+#ifdef CARBON_ELECTRON_VOXEL_CACHE
+#include "carbon/electron_voxel_cache.hpp"
+#endif
+#include "carbon/photon_response_bank_device.hpp"
 #include "carbon/electron_short_range.hpp"
 #include "carbon/copper_proton_fluctuation.hpp"
 #include "carbon/inelastic.hpp"
@@ -125,6 +143,8 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <map>
+#include <typeindex>
 #include <tuple>
 #include <type_traits>
 #include <vector>
@@ -1657,7 +1677,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     RuntimeScope runtime_setup("transport_setup_including_upload");
     config.validate();
     std::cout<<"[transport-profile] requested="<<config.transport_profile
-             <<" compiled_kernel="<<(BroadBeam?(JointResponse==2?"broadbeam_fe_joint_queue":JointResponse?"broadbeam_fe_joint":"broadbeam_fe"):"reference_detailed")<<"\n";
+             <<" compiled_kernel="<<(BroadBeam?(JointResponse==3?"broadbeam_fe_independent":JointResponse==2?"broadbeam_fe_joint_queue":JointResponse?"broadbeam_fe_joint":"broadbeam_fe"):"reference_detailed")<<"\n";
     validate_schneider_ct_startup(config);
     // Parse the large read-only packages on background threads while the
     // setup below proceeds; each consumer takes the same loader's result.
@@ -1999,6 +2019,29 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const bool minibeam_water_proton_helium_urban=
         !BroadBeam && config.minibeam_water_proton_helium_mcs_model=="urban_v2";
     const bool uses_urban_package=global_urban || minibeam_water_proton_helium_urban;
+    const bool retain_physics_device = context != nullptr && [] {
+        const char* value=std::getenv("CARBON_RETAIN_PHYSICS_DEVICE");
+        if (!value || std::string_view(value)=="1") return true;
+        if (std::string_view(value)=="0") return false;
+        throw std::invalid_argument("CARBON_RETAIN_PHYSICS_DEVICE must be 0 or 1");
+    }();
+    if (context && !retain_physics_device) {
+        context->impl_->resident_em.reset(); context->impl_->resident_urban.reset();
+        context->impl_->resident_air.reset();
+    }
+    if (context && retain_physics_device) {
+        if (!uses_urban_package) context->impl_->resident_urban.reset();
+        if (config.minibeam_air_mcs_model != "urban_v2") context->impl_->resident_air.reset();
+    }
+    const auto resident_tables = [&](auto& slot,const std::string& key,const char* name) {
+        const bool hit=slot && slot->signature==key;
+        if (!hit) slot=std::make_shared<ResidentPhysicsTables>(queue,key);
+        mem_tracker.account_retained(slot->bytes);
+        std::cout<<"[device-physics-cache] "<<name<<" "<<(hit?"hit":"miss")
+                 <<" resident_bytes="<<slot->bytes<<"\n";
+        return slot;
+    };
+
     const float urban_water_half_width_mm=static_cast<float>(config.urban_water_half_width_mm);
     UrbanMcsView urban_device{};
     std::vector<UrbanMcsSpecies> urban_species_host;
@@ -2020,12 +2063,15 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 view.projectile(1,1)<0 || view.projectile(2,3)<0 || view.projectile(2,4)<0)
                 throw std::runtime_error("Urban package lacks minibeam water/proton/helium records");
         }
-        auto upload=[&]<class T>(const std::vector<T>& values){
+        auto resident=retain_physics_device ? resident_tables(context->impl_->resident_urban,
+            input_cache_key(config.urban_mcs_package_file,config.urban_mcs_package_sha256),"urban") : nullptr;
+        auto upload=[&]<class T>(const char* name,const std::vector<T>& values){
+            if (resident) return resident->upload(name,values,mem_tracker);
             auto* ptr=mem_tracker.allocate<T>(values.size());if(!ptr)throw std::bad_alloc();
             queue.copy(values.data(),ptr,values.size()).wait_and_throw();return ptr;
         };
-        urban_device={upload(package.materials),upload(package.species),upload(package.records),
-            upload(package.nodes),upload(package.mfps),upload(package.segments),
+        urban_device={upload("materials",package.materials),upload("species",package.species),upload("records",package.records),
+            upload("nodes",package.nodes),upload("mfps",package.mfps),upload("segments",package.segments),
             static_cast<unsigned>(package.materials.size()),static_cast<unsigned>(package.species.size())};
         urban_species_host=package.species;
         urban_device.ct_density_scaling=config.urban_ct_density_scaling;
@@ -2057,12 +2103,15 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
              std::abs(package.materials[0].production_cut_mm-0.05F)>1e-7F))
             throw std::invalid_argument("Air ionization clock and Urban material/cut must match");
         config.require_primary_reference_mass(package.species[air_urban_projectile].mass_mev, "Air Urban package");
-        auto upload=[&]<class T>(const std::vector<T>& values){
-            auto* ptr=mem_tracker.allocate<T>(values.size()); if(!ptr)throw std::bad_alloc();
-            queue.copy(values.data(),ptr,values.size()).wait_and_throw(); return ptr;
+        auto resident=retain_physics_device ? resident_tables(context->impl_->resident_air,
+            input_cache_key(config.minibeam_air_urban_package_file,config.minibeam_air_urban_package_sha256),"air") : nullptr;
+        auto upload=[&]<class T>(const char* name,const std::vector<T>& values){
+            if (resident) return resident->upload(name,values,mem_tracker);
+            auto* ptr=mem_tracker.allocate<T>(values.size());if(!ptr)throw std::bad_alloc();
+            queue.copy(values.data(),ptr,values.size()).wait_and_throw();return ptr;
         };
-        air_urban_device={upload(package.materials),upload(package.species),upload(package.records),
-            upload(package.nodes),upload(package.mfps),upload(package.segments),
+        air_urban_device={upload("materials",package.materials),upload("species",package.species),upload("records",package.records),
+            upload("nodes",package.nodes),upload("mfps",package.mfps),upload("segments",package.segments),
             static_cast<unsigned>(package.materials.size()),static_cast<unsigned>(package.species.size())};
         std::cout << "[air-urban] primary beamline G4_AIR; SHA256="
                   << config.minibeam_air_urban_package_sha256 << "\n";
@@ -2070,9 +2119,9 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     bool nonion_primary_package_safe=true;
     {
         const std::string unified_em_signature =
-            config.em_package_file.string()+"|"+config.em_package_sha256+"|"+
-            (config.em_delta_moments_file.empty()?std::string():config.em_delta_moments_file.string())+"|"+
-            config.em_delta_moments_sha256+"|"+config.em_delta_moments_source_sha256;
+            input_cache_key(config.em_package_file,config.em_package_sha256)+"|"+
+            (config.em_delta_moments_file.empty()?std::string():input_cache_key(config.em_delta_moments_file,config.em_delta_moments_sha256))+"|"+
+            config.em_delta_moments_source_sha256;
         std::shared_ptr<const UnifiedEmPackage> unified_package;
         std::shared_ptr<const std::vector<float>> unified_delta_means;
         bool unified_em_cache_hit=false;
@@ -2112,14 +2161,16 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         }
         if (!primary_record_found)
             throw std::invalid_argument("Unified EM package lacks the YAML primary projectile");
-        auto upload=[&]<class T>(const std::vector<T>& values){
+        auto resident=retain_physics_device ? resident_tables(context->impl_->resident_em,unified_em_signature,"em") : nullptr;
+        auto upload=[&]<class T>(const char* name,const std::vector<T>& values){
+            if (resident) return resident->upload(name,values,mem_tracker);
             auto* ptr=mem_tracker.allocate<T>(values.size());if(!ptr)throw std::bad_alloc();
             queue.copy(values.data(),ptr,values.size()).wait_and_throw();return ptr;
         };
         std::cout<<"[physics-cache] unified_em="<<(unified_em_cache_hit?"hit":"miss")
                  <<" nodes="<<package.nodes.size()<<"\n";
         RuntimeScope t_em_device("setup_em_device_upload");
-        delta_mean_device=upload(delta_means);
+        delta_mean_device=upload("delta_means",delta_means);
         if(uses_urban_package)std::cout<<"[urban-ionization-clock] native proposal clock limits true transport paths; aggregate energy law unchanged\n";
         std::cout<<"[delta-moments] condensed_partition_v1; aggregate Gamma; nodes="
                  <<package.nodes.size()<<" SHA256="<<config.em_delta_moments_sha256<<"\n";
@@ -2133,20 +2184,24 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         unified_failure_records=mem_tracker.allocate<UnifiedEmFailureRecord>(16);
         if(!unified_failure_count || !unified_failure_records)throw std::bad_alloc();
         queue.fill(unified_failure_count,0u,1).wait_and_throw();
-        unified_sections=upload(sections);
+        unified_sections=upload("sections",sections);
         if constexpr(CARBON_EM_EXACT_INDEX) {
-            const auto index=build_unified_em_index(package);
-            unified_energy_index=upload(index);
+            if (resident && resident->contains("energy_index"))
+                unified_energy_index=resident->template get<std::remove_pointer_t<decltype(unified_energy_index)>>("energy_index");
+            else {
+                const auto index=build_unified_em_index(package);
+                unified_energy_index=upload("energy_index",index);
+            }
         }
-        unified_materials=upload(package.materials);unified_species=upload(package.species);
-        unified_records=upload(package.records);unified_nodes=upload(package.nodes);unified_segments=upload(package.segments);
+        unified_materials=upload("materials",package.materials);unified_species=upload("species",package.species);
+        unified_records=upload("records",package.records);unified_nodes=upload("nodes",package.nodes);unified_segments=upload("segments",package.segments);
         if constexpr(CARBON_EM_SPLIT_SEARCH_KEYS) {
             std::vector<float> node_keys(package.nodes.size());
             for(std::size_t i=0;i<package.nodes.size();++i)node_keys[i]=package.nodes[i].energy;
             std::vector<float> segment_keys(package.segments.size());
             for(std::size_t i=0;i<package.segments.size();++i)segment_keys[i]=package.segments[i].lower;
-            unified_node_energy_keys=upload(node_keys);
-            unified_segment_lower_keys=upload(segment_keys);
+            unified_node_energy_keys=upload("node_keys",node_keys);
+            unified_segment_lower_keys=upload("segment_keys",segment_keys);
             std::cout<<"[em-search-keys] node_keys="<<node_keys.size()
                      <<" segment_keys="<<segment_keys.size()<<"\n";
         }
@@ -2208,7 +2263,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
 
     // The dedicated FE OFF instantiation still removes joint replay entirely.
     // Reference transport uses the same pinned implementation for comparison.
-    const bool use_electron_joint = BroadBeam ? JointResponse :
+    const bool use_electron_joint = BroadBeam ? (JointResponse==1 || JointResponse==2) :
         !config.ct_electron_joint_response_diagnostic_file.empty();
     const bool use_schneider_delta_tail =
         use_electron_joint && !config.ct_schneider_delta_tail_file.empty();
@@ -2237,8 +2292,15 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const bool use_minibeam_water_response = !BroadBeam && (
         config.minibeam_water_delta_response_model == "water_response_v1" ||
         config.minibeam_water_delta_response_model == "water_response_v2");
-    const bool use_material_electron=!BroadBeam && !config.material_electron_response_index_file.empty();
+    const bool use_independent_charged=(!BroadBeam || JointResponse==3) && !config.material_electron_charged_index_file.empty();
+    const bool use_electron_fp32=use_independent_charged && config.material_electron_precision==4;
+    if(config.material_electron_precision!=0 && (!use_electron_fp32 || config.material_electron_execution_mode!="queue"))
+        throw std::invalid_argument("Electron precision4 requires queued independent transport");
+    const bool use_material_electron=(!BroadBeam || JointResponse==3) && (!config.material_electron_response_index_file.empty() || use_independent_charged);
     const bool use_material_ct=use_material_electron && config.enable_ct_grid;
+    std::uint8_t* broadbeam_electron_mask=nullptr;
+    std::uint8_t* broadbeam_birth_regions=nullptr;
+    std::uint64_t* broadbeam_region_work=nullptr;
     // CT minibeam queue lookup; the environment switch retains a same-binary control.
     const bool use_material_lookup=[&]() {
         if(!use_material_ct)return false;
@@ -2278,12 +2340,58 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     };
     MaterialPacketFailure* material_failure_device=nullptr;
 #if defined(CARBON_CT_ELECTRON_QUEUE)
-    const bool defer_material_packets=!BroadBeam && config.material_electron_execution_mode=="queue";
+    const bool defer_material_packets=(!BroadBeam || JointResponse==3) && config.material_electron_execution_mode=="queue";
 #else
     constexpr bool defer_material_packets=false;
     if(config.material_electron_execution_mode=="queue")
         throw std::invalid_argument("Queue execution requires CARBON_CT_ELECTRON_QUEUE build");
 #endif
+    std::shared_ptr<IndependentElectronFloatDevice> independent_float_bank;
+    electron_fp32::ElectronBirthBankView float_birth{};
+    electron_fp32::ElectronJointPilotView float_joint{};
+    electron_fp32::ChargedBankView float_charged{};
+    electron_fp32::PhotonResponseBankView float_photon{};
+    float* float_electron_grid_ledger=nullptr;
+    float* float_electron_vr_ledger=nullptr; // per-lane signed roulette weight gain
+    std::uint64_t* electron_vr_work=nullptr; // killed / survived roulette tasks
+#ifdef CARBON_ELECTRON_SEGMENT_DIAGNOSTICS
+    electron_segment_diagnostics::Sample* float_segment_samples=nullptr;
+    std::uint64_t* float_segment_counts=nullptr;
+#endif
+#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
+    float* float_range_delta=nullptr;
+    std::uint64_t* float_range_counts=nullptr;
+#endif
+#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
+    std::uint64_t* float_step_diagnostics=nullptr;
+#endif
+    std::shared_ptr<ChargedBankDevice> independent_charged_bank;
+    ChargedBankView independent_charged{};
+    std::uint64_t* independent_charged_work=nullptr;
+    std::shared_ptr<ElectronBirthBankDevice> independent_birth_bank;
+    ElectronBirthBankView independent_birth{};
+    std::shared_ptr<PhotonResponseBankDevice> independent_photon_bank;
+    PhotonResponseBankView independent_photon{};
+    std::uint64_t* independent_photon_work=nullptr;
+    const std::uint32_t* independent_birth_legacy_mapping=nullptr;
+    std::shared_ptr<ElectronJointPilotDevice> joint_pilot_bank;
+    ElectronJointPilotView joint_pilot{};
+    std::uint64_t* joint_pilot_work=nullptr;
+    if(!config.material_electron_joint_pilot_file.empty() && !use_electron_fp32) {
+        const auto key=config.material_electron_joint_pilot_file.string()+config.material_electron_joint_pilot_sha256+
+            config.material_electron_response_index_sha256;
+        const bool hit=retain_electron_ct && context->impl_->electron_ct.joint && context->impl_->electron_ct.joint_key==key;
+        if(hit)joint_pilot_bank=context->impl_->electron_ct.joint;
+        else joint_pilot_bank=std::make_shared<ElectronJointPilotDevice>(queue,config.material_electron_joint_pilot_file,
+            config.material_electron_joint_pilot_sha256,use_independent_charged?std::string{}:config.material_electron_response_index_sha256);
+        joint_pilot=joint_pilot_bank->view;
+        if(retain_electron_ct){context->impl_->electron_ct.joint=joint_pilot_bank;context->impl_->electron_ct.joint_key=key;}
+        joint_pilot_work=sycl::malloc_device<std::uint64_t>(9,queue);
+        if(!joint_pilot_work)throw std::bad_alloc();
+        queue.memset(joint_pilot_work,0,9*sizeof(std::uint64_t)).wait_and_throw();
+        std::cout<<"[electron-joint-pilot] experimental=1 cache="<<(hit?"hit":"miss")<<" bytes="<<joint_pilot_bank->bytes<<" models="<<joint_pilot_bank->model_count
+            <<" density_scaling="<<joint_pilot_bank->density_scaling<<" max_step_mm=0.05\n";
+    }
     // Preserve per-step coverage/yield and group selection. Only the CDF
     // reference draw of the retained packet moves to the existing queue.
     const bool defer_material_birth_sampling = [&] {
@@ -2316,6 +2424,59 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const auto material_queue_chunk=config.material_electron_queue_chunk;
     const auto material_queue_lanes=config.material_electron_queue_lanes;
     const auto material_group_size=config.material_electron_group_size;
+    if(use_electron_fp32) {
+#ifdef CARBON_ELECTRON_SEGMENT_DIAGNOSTICS
+        if(!enable_ct_grid||!config.enable_voxel_scoring||config.voxel_dose_mhd_output_file.empty())
+            throw std::invalid_argument("Segment diagnostic requires FP32 CT with MHD dose output");
+        float_segment_samples=mem_tracker.allocate<electron_segment_diagnostics::Sample>(electron_segment_diagnostics::capacity);
+        float_segment_counts=mem_tracker.allocate<std::uint64_t>(2);
+        if(!float_segment_samples||!float_segment_counts)throw std::bad_alloc();
+        queue.fill(float_segment_counts,std::uint64_t{0},2).wait_and_throw();
+#endif
+#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
+        if(!enable_ct_grid||!config.enable_voxel_scoring||config.voxel_dose_mhd_output_file.empty())
+            throw std::invalid_argument("Range diagnostic requires FP32 CT with MHD dose output");
+        float_range_delta=mem_tracker.allocate<float>(number_of_voxels);
+        float_range_counts=mem_tracker.allocate<std::uint64_t>(10);
+        if(!float_range_delta||!float_range_counts)throw std::bad_alloc();
+        queue.fill(float_range_delta,0.f,number_of_voxels);
+        queue.fill(float_range_counts,std::uint64_t{0},10).wait_and_throw();
+#endif
+#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
+        float_step_diagnostics=mem_tracker.allocate<std::uint64_t>(64*1536);
+        if(!float_step_diagnostics)throw std::bad_alloc();
+        queue.fill(float_step_diagnostics,std::uint64_t{0},64*1536).wait_and_throw();
+#endif
+        float_electron_grid_ledger=mem_tracker.allocate<float>(2*material_queue_lanes);
+        if(!float_electron_grid_ledger)throw std::bad_alloc();
+        queue.fill(float_electron_grid_ledger,0.f,2*material_queue_lanes).wait_and_throw();
+        float_electron_vr_ledger=mem_tracker.allocate<float>(material_queue_lanes);
+        electron_vr_work=mem_tracker.allocate<std::uint64_t>(2);
+        if(!float_electron_vr_ledger||!electron_vr_work)throw std::bad_alloc();
+        queue.fill(float_electron_vr_ledger,0.f,material_queue_lanes);
+        queue.fill(electron_vr_work,std::uint64_t{0},2).wait_and_throw();
+    }
+    // Low-density electron variance reduction (unbiased; see transport_config).
+    // A negative density disables a feature: physical densities are positive.
+    const bool electron_vr_scope=use_electron_fp32 && config.broadbeam_electron_tracking &&
+        config.broadbeam_independent_electrons && config.enable_ct_grid;
+    if((config.broadbeam_electron_low_density_survival!=1 || config.broadbeam_electron_expected_scoring) && !electron_vr_scope)
+        throw std::invalid_argument("Low-density electron variance reduction requires the FP32 CT broadbeam shared-electron worker");
+#ifndef CARBON_ELECTRON_VOXEL_CACHE
+    if(config.broadbeam_electron_expected_scoring)
+        throw std::invalid_argument("Expected-value electron scoring requires CARBON_ELECTRON_VOXEL_CACHE");
+#endif
+    const float electron_roulette_survival=static_cast<float>(config.broadbeam_electron_low_density_survival);
+    const float electron_roulette_density=electron_vr_scope && electron_roulette_survival<1.f?
+        static_cast<float>(config.broadbeam_electron_density_threshold):-1.f;
+    const std::uint64_t electron_roulette_bits=electron_fp32::probability_threshold(electron_roulette_survival);
+    const float electron_expected_density=electron_vr_scope && config.broadbeam_electron_expected_scoring?
+        static_cast<float>(config.broadbeam_electron_density_threshold):-1.f;
+    const float electron_expected_min_energy=static_cast<float>(config.broadbeam_electron_expected_min_energy_MeV);
+    if(electron_vr_scope)
+        std::cout<<"[electron-variance-reduction] roulette_survival="<<electron_roulette_survival
+                 <<" roulette_density_le="<<electron_roulette_density<<" expected_scoring="<<config.broadbeam_electron_expected_scoring
+                 <<" expected_density_le="<<electron_expected_density<<" expected_min_energy_MeV="<<electron_expected_min_energy<<"\n";
     if (defer_material_packets) {
         if(!use_material_ct || config.run_mode!=RunMode::research || config.enable_let_scoring ||
            config.material_electron_short_range_mm>0 || config.enable_charged_origin_voxel_scoring)
@@ -2584,6 +2745,96 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         for (const auto section : grid.material_id)
             if (section >= 25)
                 throw std::invalid_argument("Unified EM CT material section must be in [0,24]");
+        std::vector<std::uint8_t> electron_region;
+        if constexpr(BroadBeam && JointResponse==3) {
+            std::vector<float> uncached_distance;
+            const std::vector<float>* distance=nullptr;
+            if(config.broadbeam_electron_region_diagnostics || config.broadbeam_electron_region_metric=="euclidean") {
+                if(context) {
+                    auto& cached=context->impl_->electron_ct;
+                    if(cached.electron_distance_mm.empty() || cached.electron_distance_threshold!=config.broadbeam_electron_density_threshold) {
+                        cached.electron_distance_mm=broadbeam_electron_box_distance(grid.density_g_per_cm3,{grid.nx,grid.ny,grid.nz},
+                            {grid.spacing_x_mm,grid.spacing_y_mm,grid.spacing_z_mm},config.broadbeam_electron_density_threshold);
+                        cached.electron_distance_threshold=config.broadbeam_electron_density_threshold;
+                    }
+                    distance=&cached.electron_distance_mm;
+                } else {
+                    uncached_distance=broadbeam_electron_box_distance(grid.density_g_per_cm3,{grid.nx,grid.ny,grid.nz},
+                        {grid.spacing_x_mm,grid.spacing_y_mm,grid.spacing_z_mm},config.broadbeam_electron_density_threshold);
+                    distance=&uncached_distance;
+                }
+            }
+            if(config.broadbeam_electron_region_metric=="euclidean") {
+                electron_region.resize(distance->size());
+                for(std::size_t i=0;i<distance->size();++i)electron_region[i]=(*distance)[i]<=config.broadbeam_electron_halo_mm+1e-6;
+            } else if(context) {
+                // The cached grid is reset with its geometry key; reuse the
+                // identical box dilation across batches.
+                auto& cached=context->impl_->electron_ct;
+                char key[96];std::snprintf(key,sizeof key,"%a:%a",config.broadbeam_electron_density_threshold,config.broadbeam_electron_halo_mm);
+                if(cached.electron_region_key!=key){
+                    cached.electron_region_box=broadbeam_electron_region(grid.density_g_per_cm3,{grid.nx,grid.ny,grid.nz},
+                        {grid.spacing_x_mm,grid.spacing_y_mm,grid.spacing_z_mm},
+                        config.broadbeam_electron_density_threshold,config.broadbeam_electron_halo_mm);
+                    cached.electron_region_key=key;
+                }
+                electron_region=cached.electron_region_box;
+            } else
+            electron_region=broadbeam_electron_region(grid.density_g_per_cm3,{grid.nx,grid.ny,grid.nz},
+                {grid.spacing_x_mm,grid.spacing_y_mm,grid.spacing_z_mm},
+                config.broadbeam_electron_density_threshold,config.broadbeam_electron_halo_mm);
+            std::vector<std::uint8_t> uncached_body;
+            std::vector<float> uncached_body_distance;
+            const std::vector<std::uint8_t>* body=nullptr;
+            if(config.broadbeam_electron_external_air_local ||
+               (config.broadbeam_electron_region_diagnostics && !config.broadbeam_electron_body_mask_file.empty())) {
+                const auto key=input_cache_key(config.broadbeam_electron_body_mask_file,config.broadbeam_electron_body_mask_sha256)+geometry_key;
+                auto& mask=context?context->impl_->electron_ct.electron_body_mask:uncached_body;
+                auto& dist=context?context->impl_->electron_ct.electron_body_distance_mm:uncached_body_distance;
+                if(!context || context->impl_->electron_ct.electron_body_key!=key) {
+                    mask=load_broadbeam_body_mask(config.broadbeam_electron_body_mask_file,config.broadbeam_electron_body_mask_sha256,config.ct_grid_file,
+                        {grid.nx,grid.ny,grid.nz},{grid.origin_x_mm,grid.origin_y_mm,grid.origin_z_mm},{grid.spacing_x_mm,grid.spacing_y_mm,grid.spacing_z_mm});
+                    dist.clear();if(context)context->impl_->electron_ct.electron_body_key=key;
+                }
+                body=&mask;
+                if(config.broadbeam_electron_external_air_local && config.broadbeam_electron_external_air_margin_mm>0 && dist.empty()) {
+                    std::vector<float> seed(mask.size());
+                    for(std::size_t i=0;i<mask.size();++i)seed[i]=mask[i]?.01f:1.f;
+                    dist=broadbeam_electron_box_distance(seed,{grid.nx,grid.ny,grid.nz},{grid.spacing_x_mm,grid.spacing_y_mm,grid.spacing_z_mm},.1);
+                }
+                if(config.broadbeam_electron_external_air_local) {
+                std::size_t localized=0;
+                for(std::size_t i=0;i<mask.size();++i)if(!mask[i] && grid.density_g_per_cm3[i]<=config.broadbeam_electron_density_threshold &&
+                   (config.broadbeam_electron_external_air_margin_mm==0 || dist[i]>config.broadbeam_electron_external_air_margin_mm+1e-6)) {
+                    localized+=electron_region[i];electron_region[i]=0;
+                }
+                std::cout<<"[broadbeam-external-air] body_mask=pinned margin_mm="<<config.broadbeam_electron_external_air_margin_mm<<" localized_voxels="<<localized<<'\n';
+                }
+            }
+            broadbeam_electron_mask=mem_tracker.allocate<std::uint8_t>(electron_region.size());
+            if(!broadbeam_electron_mask)throw std::bad_alloc();
+            queue.copy(electron_region.data(),broadbeam_electron_mask,electron_region.size()).wait_and_throw();
+            std::cout<<"[broadbeam-electron-region] density_threshold="<<config.broadbeam_electron_density_threshold
+                     <<" metric="<<config.broadbeam_electron_region_metric
+                     <<" halo_mm="<<config.broadbeam_electron_halo_mm<<" selected_voxels="
+                     <<std::count(electron_region.begin(),electron_region.end(),std::uint8_t{1})
+                     <<" total_voxels="<<electron_region.size()<<" continuation=unrestricted\n";
+            if(config.broadbeam_electron_region_diagnostics) {
+                auto regions=broadbeam_electron_birth_regions(grid.density_g_per_cm3,{grid.nx,grid.ny,grid.nz},
+                    config.broadbeam_electron_density_threshold,*distance);
+                if(body)for(std::size_t i=0;i<regions.size();++i)if(grid.density_g_per_cm3[i]<=config.broadbeam_electron_density_threshold)regions[i]=(*body)[i]?1:0;
+                std::cout<<"[electron-birth-region-definition] low_density="<<(body?"anatomical_BODY":"six_connected_CT_boundary_proxy")<<'\n';
+                broadbeam_birth_regions=mem_tracker.allocate<std::uint8_t>(regions.size());
+                broadbeam_region_work=mem_tracker.allocate<std::uint64_t>(7*12);
+                if(!broadbeam_birth_regions||!broadbeam_region_work)throw std::bad_alloc();
+                queue.copy(regions.data(),broadbeam_birth_regions,regions.size());queue.fill(broadbeam_region_work,std::uint64_t{0},7*12).wait_and_throw();
+                for(unsigned r=0;r<6;++r) {
+                    std::size_t selected=0,total=0;double mass=0;
+                    for(std::size_t i=0;i<regions.size();++i)if(regions[i]==r){++total;if(electron_region[i]){++selected;mass+=grid.density_g_per_cm3[i]*grid.spacing_x_mm*grid.spacing_y_mm*grid.spacing_z_mm/1000.;}}
+                    std::cout<<"[electron-birth-region-geometry] region="<<r<<" voxels="<<total<<" selected="<<selected<<" selected_mass_g="<<mass<<'\n';
+                }
+            }
+        }
         if(use_material_ct) {
             if(grid.file_version<CtGrid::version_v2)
                 throw std::invalid_argument("Material electron transport requires Schneider section IDs");
@@ -2592,6 +2843,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                std::abs(grid.spacing_y_mm-config.voxel_size_y_mm)>1e-6 ||
                std::abs(grid.spacing_z_mm-config.voxel_size_z_mm)>1e-6 || std::abs(grid.origin_z_mm)>1e-6)
                 throw std::invalid_argument("Material CT packet scorer must align with CT grid, z origin zero");
+            if(!use_independent_charged) {
             const auto response_index=MaterialElectronResponseIndex::load(config.material_electron_response_index_file,
                 config.material_electron_response_index_sha256,config.primary_atomic_number,config.primary_mass_number);
             // The retained bank is an immutable snapshot validated on first load.
@@ -2603,7 +2855,13 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 <<":"<<config.material_electron_response_cache_policy<<":"<<config.material_electron_response_host_budget_MiB
                 <<":"<<config.material_electron_response_device_budget_MiB<<":"<<config.material_electron_response_hot_device_budget_MiB
                 <<":"<<(config.material_electron_short_range_mm>0)
-                <<":"<<use_material_lookup<<":"<<geometry_key;
+                <<":"<<use_material_lookup<<":"<<geometry_key
+                <<":"<<std::quoted(config.material_electron_packed_directory.string())
+                <<":"<<std::quoted(config.material_electron_compact_directory.string())
+                <<":"<<(std::getenv("CARBON_ELECTRON_PREVALIDATED")?std::getenv("CARBON_ELECTRON_PREVALIDATED"):"0")
+                <<":"<<(std::getenv("CARBON_ELECTRON_PACK_EM_ONLY")?std::getenv("CARBON_ELECTRON_PACK_EM_ONLY"):"0")
+                <<":"<<std::quoted(std::getenv("CARBON_ELECTRON_CARBON_COMPACT_DIR")?std::getenv("CARBON_ELECTRON_CARBON_COMPACT_DIR"):"")
+                <<":"<<std::quoted(std::getenv("CARBON_MATERIAL_PREPARED_DIR")?std::getenv("CARBON_MATERIAL_PREPARED_DIR"):"");
             const auto bank_key=bank_key_stream.str();
             const bool bank_hit=retain_electron_ct && context->impl_->electron_ct.bank &&
                 context->impl_->electron_ct.bank_key==bank_key;
@@ -2632,15 +2890,132 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 config.material_electron_response_cache_policy=="tiered_decoded" || config.material_electron_response_cache_policy=="tiered_small_decoded");
             material_electron_bank->load(response_index,demand,
                 budget-10*sizeof(std::uint64_t)-sizeof(MaterialPacketFailure),true,
-                config.material_electron_short_range_mm>0,use_material_lookup);
+                config.material_electron_short_range_mm>0,use_material_lookup,config.material_electron_packed_directory,config.material_electron_compact_directory);
                 if(retain_electron_ct) {
                     context->impl_->electron_ct.bank=material_electron_bank;
                     context->impl_->electron_ct.bank_key=bank_key;
                 }
             }
             if(retain_electron_ct)std::cout<<"[electron-bank-cache] "<<(bank_hit?"hit":"miss")<<"\n";
+            const char* c12_compact_env=std::getenv("CARBON_ELECTRON_CARBON_COMPACT_DIR");
+            if(!config.material_electron_compact_directory.empty() || (c12_compact_env && *c12_compact_env))
+                std::cout<<"[material-response-format] carbon_em_v7 endpoint_record_bytes="<<sizeof(ElectronEndpointRecord)<<" endpoint_bytes="<<sizeof(ElectronEndpoint)
+                         <<" shared_track_bytes="<<sizeof(ElectronCompactTrack)
+                         <<" total_bytes="<<material_electron_bank->allocated_bytes()<<"\n";
+            if(joint_pilot_bank && retain_electron_ct) {
+                context->impl_->electron_ct.joint=joint_pilot_bank;
+                context->impl_->electron_ct.joint_key=config.material_electron_joint_pilot_file.string()+
+                    config.material_electron_joint_pilot_sha256+config.material_electron_response_index_sha256;
+            }
             material_electron_views=material_electron_bank->views();material_electron_view_count=material_electron_bank->size();
             material_electron_lookup=material_electron_bank->lookup();
+            } else {
+                if(retain_electron_ct){context->impl_->electron_ct.bank.reset();context->impl_->electron_ct.bank_key.clear();}
+                if(!use_electron_fp32) {
+                const auto key=config.material_electron_charged_index_file.string()+config.material_electron_charged_index_sha256;
+                const bool hit=retain_electron_ct&&context->impl_->electron_ct.charged&&context->impl_->electron_ct.charged_key==key;
+                if(hit)independent_charged_bank=context->impl_->electron_ct.charged;
+                else independent_charged_bank=std::make_shared<ChargedBankDevice>(queue,config.material_electron_charged_index_file,config.material_electron_charged_index_sha256);
+                independent_charged=independent_charged_bank->view;
+                if(retain_electron_ct){context->impl_->electron_ct.charged=independent_charged_bank;context->impl_->electron_ct.charged_key=key;}
+                independent_charged_work=mem_tracker.allocate<std::uint64_t>(8);if(!independent_charged_work)throw std::bad_alloc();
+                queue.fill(independent_charged_work,std::uint64_t{0},8).wait_and_throw();
+                // Validate every actual CT section/density before launching transport.
+                {std::array<double,256> lows,highs;lows.fill(INFINITY);highs.fill(0);
+                for(const auto& node:independent_charged_bank->host_nodes)if(node.section>=0&&node.section<256){
+                    lows[node.section]=std::min(lows[node.section],node.density);highs[node.section]=std::max(highs[node.section],node.density);}
+                for(std::size_t i=0;i<grid.material_id.size();++i){const int section=grid.material_id[i];const double rho=grid.density_g_per_cm3[i];
+                    if(!std::isfinite(rho)||rho<lows[section]||rho>highs[section])throw std::runtime_error("Independent charged bank misses CT material/density");
+                }}
+                std::cout<<"[independent-charged] cache="<<(hit?"hit":"miss")<<" nodes="<<independent_charged.count<<" bytes="<<independent_charged_bank->bytes<<" legacy_loaded=0 legacy_fallback=0\n";
+                if(joint_pilot_bank&&retain_electron_ct){context->impl_->electron_ct.joint=joint_pilot_bank;context->impl_->electron_ct.joint_key=config.material_electron_joint_pilot_file.string()+config.material_electron_joint_pilot_sha256+config.material_electron_response_index_sha256;}
+                } else {
+                    const auto key=config.material_electron_birth_file.string()+config.material_electron_birth_sha256+
+                        config.material_electron_joint_pilot_file.string()+config.material_electron_joint_pilot_sha256+
+                        config.material_electron_charged_index_file.string()+config.material_electron_charged_index_sha256+
+                        config.material_photon_response_index_file.string()+config.material_photon_response_index_sha256+
+                        ":Z"+std::to_string(config.primary_atomic_number)+":A"+std::to_string(config.primary_mass_number);
+                    const bool hit=retain_electron_ct&&context->impl_->electron_ct.fp32&&context->impl_->electron_ct.fp32_key==key;
+                    if(hit)independent_float_bank=context->impl_->electron_ct.fp32;
+                    else independent_float_bank=std::make_shared<IndependentElectronFloatDevice>(queue,
+                        config.material_electron_birth_file,config.material_electron_birth_sha256,
+                        config.material_electron_joint_pilot_file,config.material_electron_joint_pilot_sha256,
+                        config.material_electron_charged_index_file,config.material_electron_charged_index_sha256,
+                        config.material_photon_response_index_file,config.material_photon_response_index_sha256,
+                        config.primary_atomic_number,config.primary_mass_number);
+                    if(retain_electron_ct){context->impl_->electron_ct.fp32=independent_float_bank;context->impl_->electron_ct.fp32_key=key;}
+                    float_birth=independent_float_bank->birth;float_joint=independent_float_bank->joint;
+                    float_charged=independent_float_bank->charged;float_photon=independent_float_bank->photon;
+                    {std::array<float,256> lows,highs;lows.fill(INFINITY);highs.fill(0);
+                    for(const auto& node:independent_float_bank->charged_nodes)if(node.section>=0&&node.section<256){
+                        lows[node.section]=std::min(lows[node.section],node.density);highs[node.section]=std::max(highs[node.section],node.density);}
+                    for(std::size_t i=0;i<grid.material_id.size();++i){const int section=grid.material_id[i];const float rho=grid.density_g_per_cm3[i];
+                        if(!std::isfinite(rho)||rho<lows[section]||rho>highs[section])throw std::runtime_error("FP32 charged bank misses CT material/density");}}
+                    if constexpr(BroadBeam && JointResponse==3) {
+                        std::size_t misses=0;int first_section=-1;float first_density=0;
+                        std::array<float,256> lows,highs;lows.fill(INFINITY);highs.fill(0);
+                        for(const auto& node:independent_float_bank->birth_materials)if(node.first>=0&&node.first<256){
+                            lows[node.first]=std::min(lows[node.first],node.second);highs[node.first]=std::max(highs[node.first],node.second);}
+                        for(std::size_t i=0;i<electron_region.size();++i)if(electron_region[i]) {
+                            const int section=grid.material_id[i];const float rho=grid.density_g_per_cm3[i];
+                            if(rho<lows[section]||rho>highs[section]){if(!misses){first_section=section;first_density=rho;}++misses;}
+                        }
+                        if(misses)throw std::runtime_error("Broadbeam selected region misses projectile birth coverage: voxels="+
+                            std::to_string(misses)+" first_section="+std::to_string(first_section)+" density="+std::to_string(first_density));
+                    }
+                    independent_charged_work=mem_tracker.allocate<std::uint64_t>(8);
+                    independent_photon_work=mem_tracker.allocate<std::uint64_t>(8);
+                    joint_pilot_work=mem_tracker.allocate<std::uint64_t>(9);
+                    if(!independent_charged_work||!independent_photon_work||!joint_pilot_work)throw std::bad_alloc();
+                    queue.fill(independent_charged_work,std::uint64_t{0},8);queue.fill(independent_photon_work,std::uint64_t{0},8);queue.fill(joint_pilot_work,std::uint64_t{0},9).wait_and_throw();
+                    std::cout<<"[electron-arithmetic] precision=4 transport=FP32 geometry=FP32 CDF=uint64 dose=FP32\n";
+                    std::cout<<"[independent-fp32-bank] cache="<<(hit?"hit":"miss")<<" bytes="<<independent_float_bank->bytes
+                        <<" mapped_bytes="<<independent_float_bank->mapped_bytes<<" source_bytes="<<independent_float_bank->source_bytes<<" legacy_loaded=0 legacy_fallback=0\n";
+                }
+            }
+            if(!config.material_electron_birth_file.empty() && !use_electron_fp32) {
+                const auto key=config.material_electron_birth_file.string()+config.material_electron_birth_sha256+
+                    ":Z"+std::to_string(config.primary_atomic_number)+":A"+std::to_string(config.primary_mass_number);
+                const bool hit=retain_electron_ct&&context->impl_->electron_ct.birth&&context->impl_->electron_ct.birth_key==key;
+                if(hit)independent_birth_bank=context->impl_->electron_ct.birth;
+                else independent_birth_bank=std::make_shared<ElectronBirthBankDevice>(queue,config.material_electron_birth_file,config.material_electron_birth_sha256,
+                    config.primary_atomic_number,config.primary_mass_number);
+                independent_birth=independent_birth_bank->view;
+                if(retain_electron_ct){context->impl_->electron_ct.birth=independent_birth_bank;context->impl_->electron_ct.birth_key=key;}
+                if(!use_independent_charged) {
+                // Transitional map is used only for legacy interface fallback.
+                // Birth fractions, CDFs and root states come solely from the new bank.
+                std::vector<MaterialElectronResponseView> old_views(material_electron_view_count);
+                queue.copy(material_electron_views,old_views.data(),old_views.size()).wait_and_throw();
+                std::vector<std::uint32_t> mapping(independent_birth.count,std::numeric_limits<std::uint32_t>::max());
+                for(std::size_t i=0;i<independent_birth_bank->host_nodes.size();++i){
+                    const auto& node=independent_birth_bank->host_nodes[i];
+                    for(std::size_t j=0;j<old_views.size();++j)if(node.section==old_views[j].section&&node.density==old_views[j].density_g_cm3)mapping[i]=j;
+                }
+                for(const auto& old:old_views){
+                    bool covered=false;for(const auto& n:independent_birth_bank->host_nodes)if(n.section==old.section&&n.density==old.density_g_cm3)covered=true;
+                    if(!covered)throw std::runtime_error("Independent birth bank misses a required response node");
+                }
+                auto* ptr=mem_tracker.allocate<std::uint32_t>(mapping.size());if(!ptr)throw std::bad_alloc();
+                queue.copy(mapping.data(),ptr,mapping.size()).wait_and_throw();independent_birth_legacy_mapping=ptr;
+                std::cout<<"[independent-electron-birth] cache="<<(hit?"hit":"miss")<<" nodes="<<independent_birth.count
+                    <<" bytes="<<independent_birth_bank->bytes<<" legacy_birth_reads=0 legacy_transport_fallback=1\n";
+                } else std::cout<<"[independent-electron-birth] nodes="<<independent_birth.count<<" bytes="<<independent_birth_bank->bytes<<" legacy_birth_reads=0 legacy_transport_fallback=0\n";
+            }
+
+            if(!config.material_photon_response_index_file.empty() && !use_electron_fp32) {
+                const auto key=config.material_photon_response_index_file.string()+config.material_photon_response_index_sha256;
+                const bool hit=retain_electron_ct&&context->impl_->electron_ct.photon&&context->impl_->electron_ct.photon_key==key;
+                if(hit)independent_photon_bank=context->impl_->electron_ct.photon;
+                else independent_photon_bank=std::make_shared<PhotonResponseBankDevice>(queue,config.material_photon_response_index_file,config.material_photon_response_index_sha256);
+                independent_photon=independent_photon_bank->view;
+                if(retain_electron_ct){context->impl_->electron_ct.photon=independent_photon_bank;context->impl_->electron_ct.photon_key=key;}
+                independent_photon_work=mem_tracker.allocate<std::uint64_t>(8);
+                if(!independent_photon_work)throw std::bad_alloc();
+                queue.fill(independent_photon_work,std::uint64_t{0},8).wait_and_throw();
+                std::cout<<"[independent-photon] cache="<<(hit?"hit":"miss")<<" nodes="<<independent_photon.count
+                    <<" bytes="<<independent_photon_bank->bytes<<" mapped_bytes="<<independent_photon_bank->mapped_bytes<<" legacy_photon_replay=0\n";
+            }
             std::cout<<"[electron-material-index] enabled="<<use_material_lookup
                 <<" sections="<<material_electron_lookup.section_count
                 <<" tables="<<material_electron_lookup.table_count<<"\n";
@@ -3692,13 +4067,20 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     // the uniform-water substitutions to patient transport.
     const bool ct_minibeam_split = !BroadBeam && config.enable_minibeam &&
         config.enable_ct_grid && config.minibeam_primary_pipeline != "combined";
+    // The shared beamline and generic material-aware stage 4 retain the
+    // projectile ZA and total kinetic energy in their runtime state. C12 may
+    // use this handoff with its own pinned packages. The proton-only stage 11
+    // and Cu-child queue eligibility checks below remain unchanged.
+    const bool ct_minibeam_projectile_supported =
+        (config.primary_atomic_number == 1 && config.primary_mass_number == 1) ||
+        (config.primary_atomic_number == 6 && config.primary_mass_number == 12);
     if(ct_minibeam_split && (config.run_mode!=RunMode::research ||
         config.enable_tps_source || config.enable_tps_coordinate_system ||
-        config.primary_atomic_number!=1 || config.primary_mass_number!=1 ||
+        !ct_minibeam_projectile_supported ||
         config.multiple_scattering_model!="urban_v2" || config.minibeam_primary_pipeline!="compact" ||
         config.minibeam_transport_mode!="copper_em" || !config.enable_secondary_transport ||
         !config.minibeam_water_entry_secondary_replay_file.empty()))
-        throw std::invalid_argument("CT split minibeam requires research proton Urban copper transport without TPS/replay");
+        throw std::invalid_argument("CT split minibeam requires research proton/C12 Urban copper transport without TPS/replay");
 #if defined(CARBON_ENABLE_MINIBEAM)
     const bool queue_copper_primary_children = [&] {
         const char* value=std::getenv("CARBON_MINIBEAM_CU_CHARGED_QUEUE");
@@ -4221,6 +4603,32 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     std::cout << "[input-cache] hits=" << inputs.hits-input_hits_before
               << " misses=" << inputs.misses-input_misses_before << "\n";
     runtime_setup.finish();
+    // Broadbeam CT (shared FP32 electrons): fold the fixed configuration into
+    // dedicated primary/secondary kernels. Ineligible runs keep generic stage 6.
+    const auto broadbeam_ct_switch=[](const char* name) {
+        const char* v=std::getenv(name);
+        if(!v)return true;
+        const std::string_view s(v);
+        if(s!="0"&&s!="1")throw std::invalid_argument(std::string(name)+" must be 0 or 1");
+        return s=="1";
+    };
+    bool broadbeam_ct_primary_specialize=false,broadbeam_ct_secondary_specialize=false;
+    if constexpr(BroadBeam && JointResponse==3) {
+        const bool primary_eligible = enable_ct_grid && !enable_hetero_insert && !use_unified_water &&
+            enable_voxel_scoring && enable_multiple_scattering && enable_inelastic && use_schneider_primary_xs &&
+            use_material_electron && use_material_ct && defer_material_packets && !use_minibeam_water_response &&
+            !use_ct_elastic && !use_schneider_delta_tail && !use_schneider_delta_longitudinal &&
+            !use_longitudinal_interface_mass && slab_layer_count==0 && !enable_charged_origin_voxel_scoring &&
+            !enable_minibeam_component_voxel_scoring && !enable_minibeam_energy_band_roi_scoring &&
+            use_electron_fp32 && use_independent_charged && !enable_primary_voxel_fluence && !voxel_scorer_clamps_transport;
+        const bool secondary_eligible = enable_ct_grid && enable_voxel_scoring && ct_secondary_exact_faces &&
+            ct_skip_homogeneous_face_clamp && !use_unified_water && !enable_charged_origin_voxel_scoring &&
+            !enable_minibeam_component_voxel_scoring && !enable_minibeam_energy_band_roi_scoring;
+        broadbeam_ct_primary_specialize=primary_eligible && broadbeam_ct_switch("CARBON_BROADBEAM_CT_PRIMARY_SPECIALIZE");
+        broadbeam_ct_secondary_specialize=secondary_eligible && broadbeam_ct_switch("CARBON_BROADBEAM_CT_SECONDARY_SPECIALIZE");
+        std::cout<<"[broadbeam-ct-specialize] primary_eligible="<<primary_eligible<<" primary="<<broadbeam_ct_primary_specialize
+                 <<" secondary_eligible="<<secondary_eligible<<" secondary="<<broadbeam_ct_secondary_specialize<<"\n";
+    }
     RuntimeScope runtime_steps("transport_loop_including_scoring_and_queue_transfers");
     double primary_kernel_seconds = 0.0;
 #if CARBON_PRIMARY_PRODUCTION_SPECIALIZE
@@ -4438,7 +4846,14 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             constexpr int kKernelStage = decltype(stage_tag)::value;
             constexpr bool kQueueCopperChildren = kKernelStage == 8 || kKernelStage == 9 || kKernelStage == 10;
             constexpr bool kCtQueuedPrimaryPath = kKernelStage == 11;
-            constexpr int kPrimaryStage = kCtQueuedPrimaryPath ? 4 : kKernelStage == 8 ? 1 : (kKernelStage == 9 || kKernelStage == 10) ? 3 : kKernelStage;
+            // Stage 12 is broadbeam stage 6 with host-proven CT-shared-electron
+            // configuration folded at compile time (no physics difference).
+            constexpr bool kBroadBeamCtPath = kKernelStage == 12 || kKernelStage == 13 || kKernelStage == 14;
+            // 13/14 additionally fold the host-checked projectile (proton / C12).
+            constexpr int kFoldZ = kKernelStage == 13 ? 1 : kKernelStage == 14 ? 6 : 0;
+            constexpr int kFoldA = kKernelStage == 13 ? 1 : kKernelStage == 14 ? 12 : 0;
+            static_assert(!kBroadBeamCtPath || (BroadBeam && JointResponse==3));
+            constexpr int kPrimaryStage = kCtQueuedPrimaryPath ? 4 : kKernelStage == 8 ? 1 : (kKernelStage == 9 || kKernelStage == 10) ? 3 : kBroadBeamCtPath ? 6 : kKernelStage;
             constexpr bool kUniformWaterPrimaryPath = decltype(uniform_water_path_tag)::value;
             // Host eligibility requires global Urban for every split beamline.
             // Downstream CT material handling must not select upstream physics.
@@ -4466,33 +4881,49 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             const auto ct_runtime_primary_atomic_number = primary_atomic_number;
             const auto ct_runtime_primary_mass_number = primary_mass_number;
             const auto ct_runtime_inverse_mass_number = inverse_mass_number;
+            const auto ct_runtime_enable_charged_origin_voxel_scoring = enable_charged_origin_voxel_scoring;
+            const auto ct_runtime_enable_minibeam_component_voxel_scoring = enable_minibeam_component_voxel_scoring;
+            const auto ct_runtime_enable_minibeam_energy_band_roi_scoring = enable_minibeam_energy_band_roi_scoring;
+            const auto ct_runtime_use_electron_fp32 = use_electron_fp32;
+            const auto ct_runtime_use_independent_charged = use_independent_charged;
+            const auto ct_runtime_enable_primary_voxel_fluence = enable_primary_voxel_fluence;
+            const auto ct_runtime_voxel_scorer_clamps_transport = voxel_scorer_clamps_transport;
+            const auto ct_runtime_minibeam_water_proton_helium_urban = minibeam_water_proton_helium_urban;
             return queue.parallel_for<CarbonPrimaryTransportKernel<
                 kProductionPrimaryPath, kUniformWaterPrimaryPath, kKernelStage, BroadBeam, Gaussian, JointResponse>>(
             sycl::nd_range<1>{sycl::range<1>{chunk_global}, sycl::range<1>{local_size}},
             [=](sycl::nd_item<1> item) {
                 // Constexpr-selected values remove unused physics branches;
                 // the host eligibility test proves their runtime equivalence.
-                const auto global_urban = kCtQueuedPrimaryPath ? true : ct_runtime_global_urban;
-                const auto enable_ct_grid = kCtQueuedPrimaryPath ? true : ct_runtime_enable_ct_grid;
-                const auto enable_hetero_insert = kCtQueuedPrimaryPath ? false : ct_runtime_enable_hetero_insert;
-                const auto use_unified_water = kCtQueuedPrimaryPath ? false : ct_runtime_use_unified_water;
-                const auto enable_voxel_scoring = kCtQueuedPrimaryPath ? true : ct_runtime_enable_voxel_scoring;
-                const auto enable_multiple_scattering = kCtQueuedPrimaryPath ? true : ct_runtime_enable_multiple_scattering;
-                const auto enable_inelastic = kCtQueuedPrimaryPath ? true : ct_runtime_enable_inelastic;
-                const auto use_schneider_primary_xs = kCtQueuedPrimaryPath ? true : ct_runtime_use_schneider_primary_xs;
-                const auto use_material_electron = kCtQueuedPrimaryPath ? true : ct_runtime_use_material_electron;
-                const auto use_material_ct = kCtQueuedPrimaryPath ? true : ct_runtime_use_material_ct;
-                const auto defer_material_packets = kCtQueuedPrimaryPath ? true : ct_runtime_defer_material_packets;
-                const auto use_minibeam_water_response = kCtQueuedPrimaryPath ? false : ct_runtime_use_minibeam_water_response;
-                const auto use_ct_elastic = kCtQueuedPrimaryPath ? false : ct_runtime_use_ct_elastic;
-                const auto use_schneider_delta_tail = kCtQueuedPrimaryPath ? false : ct_runtime_use_schneider_delta_tail;
-                const auto use_schneider_delta_longitudinal = kCtQueuedPrimaryPath ? false : ct_runtime_use_schneider_delta_longitudinal;
-                const auto use_longitudinal_interface_mass = kCtQueuedPrimaryPath ? false : ct_runtime_use_longitudinal_interface_mass;
-                const auto slab_layer_count = kCtQueuedPrimaryPath ? 0 : ct_runtime_slab_layer_count;
-                const auto primary_atomic_number = kCtQueuedPrimaryPath ? 1 : ct_runtime_primary_atomic_number;
-                const auto primary_mass_number = kCtQueuedPrimaryPath ? 1 : ct_runtime_primary_mass_number;
-                const auto inverse_mass_number = kCtQueuedPrimaryPath ? 1.0F : ct_runtime_inverse_mass_number;
-                const bool enable_minibeam = kPrimaryStage == 5 ? false : primary_minibeam_enabled;
+                const auto global_urban = kCtQueuedPrimaryPath ? true : (BroadBeam ? false : ct_runtime_global_urban);
+                const auto enable_ct_grid = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_ct_grid;
+                const auto enable_hetero_insert = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? false : ct_runtime_enable_hetero_insert;
+                const auto use_unified_water = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? false : ct_runtime_use_unified_water;
+                const auto enable_voxel_scoring = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_voxel_scoring;
+                const auto enable_multiple_scattering = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_multiple_scattering;
+                const auto enable_inelastic = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_inelastic;
+                const auto use_schneider_primary_xs = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_schneider_primary_xs;
+                const auto use_material_electron = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_material_electron;
+                const auto use_material_ct = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_material_ct;
+                const auto defer_material_packets = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_defer_material_packets;
+                const auto use_minibeam_water_response = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? false : ct_runtime_use_minibeam_water_response;
+                const auto use_ct_elastic = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? false : ct_runtime_use_ct_elastic;
+                const auto use_schneider_delta_tail = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? false : ct_runtime_use_schneider_delta_tail;
+                const auto use_schneider_delta_longitudinal = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? false : ct_runtime_use_schneider_delta_longitudinal;
+                const auto use_longitudinal_interface_mass = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? false : ct_runtime_use_longitudinal_interface_mass;
+                const auto slab_layer_count = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? 0 : ct_runtime_slab_layer_count;
+                const auto primary_atomic_number = kCtQueuedPrimaryPath ? 1 : (kFoldZ ? kFoldZ : ct_runtime_primary_atomic_number);
+                const auto primary_mass_number = kCtQueuedPrimaryPath ? 1 : (kFoldA ? kFoldA : ct_runtime_primary_mass_number);
+                const auto inverse_mass_number = kCtQueuedPrimaryPath ? 1.0F : (kFoldA ? 1.0F / static_cast<float>(kFoldA) : ct_runtime_inverse_mass_number);
+                const bool enable_minibeam = (kPrimaryStage == 5 || BroadBeam) ? false : primary_minibeam_enabled;
+                const auto enable_charged_origin_voxel_scoring = kBroadBeamCtPath ? false : ct_runtime_enable_charged_origin_voxel_scoring;
+                const auto enable_minibeam_component_voxel_scoring = kBroadBeamCtPath ? false : ct_runtime_enable_minibeam_component_voxel_scoring;
+                const auto enable_minibeam_energy_band_roi_scoring = kBroadBeamCtPath ? false : ct_runtime_enable_minibeam_energy_band_roi_scoring;
+                const auto use_electron_fp32 = kBroadBeamCtPath ? true : ct_runtime_use_electron_fp32;
+                const auto use_independent_charged = kBroadBeamCtPath ? true : ct_runtime_use_independent_charged;
+                const auto enable_primary_voxel_fluence = kBroadBeamCtPath ? false : ct_runtime_enable_primary_voxel_fluence;
+                const auto voxel_scorer_clamps_transport = kBroadBeamCtPath ? false : ct_runtime_voxel_scorer_clamps_transport;
+                const auto minibeam_water_proton_helium_urban = BroadBeam ? false : ct_runtime_minibeam_water_proton_helium_urban;
                 const auto lane = item.get_global_linear_id();
                 if (lane >= chunk_count) {
                     return;
@@ -4546,6 +4977,17 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 auto direction_y = entry.direction_y;
                 auto direction_z = entry.direction_z;
                 auto history_deposited_MeV = 0.0F;
+                // Broadbeam: the grid in/out energy ledgers are reduced per
+                // history instead of one single-address FP64 atomic per step.
+                double grid_in_pending_MeV = 0.0, grid_out_pending_MeV = 0.0;
+                auto grid_split = [&](bool in_grid, float value_MeV) {
+                    if constexpr (BroadBeam) {
+                        if (sycl::isfinite(value_MeV) && value_MeV > 0.0F) {
+                            if (in_grid) grid_in_pending_MeV += value_MeV;
+                            else grid_out_pending_MeV += value_MeV;
+                        }
+                    } else grid_deposit_split_device(grid_deposited_in_device, grid_deposited_out_device, in_grid, value_MeV);
+                };
                 auto history_water_electron_escaped_MeV=0.0F;
                 MaterialBirthTask grouped_task{};
                 std::uint32_t grouped_count=0;
@@ -5378,21 +5820,60 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         // carbon transport RNG. Rebinding consumes this stream only.
                         std::uint64_t packet_rng=spot_seed ^ ((rng_history+1)*0x9e3779b97f4a7c15ULL) ^
                             (static_cast<std::uint64_t>(steps)<<32) ^ 0x6a09e667f3bcc909ULL;
-                        auto uniform=[&]() {packet_rng=packet_rng*6364136223846793005ULL+1442695040888963407ULL;
-                            return double(packet_rng>>11)*0x1.0p-53;};
+                        auto uniform=[&]() -> double {
+                            if(use_electron_fp32)return float(electron_fp32::random_draw(packet_rng));
+                            packet_rng=packet_rng*6364136223846793005ULL+1442695040888963407ULL;
+                            return use_independent_charged?(double(packet_rng>>12)+.5)*0x1p-52:double(packet_rng>>11)*0x1.0p-53;};
                         count(0,1);
                         const double density_u=uniform(),birth_u=uniform();
+                        const auto birth_cdf_bits=packet_rng;
                         const double along=uniform();
                         const ElectronCtGeometry geometry{{ct_nx,ct_ny,ct_nz},{ct_origin_x,ct_origin_y,ct_origin_z},
                             {ct_spacing_x,ct_spacing_y,ct_spacing_z},ct_density_device,ct_material_device};
-                        const auto birth_position=electron_ct_birth_position(geometry,
-                            {position_x_mm,position_y_mm,position_z_mm},
-                            {direction_x,direction_y,direction_z},step_mm,along);
-                        const auto birth_material=electron_ct_point_material(geometry,birth_position,
-                            {direction_x,direction_y,direction_z});
+                        const auto float_geometry=electron_fp32::ElectronCtGeometry{{ct_nx,ct_ny,ct_nz},
+                            {float(ct_origin_x),float(ct_origin_y),float(ct_origin_z)},
+                            {float(ct_spacing_x),float(ct_spacing_y),float(ct_spacing_z)},ct_density_device,ct_material_device};
+                        const auto birth_position=[&]() -> std::array<double,3> {
+                            if(use_electron_fp32){const auto p=electron_fp32::electron_ct_birth_position(float_geometry,
+                                {position_x_mm,position_y_mm,position_z_mm},{direction_x,direction_y,direction_z},step_mm,float(along));return {p[0],p[1],p[2]};}
+                            return electron_ct_birth_position(geometry,{position_x_mm,position_y_mm,position_z_mm},
+                                {direction_x,direction_y,direction_z},step_mm,along);
+                        }();
+                        const auto birth_material=[&]() -> ElectronCtPointMaterial {
+                            if(use_electron_fp32){const auto p=electron_fp32::electron_ct_point_material(float_geometry,
+                                {electron_fp32::Coordinate(birth_position[0]),electron_fp32::Coordinate(birth_position[1]),electron_fp32::Coordinate(birth_position[2])},
+                                {direction_x,direction_y,direction_z});return {p.valid,p.density,p.section};}
+                            return electron_ct_point_material(geometry,birth_position,{direction_x,direction_y,direction_z});
+                        }();
                         MaterialElectronBirthDraw material_birth;
-                        if(birth_material.valid) {
-                            if(defer_material_birth_sampling)
+                        bool selected_birth=true;
+                        if constexpr(BroadBeam && JointResponse==3) {
+                            if(birth_material.valid) {
+                                const int bx=static_cast<int>(sycl::floor((birth_position[0]-ct_origin_x)/ct_spacing_x));
+                                const int by=static_cast<int>(sycl::floor((birth_position[1]-ct_origin_y)/ct_spacing_y));
+                                const int bz=static_cast<int>(sycl::floor((birth_position[2]-ct_origin_z)/ct_spacing_z));
+                                if(bx>=0&&by>=0&&bz>=0&&bx<int(ct_nx)&&by<int(ct_ny)&&bz<int(ct_nz)) {
+                                    selected_birth=broadbeam_electron_mask[(std::size_t(bz)*ct_ny+by)*ct_nx+bx];
+                                    // Unselected ionization remains local by explicit research policy.
+                                    if(!selected_birth)material_birth.birth.valid=true;
+                                }
+                            }
+                        }
+                        if(birth_material.valid && selected_birth) {
+                            if(use_electron_fp32) {
+                                const auto fresh=electron_fp32::prepare_independent_electron_birth(float_birth,birth_material.section,
+                                    birth_material.density,energy_MeVu,float(density_u));
+                                material_birth.birth.valid=fresh.valid;material_birth.birth.fraction=fresh.fraction;
+                                material_birth.birth.reference.source=fresh.node;material_birth.table=fresh.node;
+                            } else if(independent_birth.nodes) {
+                                const auto fresh=prepare_independent_electron_birth(independent_birth,birth_material.section,
+                                    birth_material.density,energy_MeVu,density_u);
+                                material_birth.birth.valid=fresh.valid;
+                                material_birth.birth.fraction=fresh.fraction;
+                                material_birth.birth.reference.source=fresh.node;
+                                if(fresh.valid){material_birth.table=use_independent_charged?fresh.node:independent_birth_legacy_mapping[fresh.node];
+                                    if(!use_independent_charged && material_birth.table>=material_electron_view_count)material_birth.birth.valid=false;}
+                            } else if(defer_material_birth_sampling)
                                 material_birth=prepare_material_electron_birth(birth_material.section,
                                     birth_material.density,energy_MeVu,density_u,birth_u,
                                     material_electron_views,material_electron_view_count,material_electron_lookup);
@@ -5420,7 +5901,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 MaterialBirthTask task{QueuedElectronBirth{birth,energy_MeVu,birth_u},birth_position,{direction_x,direction_y,direction_z},
                                     birth_material.density,packet_rng,global_history,static_cast<std::uint32_t>(steps),
                                     static_cast<std::uint32_t>(ti),weight};
-                                grouped_weight+=double(weight);
+                                task.birth.independent=use_electron_fp32 || independent_birth.nodes!=nullptr;
+                                // In the independent FP32 task, row is the exact birth CDF draw,
+                                // never a legacy trajectory index. Preserve all CDF support.
+                                if(use_electron_fp32)task.birth.row=birth_cdf_bits;
+                                if(use_electron_fp32)grouped_weight=float(grouped_weight)+weight;
+                                else grouped_weight+=double(weight);
                                 bool select=grouped_count==0;
                                 if(!select) {
                                     const auto block=carbon::rng::philox4x32_10(
@@ -5430,7 +5916,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         static_cast<std::uint32_t>(spot_seed>>32)^0x47525031U);
                                     ++group_draw;
                                     const std::uint64_t bits=(std::uint64_t(block[0])<<32)|block[1];
-                                    select=double(bits>>11)*0x1.0p-53 < double(weight)/grouped_weight;
+                                    select=use_electron_fp32?electron_fp32::Draw{bits}<weight/float(grouped_weight):
+                                        double(bits>>11)*0x1.0p-53 < double(weight)/grouped_weight;
                                 }
                                 if(select)grouped_task=task;
                                 if(++grouped_count==material_group_size)flush_electron_group();
@@ -6158,14 +6645,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         }
                     }
                     history_deposited_MeV += deposited_MeV-water_physical_escape_MeV-material_untracked_MeV;
-                    grid_deposit_split_device(
-                        grid_deposited_in_device, grid_deposited_out_device,
+                    grid_split(
                         (kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0,
                         deposited_MeV - delta_tail_escaped_scorer_MeV-water_physical_escape_MeV-
                             material_untracked_MeV-response_scored_separately_MeV);
-                    grid_deposit_split_device(
-                        grid_deposited_in_device, grid_deposited_out_device, false,
-                        delta_tail_escaped_scorer_MeV);
+                    grid_split(false, delta_tail_escaped_scorer_MeV);
                     last_primary_stopping_power_MeV_per_mm = stopping_power_MeV_per_mm;
                     last_primary_density_g_per_cm3 = local_density_g_per_cm3;
 
@@ -7710,6 +8194,14 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                               SchneiderDiagSlot::PrimaryRateQueries,
                                               local_schneider_rate_queries);
                 if(defer_material_packets)flush_electron_group();
+                if constexpr (BroadBeam) {
+                    if (grid_in_pending_MeV != 0.0 && grid_deposited_in_device != nullptr)
+                        sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                            sycl::access::address_space::global_space>(*grid_deposited_in_device).fetch_add(grid_in_pending_MeV);
+                    if (grid_out_pending_MeV != 0.0 && grid_deposited_out_device != nullptr)
+                        sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                            sycl::access::address_space::global_space>(*grid_deposited_out_device).fetch_add(grid_out_pending_MeV);
+                }
                 deposited_device[global_history] = history_deposited_MeV;
                 escaped_device[global_history] = energy_MeV+history_water_electron_escaped_MeV;
                 steps_device[global_history] = steps;
@@ -7720,6 +8212,13 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             if constexpr(BroadBeam) {
                 if constexpr(JointResponse==0)if(nonion_primary)
                     return launch_primary_chunk(std::false_type{},std::false_type{},std::integral_constant<int,7>{});
+                if constexpr(JointResponse==3)if(broadbeam_ct_primary_specialize) {
+                    if(primary_atomic_number==1 && primary_mass_number==1)
+                        return launch_primary_chunk(std::false_type{},std::false_type{},std::integral_constant<int,13>{});
+                    if(primary_atomic_number==6 && primary_mass_number==12)
+                        return launch_primary_chunk(std::false_type{},std::false_type{},std::integral_constant<int,14>{});
+                    return launch_primary_chunk(std::false_type{},std::false_type{},std::integral_constant<int,12>{});
+                }
                 return launch_primary_chunk(std::false_type{},std::false_type{},std::integral_constant<int,6>{});
             } else {
             {
@@ -7881,7 +8380,23 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             electron_queue_peak=std::max<std::uint64_t>(electron_queue_peak,count_host);
             if(count_host) {
                 const std::uint32_t lanes=static_cast<std::uint32_t>(std::min<std::uint64_t>(count_host,material_queue_lanes));
-                auto response_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1>) {
+                if(use_electron_fp32) {
+                    auto launch_float_response=[&](auto region_tag) {
+                        constexpr bool region_diagnostics=decltype(region_tag)::value;
+#include "detail/sycl_independent_electron_fp32.inc"
+                    };
+                    if constexpr(BroadBeam && JointResponse==3) {
+                        if(broadbeam_region_work)launch_float_response(std::true_type{});
+                        else launch_float_response(std::false_type{});
+                    } else launch_float_response(std::false_type{});
+                } else {
+                // Independent mode is fixed for the whole run. Compile its worker
+                // separately so legacy continuation state/branches cannot enlarge
+                // the hot independent electron kernel.
+                auto launch_response=[&](auto independent_tag) {
+                    constexpr bool independent_mode=decltype(independent_tag)::value;
+                    return queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1>) {
+                    constexpr bool use_independent_charged=independent_mode;
                     sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
                         sycl::access::address_space::global_space> consumed(material_task_counts[1]);
                     const ElectronCtGeometry geometry{{ct_nx,ct_ny,ct_nz},{ct_origin_x,ct_origin_y,ct_origin_z},
@@ -7901,7 +8416,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     unsigned packet_steps=0;
                     bool need_task=true;
                     auto uniform=[&]() {packet_rng=packet_rng*6364136223846793005ULL+1442695040888963407ULL;
-                        return double(packet_rng>>11)*0x1.0p-53;};
+                        return use_independent_charged?(double(packet_rng>>12)+.5)*0x1p-52:double(packet_rng>>11)*0x1.0p-53;};
                     // One transaction per outer iteration lets finished lanes
                     // refill while their warp peers continue longer packets.
                     for(;;) {
@@ -7910,23 +8425,109 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             task=material_tasks[slot];packet_rng=task.rng;
                             packet=ElectronEnergyPacket{};
                             packet.weight_MeV=task.weight;packet.material_table_index=task.table;
-                            const auto selected_birth=defer_material_birth_sampling
-                                ? resolve_prepared_electron_birth(task.birth.draw(),material_electron_views[task.table],
-                                    task.birth.energy,task.birth.uniform)
-                                : task.birth.draw();
-                            packet.cursor=bind_electron_birth(selected_birth,material_electron_views[task.table],task.position,
-                                {task.direction[0],task.direction[1],task.direction[2]},uniform());
+                            if(independent_mode || task.birth.independent) {
+                                if(independent_birth.nodes && task.birth.source<independent_birth.count) {
+                                    const auto node=independent_birth.nodes[task.birth.source];
+                                    const auto sample=sample_independent_electron_birth(node,task.birth.energy,task.birth.uniform);
+                                    auto parent=electron_joint_research::unit({task.direction[0],task.direction[1],task.direction[2]});
+                                    const auto direction=independent_electron_direction(parent,sample.cosine,uniform());
+                                    packet.cursor.position=task.position;packet.cursor.direction={direction.x,direction.y,direction.z};
+                                    packet.cursor.energy_MeV=sample.energy;packet.cursor.pdg=11;
+                                    packet.cursor.section=node.section;packet.cursor.density_g_cm3=node.density;
+                                    packet.cursor.valid=sample.energy>0 && electron_unit_vector(packet.cursor.direction);
+                                    // row remains end: an interface fallback explicitly binds a
+                                    // continuing state, never reads an old birth reference.
+                                }
+                            } else {
+                                const auto selected_birth=defer_material_birth_sampling
+                                    ? resolve_prepared_electron_birth(task.birth.draw(),material_electron_views[task.table],
+                                        task.birth.energy,task.birth.uniform)
+                                    : task.birth.draw();
+                                packet.cursor=bind_electron_birth(selected_birth,material_electron_views[task.table],task.position,
+                                    {task.direction[0],task.direction[1],task.direction[2]},uniform());
+                            }
                             packet.cursor.physical_density_g_cm3=task.density;
                             packet.status=packet.cursor.valid?ElectronPacketStatus::active:ElectronPacketStatus::invalid;
+                            if(joint_pilot_work) {
+                                std::uint64_t counts[9]{};
+                                auto joint_tally=[&](int k,std::uint64_t n) {counts[k]+=n;};
+                                packet=use_independent_charged?transport_joint_independent(packet,joint_pilot,geometry,uniform,joint_tally):
+                                    transport_joint_pilot(packet,joint_pilot,material_electron_views[task.table],geometry,uniform,joint_tally,independent_photon.nodes!=nullptr);
+                                for(unsigned k=0;k<9;++k)if(counts[k]) {
+                                    sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                        sycl::access::address_space::global_space> a(joint_pilot_work[k]);a.fetch_add(counts[k]);
+                                }
+                            }
                             previous=packet;previous_rng=packet_rng;
                             packet_steps=0;need_task=false;
                         }
-                        if(packet.status==ElectronPacketStatus::active && packet_steps<4096) {
+                        if(packet.status==ElectronPacketStatus::active && packet_steps<(use_independent_charged?200000u:4096u)) {
                             previous=packet;previous_rng=packet_rng;
-                            packet=transport_electron_packet_step(packet,material_electron_views,material_electron_view_count,geometry,uniform,material_electron_lookup);
+                            if(independent_photon.nodes && packet.cursor.pdg==22) {
+                                const auto result=transport_independent_photon(independent_photon,geometry,packet.cursor.position,
+                                    packet.cursor.direction,packet.cursor.energy_MeV,uniform);
+                                const std::uint64_t counts[8]={1,result.interactions,result.voxel_crossings,
+                                    result.status==IndependentPhotonStatus::electron,result.status==IndependentPhotonStatus::deposited,
+                                    result.status==IndependentPhotonStatus::escaped,result.status==IndependentPhotonStatus::coverage_missing,
+                                    result.status==IndependentPhotonStatus::invalid};
+                                for(unsigned k=0;k<8;++k)if(counts[k]) {
+                                    sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                        sycl::access::address_space::global_space> a(independent_photon_work[k]);a.fetch_add(counts[k]);
+                                }
+                                packet.advances+=result.interactions;
+                                packet.cursor.position=result.position;packet.cursor.direction=result.direction;packet.cursor.energy_MeV=result.energy;
+                                if(result.status==IndependentPhotonStatus::deposited) {
+                                    packet.deposit_position=result.position;packet.status=ElectronPacketStatus::deposited;
+                                } else if(result.status==IndependentPhotonStatus::escaped)packet.status=ElectronPacketStatus::escaped;
+                                else if(result.status==IndependentPhotonStatus::electron) {
+                                    const auto node=independent_photon.nodes[result.node];
+                                    packet.cursor=ElectronContinuationCursor{};packet.cursor.valid=true;packet.cursor.pdg=11;
+                                    packet.cursor.position=result.position;packet.cursor.direction=result.direction;packet.cursor.energy_MeV=result.energy;
+                                    packet.cursor.section=node.section;packet.cursor.density_g_cm3=node.density;
+                                    packet.cursor.physical_density_g_cm3=result.physical_density;
+                                    if(use_independent_charged) {
+                                        ++packet.electron_children;
+                                        std::uint64_t joint_counts[9]{};auto jt=[&](int k,std::uint64_t v){joint_counts[k]+=v;};
+                                        packet=transport_joint_independent(packet,joint_pilot,geometry,uniform,jt);
+                                        for(unsigned k=0;k<9;++k)if(joint_counts[k]) {
+                                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                                sycl::access::address_space::global_space> a(joint_pilot_work[k]);a.fetch_add(joint_counts[k]);
+                                        }
+                                    } else {
+                                    packet.material_table_index=material_electron_view_count;
+                                    for(std::size_t t=0;t<material_electron_view_count;++t)
+                                        if(material_electron_views[t].section==node.section && material_electron_views[t].density_g_cm3==node.density)packet.material_table_index=t;
+                                    ++packet.electron_children;
+                                    if(packet.material_table_index==material_electron_view_count)packet.status=ElectronPacketStatus::invalid;
+                                    else {
+                                        std::uint64_t joint_counts[9]{};auto jt=[&](int k,std::uint64_t v){joint_counts[k]+=v;};
+                                        packet=transport_joint_pilot(packet,joint_pilot,material_electron_views[packet.material_table_index],geometry,uniform,jt,true);
+                                        for(unsigned k=0;k<9;++k)if(joint_counts[k]) {
+                                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                                sycl::access::address_space::global_space> a(joint_pilot_work[k]);a.fetch_add(joint_counts[k]);
+                                        }
+                                    }
+                                    }
+                                } else packet.status=ElectronPacketStatus::invalid; // independent gaps are fatal audit failures
+                            } else if(use_independent_charged) {
+                                std::uint64_t counts[8]{};auto charged_tally=[&](int k,std::uint64_t v){counts[k]+=v;};
+                                packet=transport_independent_charged_packet(packet,independent_charged,geometry,uniform,charged_tally);
+                                for(unsigned k=0;k<8;++k)if(counts[k]) {
+                                    sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                        sycl::access::address_space::global_space> a(independent_charged_work[k]);a.fetch_add(counts[k]);
+                                }
+                                if(packet.status==ElectronPacketStatus::active&&packet.cursor.pdg==11&&(packet_steps%32==31)) {
+                                    std::uint64_t joint_counts[9]{};auto jt=[&](int k,std::uint64_t v){joint_counts[k]+=v;};
+                                    packet=transport_joint_independent(packet,joint_pilot,geometry,uniform,jt);
+                                    for(unsigned k=0;k<9;++k)if(joint_counts[k]) {
+                                        sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                            sycl::access::address_space::global_space> a(joint_pilot_work[k]);a.fetch_add(joint_counts[k]);
+                                    }
+                                }
+                            } else packet=transport_electron_packet_step(packet,material_electron_views,material_electron_view_count,geometry,uniform,material_electron_lookup);
                             ++packet_steps;
                         }
-                        if(packet.status==ElectronPacketStatus::active && packet_steps<4096)continue;
+                        if(packet.status==ElectronPacketStatus::active && packet_steps<(use_independent_charged?200000u:4096u))continue;
                         need_task=true;
                         const std::uint64_t work[3]={packet.advances,packet.source_restarts,packet.boundary_restarts};
                         for(unsigned k=0;k<3;++k) {
@@ -7977,12 +8578,107 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             }
                         }
                     }
-                });
+                    });
+                };
+                auto response_event=use_independent_charged
+                    ?launch_response(std::true_type{}):launch_response(std::false_type{});
                 electron_events.push_back(response_event);
+                }
             }
         }
     }
+    if(broadbeam_region_work) {
+        std::array<std::uint64_t,7*12> rows{};
+        queue.copy(broadbeam_region_work,rows.data(),rows.size()).wait_and_throw();
+        std::array<std::uint64_t,12> total{};
+        const char* names[]={"tasks","charged_calls","elastic","hard_proposals","hard_collisions","faces","joint_calls","joint_advances","photon_calls","photon_interactions","weight_microMeV","completed"};
+        for(unsigned r=0;r<7;++r) {
+            std::cout<<"[electron-birth-region-work] region="<<r;
+            for(unsigned k=0;k<12;++k){std::cout<<' '<<names[k]<<'='<<rows[12*r+k];total[k]+=rows[12*r+k];}
+            std::cout<<'\n';
+        }
+        std::array<std::uint64_t,9> joint{};std::array<std::uint64_t,8> charged{},photon{};
+        queue.copy(joint_pilot_work,joint.data(),9);queue.copy(independent_charged_work,charged.data(),8);queue.copy(independent_photon_work,photon.data(),8).wait_and_throw();
+        if(total[0]!=electron_tasks_total || total[11]!=electron_tasks_total || total[1]!=charged[0] || total[2]!=charged[1] ||
+           total[3]!=charged[2] || total[4]!=charged[3] || total[5]!=charged[4] || total[6]!=joint[0] || total[7]!=joint[2] ||
+           total[8]!=photon[0] || total[9]!=photon[1] || rows[6*12])
+            throw std::runtime_error("Electron birth-region diagnostic closure failed");
+        std::cout<<"[electron-birth-region-audit] closure=pass attribution=queued_birth includes_descendants=1\n";
+    }
+    if(joint_pilot_work) {
+        std::array<std::uint64_t,9> work{};queue.copy(joint_pilot_work,work.data(),9).wait_and_throw();
+        sycl::free(joint_pilot_work,queue);
+        const char* names[]={"eligible","started","advances","fallback","below","deposited","escaped","photon_gap","invalid"};
+        std::cout<<"[electron-joint-pilot-work]";
+        for(unsigned k=0;k<9;++k)std::cout<<" "<<names[k]<<"="<<work[k];
+        std::cout<<"\n";
+    }
+    if(independent_charged_work) {
+        std::array<std::uint64_t,8> work{};queue.copy(independent_charged_work,work.data(),8).wait_and_throw();
+#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
+        if(float_step_diagnostics){
+            std::vector<std::uint64_t> shards(64*1536);
+            queue.copy(float_step_diagnostics,shards.data(),shards.size()).wait_and_throw();
+            std::array<std::uint64_t,1536> bins{};std::uint64_t total=0;
+            for(unsigned shard=0;shard<64;++shard)for(unsigned k=0;k<1536;++k)bins[k]+=shards[shard*1536+k];
+            for(unsigned k=0;k<1536;++k)if(bins[k]){
+                total+=bins[k];
+                std::cout<<"[electron-step-diagnostic] energy_bin="<<k/256
+                         <<" limiter_mask="<<(k/8)%32<<" event="<<k%8<<" count="<<bins[k]<<"\n";
+            }
+            std::cout<<"[electron-step-diagnostic-total] calls="<<work[0]<<" counted="<<total<<"\n";
+            if(total!=work[0])throw std::runtime_error("Electron diagnostic histogram does not close");
+            free_device(float_step_diagnostics);
+        }
+#endif
+        const char* names[]={"calls","elastic","hard_proposals","hard_collisions","faces","stopped","coverage_missing","invalid"};
+        std::cout<<"[independent-charged-work]";for(unsigned k=0;k<8;++k)std::cout<<" "<<names[k]<<"="<<work[k];std::cout<<"\n";
+    }
+    if(independent_photon_work) {
+        std::array<std::uint64_t,8> work{};queue.copy(independent_photon_work,work.data(),8).wait_and_throw();
+        const char* names[]={"calls","interactions","voxel_crossings","electron","deposited","escaped","coverage_missing","invalid"};
+        std::cout<<"[independent-photon-work]";
+        for(unsigned k=0;k<8;++k)std::cout<<" "<<names[k]<<"="<<work[k];
+        std::cout<<"\n";
+    }
     std::array<std::uint64_t,3> electron_work{};
+#ifdef CARBON_ELECTRON_SEGMENT_DIAGNOSTICS
+    if(float_segment_samples){
+        namespace diagnostic=electron_segment_diagnostics;
+        std::array<std::uint64_t,2> counts{};queue.copy(float_segment_counts,counts.data(),2).wait_and_throw();
+        std::array<std::uint64_t,8> work{};queue.copy(independent_charged_work,work.data(),8).wait_and_throw();
+        if(counts[0]!=work[0]||counts[1]>diagnostic::capacity)
+            throw std::runtime_error("Segment diagnostic count closure or sample capacity failed");
+        std::cout<<"[electron-segment-diagnostic] charged_total="<<counts[0]<<" selected="<<counts[1]
+                 <<" denominator="<<diagnostic::selection_mask+1<<" capacity="<<diagnostic::capacity<<"\n";
+        const auto path=config.voxel_dose_mhd_output_file.parent_path()/"electron_segment_samples.bin";
+        if(std::filesystem::exists(path))throw std::runtime_error("Segment diagnostic refuses to overwrite: "+path.string());
+        std::filesystem::create_directories(path.parent_path());
+        std::vector<diagnostic::Sample> samples(counts[1]);queue.copy(float_segment_samples,samples.data(),samples.size()).wait_and_throw();
+        std::ofstream file(path,std::ios::binary);file.write(reinterpret_cast<const char*>(samples.data()),samples.size()*sizeof(diagnostic::Sample));
+        if(!file)throw std::runtime_error("Segment diagnostic write failed");
+        free_device(float_segment_samples);free_device(float_segment_counts);
+    }
+#endif
+#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
+    if(float_range_delta){
+        std::array<std::uint64_t,10> counts{};queue.copy(float_range_counts,counts.data(),counts.size()).wait_and_throw();
+        const char* names[]={"eligible","charged_after_guard","photon_calls_after_guard","joint_calls_after_guard",
+            "different_deposit","escaped_after_guard","same_deposit","invalid_after_guard","charged_total","tasks_total"};
+        std::cout<<"[electron-range-diagnostic] factor=1.5";
+        for(unsigned k=0;k<10;++k)std::cout<<" "<<names[k]<<"="<<counts[k];std::cout<<"\n";
+        const auto directory=config.voxel_dose_mhd_output_file.parent_path();std::filesystem::create_directories(directory);
+        auto write=[&](const char* name,const float* device){
+            const auto path=directory/name;
+            if(std::filesystem::exists(path))throw std::runtime_error("Range diagnostic refuses to overwrite: "+path.string());
+            std::vector<float> values(number_of_voxels);queue.copy(device,values.data(),values.size()).wait_and_throw();
+            std::ofstream file(path,std::ios::binary);file.write(reinterpret_cast<const char*>(values.data()),values.size()*sizeof(float));
+            if(!file)throw std::runtime_error("Range diagnostic write failed");
+        };
+        write("range_guard_delta_MeV.f32",float_range_delta);write("range_guard_density.f32",ct_density_device);
+        free_device(float_range_delta);free_device(float_range_counts);
+    }
+#endif
     if (defer_material_packets) {
         queue.copy(material_queue_work,electron_work.data(),3).wait_and_throw();
         free_device(material_queue_work);
@@ -9454,7 +10150,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             return carbon::get_charged_species_idx(transport_z, transport_a);
                         }();
                         const auto ledger_species_idx = charged_sp_idx;
-                        const int recoil_sp_idx=(kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_all_elastic))?CARBON_SECONDARY_CONTEXT_FIELD(recoil_stopping).projectile(transport_z,transport_a):-1;
+                        const int recoil_sp_idx=((kProductionSecondaryPath && !BroadBeam) ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_all_elastic))?CARBON_SECONDARY_CONTEXT_FIELD(recoil_stopping).projectile(transport_z,transport_a):-1;
                         const bool generic_recoil=
                             !kKnownSpeciesOnly && charged_sp_idx<0 && recoil_sp_idx>=0;
                         if (charged_sp_idx < 0 && !generic_recoil) {
@@ -9471,6 +10167,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         bool sec_terminal_recorded = false;
                         bool unified_secondary_escaped_ct = false;
                         ContinuousSpeciesTrackTally continuous_species_tally;
+                        // Broadbeam common-step ledgers reduced per segment; flushed
+                        // before suspend/terminal handling (resume state unchanged).
+                        float sec_dep_pending_MeV = 0.0F;
+                        std::uint64_t sec_diag_dep_pending_uMeV = 0;
+                        double sec_grid_in_pending_MeV = 0.0, sec_grid_out_pending_MeV = 0.0;
                         double he4_audit[4]{};
                         float sec_e = frag.energy_MeV;
                         float sec_x = frag.pos_x_mm;
@@ -9951,7 +10652,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             // Independent exponential elastic clock competes with the already
                             // sampled inelastic distance. Elastic is NOT generation-limited.
                             if(CARBON_SECONDARY_CONTEXT_FIELD(enable_inelastic) &&
-                               (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_all_elastic)) && !generic_recoil && (sec_in_ct || (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)))) {
+                               ((kProductionSecondaryPath && !BroadBeam) ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_all_elastic)) && !generic_recoil && (sec_in_ct || (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)))) {
                                 const int p=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).projectile(transport_z,transport_a);
                                 const float rate=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).rate(p,(kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))?25:sec_ct_material,sec_e_u);
                                 if(rate<0) {
@@ -11041,6 +11742,17 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 }
                             }
                             if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
+                                if constexpr (BroadBeam) {
+                                    // Same per-step values; integer microMeV truncation is
+                                    // applied per step so the diagnostic total is unchanged.
+                                    sec_dep_pending_MeV += dE;
+                                    if (dE > 0.0F)
+                                        sec_diag_dep_pending_uMeV += static_cast<std::uint64_t>(static_cast<double>(dE) * 1.0e6);
+                                    if (sycl::isfinite(dE) && dE > 0.0F) {
+                                        if (source_voxel_continuous_loss ? continuous_step_voxel>=0 : com_voxel>=0) sec_grid_in_pending_MeV += dE;
+                                        else sec_grid_out_pending_MeV += dE;
+                                    }
+                                } else {
                                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
@@ -11053,6 +11765,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),
                                     CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device), source_voxel_continuous_loss ? continuous_step_voxel>=0 : com_voxel>=0,
                                     dE);
+                                }
                             }
                             if (!secondary_inelastic) {
                                 sec_x = post_em_x;
@@ -12057,6 +12770,24 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 static_cast<float>(sec_steps));
                             unified_secondary_count(0);
                         }
+                        if constexpr (BroadBeam) {
+                            if (sec_dep_pending_MeV != 0.0F && CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr)
+                                sycl::atomic_ref<float, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>(
+                                    CARBON_SECONDARY_CONTEXT_FIELD(deposited_device)[frag.parent_history]).fetch_add(sec_dep_pending_MeV);
+                            schneider_diag_add_device(CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                SchneiderDiagSlot::SecondaryDepositedMicroMeV, sec_diag_dep_pending_uMeV);
+                            if (sec_grid_in_pending_MeV != 0.0 && CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device) != nullptr)
+                                sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>(
+                                    *CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device)).fetch_add(sec_grid_in_pending_MeV);
+                            if (sec_grid_out_pending_MeV != 0.0 && CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device) != nullptr)
+                                sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>(
+                                    *CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device)).fetch_add(sec_grid_out_pending_MeV);
+                            sec_dep_pending_MeV = 0.0F;sec_diag_dep_pending_uMeV = 0;
+                            sec_grid_in_pending_MeV = sec_grid_out_pending_MeV = 0.0;
+                        }
                         if(segment_paused){
                             SecondaryResumeState saved;
                             saved.sec_terminal_recorded=sec_terminal_recorded;
@@ -12376,6 +13107,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         production_path_tag,exact_species_tag,active_begin,active_size);
                 };
                 if constexpr(BroadBeam) {
+                    if constexpr(JointResponse==3) {
+                        if(broadbeam_ct_secondary_specialize)
+                            submit_secondary_slice(std::true_type{},std::integral_constant<int,-1>{},0,resume_active);
+                        else submit_secondary_slice(std::false_type{},std::integral_constant<int,-1>{},0,resume_active);
+                    } else
                     submit_secondary_slice(std::false_type{},std::integral_constant<int,-1>{},0,resume_active);
                 } else {
 #if CARBON_SECONDARY_PRODUCTION_SPECIALIZE
@@ -13073,6 +13809,27 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     }
     queue.wait_and_throw();
 
+    // Electron worker ledgers are private FP32 sums. Widen only on the host
+    // after transport, avoiding a shared FP64 atomic in the full FP32 worker.
+    if(float_electron_grid_ledger) {
+        std::vector<float> partial(2*material_queue_lanes);
+        queue.copy(float_electron_grid_ledger,partial.data(),partial.size()).wait_and_throw();
+        for(unsigned lane=0;lane<material_queue_lanes;++lane) {
+            grid_deposited_in_host+=partial[2*lane];
+            grid_deposited_out_host+=partial[2*lane+1];
+        }
+    }
+    double electron_vr_gain_host=0;
+    if(float_electron_vr_ledger) {
+        std::vector<float> partial(material_queue_lanes);std::array<std::uint64_t,2> work{};
+        queue.copy(float_electron_vr_ledger,partial.data(),partial.size());
+        queue.copy(electron_vr_work,work.data(),2).wait_and_throw();
+        for(const float x:partial)electron_vr_gain_host+=x;
+        if(work[0]||work[1])
+            std::cout<<"[electron-variance-reduction-work] roulette_killed="<<work[0]<<" roulette_survived="<<work[1]
+                     <<" weight_gain_MeV="<<electron_vr_gain_host<<"\n";
+    }
+
     // Per-record Schneider logs: counts are exact after the fence above.
     // Staged into host vectors here (device buffers are freed below);
     // moved into TransportResult after its declaration.
@@ -13119,6 +13876,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                  <<" restarts="<<f.after.source_restarts<<" residual="<<f.advance.energy_residual_MeV<<'\n';
     }
     if(electron_joint_diag_device)queue.copy(electron_joint_diag_device,electron_joint_diag_host.data(),7).wait_and_throw();
+    if(use_electron_fp32) {
+        if(electron_joint_diag_host[6]!=electron_tasks_total)
+            throw std::runtime_error("Independent FP32 electron queue completion mismatch; batch rejected");
+        std::cout<<"[independent-fp32-completion] expected="<<electron_tasks_total
+                 <<" completed="<<electron_joint_diag_host[6]<<"\n";
+    }
     if (schneider_delta_energy_device != nullptr) {
         queue.copy(schneider_delta_energy_device,
                    schneider_delta_energy_host.data(),
@@ -13243,6 +14006,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     free_device(schneider_delta_fractions_device);
     free_device(schneider_delta_radii_device);
     free_device(schneider_delta_source_eligible_device);
+    free_device(broadbeam_electron_mask);
+    free_device(broadbeam_birth_regions);free_device(broadbeam_region_work);
     free_device(schneider_delta_energy_device);
     free_device(longitudinal_domain_device);
     free_device(schneider_long_energies_device);
@@ -13294,6 +14059,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     result.electron_ordered_path_sha256=electron_path_sha256;
     result.material_electron_photon_untracked_MeV=double(material_untracked_host[0])*1e-6;
     result.material_electron_untracked_MeV=double(material_untracked_host[0]+material_untracked_host[1])*1e-6;
+    result.electron_variance_reduction_weight_gain_MeV=electron_vr_gain_host;
     free_device(material_untracked_device);
     free_device(material_failure_device);
     if(short_range_hits_device) {
@@ -13919,6 +14685,13 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const StoppingPowerTable& stopping_power,const CrossSectionTable& cross_section,
     const std::string& device_name,SyclTransportContext* context) {
     if(config.transport_profile=="broadbeam_fast") {
+        std::cout<<"[broadbeam-electron-tracking] requested="<<config.broadbeam_electron_tracking
+                 <<" effective="<<(config.broadbeam_independent_electrons?"shared_fp32":
+                    config.broadbeam_electron_tracking?"empty_uniform_water_selection":"disabled")
+                 <<" density_threshold="<<config.broadbeam_electron_density_threshold
+                 <<" halo_mm="<<config.broadbeam_electron_halo_mm<<'\n';
+        if(config.broadbeam_independent_electrons)
+            return transport_sycl_impl<true,true,3>(config,stopping_power,cross_section,device_name,context);
         if(config.ct_electron_joint_execution_mode=="queued") {
 #if CARBON_FE_JOINT_QUEUE
             return config.fermi_eyges_gaussian_only
