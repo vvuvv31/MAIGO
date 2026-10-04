@@ -115,3 +115,5 @@ The latest cleanup tests exercised all eight presets in two batches. All eight m
 Measure cold start, first batch and resident batches separately. Report primaries/s, kernel times, task counts and peak memory with GPU model, compiler, source, seed and history counts. Compare like-for-like source histories, not electron tasks or accepted collimator primaries. Search [failed.md](failed.md) before each candidate; require the documented new evidence before retrying a rejected route. FP32 atomic order differences alone do not reject scheduling changes, but energy, transport/EM, completion and queue-overflow audits must pass.
 
 TOPAS references and historical experimental evidence are retained. The next throughput campaign uses the committed cleanup as its baseline.
+
+A larger-statistics proton broadbeam check found and corrected a cleanup control-flow regression in the secondary post-EM elastic guard. The same failing seed now passes3,759,450 histories; see [cleanup correction](docs/repository_cleanup_20261005.md#larger-statistics-correction).

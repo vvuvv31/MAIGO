@@ -72,3 +72,17 @@ Carbon minibeam dose acceptance is pending. Water dose/performance validation is
 deferred. Subsequent CT optimization requires local gamma >99% at 1%/1mm for
 both broadbeams (search .1mm) and 3%/.2mm for proton minibeam (search .02mm).
 Carbon minibeam must pass energy, coverage, completion and overflow audits.
+
+## Larger-statistics correction
+
+A subsequent RT07575 proton broadbeam screen (seed1001901102,1,253,150 histories)
+exposed13 secondary elastic-draw errors that the small regression did not exercise.
+Removing a retired water phase-space branch had left a dangling `else` before the
+post-EM zero-rate guard. The guard is restored as an independent statement,
+matching the pre-cleanup source. No audit or physical branch was disabled.
+The identical seed now completes three batches (3,759,450 histories), with zero
+elastic query errors, all quality/completion/coverage/overflow checks passing,
+and maximum physical relative energy residual3.92e-7. Evidence:
+`out/ct_throughput_20261005/runs/guard_fixed_proton_broadbeam`.
+The eight-case small regression above remains a limited regression result, not
+proof that every rare branch was covered.

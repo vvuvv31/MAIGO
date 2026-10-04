@@ -115,3 +115,5 @@ build/carbon_mc --config config/proton_ct_minibeam.yaml \
 计时应分开冷启动、首批及常驻批次，报告 primary/s、kernel 时间、任务量和峰值内存，并记录 GPU、编译器、束流、种子及粒子数。比较相同入射 primary 口径，不能用电子任务或穿过准直器的 primary 替换。每个候选前先查 [failed.md](failed.md)，只有满足记录中的新证据条件才能重试。FP32 原子累加顺序差异本身不否决调度改动，但输运/EM、能量、完成数和队列溢出审计仍必须通过。
 
 保留 TOPAS 参考和历史实验记录。下一轮吞吐优化以清理提交为基线；water 专项吞吐和剂量验证按要求推迟至 CT 之后。
+
+较大统计量的 proton broadbeam 测试发现并修复了清理引入的次级粒子弹性散射检查分支错误。同一失败种子现已通过3,759,450个历史及全部运行审计；见[清理修正记录](docs/repository_cleanup_20261005.md#larger-statistics-correction)。

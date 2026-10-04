@@ -3202,9 +3202,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
 #endif
         queue.wait_and_throw();
     }
-#if defined(CARBON_ENABLE_MINIBEAM)
-
-#endif
 
     std::uint64_t* primary_loss_query_audit = nullptr;
     if (config.enable_primary_loss_query_audit) {
@@ -4199,9 +4196,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     }
                     float accepted_loss_path_mm = step_mm;
                     bool urban_range_limited = false;
-#if defined(CARBON_ENABLE_MINIBEAM)
-
-#endif
                     bool inelastic_this_step = false;
                     // Elastic candidates are resolved only by the configured CT/water bank.
                     bool ct_elastic_this_step = false;
@@ -4796,22 +4790,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             water_scattering_displacement =
                                 correlated.displacement_mm;
                         }
-#if defined(CARBON_ENABLE_MINIBEAM)
-
-
-#endif
                         else {
                             auto theta0 = highland_projected_rms_angle_device(
                                 energy_MeV, primary_atomic_number, primary_mass_number,
                                 step_mm, local_density_g_per_cm3,
                                 radiation_length_g_per_cm2, primary_mcs_mass_override_MeV) * multiple_scattering_scale;
-#if defined(CARBON_ENABLE_MINIBEAM)
-
-#endif
                             float angular_scale = 1.0F;
-#if defined(CARBON_ENABLE_MINIBEAM)
-
-#endif
                             const auto u0 = rng::uniform01(
                                 spot_seed, rng_history, steps, 3);
                             const auto u1 = rng::uniform01(
@@ -5508,9 +5492,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     ++steps;
                 }
 
-#if defined(CARBON_ENABLE_MINIBEAM)
-
-#endif
 
                 if(CARBON_EM_LOCAL_AUDIT)flush_unified_em_audit(unified_audit,unified_primary_audit);
 
@@ -5719,8 +5700,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
 #endif
                     if (split_minibeam_primary == 2) {
                         queue.fill(primary_entry_counts, std::uint64_t{0}, 2);
-#if defined(CARBON_ENABLE_MINIBEAM)
-#endif
                         primary_events.push_back(queue_copper_primary_children
                             ? launch_minibeam_stage(std::integral_constant<int,9>{})
                             : launch_minibeam_stage(std::integral_constant<int,3>{}));
@@ -7831,9 +7810,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 dE=draw.loss;unified_secondary_count(2);unified_secondary_count(3,draw.proposed);unified_secondary_count(4,draw.accepted);
                                 unified_secondary_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_secondary_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
                             }
-#if defined(CARBON_ENABLE_MINIBEAM)
-
-#endif
                             const auto post_em_e = sycl::fmax(0.0F, sec_e - dE);
                             if constexpr (!kNonHe4Only) {
                             if (CARBON_SECONDARY_CONTEXT_FIELD(enable_inelastic) &&
@@ -9002,12 +8978,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     sec_dy = correlated.direction.y;
                                     sec_dz = correlated.direction.z;
                                 }
-#if defined(CARBON_ENABLE_MINIBEAM)
-
-#endif
-#if defined(CARBON_ENABLE_MINIBEAM)
-
-#endif
                                 else {
                                     schneider_diag_increment_device(
                                         CARBON_SECONDARY_CONTEXT_FIELD(
@@ -9034,15 +9004,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     sec_dx = msc.direction.x;
                                     sec_dy = msc.direction.y;
                                     sec_dz = msc.direction.z;
-#if defined(CARBON_ENABLE_MINIBEAM)
-
-#endif
                                 }
                             }
-#if defined(CARBON_ENABLE_MINIBEAM)
-                            else
-#endif
-
                             // A hazard sampled at step start can leave a supported rate
                             // interval after EM loss. Treat the zero-rate endpoint as a
                             // null collision; retain post-EM energy, position and MCS.
@@ -10838,8 +10801,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                   << " charged_bytes=" << sizeof(SecondaryParticle)
                   << " neutron_bytes=" << sizeof(NeutronBirthRecord) << '\n';
     }
-#endif
-#if defined(CARBON_ENABLE_MINIBEAM)
 #endif
     if((!BroadBeam && config.enable_neutron_transport)) transport_neutrons_experimental(queue,config,result,&inputs);
     result.elapsed_seconds =
