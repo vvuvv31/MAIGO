@@ -1784,6 +1784,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             }
         }
         const auto& package=*unified_package;
+        if(package.materials.size()!=26 || package.continuous_descriptors.size()!=468)
+            throw std::invalid_argument("GPU transport requires the continuous26-composition EMCNT001 package; archived density-state packages are host diagnostics only");
         const auto& delta_means=*unified_delta_means;
         bool primary_record_found = false;
         for (const auto& record : package.records) {
@@ -1870,6 +1872,16 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             ,unified_interval_width_audit
 #endif
         };
+        if(!package.continuous_descriptors.empty()) {
+            unified_device.continuous_descriptors=upload("continuous_descriptors",package.continuous_descriptors);
+            unified_device.continuous_scalars=upload("continuous_scalars",package.continuous_scalars);
+            unified_device.continuous_ranges=upload("continuous_ranges",package.continuous_ranges);
+            unified_device.continuous_lengths=upload("continuous_lengths",package.continuous_lengths);
+            unified_device.continuous_degree=package.continuous_degree;
+            unified_device.continuous_scalar_count=package.continuous_scalar_count;
+            std::cout<<"[em-continuous-density] compositions="<<package.materials.size()
+                     <<" density_response_states=0 range_degree="<<package.continuous_degree-1<<"\n";
+        }
         unified_device.shared_prepare_grid=package.shared_prepare_grid;
         std::cout<<"[em-shared-prepare-grid] certified="<<unified_device.shared_prepare_grid<<"\n";
 

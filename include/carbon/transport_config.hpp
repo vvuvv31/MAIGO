@@ -349,11 +349,11 @@ struct TransportConfig {
     double voxel_size_x_mm{5.0};
     double voxel_size_y_mm{5.0};
     double voxel_size_z_mm{0.0};
-    bool enable_energy_straggling{false};
+    bool enable_energy_straggling{true};
     // Smoke-only read-only primary query histogram; no RNG or physics changes.
     bool enable_primary_loss_query_audit{false};
     // Toggle native Unified EM fluctuations for charged secondaries.
-    bool enable_secondary_energy_straggling{false};
+    bool enable_secondary_energy_straggling{true};
     // GPU generation-wise species ordering. Production YAML opts in explicitly.
     bool secondary_species_grouping{false};
     // Compile-time geometry/model branch selection for uniform-water Urban
@@ -513,17 +513,15 @@ struct TransportConfig {
     // electromagnetic MCS remains independent of this switch.
     bool minibeam_copper_enable_elastic{true};
     // Sample Bohr energy-loss fluctuations step-by-step in Copper.  This is
-    // independent of downstream water straggling so legacy minibeam cases
-    // remain reproducible unless explicitly enabled.
-    bool minibeam_copper_enable_energy_straggling{false};
+    // independent of downstream ion straggling; both default to enabled.
+    bool minibeam_copper_enable_energy_straggling{true};
     double minibeam_copper_straggling_scale{1.0};
     // Research selector applies to Z=1,A=1 primary and fragment tracks only.
     std::string minibeam_copper_proton_straggling_model{"legacy_clipped_gaussian"};
     // Research candidate: native restricted mean law for primary protons in Cu.
     bool minibeam_copper_primary_native_mean_loss{false};
-    // Fragment loss fluctuations are separately gated until per-species
-    // Copper exit spectra have been validated.
-    bool minibeam_copper_fragment_enable_energy_straggling{false};
+    // Separate Copper fragment control, enabled in all default minibeams.
+    bool minibeam_copper_fragment_enable_energy_straggling{true};
     double minibeam_copper_fragment_straggling_scale{1.0};
     // Amplitude scale for the selected Copper MCS model. The legacy Highland
     // benchmark uses 0.785; the slab-constrained model uses 1.0.

@@ -1,4 +1,5 @@
-# Default broadbeam: shared FP32 electron transport; RT07575 local 1%/1mm >99% accepted.
+# Default broadbeam: shared FP32 electrons; primary/secondary ion fluctuations enabled.
+# RT07575 fluctuations-ON local1%/1mm99.7955% passed; see docs/ion_straggling_defaults_20261005.md.
 # RT07575 full plan: use native repeated batches on 2080Ti.
 run_mode: research
 scorer_mode: production
@@ -56,9 +57,10 @@ ct_schneider_secondary_cinel03_file: data/schneider/cinel03_secondary_targets_v2
 ct_schneider_physics_bundle_file: data/schneider/schneider_physics_bundle_v2_1.json
 em_model: g4_material_joint_v1
 em_delta_moments_file: data/em/unified_em_delta_moments_v2.bin
+# EMCNT001:26 composition responses; continuous density; no density-state expansion.
 em_package_file: data/em/unified_em_v1.bin
-enable_energy_straggling: false
-enable_secondary_energy_straggling: false
+enable_energy_straggling: true
+enable_secondary_energy_straggling: true
 ct_secondary_exact_faces: true
 history_chunk_size: 524288
 multiple_scattering_model: fermi_eyges

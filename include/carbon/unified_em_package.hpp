@@ -1,5 +1,6 @@
 #pragma once
 #include "carbon/primary_em_mean_candidate.hpp"
+#include "carbon/em_continuous_density.hpp"
 #include <array>
 #include <cstdint>
 #include <filesystem>
@@ -27,6 +28,10 @@ public:
     std::vector<UnifiedEmRecord> records;
     std::vector<UnifiedEmNode> nodes;
     std::vector<EmCubicSegmentCandidate<float>> segments;
+    std::vector<EmContinuousDescriptor> continuous_descriptors;
+    std::vector<float> continuous_scalars, continuous_ranges;
+    unsigned continuous_degree{}, continuous_scalar_count{};
+    std::vector<unsigned> continuous_lengths;
     // Immutable certificate computed once when the package is parsed.
     bool shared_prepare_grid{false};
     static UnifiedEmPackage load(const std::filesystem::path&);

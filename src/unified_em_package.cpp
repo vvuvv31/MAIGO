@@ -1,4 +1,5 @@
 #include "carbon/unified_em_package.hpp"
+#include "carbon/em_density_factorization.hpp"
 #include <bit>
 #include <cmath>
 #include <cstring>
@@ -11,15 +12,110 @@ namespace carbon {
 namespace {
 UnifiedEmPackage parse_unified_em(const std::filesystem::path& path) {
     std::ifstream in(path,std::ios::binary);
-    char magic[8];std::uint32_t h[6];in.read(magic,8);in.read(reinterpret_cast<char*>(h),sizeof h);
-    if(!in || std::memcmp(magic,"EMJOINT1",8) || h[0]!=1 || h[1]<26 || h[1]>256 || h[2]!=18 || h[3]!=h[1]*h[2])
+    char magic[8]{};std::uint32_t h[6]{};in.read(magic,8);in.read(reinterpret_cast<char*>(h),sizeof h);
+    const bool continuous=std::memcmp(magic,"EMCNT001",8)==0;
+    const bool factorized=std::memcmp(magic,"EMFAC001",8)==0;
+    if(!in || (!factorized && !continuous && std::memcmp(magic,"EMJOINT1",8)) || h[0]!=1 || h[1]<26 || h[1]>256 || h[2]!=18 || h[3]!=h[1]*h[2])
         throw std::runtime_error("Invalid unified EM header/registry");
     const std::uint64_t expected=32ULL+8ULL*h[1]+8ULL*h[2]+104ULL*h[3]+52ULL*h[4]+24ULL*h[5];
-    if(std::filesystem::file_size(path)!=expected || expected>4ULL*1024*1024*1024)
+    if((!factorized && !continuous && std::filesystem::file_size(path)!=expected) || expected>4ULL*1024*1024*1024 ||
+       std::filesystem::file_size(path)>4ULL*1024*1024*1024)
         throw std::runtime_error("Unified EM size mismatch");
     UnifiedEmPackage p;
     auto read=[&](auto& v,std::uint32_t count){v.resize(count);in.read(reinterpret_cast<char*>(v.data()),count*sizeof(v[0]));if(!in)throw std::runtime_error("Truncated unified EM payload");};
-    read(p.materials,h[1]);read(p.species,h[2]);read(p.records,h[3]);read(p.nodes,h[4]);read(p.segments,h[5]);
+    read(p.materials,h[1]);read(p.species,h[2]);read(p.records,h[3]);
+    if(!factorized) {
+        read(p.nodes,h[4]);read(p.segments,h[5]);
+    } else {
+        namespace f=em_density_factorization;
+        read(p.segments,h[5]);p.nodes.resize(h[4]);
+        struct Block {unsigned base{};float ratio{};std::array<f::Field,10> fields;std::array<std::vector<f::Run>,2> switches;};
+        std::vector<Block> blocks(h[3]);std::uint64_t expected_offset=0;
+        for(unsigned i=0;i<h[3];++i) {
+            const auto& r=p.records[i];auto& b=blocks[i];f::read(in,&b.base);f::read(in,&b.ratio);
+            if(r.node_count<2 || r.node_offset!=expected_offset || expected_offset+r.node_count>h[4] ||
+               b.base>=h[3] || b.base%18!=i%18 || p.materials[b.base/18].section!=p.materials[i/18].section ||
+               r.node_count!=p.records[b.base].node_count || !(b.ratio>0 && std::isfinite(b.ratio)))
+                throw std::runtime_error("Invalid factorized EM base directory");
+            const float expected_ratio=p.materials[i/18].density/p.materials[b.base/18].density;
+            if(b.ratio!=expected_ratio)throw std::runtime_error("Factorized EM density ratio mismatch");
+            expected_offset+=r.node_count;
+            if(b.base==i)f::read(in,p.nodes.data()+r.node_offset,r.node_count);
+            else {
+                for(auto& field:b.fields)field=f::Field::load(in,r.node_count);
+                b.switches[0]=f::read_runs(in,r.node_count,3);b.switches[1]=f::read_runs(in,r.node_count,1);
+            }
+        }
+        if(expected_offset!=h[4])throw std::runtime_error("Factorized EM node coverage mismatch");
+        f::require_end(in);
+        constexpr int exponents[10]={1,1,1,-1,1,0,1,1,1,0};
+        for(unsigned i=0;i<h[3];++i) {
+            const auto& r=p.records[i];const auto& b=blocks[i];if(b.base==i)continue;
+            if(blocks[b.base].base!=b.base)throw std::runtime_error("Factorized EM chained base unsupported");
+            const auto& br=p.records[b.base];auto* dst=p.nodes.data()+r.node_offset;const auto* base=p.nodes.data()+br.node_offset;
+            for(unsigned j=0;j<r.node_count;++j)dst[j].energy=base[j].energy;
+            for(unsigned column=0;column<10;++column) {
+                const float scale=exponents[column]==1?b.ratio:exponents[column]==-1?1.f/b.ratio:1.f;
+                b.fields[column].expand(reinterpret_cast<float*>(dst)+column+1,13,
+                    reinterpret_cast<const float*>(base)+column+1,13,r.node_count,scale,column!=6);
+            }
+            f::expand_runs(&dst->model,13,r.node_count,b.switches[0]);
+            f::expand_runs(&dst->fluctuation,13,r.node_count,b.switches[1]);
+        }
+    }
+    if(continuous) {
+        if(h[1]!=26)throw std::runtime_error("Continuous EM must have exactly26 compositions");
+        unsigned ext[4]{};in.read(reinterpret_cast<char*>(ext),sizeof ext);
+        if(!in || ext[0]<2 || ext[0]>64 || ext[1]<2 || ext[1]>4096 || ext[2]!=468 || ext[3]>1000000)
+            throw std::runtime_error("Invalid continuous EM extension");
+        p.continuous_degree=ext[0];p.continuous_scalar_count=ext[1];
+        const auto bytes=expected+16+64ULL*ext[2]+26ULL*ext[1]*8*4+4ULL*ext[3]*(ext[0]+1);
+        if(std::filesystem::file_size(path)!=bytes)throw std::runtime_error("Continuous EM size mismatch");
+        read(p.continuous_descriptors,ext[2]);read(p.continuous_scalars,26*ext[1]*8);read(p.continuous_ranges,ext[3]*(ext[0]+1));
+        std::uint64_t next=0;
+        for(unsigned i=0;i<468;++i){const auto& d=p.continuous_descriptors[i];
+            for(float v:std::array{d.log_min,d.log_max,d.base_density,d.base_cut,d.base_coefficient,d.base_c,d.base_m,d.base_a,d.base_x0,d.base_x1,d.base_d0,d.rate_max_energy})
+                if(!std::isfinite(v))throw std::runtime_error("Invalid continuous descriptor scalar");
+            if(d.log_max<d.log_min || !(d.base_density>0 && d.base_cut>0 && d.base_coefficient>0) ||
+               d.base_density!=p.materials[i/18].density || d.range_offset!=next || d.range_count<2 || next+d.range_count>ext[3])
+                throw std::runtime_error("Invalid continuous density domain/range directory");
+            float energy=0;
+            for(unsigned j=0;j<d.range_count;++j){const float e=p.continuous_ranges[(next+j)*(ext[0]+1)];
+                if(!(e>energy))throw std::runtime_error("Continuous range knots not ordered");energy=e;}
+            if(d.rate_offset!=next+d.range_count || d.rate_count<2 || d.rate_offset+d.rate_count>ext[3])
+                throw std::runtime_error("Invalid continuous rate directory");
+            const unsigned stride=ext[0]+1;
+            for(unsigned j=0;j<d.rate_count;++j){const float u=p.continuous_ranges[(d.rate_offset+j)*stride];
+                if(u<0 || u>1 || (j && u<=p.continuous_ranges[(d.rate_offset+j-1)*stride]))throw std::runtime_error("Invalid normalized rate knot");}
+            next+=d.range_count+d.rate_count;
+        }
+        if(next!=ext[3])throw std::runtime_error("Continuous range coverage mismatch");
+        for(unsigned i=0;i<26*ext[1];++i) {
+            const float* v=p.continuous_scalars.data()+8*i;
+            for(unsigned k=0;k<8;++k)if(!std::isfinite(v[k]))throw std::runtime_error("Nonfinite material scalar");
+            if(!(v[0]>0 && v[1]>0 && v[3]>0 && v[6]>v[5] && v[7]>=0))throw std::runtime_error("Invalid cut/density-effect material scalar");
+        }
+        for(float v:p.continuous_ranges)if(!std::isfinite(v))throw std::runtime_error("Nonfinite range coefficient");
+        // Certify truncation once, on immutable loaded coefficients. For
+        // |x|<=1, |T_k(x)|<=1, so the omitted absolute coefficient sum bounds
+        // the error everywhere in the physical log-density interval.
+        p.continuous_lengths.assign(ext[3],ext[0]);
+        for(const auto& d:p.continuous_descriptors)for(unsigned kind=0;kind<2;++kind) {
+            const unsigned offset=kind?d.rate_offset:d.range_offset;
+            const unsigned count=kind?d.rate_count:d.range_count;
+            const double tolerance=kind?5e-5:4e-7;
+            for(unsigned j=0;j<count;++j) {
+                const auto* coeff=p.continuous_ranges.data()+(offset+j)*(ext[0]+1)+1;
+                double tail=0;
+                for(unsigned k=ext[0]-1;k>0;--k) {
+                    tail+=std::abs(static_cast<double>(coeff[k]));
+                    if(tail<tolerance)p.continuous_lengths[offset+j]=k;
+                    else break;
+                }
+            }
+        }
+
+    }
     const std::set<std::pair<unsigned,unsigned>> required={{1,1},{1,2},{1,3},{2,3},{2,4},{2,6},{3,6},{3,7},{4,6},{4,7},{4,9},{4,10},{5,8},{5,10},{5,11},{6,10},{6,11},{6,12}};
     std::set<std::pair<unsigned,unsigned>> found;
     for(auto s:p.species)found.emplace(s.z,s.a);

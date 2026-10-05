@@ -37,6 +37,7 @@ LET: false
 device: cuda
 em_model: g4_material_joint_v1
 em_delta_moments_file: data/em/unified_em_delta_moments_v2.bin
+# EMCNT001:26 composition responses; continuous density; no density-state expansion.
 em_package_file: data/em/unified_em_v1.bin
 enable_energy_straggling: true
 enable_secondary_energy_straggling: true

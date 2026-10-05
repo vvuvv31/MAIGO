@@ -1,0 +1,197 @@
+{
+  "scope": "All eight presets ion fluctuation defaults ON; runtime smoke only",
+  "fp32_dose": true,
+  "fp64_dose": false,
+  "histories_per_preset": 40000,
+  "batches_per_preset": 2,
+  "records": [
+    {
+      "case": "carbon_ct_broadbeam",
+      "arm": "factorized",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 10572001,
+      "n": 2,
+      "h": 20000,
+      "histories": 40000,
+      "wall_seconds": 7.329578125034459,
+      "batch_wall_seconds": [
+        6.1142766,
+        0.5908105
+      ],
+      "resident_primary_s": 33851.80188909981,
+      "max_energy_residual": 4.08928340832e-06,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.5,
+      "case_identity": "RT07575 head",
+      "spot_allocation": null
+    },
+    {
+      "case": "carbon_ct_minibeam",
+      "arm": "factorized",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 10572001,
+      "n": 2,
+      "h": 20000,
+      "histories": 40000,
+      "wall_seconds": 16.98302237293683,
+      "batch_wall_seconds": [
+        11.643736,
+        4.7215925
+      ],
+      "resident_primary_s": 4235.858981900704,
+      "max_energy_residual": 1.31395155701e-06,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.1,
+      "case_identity": "lung CT; accuracy deferred",
+      "spot_allocation": null
+    },
+    {
+      "case": "carbon_water_broadbeam",
+      "arm": "factorized",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 10572001,
+      "n": 2,
+      "h": 20000,
+      "histories": 40000,
+      "wall_seconds": 2.5497846859507263,
+      "batch_wall_seconds": [
+        2.1037103,
+        0.29800081
+      ],
+      "resident_primary_s": 67113.91153601227,
+      "max_energy_residual": 5.43908284246e-06,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.5,
+      "case_identity": "Water_75eV phantom",
+      "spot_allocation": null
+    },
+    {
+      "case": "carbon_water_minibeam",
+      "arm": "factorized",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 10572001,
+      "n": 2,
+      "h": 20000,
+      "histories": 40000,
+      "wall_seconds": 12.1523773369845,
+      "batch_wall_seconds": [
+        8.9816345,
+        2.7179488
+      ],
+      "resident_primary_s": 7358.490343894631,
+      "max_energy_residual": 1.32982140102e-06,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.1,
+      "case_identity": "Water_75eV phantom",
+      "spot_allocation": null
+    },
+    {
+      "case": "proton_ct_broadbeam",
+      "arm": "factorized",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 10572001,
+      "n": 2,
+      "h": 20000,
+      "histories": 40000,
+      "wall_seconds": 6.2083687980193645,
+      "batch_wall_seconds": [
+        5.2433347,
+        0.44221489
+      ],
+      "resident_primary_s": 45226.88053312723,
+      "max_energy_residual": 3.20602650248e-09,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.5,
+      "case_identity": "RT07575 head",
+      "spot_allocation": null
+    },
+    {
+      "case": "proton_ct_minibeam",
+      "arm": "factorized",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 10572001,
+      "n": 2,
+      "h": 20000,
+      "histories": 40000,
+      "wall_seconds": 9.77086717390921,
+      "batch_wall_seconds": [
+        7.2624443,
+        1.9259248
+      ],
+      "resident_primary_s": 10384.62145562485,
+      "max_energy_residual": 3.712282501e-07,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.1,
+      "case_identity": "lung CT; accuracy deferred",
+      "spot_allocation": null
+    },
+    {
+      "case": "proton_water_broadbeam",
+      "arm": "factorized",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 10572001,
+      "n": 2,
+      "h": 20000,
+      "histories": 40000,
+      "wall_seconds": 3.032153325038962,
+      "batch_wall_seconds": [
+        2.3939888,
+        0.47219109
+      ],
+      "resident_primary_s": 42355.73356540887,
+      "max_energy_residual": 1.5024562443e-06,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.5,
+      "case_identity": "Water_75eV phantom",
+      "spot_allocation": null
+    },
+    {
+      "case": "proton_water_minibeam",
+      "arm": "factorized",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 10572001,
+      "n": 2,
+      "h": 20000,
+      "histories": 40000,
+      "wall_seconds": 8.721316022099927,
+      "batch_wall_seconds": [
+        6.7515595,
+        1.3611554
+      ],
+      "resident_primary_s": 14693.39944579436,
+      "max_energy_residual": 5.49659560034e-07,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.1,
+      "case_identity": "Water_75eV phantom",
+      "spot_allocation": null
+    }
+  ],
+  "carbon_ct_broadbeam_new_default_gamma": {
+    "case": "carbon_broadbeam",
+    "arm": "current",
+    "case_identity": "RT07575 head",
+    "dimension": 3,
+    "complete_spot_plan": true,
+    "histories": 12963818,
+    "reference": "/mnt/sdb/wuwei/MAIGO_minibeam/out/broadbeam_shared_electron_20261004/carbon_analysis5/plot_arrays.npz",
+    "mask": "full grid reference >=10% reference max",
+    "points": 459684,
+    "dose_percent": 1,
+    "dta_mm": 1,
+    "search_step_mm": 0.1,
+    "pass_percent": 99.79551169934129,
+    "passed": true,
+    "dose_sum_bias_percent": -0.5118611276192397,
+    "normalization": "absolute plan weights/per-history; no fitting or registration",
+    "gamma_seconds": 1.1250204220414162
+  },
+  "electron_package_changed": false
+}

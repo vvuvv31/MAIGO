@@ -1,0 +1,756 @@
+{
+  "experiment": "26 composition bases plus sparse density corrections",
+  "case_identity": "RT07575 head; carbon minibeam lung smoke is separate",
+  "baseline_commit": "5d3e4f5",
+  "dose_scoring": "FP32",
+  "default_promoted": true,
+  "device_layout": "unchanged dense175 nodes; host reconstruction only",
+  "package": {
+    "schema": "EMFAC001 + EMDFAC01",
+    "scope": "26 native composition bases + sparse density corrections; host reconstruction for unchanged GPU layout",
+    "reference_source": "data/archive/ion_em_native_20261005/unified_em_v1.bin",
+    "reference_delta_source": "data/archive/ion_em_native_20261005/unified_em_delta_moments_v2.bin",
+    "materials": 175,
+    "composition_bases": 26,
+    "base_material_indices": {
+      "-1": 0,
+      "0": 20,
+      "1": 69,
+      "2": 100,
+      "3": 103,
+      "4": 106,
+      "5": 109,
+      "6": 112,
+      "7": 115,
+      "8": 119,
+      "9": 122,
+      "10": 125,
+      "11": 128,
+      "12": 131,
+      "13": 134,
+      "14": 137,
+      "15": 140,
+      "16": 143,
+      "17": 146,
+      "18": 149,
+      "19": 152,
+      "20": 156,
+      "21": 159,
+      "22": 162,
+      "23": 169,
+      "24": 174
+    },
+    "ions": 18,
+    "records": 3150,
+    "nodes": 25872175,
+    "tolerance": 5e-05,
+    "native_record_scalars_and_splines": "retained exactly",
+    "discrete_switches_and_zero_support": "retained exactly",
+    "fresh_native_extraction": false,
+    "reference_bytes": 1593660068,
+    "compact_bytes": 302266988,
+    "em_bytes": 264095640,
+    "delta_bytes": 38171348,
+    "seconds": 64.71498150902335,
+    "validation_status": "User-authorized default representation; matched-native gamma100%; independent head TOPAS gate still fails",
+    "max_node_relative_error": 4.9999898496446664e-05,
+    "max_delta_relative_error": 4.999997093024946e-05,
+    "node_correction_knots": 1563304,
+    "delta_correction_knots": 903583,
+    "size_reduction_percent": 81.03315794444566
+  },
+  "component": {
+    "materials": 175,
+    "composition_bases": 26,
+    "ions": 18,
+    "node_values": 336338275,
+    "delta_values": 51744350,
+    "finite_step_cases": 1219050,
+    "max_node_relative_error": 4.99999e-05,
+    "max_delta_relative_error": 5e-05,
+    "max_mean_relative_error": 6.20839e-05,
+    "max_range_relative_error": 0,
+    "seconds": 4.14086
+  },
+  "full_plan": [
+    {
+      "case": "proton_broadbeam",
+      "native_TOPAS": {
+        "case": "proton_broadbeam",
+        "arm": "native",
+        "case_identity": "RT07575 head",
+        "dimension": 3,
+        "complete_spot_plan": true,
+        "histories": 25063000,
+        "reference": "/mnt/sdb/wuwei/MAIGO_minibeam/out/broadbeam_shared_electron_20261004/proton_shared5_arrays.npz",
+        "mask": "full grid reference >=10% reference max",
+        "points": 416837,
+        "dose_percent": 1,
+        "dta_mm": 1,
+        "search_step_mm": 0.1,
+        "pass_percent": 99.88220815330693,
+        "passed": true,
+        "dose_sum_bias_percent": -0.047082126550423986,
+        "normalization": "absolute plan weights/per-history; no fitting or registration",
+        "gamma_seconds": 0.9382186500588432
+      },
+      "factorized_TOPAS": {
+        "case": "proton_broadbeam",
+        "arm": "factorized",
+        "case_identity": "RT07575 head",
+        "dimension": 3,
+        "complete_spot_plan": true,
+        "histories": 25063000,
+        "reference": "/mnt/sdb/wuwei/MAIGO_minibeam/out/broadbeam_shared_electron_20261004/proton_shared5_arrays.npz",
+        "mask": "full grid reference >=10% reference max",
+        "points": 416837,
+        "dose_percent": 1,
+        "dta_mm": 1,
+        "search_step_mm": 0.1,
+        "pass_percent": 99.88100864366646,
+        "passed": true,
+        "dose_sum_bias_percent": -0.04700871813899665,
+        "normalization": "absolute plan weights/per-history; no fitting or registration",
+        "gamma_seconds": 0.8376638499321416
+      },
+      "against_native_pass_percent": 100.0,
+      "relative_L1": 0.000228015176242465,
+      "dose_sum_change_percent": 7.344298992995885e-05,
+      "local_percent_quantiles": {
+        "50": 0.00310141047619951,
+        "95": 0.12586457300504628,
+        "99": 0.28776981897003545,
+        "99.9": 0.5701941587842085,
+        "100": 21.617988746814152
+      },
+      "accuracy_accepted": true
+    },
+    {
+      "case": "carbon_broadbeam",
+      "native_TOPAS": {
+        "case": "carbon_broadbeam",
+        "arm": "native",
+        "case_identity": "RT07575 head",
+        "dimension": 3,
+        "complete_spot_plan": true,
+        "histories": 12963818,
+        "reference": "/mnt/sdb/wuwei/MAIGO_minibeam/out/broadbeam_shared_electron_20261004/carbon_analysis5/plot_arrays.npz",
+        "mask": "full grid reference >=10% reference max",
+        "points": 459684,
+        "dose_percent": 1,
+        "dta_mm": 1,
+        "search_step_mm": 0.1,
+        "pass_percent": 99.78681006952603,
+        "passed": true,
+        "dose_sum_bias_percent": -0.5113230991112161,
+        "normalization": "absolute plan weights/per-history; no fitting or registration",
+        "gamma_seconds": 1.110667324042879
+      },
+      "factorized_TOPAS": {
+        "case": "carbon_broadbeam",
+        "arm": "factorized",
+        "case_identity": "RT07575 head",
+        "dimension": 3,
+        "complete_spot_plan": true,
+        "histories": 12963818,
+        "reference": "/mnt/sdb/wuwei/MAIGO_minibeam/out/broadbeam_shared_electron_20261004/carbon_analysis5/plot_arrays.npz",
+        "mask": "full grid reference >=10% reference max",
+        "points": 459684,
+        "dose_percent": 1,
+        "dta_mm": 1,
+        "search_step_mm": 0.1,
+        "pass_percent": 99.78768023250754,
+        "passed": true,
+        "dose_sum_bias_percent": -0.5113324222724702,
+        "normalization": "absolute plan weights/per-history; no fitting or registration",
+        "gamma_seconds": 1.1669499359559268
+      },
+      "against_native_pass_percent": 100.0,
+      "relative_L1": 3.3187606029749807e-05,
+      "dose_sum_change_percent": -9.371077747785883e-06,
+      "local_percent_quantiles": {
+        "50": 0.0003874508195426873,
+        "95": 0.015396764363647323,
+        "99": 0.04423114906691244,
+        "99.9": 0.13753597046807647,
+        "100": 5.10563970793956
+      },
+      "accuracy_accepted": true
+    },
+    {
+      "case": "proton_head_minibeam",
+      "native_TOPAS": {
+        "case": "proton_head_minibeam",
+        "arm": "native",
+        "case_identity": "RT07575 head",
+        "dimension": 3,
+        "complete_spot_plan": true,
+        "histories": 236086480,
+        "reference": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/inputs/physical_dose.mhd",
+        "mask": "BODY including GTV, reference >=10% reference max",
+        "points": 185559,
+        "dose_percent": 3,
+        "dta_mm": 0.2,
+        "search_step_mm": 0.020000000000000004,
+        "pass_percent": 98.92325352044364,
+        "passed": false,
+        "dose_sum_bias_percent": 0.16875092748629417,
+        "normalization": "absolute plan weights/per-history; no fitting or registration",
+        "gamma_seconds": 0.9121210559969768,
+        "GTV_pass_percent": 98.21062083119548,
+        "prescription_fraction_sampled": 0.0010000002019709298
+      },
+      "factorized_TOPAS": {
+        "case": "proton_head_minibeam",
+        "arm": "factorized",
+        "case_identity": "RT07575 head",
+        "dimension": 3,
+        "complete_spot_plan": true,
+        "histories": 236086480,
+        "reference": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/inputs/physical_dose.mhd",
+        "mask": "BODY including GTV, reference >=10% reference max",
+        "points": 185559,
+        "dose_percent": 3,
+        "dta_mm": 0.2,
+        "search_step_mm": 0.020000000000000004,
+        "pass_percent": 98.93726523639381,
+        "passed": false,
+        "dose_sum_bias_percent": 0.16816322766830538,
+        "normalization": "absolute plan weights/per-history; no fitting or registration",
+        "gamma_seconds": 0.7816100539639592,
+        "GTV_pass_percent": 98.35171883016932,
+        "prescription_fraction_sampled": 0.0010000002019709298
+      },
+      "against_native_pass_percent": 100.0,
+      "relative_L1": 0.0022277036874964605,
+      "dose_sum_change_percent": -0.0005867097398848775,
+      "local_percent_quantiles": {
+        "50": 0.14354098254703732,
+        "95": 0.8651276423819357,
+        "99": 1.5117554595411682,
+        "99.9": 2.5685814075893085,
+        "100": 4.947830946558889
+      },
+      "accuracy_accepted": false
+    }
+  ],
+  "runtime_smokes": [
+    {
+      "case": "proton_broadbeam",
+      "arm": "native",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 1001904402,
+      "n": 2,
+      "h": 50000,
+      "histories": 100000,
+      "wall_seconds": 6.260738544980995,
+      "batch_wall_seconds": [
+        5.1771993,
+        0.56135713
+      ],
+      "resident_primary_s": 89069.85825583083,
+      "max_energy_residual": 1.91412075944e-06,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.5,
+      "case_identity": "RT07575 head"
+    },
+    {
+      "case": "proton_broadbeam",
+      "arm": "factorized",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 1001904402,
+      "n": 2,
+      "h": 50000,
+      "histories": 100000,
+      "wall_seconds": 6.455489033949561,
+      "batch_wall_seconds": [
+        5.3856048,
+        0.56049954
+      ],
+      "resident_primary_s": 89206.13922359329,
+      "max_energy_residual": 1.91601230379e-06,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.5,
+      "case_identity": "RT07575 head"
+    },
+    {
+      "case": "carbon_broadbeam",
+      "arm": "native",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 1001904402,
+      "n": 2,
+      "h": 50000,
+      "histories": 100000,
+      "wall_seconds": 6.653568763053045,
+      "batch_wall_seconds": [
+        5.3654589,
+        0.72335257
+      ],
+      "resident_primary_s": 69122.58568459915,
+      "max_energy_residual": 3.93643791987e-06,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.5,
+      "case_identity": "RT07575 head"
+    },
+    {
+      "case": "carbon_broadbeam",
+      "arm": "factorized",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 1001904402,
+      "n": 2,
+      "h": 50000,
+      "histories": 100000,
+      "wall_seconds": 7.149201047956012,
+      "batch_wall_seconds": [
+        5.8633552,
+        0.71003198
+      ],
+      "resident_primary_s": 70419.36336445015,
+      "max_energy_residual": 3.9322731753e-06,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.5,
+      "case_identity": "RT07575 head"
+    },
+    {
+      "case": "proton_head_minibeam",
+      "arm": "native",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 1001904402,
+      "n": 2,
+      "h": 50000,
+      "histories": 100000,
+      "wall_seconds": 7.575986891053617,
+      "batch_wall_seconds": [
+        5.9891908,
+        1.0831285
+      ],
+      "resident_primary_s": 46162.57443138095,
+      "max_energy_residual": 5.2453559409e-10,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.1,
+      "case_identity": "RT07575 head"
+    },
+    {
+      "case": "proton_head_minibeam",
+      "arm": "factorized",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 1001904402,
+      "n": 2,
+      "h": 50000,
+      "histories": 100000,
+      "wall_seconds": 7.821227872977033,
+      "batch_wall_seconds": [
+        6.2529396,
+        1.0953624
+      ],
+      "resident_primary_s": 45646.99317778299,
+      "max_energy_residual": 8.4087834825e-10,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.1,
+      "case_identity": "RT07575 head"
+    },
+    {
+      "case": "carbon_minibeam",
+      "arm": "native",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 1001904402,
+      "n": 2,
+      "h": 20000,
+      "histories": 40000,
+      "wall_seconds": 16.900934132980183,
+      "batch_wall_seconds": [
+        11.187912,
+        5.1147031
+      ],
+      "resident_primary_s": 3910.2953991601194,
+      "max_energy_residual": 1.38195545636e-06,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.1,
+      "case_identity": "lung CT; accuracy deferred"
+    },
+    {
+      "case": "carbon_minibeam",
+      "arm": "factorized",
+      "tag": "smoke",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 1001904402,
+      "n": 2,
+      "h": 20000,
+      "histories": 40000,
+      "wall_seconds": 17.341037504025735,
+      "batch_wall_seconds": [
+        11.521257,
+        5.2043457
+      ],
+      "resident_primary_s": 3842.9422549697265,
+      "max_energy_residual": 1.19923415643e-06,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.1,
+      "case_identity": "lung CT; accuracy deferred"
+    },
+    {
+      "case": "proton_head_minibeam",
+      "arm": "native",
+      "tag": "closeout",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 1001904402,
+      "n": 2,
+      "h": 50000,
+      "histories": 100000,
+      "wall_seconds": 7.501601867959835,
+      "batch_wall_seconds": [
+        5.9311454,
+        1.0858449
+      ],
+      "resident_primary_s": 46047.0919926041,
+      "max_energy_residual": 5.18446272067e-10,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.1,
+      "case_identity": "RT07575 head",
+      "spot_allocation": {
+        "active_spots": 487,
+        "sampled_spots": 484,
+        "histories": 100000,
+        "allocation": "whole-campaign largest remainder; verified per-spot seeds and counts"
+      }
+    },
+    {
+      "case": "proton_head_minibeam",
+      "arm": "factorized",
+      "tag": "closeout",
+      "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+      "seed": 1001904402,
+      "n": 2,
+      "h": 50000,
+      "histories": 100000,
+      "wall_seconds": 7.936027821036987,
+      "batch_wall_seconds": [
+        6.3616634,
+        1.0885627
+      ],
+      "resident_primary_s": 45932.12683109572,
+      "max_energy_residual": 8.55361060089e-10,
+      "runtime_pass": true,
+      "ion_maximum_step_mm": 0.1,
+      "case_identity": "RT07575 head",
+      "spot_allocation": {
+        "active_spots": 487,
+        "sampled_spots": 484,
+        "histories": 100000,
+        "allocation": "whole-campaign largest remainder; verified per-spot seeds and counts"
+      }
+    }
+  ],
+  "timing": {
+    "proton_broadbeam": {
+      "native": {
+        "resident_primary_s": 206719.92936006462,
+        "campaign_wall_s": 130.88743085192982,
+        "EM_load_verify_mean_s": 0.7347490275,
+        "timing_scope": "Two reversed-order seeds; startup excluded for resident throughput; unlocked clocks, warm filesystem cache"
+      },
+      "factorized": {
+        "resident_primary_s": 206121.15301658426,
+        "campaign_wall_s": 132.31019979296252,
+        "EM_load_verify_mean_s": 1.3299107895,
+        "timing_scope": "Two reversed-order seeds; startup excluded for resident throughput; unlocked clocks, warm filesystem cache"
+      }
+    },
+    "carbon_broadbeam": {
+      "native": {
+        "resident_primary_s": 134612.7839436812,
+        "campaign_wall_s": 106.83005297894124,
+        "EM_load_verify_mean_s": 0.742292724,
+        "timing_scope": "Two reversed-order seeds; startup excluded for resident throughput; unlocked clocks, warm filesystem cache"
+      },
+      "factorized": {
+        "resident_primary_s": 134365.8216377602,
+        "campaign_wall_s": 107.8400548909558,
+        "EM_load_verify_mean_s": 1.3187133585000002,
+        "timing_scope": "Two reversed-order seeds; startup excluded for resident throughput; unlocked clocks, warm filesystem cache"
+      }
+    },
+    "proton_head_minibeam": {
+      "native": {
+        "resident_primary_s": 87255.12074219511,
+        "campaign_wall_s": 2722.427093879087,
+        "EM_load_verify_mean_s": 0.38163062799999997,
+        "timing_scope": "Two12-batch reversed-order seeds plus95-batch factorized-then-native supplement; first batch of each process excluded, unlocked clocks"
+      },
+      "factorized": {
+        "resident_primary_s": 87293.6576185324,
+        "campaign_wall_s": 2720.9024956729263,
+        "EM_load_verify_mean_s": 0.9376882516666667,
+        "timing_scope": "Two12-batch reversed-order seeds plus95-batch factorized-then-native supplement; first batch of each process excluded, unlocked clocks"
+      }
+    }
+  },
+  "head_noise_diagnostic": {
+    "native": {
+      "pooled_relative_noise_rms_percent": 2.4692710280633037,
+      "definition": "RMS[(seed1-seed2)/(seed1+seed2)] over acceptance mask; equal-history independent seeds. Single-pair diagnostic, not a converged uncertainty bound."
+    },
+    "factorized": {
+      "pooled_relative_noise_rms_percent": 2.469422793203404,
+      "definition": "RMS[(seed1-seed2)/(seed1+seed2)] over acceptance mask; equal-history independent seeds. Single-pair diagnostic, not a converged uncertainty bound."
+    }
+  },
+  "limitations": [
+    "Head minibeam native and factorized TOPAS gates both fail at236,086,480 histories per arm; no noise-excluded acceptance.",
+    "No device-memory reduction, cold-storage loading test or new26-material-only native extraction.",
+    "Carbon minibeam accuracy and water validation deferred."
+  ],
+  "requested_head_validation": {
+    "status": "complete; native and factorized both fail strict>99% TOPAS gate",
+    "requested_fraction": 0.001,
+    "target_histories_per_arm": 236086480,
+    "prior_histories_per_arm": 47614080,
+    "supplement_batches_per_arm": 95,
+    "histories_per_batch": 1983920,
+    "rounding_above_nearest_integer_target": 48,
+    "factorized_TOPAS": {
+      "case": "proton_head_minibeam",
+      "arm": "factorized",
+      "case_identity": "RT07575 head",
+      "dimension": 3,
+      "complete_spot_plan": true,
+      "histories": 236086480,
+      "reference": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/inputs/physical_dose.mhd",
+      "mask": "BODY including GTV, reference >=10% reference max",
+      "points": 185559,
+      "dose_percent": 3,
+      "dta_mm": 0.2,
+      "search_step_mm": 0.020000000000000004,
+      "pass_percent": 98.93726523639381,
+      "passed": false,
+      "dose_sum_bias_percent": 0.16816322766830538,
+      "normalization": "absolute plan weights/per-history; no fitting or registration",
+      "gamma_seconds": 0.7816100539639592,
+      "GTV_pass_percent": 98.35171883016932,
+      "prescription_fraction_sampled": 0.0010000002019709298
+    },
+    "native_TOPAS": {
+      "case": "proton_head_minibeam",
+      "arm": "native",
+      "case_identity": "RT07575 head",
+      "dimension": 3,
+      "complete_spot_plan": true,
+      "histories": 236086480,
+      "reference": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/inputs/physical_dose.mhd",
+      "mask": "BODY including GTV, reference >=10% reference max",
+      "points": 185559,
+      "dose_percent": 3,
+      "dta_mm": 0.2,
+      "search_step_mm": 0.020000000000000004,
+      "pass_percent": 98.92325352044364,
+      "passed": false,
+      "dose_sum_bias_percent": 0.16875092748629417,
+      "normalization": "absolute plan weights/per-history; no fitting or registration",
+      "gamma_seconds": 0.9121210559969768,
+      "GTV_pass_percent": 98.21062083119548,
+      "prescription_fraction_sampled": 0.0010000002019709298
+    }
+  },
+  "full_plan_scope": "Both broadbeam final and head0.1% complete; head TOPAS gate fails for both arms.",
+  "head_noise_diagnostic_scope": "47,614,080-history preliminary screen only; no high-statistics noise-excluded claim",
+  "final_build_and_smoke": "Closeout build exited0; generated electron checks and native/factorized head closeout smokes passed. Only additional code change since main screen: zero-initialize truncated-header buffer.",
+  "promotion": {
+    "authorized_by": "User instruction: default compressed, native archived",
+    "runtime_root": "data/em",
+    "native_archive": "data/archive/ion_em_native_20261005",
+    "scope": "Storage representation only; head TOPAS accuracy remains below>99%, no throughput or device-memory gain",
+    "component": {
+      "materials": 175,
+      "composition_bases": 26,
+      "ions": 18,
+      "node_values": 336338275,
+      "delta_values": 51744350,
+      "finite_step_cases": 1219050,
+      "max_node_relative_error": 4.99999e-05,
+      "max_delta_relative_error": 5e-05,
+      "max_mean_relative_error": 6.20839e-05,
+      "max_range_relative_error": 0,
+      "seconds": 3.66642
+    },
+    "default_preset_smokes": [
+      {
+        "case": "carbon_ct_broadbeam",
+        "arm": "factorized",
+        "tag": "default",
+        "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+        "seed": 1001904802,
+        "n": 2,
+        "h": 20000,
+        "histories": 40000,
+        "wall_seconds": 7.0759532019728795,
+        "batch_wall_seconds": [
+          5.9435464,
+          0.557045
+        ],
+        "resident_primary_s": 35903.742067516985,
+        "max_energy_residual": 2.73801931192e-06,
+        "runtime_pass": true,
+        "ion_maximum_step_mm": 0.5,
+        "case_identity": "RT07575 head",
+        "spot_allocation": null
+      },
+      {
+        "case": "carbon_ct_minibeam",
+        "arm": "factorized",
+        "tag": "default",
+        "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+        "seed": 1001904802,
+        "n": 2,
+        "h": 20000,
+        "histories": 40000,
+        "wall_seconds": 17.41122017696034,
+        "batch_wall_seconds": [
+          11.67927,
+          5.1641918
+        ],
+        "resident_primary_s": 3872.8228490661404,
+        "max_energy_residual": 1.39019163239e-06,
+        "runtime_pass": true,
+        "ion_maximum_step_mm": 0.1,
+        "case_identity": "lung CT; accuracy deferred",
+        "spot_allocation": null
+      },
+      {
+        "case": "carbon_water_broadbeam",
+        "arm": "factorized",
+        "tag": "default",
+        "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+        "seed": 1001904802,
+        "n": 2,
+        "h": 20000,
+        "histories": 40000,
+        "wall_seconds": 2.702543403953314,
+        "batch_wall_seconds": [
+          2.226235,
+          0.3024637
+        ],
+        "resident_primary_s": 66123.63731581674,
+        "max_energy_residual": 6.49995161974e-06,
+        "runtime_pass": true,
+        "ion_maximum_step_mm": 0.5,
+        "case_identity": "Water_75eV phantom",
+        "spot_allocation": null
+      },
+      {
+        "case": "carbon_water_minibeam",
+        "arm": "factorized",
+        "tag": "default",
+        "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+        "seed": 1001904802,
+        "n": 2,
+        "h": 20000,
+        "histories": 40000,
+        "wall_seconds": 12.056444698013365,
+        "batch_wall_seconds": [
+          8.7616519,
+          2.841359
+        ],
+        "resident_primary_s": 7038.885265818222,
+        "max_energy_residual": 1.73327078566e-06,
+        "runtime_pass": true,
+        "ion_maximum_step_mm": 0.1,
+        "case_identity": "Water_75eV phantom",
+        "spot_allocation": null
+      },
+      {
+        "case": "proton_ct_broadbeam",
+        "arm": "factorized",
+        "tag": "default",
+        "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+        "seed": 1001904802,
+        "n": 2,
+        "h": 20000,
+        "histories": 40000,
+        "wall_seconds": 6.263665568898432,
+        "batch_wall_seconds": [
+          5.3215434,
+          0.43802149
+        ],
+        "resident_primary_s": 45659.86020457581,
+        "max_energy_residual": 1.72786763391e-08,
+        "runtime_pass": true,
+        "ion_maximum_step_mm": 0.5,
+        "case_identity": "RT07575 head",
+        "spot_allocation": null
+      },
+      {
+        "case": "proton_ct_minibeam",
+        "arm": "factorized",
+        "tag": "default",
+        "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+        "seed": 1001904802,
+        "n": 2,
+        "h": 20000,
+        "histories": 40000,
+        "wall_seconds": 9.752624814980663,
+        "batch_wall_seconds": [
+          7.2432269,
+          1.9468835
+        ],
+        "resident_primary_s": 10272.828343349769,
+        "max_energy_residual": 3.89594821643e-07,
+        "runtime_pass": true,
+        "ion_maximum_step_mm": 0.1,
+        "case_identity": "lung CT; accuracy deferred",
+        "spot_allocation": null
+      },
+      {
+        "case": "proton_water_broadbeam",
+        "arm": "factorized",
+        "tag": "default",
+        "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+        "seed": 1001904802,
+        "n": 2,
+        "h": 20000,
+        "histories": 40000,
+        "wall_seconds": 3.068172408035025,
+        "batch_wall_seconds": [
+          2.4325919,
+          0.46752659
+        ],
+        "resident_primary_s": 42778.3155606187,
+        "max_energy_residual": 2.40076990689e-07,
+        "runtime_pass": true,
+        "ion_maximum_step_mm": 0.5,
+        "case_identity": "Water_75eV phantom",
+        "spot_allocation": null
+      },
+      {
+        "case": "proton_water_minibeam",
+        "arm": "factorized",
+        "tag": "default",
+        "binary": "/mnt/sdb/wuwei/MAIGO_minibeam/build/carbon_mc",
+        "seed": 1001904802,
+        "n": 2,
+        "h": 20000,
+        "histories": 40000,
+        "wall_seconds": 8.576626584981568,
+        "batch_wall_seconds": [
+          6.612312,
+          1.3547736
+        ],
+        "resident_primary_s": 14762.614210964844,
+        "max_energy_residual": 5.13880450254e-08,
+        "runtime_pass": true,
+        "ion_maximum_step_mm": 0.1,
+        "case_identity": "Water_75eV phantom",
+        "spot_allocation": null
+      }
+    ],
+    "default_preset_smoke_status": "All8 presets,2x20k histories each, runtime audits and dose/energy/zero-overflow checks pass; water dose acceptance not inferred.",
+    "regeneration": "Regenerated from archived native sources with updated generator; both binary files byte-identical to installed active pair, default/regen structural verification passes.",
+    "archive_is_runtime_dependency": false
+  }
+}

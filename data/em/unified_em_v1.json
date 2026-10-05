@@ -1,881 +1,135 @@
 {
-  "schema": "EMJOINT1",
+  "schema": "EMCNT001",
   "materials": [
     {
-      "name": "JEM_W",
+      "name": "Water_75eV",
       "section": -1,
-      "density_g_cm3": 1.0,
-      "material": "Water_75eV"
+      "density_g_cm3": 1.0
     },
     {
-      "name": "JEM_S00D0",
+      "name": "Schneider_0",
       "section": 0,
-      "density_g_cm3": 0.011316065199999998
+      "density_g_cm3": 0.0280335433781147
     },
     {
-      "name": "JEM_S00D1",
-      "section": 0,
-      "density_g_cm3": 0.011869471029378142
-    },
-    {
-      "name": "JEM_S00D2",
-      "section": 0,
-      "density_g_cm3": 0.012449940860825631
-    },
-    {
-      "name": "JEM_S00D3",
-      "section": 0,
-      "density_g_cm3": 0.013058798244202502
-    },
-    {
-      "name": "JEM_S00D4",
-      "section": 0,
-      "density_g_cm3": 0.013697431456833222
-    },
-    {
-      "name": "JEM_S00D5",
-      "section": 0,
-      "density_g_cm3": 0.014367296668967126
-    },
-    {
-      "name": "JEM_S00D6",
-      "section": 0,
-      "density_g_cm3": 0.015069921264043834
-    },
-    {
-      "name": "JEM_S00D7",
-      "section": 0,
-      "density_g_cm3": 0.01580690732133444
-    },
-    {
-      "name": "JEM_S00D8",
-      "section": 0,
-      "density_g_cm3": 0.016579935268899337
-    },
-    {
-      "name": "JEM_S00D9",
-      "section": 0,
-      "density_g_cm3": 0.01739076771519181
-    },
-    {
-      "name": "JEM_S00D10",
-      "section": 0,
-      "density_g_cm3": 0.018241253468044172
-    },
-    {
-      "name": "JEM_S00D11",
-      "section": 0,
-      "density_g_cm3": 0.019133331750200055
-    },
-    {
-      "name": "JEM_S00D12",
-      "section": 0,
-      "density_g_cm3": 0.020069036621005017
-    },
-    {
-      "name": "JEM_S00D13",
-      "section": 0,
-      "density_g_cm3": 0.021050501614337476
-    },
-    {
-      "name": "JEM_S00D14",
-      "section": 0,
-      "density_g_cm3": 0.022079964603354922
-    },
-    {
-      "name": "JEM_S00D15",
-      "section": 0,
-      "density_g_cm3": 0.02315977290314801
-    },
-    {
-      "name": "JEM_S00D16",
-      "section": 0,
-      "density_g_cm3": 0.024292388622936898
-    },
-    {
-      "name": "JEM_S00D17",
-      "section": 0,
-      "density_g_cm3": 0.025480394280013936
-    },
-    {
-      "name": "JEM_S00D18",
-      "section": 0,
-      "density_g_cm3": 0.026726498688232906
-    },
-    {
-      "name": "JEM_S00D19",
-      "section": 0,
-      "density_g_cm3": 0.02803354313447163
-    },
-    {
-      "name": "JEM_S00D20",
-      "section": 0,
-      "density_g_cm3": 0.029404507857151055
-    },
-    {
-      "name": "JEM_S00D21",
-      "section": 0,
-      "density_g_cm3": 0.030842518841582543
-    },
-    {
-      "name": "JEM_S00D22",
-      "section": 0,
-      "density_g_cm3": 0.03235085494763793
-    },
-    {
-      "name": "JEM_S00D23",
-      "section": 0,
-      "density_g_cm3": 0.033932955385994334
-    },
-    {
-      "name": "JEM_S00D24",
-      "section": 0,
-      "density_g_cm3": 0.035592427560000334
-    },
-    {
-      "name": "JEM_S00D25",
-      "section": 0,
-      "density_g_cm3": 0.03733305529104447
-    },
-    {
-      "name": "JEM_S00D26",
-      "section": 0,
-      "density_g_cm3": 0.03876334190447314
-    },
-    {
-      "name": "JEM_S00D27",
-      "section": 0,
-      "density_g_cm3": 0.039158807446180555
-    },
-    {
-      "name": "JEM_S00D28",
-      "section": 0,
-      "density_g_cm3": 0.04107384698768237
-    },
-    {
-      "name": "JEM_S00D29",
-      "section": 0,
-      "density_g_cm3": 0.04308254046516157
-    },
-    {
-      "name": "JEM_S00D30",
-      "section": 0,
-      "density_g_cm3": 0.045189467971892446
-    },
-    {
-      "name": "JEM_S00D31",
-      "section": 0,
-      "density_g_cm3": 0.04739943358804516
-    },
-    {
-      "name": "JEM_S00D32",
-      "section": 0,
-      "density_g_cm3": 0.04971747633463931
-    },
-    {
-      "name": "JEM_S00D33",
-      "section": 0,
-      "density_g_cm3": 0.052148881663194604
-    },
-    {
-      "name": "JEM_S00D34",
-      "section": 0,
-      "density_g_cm3": 0.05469919350727647
-    },
-    {
-      "name": "JEM_S00D35",
-      "section": 0,
-      "density_g_cm3": 0.05737422692341568
-    },
-    {
-      "name": "JEM_S00D36",
-      "section": 0,
-      "density_g_cm3": 0.06018008135022499
-    },
-    {
-      "name": "JEM_S00D37",
-      "section": 0,
-      "density_g_cm3": 0.06312315451594563
-    },
-    {
-      "name": "JEM_S00D38",
-      "section": 0,
-      "density_g_cm3": 0.06621015702613457
-    },
-    {
-      "name": "JEM_S01D0",
+      "name": "Schneider_1",
       "section": 1,
-      "density_g_cm3": 0.059461075529906975
+      "density_g_cm3": 0.23997263610363007
     },
     {
-      "name": "JEM_S01D1",
-      "section": 1,
-      "density_g_cm3": 0.062391706193044065
-    },
-    {
-      "name": "JEM_S01D2",
-      "section": 1,
-      "density_g_cm3": 0.06546677750087486
-    },
-    {
-      "name": "JEM_S01D3",
-      "section": 1,
-      "density_g_cm3": 0.06869340843297662
-    },
-    {
-      "name": "JEM_S01D4",
-      "section": 1,
-      "density_g_cm3": 0.07207906883879667
-    },
-    {
-      "name": "JEM_S01D5",
-      "section": 1,
-      "density_g_cm3": 0.07563159673081407
-    },
-    {
-      "name": "JEM_S01D6",
-      "section": 1,
-      "density_g_cm3": 0.0793592164300215
-    },
-    {
-      "name": "JEM_S01D7",
-      "section": 1,
-      "density_g_cm3": 0.0832705576057353
-    },
-    {
-      "name": "JEM_S01D8",
-      "section": 1,
-      "density_g_cm3": 0.08737467525381164
-    },
-    {
-      "name": "JEM_S01D9",
-      "section": 1,
-      "density_g_cm3": 0.09168107065951998
-    },
-    {
-      "name": "JEM_S01D10",
-      "section": 1,
-      "density_g_cm3": 0.09619971339360386
-    },
-    {
-      "name": "JEM_S01D11",
-      "section": 1,
-      "density_g_cm3": 0.10094106439245176
-    },
-    {
-      "name": "JEM_S01D12",
-      "section": 1,
-      "density_g_cm3": 0.10591610017580935
-    },
-    {
-      "name": "JEM_S01D13",
-      "section": 1,
-      "density_g_cm3": 0.11113633825809911
-    },
-    {
-      "name": "JEM_S01D14",
-      "section": 1,
-      "density_g_cm3": 0.11661386381217598
-    },
-    {
-      "name": "JEM_S01D15",
-      "section": 1,
-      "density_g_cm3": 0.12236135764724741
-    },
-    {
-      "name": "JEM_S01D16",
-      "section": 1,
-      "density_g_cm3": 0.1283921255657279
-    },
-    {
-      "name": "JEM_S01D17",
-      "section": 1,
-      "density_g_cm3": 0.1347201291669917
-    },
-    {
-      "name": "JEM_S01D18",
-      "section": 1,
-      "density_g_cm3": 0.14136001816933566
-    },
-    {
-      "name": "JEM_S01D19",
-      "section": 1,
-      "density_g_cm3": 0.1483271643249801
-    },
-    {
-      "name": "JEM_S01D20",
-      "section": 1,
-      "density_g_cm3": 0.15563769700662197
-    },
-    {
-      "name": "JEM_S01D21",
-      "section": 1,
-      "density_g_cm3": 0.16330854054792712
-    },
-    {
-      "name": "JEM_S01D22",
-      "section": 1,
-      "density_g_cm3": 0.17135745342440556
-    },
-    {
-      "name": "JEM_S01D23",
-      "section": 1,
-      "density_g_cm3": 0.17980306936537635
-    },
-    {
-      "name": "JEM_S01D24",
-      "section": 1,
-      "density_g_cm3": 0.18866494049219953
-    },
-    {
-      "name": "JEM_S01D25",
-      "section": 1,
-      "density_g_cm3": 0.1979635825826421
-    },
-    {
-      "name": "JEM_S01D26",
-      "section": 1,
-      "density_g_cm3": 0.2077205225661673
-    },
-    {
-      "name": "JEM_S01D27",
-      "section": 1,
-      "density_g_cm3": 0.21795834836010353
-    },
-    {
-      "name": "JEM_S01D28",
-      "section": 1,
-      "density_g_cm3": 0.22870076116206445
-    },
-    {
-      "name": "JEM_S01D29",
-      "section": 1,
-      "density_g_cm3": 0.23997263031968216
-    },
-    {
-      "name": "JEM_S01D30",
-      "section": 1,
-      "density_g_cm3": 0.2518000509046799
-    },
-    {
-      "name": "JEM_S01D31",
-      "section": 1,
-      "density_g_cm3": 0.26421040412457036
-    },
-    {
-      "name": "JEM_S01D32",
-      "section": 1,
-      "density_g_cm3": 0.2772324207118395
-    },
-    {
-      "name": "JEM_S01D33",
-      "section": 1,
-      "density_g_cm3": 0.2908962474373618
-    },
-    {
-      "name": "JEM_S01D34",
-      "section": 1,
-      "density_g_cm3": 0.30523351690203304
-    },
-    {
-      "name": "JEM_S01D35",
-      "section": 1,
-      "density_g_cm3": 0.32027742076819093
-    },
-    {
-      "name": "JEM_S01D36",
-      "section": 1,
-      "density_g_cm3": 0.3360627866003583
-    },
-    {
-      "name": "JEM_S01D37",
-      "section": 1,
-      "density_g_cm3": 0.3526261584932019
-    },
-    {
-      "name": "JEM_S01D38",
-      "section": 1,
-      "density_g_cm3": 0.3700058816733628
-    },
-    {
-      "name": "JEM_S01D39",
-      "section": 1,
-      "density_g_cm3": 0.38824219127101944
-    },
-    {
-      "name": "JEM_S01D40",
-      "section": 1,
-      "density_g_cm3": 0.4073773054666938
-    },
-    {
-      "name": "JEM_S01D41",
-      "section": 1,
-      "density_g_cm3": 0.42745552322894026
-    },
-    {
-      "name": "JEM_S01D42",
-      "section": 1,
-      "density_g_cm3": 0.44852332686918844
-    },
-    {
-      "name": "JEM_S01D43",
-      "section": 1,
-      "density_g_cm3": 0.4695466099148084
-    },
-    {
-      "name": "JEM_S01D44",
-      "section": 1,
-      "density_g_cm3": 0.47004117668681483
-    },
-    {
-      "name": "JEM_S01D45",
-      "section": 1,
-      "density_g_cm3": 0.4706294896511579
-    },
-    {
-      "name": "JEM_S01D46",
-      "section": 1,
-      "density_g_cm3": 0.49382518870396985
-    },
-    {
-      "name": "JEM_S01D47",
-      "section": 1,
-      "density_g_cm3": 0.5181641235003547
-    },
-    {
-      "name": "JEM_S01D48",
-      "section": 1,
-      "density_g_cm3": 0.5437026401742401
-    },
-    {
-      "name": "JEM_S01D49",
-      "section": 1,
-      "density_g_cm3": 0.5704998619655245
-    },
-    {
-      "name": "JEM_S01D50",
-      "section": 1,
-      "density_g_cm3": 0.5986178260940191
-    },
-    {
-      "name": "JEM_S01D51",
-      "section": 1,
-      "density_g_cm3": 0.6281216273794373
-    },
-    {
-      "name": "JEM_S01D52",
-      "section": 1,
-      "density_g_cm3": 0.6590795689399106
-    },
-    {
-      "name": "JEM_S01D53",
-      "section": 1,
-      "density_g_cm3": 0.6915633203179189
-    },
-    {
-      "name": "JEM_S01D54",
-      "section": 1,
-      "density_g_cm3": 0.725648083399697
-    },
-    {
-      "name": "JEM_S01D55",
-      "section": 1,
-      "density_g_cm3": 0.7614127665122353
-    },
-    {
-      "name": "JEM_S01D56",
-      "section": 1,
-      "density_g_cm3": 0.798940167100919
-    },
-    {
-      "name": "JEM_S01D57",
-      "section": 1,
-      "density_g_cm3": 0.8383171634107178
-    },
-    {
-      "name": "JEM_S01D58",
-      "section": 1,
-      "density_g_cm3": 0.8796349156146768
-    },
-    {
-      "name": "JEM_S02D0",
+      "name": "Schneider_2",
       "section": 2,
-      "density_g_cm3": 0.8575695516922921
+      "density_g_cm3": 0.8749114274978638
     },
     {
-      "name": "JEM_S02D1",
-      "section": 2,
-      "density_g_cm3": 0.8749114374253218
-    },
-    {
-      "name": "JEM_S02D2",
-      "section": 2,
-      "density_g_cm3": 0.8922458157200001
-    },
-    {
-      "name": "JEM_S03D0",
+      "name": "Schneider_3",
       "section": 3,
-      "density_g_cm3": 0.89815940436
+      "density_g_cm3": 0.9122030138969421
     },
     {
-      "name": "JEM_S03D1",
-      "section": 3,
-      "density_g_cm3": 0.91220299891
-    },
-    {
-      "name": "JEM_S03D2",
-      "section": 3,
-      "density_g_cm3": 0.92625436336
-    },
-    {
-      "name": "JEM_S04D0",
+      "name": "Schneider_4",
       "section": 4,
-      "density_g_cm3": 0.9325624565400001
+      "density_g_cm3": 0.9466944336891174
     },
     {
-      "name": "JEM_S04D1",
-      "section": 4,
-      "density_g_cm3": 0.94669445076
-    },
-    {
-      "name": "JEM_S04D2",
-      "section": 4,
-      "density_g_cm3": 0.96082110584
-    },
-    {
-      "name": "JEM_S05D0",
+      "name": "Schneider_5",
       "section": 5,
-      "density_g_cm3": 0.9657217909800001
+      "density_g_cm3": 0.9799052476882935
     },
     {
-      "name": "JEM_S05D1",
-      "section": 5,
-      "density_g_cm3": 0.97990525952
-    },
-    {
-      "name": "JEM_S05D2",
-      "section": 5,
-      "density_g_cm3": 0.9941513626799999
-    },
-    {
-      "name": "JEM_S06D0",
+      "name": "Schneider_6",
       "section": 6,
-      "density_g_cm3": 0.99891103026
+      "density_g_cm3": 1.0038622617721558
     },
     {
-      "name": "JEM_S06D1",
-      "section": 6,
-      "density_g_cm3": 1.00386222144
-    },
-    {
-      "name": "JEM_S06D2",
-      "section": 6,
-      "density_g_cm3": 1.0088232
-    },
-    {
-      "name": "JEM_S07D0",
+      "name": "Schneider_7",
       "section": 7,
-      "density_g_cm3": 1.0166203
+      "density_g_cm3": 1.0428365468978882
     },
     {
-      "name": "JEM_S07D1",
-      "section": 7,
-      "density_g_cm3": 1.0428365474899999
-    },
-    {
-      "name": "JEM_S07D2",
-      "section": 7,
-      "density_g_cm3": 1.05806525196
-    },
-    {
-      "name": "JEM_S08D0",
+      "name": "Schneider_8",
       "section": 8,
-      "density_g_cm3": 1.0687122528
+      "density_g_cm3": 1.0787997245788574
     },
     {
-      "name": "JEM_S08D1",
-      "section": 8,
-      "density_g_cm3": 1.0785442721749998
-    },
-    {
-      "name": "JEM_S08D2",
-      "section": 8,
-      "density_g_cm3": 1.07879967
-    },
-    {
-      "name": "JEM_S08D3",
-      "section": 8,
-      "density_g_cm3": 1.0883723308
-    },
-    {
-      "name": "JEM_S09D0",
+      "name": "Schneider_9",
       "section": 9,
-      "density_g_cm3": 1.088420814
+      "density_g_cm3": 1.108323097229004
     },
     {
-      "name": "JEM_S09D1",
-      "section": 9,
-      "density_g_cm3": 1.1083231151999997
-    },
-    {
-      "name": "JEM_S09D2",
-      "section": 9,
-      "density_g_cm3": 1.1282261135999998
-    },
-    {
-      "name": "JEM_S10D0",
+      "name": "Schneider_10",
       "section": 10,
-      "density_g_cm3": 1.140600132
+      "density_g_cm3": 1.1658046245574951
     },
     {
-      "name": "JEM_S10D1",
-      "section": 10,
-      "density_g_cm3": 1.1658046349199997
-    },
-    {
-      "name": "JEM_S10D2",
-      "section": 10,
-      "density_g_cm3": 1.19101103992
-    },
-    {
-      "name": "JEM_S11D0",
+      "name": "Schneider_11",
       "section": 11,
-      "density_g_cm3": 1.205697834
+      "density_g_cm3": 1.231204628944397
     },
     {
-      "name": "JEM_S11D1",
-      "section": 11,
-      "density_g_cm3": 1.2312045769999997
-    },
-    {
-      "name": "JEM_S11D2",
-      "section": 11,
-      "density_g_cm3": 1.25670445032
-    },
-    {
-      "name": "JEM_S12D0",
+      "name": "Schneider_12",
       "section": 12,
-      "density_g_cm3": 1.2705382299999997
+      "density_g_cm3": 1.2963199615478516
     },
     {
-      "name": "JEM_S12D1",
-      "section": 12,
-      "density_g_cm3": 1.29631996232
-    },
-    {
-      "name": "JEM_S12D2",
-      "section": 12,
-      "density_g_cm3": 1.32209357104
-    },
-    {
-      "name": "JEM_S13D0",
+      "name": "Schneider_13",
       "section": 13,
-      "density_g_cm3": 1.33436251
+      "density_g_cm3": 1.3603646755218506
     },
     {
-      "name": "JEM_S13D1",
-      "section": 13,
-      "density_g_cm3": 1.36036469292
-    },
-    {
-      "name": "JEM_S13D2",
-      "section": 13,
-      "density_g_cm3": 1.38636650208
-    },
-    {
-      "name": "JEM_S14D0",
+      "name": "Schneider_14",
       "section": 14,
-      "density_g_cm3": 1.3993558379999997
+      "density_g_cm3": 1.425588846206665
     },
     {
-      "name": "JEM_S14D1",
-      "section": 14,
-      "density_g_cm3": 1.42558883884
-    },
-    {
-      "name": "JEM_S14D2",
-      "section": 14,
-      "density_g_cm3": 1.4518265695199999
-    },
-    {
-      "name": "JEM_S15D0",
+      "name": "Schneider_15",
       "section": 15,
-      "density_g_cm3": 1.465166726
+      "density_g_cm3": 1.4916343688964844
     },
     {
-      "name": "JEM_S15D1",
-      "section": 15,
-      "density_g_cm3": 1.4916343998
-    },
-    {
-      "name": "JEM_S15D2",
-      "section": 15,
-      "density_g_cm3": 1.5181095508800002
-    },
-    {
-      "name": "JEM_S16D0",
+      "name": "Schneider_16",
       "section": 16,
-      "density_g_cm3": 1.532247364
+      "density_g_cm3": 1.5589503049850464
     },
     {
-      "name": "JEM_S16D1",
-      "section": 16,
-      "density_g_cm3": 1.5589503278399999
-    },
-    {
-      "name": "JEM_S16D2",
-      "section": 16,
-      "density_g_cm3": 1.58566086424
-    },
-    {
-      "name": "JEM_S17D0",
+      "name": "Schneider_17",
       "section": 17,
-      "density_g_cm3": 1.5976113299999999
+      "density_g_cm3": 1.6245111227035522
     },
     {
-      "name": "JEM_S17D1",
-      "section": 17,
-      "density_g_cm3": 1.62451112812
-    },
-    {
-      "name": "JEM_S17D2",
-      "section": 17,
-      "density_g_cm3": 1.6514007458399997
-    },
-    {
-      "name": "JEM_S18D0",
+      "name": "Schneider_18",
       "section": 18,
-      "density_g_cm3": 1.6617108399999998
+      "density_g_cm3": 1.6887637376785278
     },
     {
-      "name": "JEM_S18D1",
-      "section": 18,
-      "density_g_cm3": 1.6887637572799998
-    },
-    {
-      "name": "JEM_S18D2",
-      "section": 18,
-      "density_g_cm3": 1.71581854728
-    },
-    {
-      "name": "JEM_S19D0",
+      "name": "Schneider_19",
       "section": 19,
-      "density_g_cm3": 1.728822388
+      "density_g_cm3": 1.7560763359069824
     },
     {
-      "name": "JEM_S19D1",
-      "section": 19,
-      "density_g_cm3": 1.7560763710799998
-    },
-    {
-      "name": "JEM_S19D2",
-      "section": 19,
-      "density_g_cm3": 1.7833264258399997
-    },
-    {
-      "name": "JEM_S20D0",
+      "name": "Schneider_20",
       "section": 20,
-      "density_g_cm3": 1.793922174
+      "density_g_cm3": 1.82160484790802
     },
     {
-      "name": "JEM_S20D1",
-      "section": 20,
-      "density_g_cm3": 1.8213243522
-    },
-    {
-      "name": "JEM_S20D2",
-      "section": 20,
-      "density_g_cm3": 1.82160489
-    },
-    {
-      "name": "JEM_S20D3",
-      "section": 20,
-      "density_g_cm3": 1.8487326009599998
-    },
-    {
-      "name": "JEM_S21D0",
+      "name": "Schneider_21",
       "section": 21,
-      "density_g_cm3": 1.8597255379999997
+      "density_g_cm3": 1.8872871398925781
     },
     {
-      "name": "JEM_S21D1",
-      "section": 21,
-      "density_g_cm3": 1.88728718032
-    },
-    {
-      "name": "JEM_S21D2",
-      "section": 21,
-      "density_g_cm3": 1.9148461499200002
-    },
-    {
-      "name": "JEM_S22D0",
+      "name": "Schneider_22",
       "section": 22,
-      "density_g_cm3": 1.9262399639999999
+      "density_g_cm3": 1.9539709091186523
     },
     {
-      "name": "JEM_S22D1",
-      "section": 22,
-      "density_g_cm3": 1.9539708683199999
-    },
-    {
-      "name": "JEM_S22D2",
-      "section": 22,
-      "density_g_cm3": 1.98168887664
-    },
-    {
-      "name": "JEM_S23D0",
+      "name": "Schneider_23",
       "section": 23,
-      "density_g_cm3": 1.98986775
+      "density_g_cm3": 2.419595241546631
     },
     {
-      "name": "JEM_S23D1",
-      "section": 23,
-      "density_g_cm3": 2.0827903544463906
-    },
-    {
-      "name": "JEM_S23D2",
-      "section": 23,
-      "density_g_cm3": 2.1800522474797246
-    },
-    {
-      "name": "JEM_S23D3",
-      "section": 23,
-      "density_g_cm3": 2.2818560646756283
-    },
-    {
-      "name": "JEM_S23D4",
-      "section": 23,
-      "density_g_cm3": 2.3884139042614256
-    },
-    {
-      "name": "JEM_S23D5",
-      "section": 23,
-      "density_g_cm3": 2.419595295
-    },
-    {
-      "name": "JEM_S23D6",
-      "section": 23,
-      "density_g_cm3": 2.4999477690019063
-    },
-    {
-      "name": "JEM_S23D7",
-      "section": 23,
-      "density_g_cm3": 2.616690028720223
-    },
-    {
-      "name": "JEM_S23D8",
-      "section": 23,
-      "density_g_cm3": 2.7388839044175324
-    },
-    {
-      "name": "JEM_S23D9",
-      "section": 23,
-      "density_g_cm3": 2.866783975
-    },
-    {
-      "name": "JEM_S24D0",
+      "name": "Schneider_24",
       "section": 24,
-      "density_g_cm3": 4.552485
+      "density_g_cm3": 4.55248498916626
     }
   ],
   "species_za": [
@@ -953,17 +207,23 @@
     ]
   ],
   "reference": "Geant4 11.3.2 default opt4, EMRangeMax 10 GeV",
-  "density_policy": "explicit density nodes for every Schneider section, adjacent density ratio <= 1.05; research interpolation requires validation",
+  "density_policy": "26 fixed compositions; actual density with analytical stopping/fluctuation corrections, independent scalar interpolation and continuous range/rate polynomials; no density response states",
   "max_total_kinetic_MeV": 6000,
   "grid": "8193 logarithmic energy nodes plus reference beam energies; original raw spline intervals also exported",
   "scope": "charged ion electronic losses only; no hadronic package replacement",
-  "validation_status": "research_candidate_not_validated",
+  "validation_status": "Continuous26 default; broadbeam qualification and final-default checks reported separately; head0.1% TOPAS local3%/0.2mm98.9033%, below >99%; matched expanded control99.6249%; see docs/em_continuous_density_20261005.md",
   "version": 1,
-  "records": 3150,
-  "nodes": 25872175,
-  "segments": 1708349,
+  "records": 468,
+  "nodes": 3843866,
+  "segments": 248805,
   "record_bytes": 104,
   "node_bytes": 52,
   "segment_bytes": 24,
-  "package_bytes": 1386682652
+  "package_bytes": 225707600,
+  "encoding": "26 composition responses + continuous analytical density corrections and integrated-range polynomials; no density response states",
+  "composition_bases": 26,
+  "density_residual_tables": 0,
+  "basis_source": "data/em/ion_em_26_composition_bases.npz",
+  "density_response_states": 0,
+  "generator": "extensions/tools/unified_em/build_continuous_density.py"
 }

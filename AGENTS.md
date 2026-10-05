@@ -1,5 +1,39 @@
 # MAIGO Agent Instructions
 
+## Case identity and validation
+
+- RT07575 is a **head (cranial) case**, not a lung case. Its CT, spot plan,
+  collimator geometry, normalization and TOPAS full-plan reference must be kept
+  together when validating a full plan.
+- The lung CT minibeam presets are a separate benchmark. Do not label their
+  dose, gamma or throughput results as RT07575 head full-plan validation.
+
+## Default ion EM representation
+
+- All eight presets use `data/em/unified_em_v1.bin` (EMCNT001), with exactly
+  26 compositions (25 Schneider + Water_75eV), 468 records and continuous
+  density response. No 175-state host expansion or GPU density-pair lookup.
+- The production GPU contains only the continuous26 path and rejects old
+  density-state interfaces at startup. Host diagnostics and frozen reference
+  binaries may explicitly read archived packages; no implicit fallback.
+- The cleaned generation source `data/em/ion_em_26_composition_bases.npz`
+  has exactly26 directory entries and26 density-domain bounds. Small independently
+  calculated cut/density-effect scalar grids and range/rate polynomial
+  coefficients are not complete material-density EM response states.
+- Historical sources are separated in `data/archive/ion_em_native_20261005/`,
+  `data/archive/ion_em_density_residual_20261005/` and
+  `data/archive/ion_em_analytic_expanded_20261005/`.
+- Broadbeam absolute TOPAS gates pass. The0.1% head minibeam comparison must
+  be reported independently; default promotion is not universal dose acceptance.
+  Carbon-minibeam accuracy remains deferred; its runtime audits are required.
+
+## Ion fluctuation defaults
+
+- All eight presets and TransportConfig defaults enable primary and secondary
+  ion energy-loss fluctuations. All four minibeams enable copper primary and
+  charged-fragment fluctuations. Historical carbon CT broadbeam acceptance
+  with fluctuations OFF does not validate the current ON configuration.
+
 ## GPU performance work
 
 - Before proposing or implementing a performance experiment, search

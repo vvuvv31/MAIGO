@@ -1,21 +1,14 @@
 {
   "schema": "EMDMOMT2",
   "version": 2,
-  "nodes": 25872175,
-  "records": 3150,
-  "bytes": 206977416,
-  "quadrature_order": 32,
-  "check_order": 64,
-  "checked_nodes": 31648,
-  "max_relative_quadrature_error": 1.0144635387288048e-07,
-  "model": "native proposal rate times accepted delta first and raw second moments; same spin/form-factor/magnetic veto as GPU sampler; all existing material/density/projectile nodes",
-  "data_file": "unified_em_delta_moments_v2.bin",
-  "transport_model": "condensed_delta_partition_v1",
+  "nodes": 3843866,
+  "records": 468,
+  "bytes": 30750944,
   "units": [
     "MeV/mm",
     "MeV^2/mm"
   ],
-  "layout": "16-byte <8sII header; interleaved little-endian float32 M1,M2 in original EM node order",
-  "generator": "tools/build_delta_moments.py",
-  "integration_authorized": "2026-09-15"
+  "encoding": "26 composition base moments; runtime continuous-density moments use the native spectrum and finite-size/spin veto",
+  "generator": "extensions/tools/unified_em/build_continuous_density.py",
+  "validation_status": "Continuous26 default; broadbeam qualification and final-default checks reported separately; head0.1% TOPAS local3%/0.2mm98.9033%, below >99%; matched expanded control99.6249%; see docs/em_continuous_density_20261005.md"
 }

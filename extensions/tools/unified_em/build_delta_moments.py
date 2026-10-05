@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reproduce the accepted M1/M2 table from the current validated unified EM package.
+"""Offline M1/M2 generation from archived native EM; compress the matching pair for runtime.
 Requires NumPy. Existing valid output is verified; invalid output is never overwritten.
 """
 import argparse,json,os,struct
@@ -27,7 +27,8 @@ def mean_values(r,n,order=32,moment=1):
 def build(source,output):
     verify_source(source)
     if output.exists():verify(output,source);return
-    with source.open('rb') as f:_,_,nm,ns,nr,nn,nv=struct.unpack('<8s6I',f.read(32))
+    with source.open('rb') as f:magic,version,nm,ns,nr,nn,nv=struct.unpack('<8s6I',f.read(32))
+    if magic!=b'EMJOINT1' or version!=1:raise ValueError('Delta generation requires native EMJOINT1; use archived source, then factor_density.py')
     records=np.memmap(source,dtype=rd,mode='r',offset=32+8*(nm+ns),shape=(nr,))
     nodes=np.memmap(source,dtype='<f4',mode='r',offset=32+8*(nm+ns)+104*nr,shape=(nn,13))
     output.parent.mkdir(parents=True,exist_ok=True);tmp=output.with_name(output.name+f'.tmp.{os.getpid()}')
@@ -55,4 +56,4 @@ def build(source,output):
     finally:
         if tmp.exists():tmp.unlink()
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--source',type=Path,default=ROOT/'data/em/unified_em_v1.bin');p.add_argument('--output',type=Path,default=ROOT/'data/em/unified_em_delta_moments_v2.bin');a=p.parse_args();build(a.source,a.output)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--source',type=Path,default=ROOT/'data/archive/ion_em_native_20261005/unified_em_v1.bin');p.add_argument('--output',type=Path,default=ROOT/'data/archive/ion_em_native_20261005/unified_em_delta_moments_v2.bin');a=p.parse_args();build(a.source,a.output)
