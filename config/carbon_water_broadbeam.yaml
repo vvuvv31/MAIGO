@@ -11,7 +11,7 @@ beam_energy_spread: 0.01
 random_seed: 202609071
 water_density_g_per_cm3: 1.0
 phantom_length_mm: 200
-maximum_step_mm: 0.25
+maximum_step_mm: 0.5
 maximum_relative_energy_loss: 0.005
 energy_cutoff_MeV: 0.1
 enable_voxel_scoring: true

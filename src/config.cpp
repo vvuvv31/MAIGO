@@ -1890,6 +1890,10 @@ TransportConfig load_config(const std::filesystem::path& path) {
     auto values = read_key_values(path);
     const auto ion_physics_file = merge_ion_physics_manifest(path, values);
     values.try_emplace("em_model", "g4_material_joint_v1");
+    // Record the mode-specific ion step default in the canonical config;
+    // an explicit maximum_step_mm remains authoritative.
+    values.try_emplace("maximum_step_mm",
+        parse_bool(values, "minibeam", false) ? "0.1" : "0.5");
     // Broad-beam YAML defaults apply to every source ZA, including protons.
     // Insert before canonicalization so the effective defaults are recorded.
     // Explicit model, enable/disable and species selections remain authoritative.

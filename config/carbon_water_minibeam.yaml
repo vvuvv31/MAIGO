@@ -6,7 +6,7 @@ primary_atomic_number: 6
 primary_mass_number: 12
 phantom_length_mm: 250.0
 depth_bin_width_mm: 0.25
-maximum_step_mm: 0.005
+maximum_step_mm: 0.1
 maximum_relative_energy_loss: 0.001
 energy_cutoff_MeV: 0.1
 water_density_g_per_cm3: 1.0

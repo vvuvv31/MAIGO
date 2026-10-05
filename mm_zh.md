@@ -1,12 +1,12 @@
 # 材料与方法
 
-更新：2026-10-05；实现基线 `ebff981`。[English](mm.md)。本文描述当前八个预设的物理过程、近似、评分及执行方式，详见[清理验证](docs/repository_cleanup_20261005.md)与[CT 吞吐和验收记录](docs/ct_throughput_20261005.md)。另见[CT broadbeam 电子优化](docs/broadbeam_300k_20261005.md)与[最新 EM 搜索复用](docs/broadbeam_em_search_20261005.md)。两个 CT broadbeam 已通过指定门槛；肺 CT proton minibeam 仍未通过。历史测量只对应其记录的程序、束流、几何及统计量。
+更新：2026-10-05；实现基线 `ebff981`。[English](mm.md)。本文描述当前八个预设的物理过程、近似、评分及执行方式，详见[清理验证](docs/repository_cleanup_20261005.md)与[CT 吞吐和验收记录](docs/ct_throughput_20261005.md)。另见[CT broadbeam 电子优化](docs/broadbeam_300k_20261005.md)与[最新 EM 搜索复用](docs/broadbeam_em_search_20261005.md)。两个 CT broadbeam 已通过指定门槛；历史肺 CT proton minibeam 结果仍未通过。此后已将默认离子步长改为 minibeam 0.1 mm、water broadbeam 0.5 mm；这些变化后的配置尚未重新做剂量/吞吐验收，CT broadbeam 保持已测的0.5 mm。历史测量只对应其记录的程序、束流、几何及统计量。
 
 ## 八个预设
 
 仅保留以下八个 `config/` 入口。粒子种类和几何各自选择，共用电子传播实现。
 
-| 预设 | 离子多重散射 | 电子出生选区 | 当前验证状态 |
+| 预设 | 离子多重散射 | 电子出生选区 | 已有验证记录（步长默认值更新前） |
 |---|---|---|---|
 | `proton_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 当前三维 local 1%/1 mm 99.8935%，通过 |
 | `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 当前三维 local 1%/1 mm 99.8699%，通过 |
@@ -59,14 +59,14 @@ Minibeam 使用共用的**离子 Urban v2** 路径。材料相关原生参数限
 |---|---:|---|---|---|---|
 | Proton CT broadbeam | 0.5 | Gaussian FE | 开 / 开 | 开 | 关 |
 | Carbon CT broadbeam | 0.5 | Gaussian FE | 关 / 关 | 关 | 关 |
-| Proton water broadbeam | 0.25 | Gaussian FE | 开 / 开 | 开 | 关 |
-| Carbon water broadbeam | 0.25 | Gaussian FE | 开 / 开 | 关 | 关 |
-| Proton CT minibeam | 0.25 | Urban v2 | 开 / 开 | 开 | 关 |
-| Carbon CT minibeam | 0.25 | Urban v2 | 开 / 开 | 开 | 关 |
-| Proton water minibeam | 0.25 | Urban v2 | 开 / 开 | 开 | 开，实验性 |
-| Carbon water minibeam | 0.005 | Urban v2 | 开 / 开 | 开 | 关 |
+| Proton water broadbeam | 0.5 | Gaussian FE | 开 / 开 | 开 | 关 |
+| Carbon water broadbeam | 0.5 | Gaussian FE | 开 / 开 | 关 | 关 |
+| Proton CT minibeam | 0.1 | Urban v2 | 开 / 开 | 开 | 关 |
+| Carbon CT minibeam | 0.1 | Urban v2 | 开 / 开 | 开 | 关 |
+| Proton water minibeam | 0.1 | Urban v2 | 开 / 开 | 开 | 开，实验性 |
+| Carbon water minibeam | 0.1 | Urban v2 | 开 / 开 | 开 | 关 |
 
-CT broadbeam 的平均能损步长比例限制为质子0.02、碳0.05；water broadbeam 使用默认0.01。边界、射程与相互作用还会缩短步长。全部 minibeam primary 步长≤0.25 mm，其中 carbon water 保留更严格的0.005 mm。因此，共用算法不表示八个预设采用完全相同的数值设置。
+CT broadbeam 的平均能损步长比例限制为质子0.02、碳0.05；water broadbeam 使用默认0.01。边界、射程与相互作用还会缩短步长。默认 `maximum_step_mm` 为 broadbeam 0.5 mm、minibeam 0.1 mm，适用于两种粒子及 CT/water；八个 YAML 均显式采用这些值。未填写该键时，`load_config()` 根据 `minibeam` 选择默认值并写入规范化配置，显式值可覆盖默认值。该参数限制模体内 primary 和带电次级离子步长，铜中独立上限仍为0.05 mm。因此，共用算法不表示八个预设采用完全相同的数值设置。
 
 ## 核反应和带电次级粒子
 
@@ -122,7 +122,7 @@ Schneider 覆盖状态可使用紧凑相关 joint 算子推进短段。必须在
 
 ### 光子分支
 
-共用光子包包含光电吸收、康普顿散射和瑞利散射；当前亚 MeV 覆盖不包含电子对产生。抽取光学厚度 `τ = −ln(U)`，在实际 CT/水体素序列中逐段扣除 `μ × 距离`，直至碰撞或物理逃逸。材料界面本身不沉积能量，也不重抽剩余光学厚度。光子不受带电粒子0.25 mm步长限制。
+共用光子包包含光电吸收、康普顿散射和瑞利散射；当前亚 MeV 覆盖不包含电子对产生。抽取光学厚度 `τ = −ln(U)`，在实际 CT/水体素序列中逐段扣除 `μ × 距离`，直至碰撞或物理逃逸。材料界面本身不沉积能量，也不重抽剩余光学厚度。光子不受离子或电子步长上限限制。
 
 碰撞时先按反应率选择过程，再按能量加权条件终态选择局部沉积、继续光子或交回带电 worker 的电子。质量衰减系数按物理密度缩放；条件终态在密度相邻节点间按几何插值权重混合，这是明确的有限节点近似。能量在抽样的相互作用/沉积位置评分，不沿光子飞行路径摊开。见[光学厚度输运](include/carbon/photon_optical_transport.hpp)、[光子包抽样](include/carbon/photon_response_bank.hpp)。
 
@@ -218,7 +218,7 @@ DTA 非零时，参考点 r 的 local gamma 为评价位置 x 上 `sqrt((|x−r|
 
 对比前固定参考、绝对剂量归一化、坐标映射、剂量阈值和评价 mask，并随结果报告。当前 RT07575 broadbeam 使用参考最大剂量10%以上的全三维评价区，未拟合剂量比例或配准。搜索步长变化不允许伴随评价区或分母改变。零 DTA gamma 保留为受蒙卡噪声影响的诊断。
 
-RTX2080Ti 最新 broadbeam 结果采用两个独立种子的连续吞吐及合并剂量 gamma；minibeam 行保留此前较大统计量研究：
+以下测量早于本次步长默认值更新。CT broadbeam 保持已测的0.5 mm；下列 minibeam 吞吐和 gamma 属于历史结果，不是新0.1 mm上限的测量。RTX2080Ti broadbeam 采用两个独立种子的连续吞吐及合并剂量 gamma；minibeam 行保留此前较大统计量研究：
 
 | 预设 | 历史数 | 连续批次 primary/s | TOPAS local gamma |
 |---|---:|---:|---|

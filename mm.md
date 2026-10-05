@@ -1,12 +1,12 @@
 # Materials and methods
 
-Revision: 2026-10-05; implementation baseline `ebff981`. [中文](mm_zh.md). This describes the physics processes, approximations, scoring and execution of the current eight presets. See the [cleanup regression](docs/repository_cleanup_20261005.md) and [CT throughput/acceptance report](docs/ct_throughput_20261005.md). See also the [CT broadbeam electron optimization](docs/broadbeam_300k_20261005.md) and the [latest exact EM search reuse](docs/broadbeam_em_search_20261005.md). Both CT broadbeams pass the requested dose gate; lung proton minibeam still falls below it. Historical measurements apply to their recorded executable, source, geometry and statistics.
+Revision: 2026-10-05; implementation baseline `ebff981`. [中文](mm_zh.md). This describes the physics processes, approximations, scoring and execution of the current eight presets. See the [cleanup regression](docs/repository_cleanup_20261005.md) and [CT throughput/acceptance report](docs/ct_throughput_20261005.md). See also the [CT broadbeam electron optimization](docs/broadbeam_300k_20261005.md) and the [latest exact EM search reuse](docs/broadbeam_em_search_20261005.md). Both CT broadbeams pass the requested dose gate; the historical lung proton minibeam result falls below it. The ion-step defaults below have since changed: minibeam is now 0.1 mm and water broadbeam 0.5 mm. These changed configurations have not yet been requalified for dose or throughput; CT broadbeam remains at its measured 0.5 mm setting. Historical measurements apply to their recorded executable, source, geometry and statistics.
 
 ## Eight presets
 
 The supported configuration matrix contains exactly eight entries. Presets select projectile and geometry; electron propagation is shared.
 
-| Preset in `config/` | Ion scattering | Electron birth selection | Current verification |
+| Preset in `config/` | Ion scattering | Electron birth selection | Recorded verification (before step-default update) |
 |---|---|---|---|
 | `proton_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Current 3D local 1%/1 mm 99.8935%; passed |
 | `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Current 3D local 1%/1 mm 99.8699%; passed |
@@ -59,14 +59,14 @@ These are the effective settings after `transport_profile` expansion in [configu
 |---|---:|---|---|---|---|
 | Proton CT broadbeam | 0.5 | Gaussian FE | On / on | On | Off |
 | Carbon CT broadbeam | 0.5 | Gaussian FE | Off / off | Off | Off |
-| Proton water broadbeam | 0.25 | Gaussian FE | On / on | On | Off |
-| Carbon water broadbeam | 0.25 | Gaussian FE | On / on | Off | Off |
-| Proton CT minibeam | 0.25 | Urban v2 | On / on | On | Off |
-| Carbon CT minibeam | 0.25 | Urban v2 | On / on | On | Off |
-| Proton water minibeam | 0.25 | Urban v2 | On / on | On | On, experimental |
-| Carbon water minibeam | 0.005 | Urban v2 | On / on | On | Off |
+| Proton water broadbeam | 0.5 | Gaussian FE | On / on | On | Off |
+| Carbon water broadbeam | 0.5 | Gaussian FE | On / on | Off | Off |
+| Proton CT minibeam | 0.1 | Urban v2 | On / on | On | Off |
+| Carbon CT minibeam | 0.1 | Urban v2 | On / on | On | Off |
+| Proton water minibeam | 0.1 | Urban v2 | On / on | On | On, experimental |
+| Carbon water minibeam | 0.1 | Urban v2 | On / on | On | Off |
 
-The CT broadbeam mean-loss step fractions are 0.02 for proton and 0.05 for carbon; water broadbeam uses the 0.01 default. Boundary, range and interaction limits can shorten these steps. All minibeam primary steps stay ≤0.25 mm; carbon water retains its stricter 0.005 mm setting. Common algorithms therefore do not imply identical numerical controls across all eight presets.
+The CT broadbeam mean-loss step fractions are 0.02 for proton and 0.05 for carbon; water broadbeam uses the 0.01 default. Boundary, range and interaction limits can shorten these steps. The default `maximum_step_mm` is 0.5 mm for broadbeam and 0.1 mm for minibeam, for both projectiles and both geometries. All eight YAML presets specify these values. If the key is omitted, `load_config()` selects the default from `minibeam` and records it in the canonical configuration; an explicit value overrides the default. This setting limits phantom primary and charged-secondary ion transport; the separate copper cap remains 0.05 mm. Common algorithms therefore do not imply identical numerical controls across all eight presets.
 
 ## Nuclear interactions and charged secondaries
 
@@ -122,7 +122,7 @@ Joint attempts occur at birth, after photon-to-electron conversion and periodica
 
 ### Photon branches
 
-The common photon bank covers photoelectric absorption, Compton scattering and Rayleigh scattering. Pair production is outside the present sub-MeV support. A sampled optical depth `τ = −ln(U)` is consumed by `μ × distance` through the actual sequence of CT/water cells until collision or physical escape. A material boundary does not itself deposit energy or resample the remaining optical depth. Photons are not subject to the charged 0.25 mm step cap.
+The common photon bank covers photoelectric absorption, Compton scattering and Rayleigh scattering. Pair production is outside the present sub-MeV support. A sampled optical depth `τ = −ln(U)` is consumed by `μ × distance` through the actual sequence of CT/water cells until collision or physical escape. A material boundary does not itself deposit energy or resample the remaining optical depth. Photons are not subject to the ion or electron step caps.
 
 At collision, process rates select the interaction and its energy-weighted conditional outcome selects local deposit, a continuing photon or an electron returned to the charged worker. Mass attenuation scales with physical density; conditional final states mix bracketing density nodes with geometric interpolation weights, an explicit finite-node approximation. Energy is scored at the sampled interaction/deposit location, not spread along a photon flight. See [optical transport](include/carbon/photon_optical_transport.hpp) and [bank sampling](include/carbon/photon_response_bank.hpp).
 
@@ -218,7 +218,7 @@ The four CT presets use these acceptance gates:
 
 Freeze the reference, dose normalization, coordinate mapping, dose threshold and evaluation mask before comparison. Report them with the result. The current RT07575 broadbeam comparison uses the full 3D evaluation region above 10% of reference maximum, absolute normalization and no dose fitting or registration. A smaller search step is not permission to change the mask or denominator. Zero-DTA gamma remains a noise-sensitive diagnostic.
 
-Latest RTX2080Ti broadbeam results use two independent seeds and pooled dose; minibeam rows retain the preceding larger-statistics study:
+The following measurements predate the step-default update. CT broadbeam keeps the measured 0.5 mm setting; minibeam rates and gamma below are historical, not measurements at the new 0.1 mm cap. RTX2080Ti broadbeam results use two independent seeds and pooled dose; minibeam rows retain the preceding larger-statistics study:
 
 | Preset | Histories | Resident primary/s | TOPAS local gamma |
 |---|---:|---:|---|
