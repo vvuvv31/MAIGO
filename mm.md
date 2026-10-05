@@ -1,6 +1,6 @@
 # Materials and methods
 
-Revision: 2026-10-05; implementation baseline `ebff981`. [中文](mm_zh.md). This describes the physics processes, approximations, scoring and execution of the current eight presets. See the [cleanup regression](docs/repository_cleanup_20261005.md) and [CT throughput/acceptance report](docs/ct_throughput_20261005.md). See also the [CT broadbeam electron optimization](docs/broadbeam_300k_20261005.md) and the [latest exact EM search reuse](docs/broadbeam_em_search_20261005.md). Both CT broadbeams pass the requested dose gate; the historical lung proton minibeam result falls below it. The ion-step defaults below have since changed: minibeam is now 0.1 mm and water broadbeam 0.5 mm. These changed configurations have not yet been requalified for dose or throughput; CT broadbeam remains at its measured 0.5 mm setting. Historical measurements apply to their recorded executable, source, geometry and statistics.
+Revision: 2026-10-05; implementation baseline `ebff981`. [中文](mm_zh.md). This describes the physics processes, approximations, scoring and execution of the current eight presets. See the [cleanup regression](docs/repository_cleanup_20261005.md) and [CT throughput/acceptance report](docs/ct_throughput_20261005.md). See also the [CT broadbeam electron optimization](docs/broadbeam_300k_20261005.md) and the [latest exact EM search reuse](docs/broadbeam_em_search_20261005.md). Both historical CT broadbeam configurations pass the requested dose gate; carbon CT broadbeam now enables primary/secondary fluctuations and requires dose requalification; the historical lung proton minibeam result falls below it. The ion-step defaults below have since changed: minibeam is now 0.1 mm and water broadbeam 0.5 mm. These changed configurations have not yet been requalified for dose or throughput; CT broadbeam remains at its measured 0.5 mm setting. Historical measurements apply to their recorded executable, source, geometry and statistics.
 
 ## Eight presets
 
@@ -9,7 +9,7 @@ The supported configuration matrix contains exactly eight entries. Presets selec
 | Preset in `config/` | Ion scattering | Electron birth selection | Recorded verification (before step-default update) |
 |---|---|---|---|
 | `proton_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Current 3D local 1%/1 mm 99.8935%; passed |
-| `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Current 3D local 1%/1 mm 99.8699%; passed |
+| `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Historical fluctuations OFF: local1%/1mm99.8699%; dose acceptance with fluctuations ON pending |
 | `proton_ct_minibeam.yaml` | Urban | All primary ionization in CT | Shared Urban/FP32 logic; lung CT does not yet pass the new >99% gate |
 | `carbon_ct_minibeam.yaml` | Urban | All primary ionization in CT | Scheduling 1.946× faster; transport audits passed; dose pending |
 | `proton_water_broadbeam.yaml` | Gaussian Fermi–Eyges | Empty selection in unit-density water | Two-batch smoke passed; water campaign deferred |
@@ -18,6 +18,10 @@ The supported configuration matrix contains exactly eight entries. Presets selec
 | `carbon_water_minibeam.yaml` | Urban | All primary ionization in water | Shared-worker smoke passed; water dose acceptance pending |
 
 The two CT broadbeam presets use RT07575 plan inputs. The CT minibeam presets use the lung CT, with 170 MeV protons and 250 MeV/u C12 respectively. These YAMLs are not the RT07575 minibeam full plan; running that plan requires its actual geometry, spots, normalization and reference. Carbon water minibeam retains its 250 MeV/u spot source and 1.2% relative energy spread.
+
+The default [composition-base/density-correction ion EM representation](docs/em_density_factorization_20261005.md) reduces the ion EM plus delta-moment files by 81.033%, using 26 composition bases and sparse corrections derived from the original 175 density nodes. Native cut scalars and stopping/range splines remain exact; reconstructed fields differ by at most 0.005% in the component check. This prototype reconstructs the original dense GPU tables on the host, so it does not reduce GPU memory. The presets now load compressed EMFAC001/EMDFAC01 at their existing `data/em/` paths; native sources and metadata are archived in `data/archive/ion_em_native_20261005/` for offline generation/regression. Its RT07575 validation uses the **head** CT and full optimized spot plan, independently of the lung CT minibeam presets. Full-plan results and Monte Carlo counts are reported separately in the linked report. Full-plan results: factorized proton/carbon broadbeam local1%/1mm are99.8810%/99.7877% (historical configurations passed; carbon used fluctuations OFF, so this does not qualify the new ON default). RT07575 **head** proton minibeam now uses0.1% of the4Gy plan:236,086,480 primary per arm, all487 positive spots. Local3%/0.2mm is98.9373% factorized versus98.9233% native, so neither passes>99%; search spacing is0.1×DTA. Factorized versus matched native passes100%, with relative doseL1 of0.2228%. Head resident throughput is87.3k/s for both arms, with no resolved gain or GPU-memory reduction. The user authorized the compressed encoding as default; the independent TOPAS head accuracy gate remains failed.
+
+All eight updated presets pass two-batch runtime smokes with FP32 dose; carbon CT broadbeam ON gamma remains pending. See the [fluctuation default checks](docs/ion_straggling_defaults_20261005.md).
 
 ## Materials, source and transport geometry
 
@@ -43,7 +47,7 @@ The total ionization loss is the restricted continuous component plus an aggrega
 
 With straggling enabled, restricted loss uses the extracted ion/universal fluctuation model and its material production cut, dispersion and kinematic maximum transfer. Its thin/thick-step regimes are not a single Gaussian approximation. The independent aggregate delta draw is moment-matched Gamma with shape `mean²/variance` and scale `variance/mean`; zero variance returns the mean. This reproduces two aggregate moments, not the exact compound-Poisson zero-collision probability or higher moments. See [restricted sampler](include/carbon/restricted_fluctuation_candidate.hpp) and [delta sampler](include/carbon/delta_loss_sampling.hpp).
 
-**Carbon CT broadbeam currently disables both primary and secondary ion straggling.** The other seven presets enable them. Disabling ion straggling uses mean losses; it does not disable stochastic nuclear reactions, scattering, electron births or the electron worker's own loss fluctuations. This preset difference is part of the validated configuration.
+**All eight presets enable primary and secondary ion energy-loss fluctuations.** These are also enabled by default in TransportConfig. All four minibeams enable copper primary and charged-fragment loss fluctuations. The previous carbon CT broadbeam acceptance used fluctuations OFF; its historical gamma/throughput values do not validate the new ON configuration. Carbon water minibeam previously disabled copper-fragment fluctuations, now enabled.
 
 ### Ion multiple Coulomb scattering
 
@@ -58,7 +62,7 @@ These are the effective settings after `transport_profile` expansion in [configu
 | Preset | Ion maximum step, mm | Ion MCS | Primary / secondary ion straggling | Independent all-ion nuclear elastic bank | Neutron worker |
 |---|---:|---|---|---|---|
 | Proton CT broadbeam | 0.5 | Gaussian FE | On / on | On | Off |
-| Carbon CT broadbeam | 0.5 | Gaussian FE | Off / off | Off | Off |
+| Carbon CT broadbeam | 0.5 | Gaussian FE | On / on | Off | Off |
 | Proton water broadbeam | 0.5 | Gaussian FE | On / on | On | Off |
 | Carbon water broadbeam | 0.5 | Gaussian FE | On / on | Off | Off |
 | Proton CT minibeam | 0.1 | Urban v2 | On / on | On | Off |
@@ -90,7 +94,7 @@ Neutral products, unsupported products, escapes and nuclear residuals have separ
 
 ### Copper collimator and upstream transport
 
-Minibeam tracks pass through the configured copper slit geometry and air gaps before entering the phantom. Copper uses density 8.96 g/cm³ and its own stopping, Urban scattering, elastic and inelastic data; collimator attenuation is therefore more than a geometric aperture. Its charged step cap is 0.05 mm. The proton presets use the `g4_universal_delta` copper proton-loss option; the carbon presets retain `legacy_clipped_gaussian` for that option. Copper fragment straggling is enabled except in carbon water minibeam. Upstream electron showers are not supplied by the patient/water primary birth bank. Copper-specific settings are retained in each [minibeam YAML](config/).
+Minibeam tracks pass through the configured copper slit geometry and air gaps before entering the phantom. Copper uses density 8.96 g/cm³ and its own stopping, Urban scattering, elastic and inelastic data; collimator attenuation is therefore more than a geometric aperture. Its charged step cap is 0.05 mm. The proton presets use the `g4_universal_delta` copper proton-loss option; the carbon presets retain `legacy_clipped_gaussian` for that option. Copper fragment straggling is enabled in all four minibeams. Upstream electron showers are not supplied by the patient/water primary birth bank. Copper-specific settings are retained in each [minibeam YAML](config/).
 
 ### Optional neutron transport
 
@@ -113,6 +117,14 @@ At the current material and energy, the worker evaluates restricted stopping, ra
 Soft loss uses extracted electron Urban fluctuation parameters. Elastic deflections use the Geant4 GS single-elastic law including Mott corrections. This is neither ion Urban MCS nor a new low-density condensed-MCS approximation. Hard events use certified majorant proposals, rate-based acceptance/null collisions and the extracted conditional ionization/bremsstrahlung outcomes. Boundary crossings continue from the resulting state in the new material; missing support and iteration-limit failures are reported, not converted into successful local deposition. See [step algorithm](include/carbon/electron_charged_step.hpp), [elastic law](include/carbon/electron_elastic.hpp) and [Urban loss](include/carbon/electron_urban_fluctuation.hpp).
 
 Within a composition, mass stopping/range and mass interaction rates interpolate between actual density nodes and are converted back using physical density. Hard final-state node mixing uses process-rate weights. The charged model uses the lower-node elastic angular law and composition Urban constants; this choice and finite density interpolation are approximations, not an assertion that every density response is identical. See [density model](include/carbon/electron_charged_density.hpp).
+
+### Electron density nodes and compression
+
+The active shared charged bank has **82 Schneider density nodes plus one Water_75eV node**, covering25 tissue compositions and water; these are not82 separate compositions. Birth distributions, restricted stopping, hard rates and conditional final states are extracted at actual density nodes and interpolated/mixed within a composition. Joint already density-scales its spatial advance, which does not make all electron responses linear in density.
+
+The ion representation is likewise **26 composition bases plus sparse corrections for175 density states**, reconstructed on the host. Electrons can use this storage approach: share composition Urban/elastic parameters, encode mass-normalized scalar bases plus density corrections, and compress birth/collision joint CDFs while retaining normalized probability, threshold support, energy/angle correlation and process-rate weighting. Removing the other density information entirely is an unvalidated new approximation.
+
+A read-only audit of the installed bank finds Schneider section1 at densities0.05946 and0.87963g/cm³ has electron cuts1.60075 and52.6970keV. At100keV its restricted mass stopping is0.32525 versus0.41212MeV·cm³/(mm·g), a26.7% difference including the cut dependence. Multiplying a single table by density cannot reproduce this. Share redundant composition data and preserve density corrections first; conditional-distribution compression needs independent validation. The electron runtime bank has not been replaced by this proposed representation.
 
 ### Joint-response acceleration
 

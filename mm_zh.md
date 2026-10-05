@@ -1,6 +1,6 @@
 # 材料与方法
 
-更新：2026-10-05；实现基线 `ebff981`。[English](mm.md)。本文描述当前八个预设的物理过程、近似、评分及执行方式，详见[清理验证](docs/repository_cleanup_20261005.md)与[CT 吞吐和验收记录](docs/ct_throughput_20261005.md)。另见[CT broadbeam 电子优化](docs/broadbeam_300k_20261005.md)与[最新 EM 搜索复用](docs/broadbeam_em_search_20261005.md)。两个 CT broadbeam 已通过指定门槛；历史肺 CT proton minibeam 结果仍未通过。此后已将默认离子步长改为 minibeam 0.1 mm、water broadbeam 0.5 mm；这些变化后的配置尚未重新做剂量/吞吐验收，CT broadbeam 保持已测的0.5 mm。历史测量只对应其记录的程序、束流、几何及统计量。
+更新：2026-10-05；实现基线 `ebff981`。[English](mm.md)。本文描述当前八个预设的物理过程、近似、评分及执行方式，详见[清理验证](docs/repository_cleanup_20261005.md)与[CT 吞吐和验收记录](docs/ct_throughput_20261005.md)。另见[CT broadbeam 电子优化](docs/broadbeam_300k_20261005.md)与[最新 EM 搜索复用](docs/broadbeam_em_search_20261005.md)。历史配置的两个 CT broadbeam 已通过指定门槛；carbon CT broadbeam 现已开启 primary/secondary 涨落，需重新验收。历史肺 CT proton minibeam 结果仍未通过。此后已将默认离子步长改为 minibeam 0.1 mm、water broadbeam 0.5 mm；这些变化后的配置尚未重新做剂量/吞吐验收，CT broadbeam 保持已测的0.5 mm。历史测量只对应其记录的程序、束流、几何及统计量。
 
 ## 八个预设
 
@@ -9,7 +9,7 @@
 | 预设 | 离子多重散射 | 电子出生选区 | 已有验证记录（步长默认值更新前） |
 |---|---|---|---|
 | `proton_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 当前三维 local 1%/1 mm 99.8935%，通过 |
-| `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 当前三维 local 1%/1 mm 99.8699%，通过 |
+| `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 历史涨落关闭：local1%/1mm99.8699%；涨落开启后的剂量验收待完成 |
 | `proton_ct_minibeam.yaml` | Urban | CT 内全部 primary 电离损失 | 共用 Urban/FP32；肺 CT 尚未通过新 >99% 门槛 |
 | `carbon_ct_minibeam.yaml` | Urban | CT 内全部 primary 电离损失 | 调度提速1.946倍；输运审计通过；剂量待验收 |
 | `proton_water_broadbeam.yaml` | Gaussian Fermi–Eyges | 单位密度均匀水中选区为空 | 两批 smoke 通过；water 专项验证推迟 |
@@ -18,6 +18,10 @@
 | `carbon_water_minibeam.yaml` | Urban | 水内全部 primary 电离损失 | 共用 worker smoke 通过；剂量待验收 |
 
 两个 CT broadbeam 预设使用 RT07575 计划输入。两个 CT minibeam 预设使用肺 CT，分别为170 MeV 质子和250 MeV/u C12；它们不是 RT07575 minibeam full plan。计算后者需要使用该计划的实际 CT、spots、归一化和参考剂量。Carbon water minibeam 保留250 MeV/u spots 源及1.2%相对能散。
+
+默认的[组成基表＋密度修正离子 EM 表示](docs/em_density_factorization_20261005.md)使用 26 个组成基表及从原 175 个密度节点得到的稀疏修正，使离子 EM 与 delta 矩文件合计缩小 81.033%。原生 cut 标量与阻止本领/射程样条保持完全一致；节点级检查的最大重建误差为 0.005%。本首版在主机上重建原来的稠密 GPU 表，因此不减少 GPU 显存。八个预设现在从原有 `data/em/` 路径加载 EMFAC001/EMDFAC01 压缩包；原包与元数据已归档到 `data/archive/ion_em_native_20261005/`，仅用于离线生成与回归。其 RT07575 验证使用**头部** CT 和完整优化 spot plan，与肺 CT minibeam 预设分开；full-plan 结果及蒙卡粒子数在链接报告中单独列出。 Full-plan 结果：压缩包 proton/carbon broadbeam 的 local1%/1mm 为99.8810%/99.7877%，当时配置通过；其中 carbon 使用涨落关闭，不能代表当前开启后的配置。RT07575 **头部** proton minibeam 已按4Gy计划的0.1%粒子数完成：每组236,086,480个 primary，覆盖全部487个正权重 spot。Local3%/0.2mm 为压缩包98.9373%、原包98.9233%，两者均未通过>99%；搜索步长为0.1×DTA。压缩包对等统计量原包 gamma 为100%，相对剂量L1为0.2228%。头部持续吞吐两者均约8.73万/s，无可分辨的吞吐收益，也未减少GPU显存；用户已授权压缩表示作为默认；独立的 TOPAS 头部准确性门槛仍未通过。
+
+更新后的八个预设均通过两批 FP32 剂量运行 smoke；carbon CT broadbeam 开启涨落后的 gamma 尚未验收。见[涨落默认值检查](docs/ion_straggling_defaults_20261005.md)。
 
 ## 材料、源和输运几何
 
@@ -43,7 +47,7 @@ CT 材料面限制输运步长，包括斜入射。评分几何与物理几何�
 
 开启 straggling 时，受限能损使用提取的 ion/universal 涨落模型及其材料产生阈值、色散和运动学最大能量转移。薄/厚步长采用不同抽样区间，并非统一高斯近似。独立的聚合 delta 部分使用矩匹配 Gamma 分布，shape=`mean²/variance`、scale=`variance/mean`；方差为零时返回均值。它匹配两个聚合矩，不保留精确 compound-Poisson 的零碰撞概率和高阶矩。见[受限涨落抽样](include/carbon/restricted_fluctuation_candidate.hpp)、[delta 抽样](include/carbon/delta_loss_sampling.hpp)。
 
-**Carbon CT broadbeam 当前关闭 primary 和 secondary ion 的能损涨落**，其余七个预设开启。关闭离子涨落后使用平均能损，但核反应、散射、电子出生及电子 worker 自身的能损涨落仍然是随机过程。这一预设差异属于当前已验证配置。
+**八个预设全部开启 primary 和 secondary ion 的能损涨落**，TransportConfig 的缺省值也已开启。四个 minibeam 的铜内 primary 和带电碎片涨落也全部开启。此前 carbon CT broadbeam 的验收使用涨落关闭配置，历史 gamma/吞吐不能直接代表当前开启后的配置；carbon water minibeam 原先关闭的铜碎片涨落也已开启。
 
 ### 离子多重库仑散射
 
@@ -58,7 +62,7 @@ Minibeam 使用共用的**离子 Urban v2** 路径。材料相关原生参数限
 | 预设 | 离子最大步长，mm | 离子多重散射 | Primary / secondary ion 涨落 | 独立 all-ion 核弹性包 | 中子 worker |
 |---|---:|---|---|---|---|
 | Proton CT broadbeam | 0.5 | Gaussian FE | 开 / 开 | 开 | 关 |
-| Carbon CT broadbeam | 0.5 | Gaussian FE | 关 / 关 | 关 | 关 |
+| Carbon CT broadbeam | 0.5 | Gaussian FE | 开 / 开 | 关 | 关 |
 | Proton water broadbeam | 0.5 | Gaussian FE | 开 / 开 | 开 | 关 |
 | Carbon water broadbeam | 0.5 | Gaussian FE | 开 / 开 | 关 | 关 |
 | Proton CT minibeam | 0.1 | Urban v2 | 开 / 开 | 开 | 关 |
@@ -90,7 +94,7 @@ CINEL03 按 `(projectile Z, A, target Z, collision energy)` 保存相关的原�
 
 ### 铜准直器与上游输运
 
-Minibeam 在进入模体前穿过配置的铜狭缝和空气间隙。铜密度8.96 g/cm³，使用自身阻止本领、Urban 散射、弹性和非弹性数据，因此准直器衰减不只是几何遮挡。铜中带电步长上限0.05 mm。铜内 proton 能损选项在 proton 预设为 `g4_universal_delta`，在 carbon 预设保留 `legacy_clipped_gaussian`。铜碎片涨落除 carbon water minibeam 外均开启。患者/水中 primary 出生包不提供上游电子簇射。具体铜设置保留在各 [minibeam YAML](config/) 中。
+Minibeam 在进入模体前穿过配置的铜狭缝和空气间隙。铜密度8.96 g/cm³，使用自身阻止本领、Urban 散射、弹性和非弹性数据，因此准直器衰减不只是几何遮挡。铜中带电步长上限0.05 mm。铜内 proton 能损选项在 proton 预设为 `g4_universal_delta`，在 carbon 预设保留 `legacy_clipped_gaussian`。四个 minibeam 的铜碎片涨落均开启。患者/水中 primary 出生包不提供上游电子簇射。具体铜设置保留在各 [minibeam YAML](config/) 中。
 
 ### 可选中子输运
 
@@ -113,6 +117,14 @@ Worker 在当前材料和能量下求受限阻止本领、射程、弹性率及�
 软能损使用提取的电子 Urban 涨落参数；弹性角偏转采用含 Mott 修正的 Geant4 GS 单次弹性散射律。这既不是离子 Urban 多重散射，也不是新提出的低密度凝聚 MCS 近似。硬事件采用已检查的碰撞率上界生成候选，再按实际率接受/拒绝为空碰撞，并从提取的电离/轫致辐射条件终态抽样。跨界后从当前状态在新材料继续；缺覆盖和迭代上限失败会被报告，不转换为成功的局部沉积。见[步进算法](include/carbon/electron_charged_step.hpp)、[弹性散射律](include/carbon/electron_elastic.hpp)、[Urban 能损](include/carbon/electron_urban_fluctuation.hpp)。
 
 同一组成内，质量阻止本领/射程及质量反应率在实际密度节点之间插值，再用物理密度转换回来。硬碰撞终态的节点混合按过程反应率加权。带电模型采用较低密度节点的弹性角律与该组成的 Urban 常数；该选择及有限密度插值属于近似，不表示所有密度响应完全相同。见[密度模型](include/carbon/electron_charged_density.hpp)。
+
+### 电子密度节点与压缩方向
+
+当前共用带电电子包有 **82个 Schneider 密度节点＋1个 Water_75eV 节点**，覆盖25个组织组成及水；82不是82种独立材料。出生分布、受限阻止本领、硬碰撞率及条件终态按提取密度节点提供，运行时按同组成相邻节点插值/混合。Joint 已使用组成参考密度缩放空间推进，但不能据此推断全部电子响应都线性随密度变化。
+
+离子当前也不是仅用26表纯密度缩放，而是 **26组成基表＋175个密度状态的稀疏修正**，主机重建原密度表后输运。电子可以采用同样的存储思路：每组成一份共用 Urban/弹性角参数，标量响应使用质量归一化基表＋密度修正，出生/碰撞联合CDF需保留归一化、阈值支持、能量/角度相关性及过程率权重。单纯删除其余密度信息则是尚未验证的新近似。
+
+对当前二进制的只读检查显示：Schneider分区1在ρ=0.05946与0.87963g/cm³时，electron_cut分别约1.60075与52.6970keV；100keV电子的受限质量阻止本领分别0.32525与0.41212MeV·cm³/(mm·g)，相差约26.7%。这包含产生阈值变化，不能通过仅乘ρ重现。建议先压缩重复组成数据与稀疏密度修正，再独立验证出生/碰撞分布压缩；此处尚未替换电子运行包。
 
 ### Joint-response 加速
 
