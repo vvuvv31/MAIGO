@@ -110,4 +110,7 @@ broadbeam_electron_halo_mm: 5.0
 # unchanged, external-air precision per unit time x1.04 / x0.91. 1.0 disables; see
 # docs/broadbeam_air_roulette_20261004.md.
 broadbeam_electron_low_density_survival: 0.5
+# Order shared electron tasks; unbiased W/p roulette for selected tissue births.
+broadbeam_electron_birth_order: true
+broadbeam_electron_tissue_survival: 0.5
 # RTX2080Ti full preset: use --batch-count 10 --histories-per-batch 1253150 --batch-output NEW_DIR.

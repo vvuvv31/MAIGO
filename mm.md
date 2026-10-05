@@ -1,6 +1,6 @@
 # Materials and methods
 
-Revision: 2026-10-05. [中文](mm_zh.md). This describes the eight-preset cleanup and CT scheduling release. See the [cleanup regression](docs/repository_cleanup_20261005.md) and [CT throughput/acceptance report](docs/ct_throughput_20261005.md). Both CT broadbeams pass the requested dose gate; lung proton minibeam still falls below it. Historical measurements apply to their recorded executable, source, geometry and statistics.
+Revision: 2026-10-05. [中文](mm_zh.md). This describes the eight-preset cleanup and CT scheduling release. See the [cleanup regression](docs/repository_cleanup_20261005.md) and [CT throughput/acceptance report](docs/ct_throughput_20261005.md). See also the [CT broadbeam electron optimization](docs/broadbeam_300k_20261005.md) and the [latest exact EM search reuse](docs/broadbeam_em_search_20261005.md). Both CT broadbeams pass the requested dose gate; lung proton minibeam still falls below it. Historical measurements apply to their recorded executable, source, geometry and statistics.
 
 ## Eight presets
 
@@ -8,8 +8,8 @@ The supported configuration matrix contains exactly eight entries. Presets selec
 
 | Preset in `config/` | Ion scattering | Electron birth selection | Current verification |
 |---|---|---|---|
-| `proton_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Current 3D local 1%/1 mm 99.9254%; passed |
-| `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Current 3D local 1%/1 mm 99.8677%; passed |
+| `proton_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Current 3D local 1%/1 mm 99.8935%; passed |
+| `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Current 3D local 1%/1 mm 99.8699%; passed |
 | `proton_ct_minibeam.yaml` | Urban | All primary ionization in CT | Shared Urban/FP32 logic; lung CT does not yet pass the new >99% gate |
 | `carbon_ct_minibeam.yaml` | Urban | All primary ionization in CT | Scheduling 1.946× faster; transport audits passed; dose pending |
 | `proton_water_broadbeam.yaml` | Gaussian Fermi–Eyges | Empty selection in unit-density water | Two-batch smoke passed; water campaign deferred |
@@ -50,6 +50,8 @@ broadbeam_electron_halo_mm: 5.0
 The default CT selection uses a box dilation of density ≤0.1 g/cm³ by 5 mm, evaluated at the sampled birth position. Once selected, a packet may propagate beyond the selection. Uniform unit-density water has an empty selection and remains locally deposited under this policy. Disabling the switch selects local deposition and removes the independent electron bank from that run. No proton-only tail or carbon-only joint-replay path is required.
 
 The current CT broadbeam YAMLs also retain low-density packet survival probability 0.5 with compensating weight. Its signed weight ledger and task/energy audits remain required. This is variance reduction, not justification for dropping external-air electrons without weights or dose validation.
+
+Both CT broadbeams select `broadbeam_electron_birth_order: true`, grouping task indices by sampled birth energy and physical density, and `broadbeam_electron_tissue_survival: 0.5`, applying W/p roulette to selected births above 0.1 g/cm³. Surviving electrons and their photons retain full transport. Survival 1 disables tissue roulette; tracking OFF resets both settings. Neither optimization applies to minibeam or water.
 
 ## Data layout
 
@@ -108,22 +110,26 @@ The four CT presets use these acceptance gates:
 
 Freeze the reference, dose normalization, coordinate mapping, dose threshold and evaluation mask before comparison. Report them with the result. The current RT07575 broadbeam comparison uses the full 3D evaluation region above 10% of reference maximum, absolute normalization and no dose fitting or registration. A smaller search step is not permission to change the mask or denominator. Zero-DTA gamma remains a noise-sensitive diagnostic.
 
-Final RTX2080Ti results, including the elastic-guard repair:
+Latest RTX2080Ti broadbeam results use two independent seeds and pooled dose; minibeam rows retain the preceding larger-statistics study:
 
 | Preset | Histories | Resident primary/s | TOPAS local gamma |
 |---|---:|---:|---|
-| Proton CT broadbeam | 12,531,500 | 167,692 | 1%/1 mm: **99.9254%**, pass |
-| Carbon CT broadbeam | 6,481,909 | 104,144 | 1%/1 mm: **99.8677%**, pass |
+| Proton CT broadbeam | 2 × 12,531,500 | 203,021 | 1%/1 mm: **99.8935%**, pass |
+| Carbon CT broadbeam | 2 × 6,481,909 | 138,019 | 1%/1 mm: **99.8699%**, pass |
 | Proton CT minibeam | 20,000,000 | 51,821 | Projected 2D 3%/0.2 mm: **98.3183%**, below gate |
 | Carbon CT minibeam | Two seeds, each 3 × 200,000 per arm | **10,048**, control 5,165 | Accuracy deferred |
 
-The proton minibeam figure uses the historical PyMedPhys 0.41.0 radial search (`interp_fraction=10`) on the BODY-projected lung dose, |y|<15 mm, |x|<15 mm, reference ≥3% maximum. It is not a 3D voxel or RT07575 full-plan acceptance. A Cartesian-lattice cross-check gives 97.1013% at the same 0.02 mm spacing; neither evaluator passes >99%. Peak and valley strips give 99.9605% and 99.0052% with PyMedPhys, but do not replace the full-field gate. No new proton minibeam performance candidate was promoted.
+Latest matched controls give proton 201,356→203,021/s (+0.8%, small) and carbon 129,244→138,019/s (+6.8%). Both pooled gamma values are identical to their same-seed controls. The common EM preparation now reuses certified same-step search indices across density endpoints; normal interpolation, loss/RNG and transport are unchanged. Grid certification runs once when the immutable package loads. See the [report](docs/broadbeam_em_search_20261005.md) and [results](docs/broadbeam_em_search_20261005.json).
+
+The [preceding electron optimization](docs/broadbeam_300k_20261005.md) established birth ordering and tissue survival0.5, with +22.8%/+22.0% resident gains and improved BODY statistical efficiency. Its earlier rates/gamma use different seeds and timing conditions; they must not be compared directly to infer an extra gain. The current work preserves that estimator. 300k/s is still not reached. Minibeam table entries retain the earlier larger-statistics study; new three-batch exact-work screens give proton49,147→50,524/s and carbon9,965→10,429/s, without a new gamma acceptance.
+
+The proton minibeam figure uses the historical PyMedPhys 0.41.0 radial search (`interp_fraction=10`) on the BODY-projected lung dose, |y|<15 mm, |x|<15 mm, reference ≥3% maximum. It is not a 3D voxel or RT07575 full-plan acceptance. A Cartesian-lattice cross-check gives 97.1013% at the same 0.02 mm spacing; neither evaluator passes >99%. Peak and valley strips give 99.9605% and 99.0052% with PyMedPhys, but do not replace the full-field gate. The shared EM search update preserves this dose conclusion; the new minibeam checks establish implementation consistency, not a new gamma acceptance.
 
 Carbon CT minibeam now uses `history_chunk_size` and `material_electron_queue_chunk` of 131,072, with existing species grouping and 16-step secondary continuation enabled. Group32, 16,384 electron lanes, the 576 MiB queue budget, physical steps and per-history RNG stay fixed. Same-binary reverse-order confirmation gives **1.946×** resident throughput, primary kernel 22.320→7.565 s and secondary 6.917→3.498 s per 200k batch. All compared discrete transport/EM/electron fields match; maximum dose relative L1 is 5.01e-8. Queue demand peaks at 3,798,118 / 5,807,497 tasks for this scene. This validates scheduling consistency, not carbon minibeam dose accuracy.
 
 The shared-worker count, compact failure state, C12 specialization and smaller secondary-tail candidates did not deliver a resolved useful gain and were not promoted. Actual worker profiling showed substantial local-memory traffic and about 11 active threads per issued warp instruction; reducing static registers alone did not improve runtime. See [the full report](docs/ct_throughput_20261005.md) and [machine-readable results](docs/ct_throughput_20261005.json).
 
-Final two-batch regression covers all eight presets on the current binary and YAMLs. Electron work counters match the retained controls exactly; maximum dose relative L1 is 1.224e-7. Quality, energy, completion, coverage and zero-overflow checks pass. These small runs are not water gamma or steady-state throughput measurements. Water birth extraction used 64 native histories per projectile and needs a separate dose/statistical campaign. The earlier cleanup control-flow regression and its larger-statistics repair are recorded in the [cleanup correction](docs/repository_cleanup_20261005.md#larger-statistics-correction).
+The EM search update completes 68 full broadbeam validation batches, 12 CT minibeam comparison batches and two-batch regression for each of the other six presets. All compared ion/EM/electron counts match. Broadbeam dose relative L1 is at most4.823e-8; the other-presets smoke maximum is1.081e-7. Quality, energy, completion, coverage and zero-overflow checks pass. These small runs are not water gamma or steady-state throughput measurements. Water birth extraction used 64 native histories per projectile and needs a separate dose/statistical campaign. The earlier cleanup control-flow regression and its larger-statistics repair are recorded in the [cleanup correction](docs/repository_cleanup_20261005.md#larger-statistics-correction).
 
 Measure cold start, first batch and resident batches separately. Report primaries/s, kernel times, task counts and peak memory with GPU model, compiler, source, seed and history counts. Compare like-for-like source histories, not electron tasks or accepted collimator primaries. `scripts/benchmark_ct_devices.py` uses native repeated batches for all four CT presets, validates each batch, and supports `--smoke-only`; the reproduction command is in the CT report.
 

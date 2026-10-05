@@ -40,12 +40,12 @@ Use a new output directory. Check each batch's quality report, coverage, energy 
 
 ## Validation and development
 
-Current RTX2080Ti resident rates and dose results:
+Latest RTX2080Ti broadbeam rates and pooled dose results ([EM search reuse](docs/broadbeam_em_search_20261005.md): carbon +6.8%, proton +0.8% in matched full plans; 300k/s not reached). Minibeam rows retain the previous larger-statistics study; latest three-batch consistency screens are in the linked report:
 
 | CT preset | Primary/s | Local gamma |
 |---|---:|---|
-| Proton broadbeam | 167,692 | 1%/1 mm: 99.9254%, pass |
-| Carbon broadbeam | 104,144 | 1%/1 mm: 99.8677%, pass |
+| Proton broadbeam | 203,021 | Pooled 3D 1%/1 mm: 99.8935%, pass |
+| Carbon broadbeam | 138,019 | Pooled 3D 1%/1 mm: 99.8699%, pass |
 | Proton minibeam | 51,821 | Projected 2D 3%/0.2 mm: 98.3183%, below gate |
 | Carbon minibeam | 10,048 (previously 5,165) | Dose accuracy deferred; runtime audits pass |
 

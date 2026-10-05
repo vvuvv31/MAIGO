@@ -285,6 +285,11 @@ struct TransportConfig {
     // energy-packet deposit by its conditional expectation along each step
     // while the electron is in such a voxel. Physics and RNG laws unchanged.
     double broadbeam_electron_low_density_survival{1.0};
+    // Selected halo births above the threshold: independent W/p roulette.
+    // Changes variance, not the surviving electron/photon transport law.
+    double broadbeam_electron_tissue_survival{1.0};
+    // Bucket queued indices by sampled birth energy and physical density.
+    bool broadbeam_electron_birth_order{false};
     bool broadbeam_electron_expected_scoring{false};
     double broadbeam_electron_expected_min_energy_MeV{0.0};
 

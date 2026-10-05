@@ -159,6 +159,10 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             report.approximations.push_back({"broadbeam_low_density_electron_roulette",
                 "Unbiased deterministic per-task Russian roulette of electrons born at density<=threshold; survivors carry W/p and a signed weight ledger closes energy accounting. Not a physics approximation; finite-statistics patient gamma requires validation",
                 config.broadbeam_electron_low_density_survival,1.0});
+        if(config.broadbeam_independent_electrons && config.broadbeam_electron_tissue_survival!=1)
+            report.approximations.push_back({"broadbeam_tissue_electron_roulette",
+                "Unbiased per-task roulette of selected electron births at density>threshold; survivors and photon descendants carry W/p with a signed energy ledger. Changes variance; validate regional noise and patient gamma",
+                config.broadbeam_electron_tissue_survival,1.0});
         if(config.broadbeam_independent_electrons && config.broadbeam_electron_expected_scoring)
             report.approximations.push_back({"broadbeam_low_density_expected_scoring",
                 "Unbiased expected-value (track-length) energy-packet scoring while electrons are in density<=threshold voxels; transport laws and step limits unchanged",

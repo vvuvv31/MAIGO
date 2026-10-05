@@ -2166,6 +2166,8 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"broadbeam_electron_body_mask_file\": \"" << config.broadbeam_electron_body_mask_file.string() << "\",\n"
            << "  \"broadbeam_electron_region_diagnostics\": " << (config.broadbeam_electron_region_diagnostics?"true":"false") << ",\n"
            << "  \"broadbeam_electron_low_density_survival\": " << config.broadbeam_electron_low_density_survival << ",\n"
+           << "  \"broadbeam_electron_tissue_survival\": " << config.broadbeam_electron_tissue_survival << ",\n"
+           << "  \"broadbeam_electron_birth_order\": " << (config.broadbeam_electron_birth_order?"true":"false") << ",\n"
            << "  \"broadbeam_electron_expected_scoring\": " << (config.broadbeam_electron_expected_scoring?"true":"false") << ",\n"
            << "  \"broadbeam_electron_expected_min_energy_MeV\": " << config.broadbeam_electron_expected_min_energy_MeV << ",\n";
     output << "  \"transport_profile\": \"" << config.transport_profile << "\",\n"

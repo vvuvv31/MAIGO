@@ -97,6 +97,9 @@ struct UnifiedEmSearchAuditState {
     std::uint32_t step{};
     std::uint16_t ordinal{};
 };
+struct UnifiedEmPrepareIndices {
+    unsigned node{~0u}, stopping{~0u}, range{~0u};
+};
 struct UnifiedEmPoint {
     const UnifiedEmRecord* record{};
     const UnifiedEmNode* nodes{};
@@ -180,8 +183,10 @@ struct UnifiedEmPoint {
         float e=kinetic/record->a;
         return e>=nodes[0].energy && e<=nodes[record->node_count-1].energy;
     }
-    UnifiedEmNode at(float e,float* delta_mean=nullptr,float* delta_variance=nullptr,float* delta_slope=nullptr)const {
-        unsigned lo=0,hi=record->node_count-2;bounds(0,e,lo,hi);
+    UnifiedEmNode at(float e,float* delta_mean=nullptr,float* delta_variance=nullptr,float* delta_slope=nullptr, unsigned* found=nullptr, unsigned shared=~0u)const {
+        unsigned lo=shared;
+        if(shared==~0u) {
+        lo=0;unsigned hi=record->node_count-2;bounds(0,e,lo,hi);
         if constexpr(CARBON_EM_SPLIT_SEARCH_KEYS) {
             const float* key=node_energy_keys;
             if(key)while(lo<hi){auto m=(lo+hi+1)/2;if(key[m]<=e)lo=m;else hi=m-1;}
@@ -189,6 +194,8 @@ struct UnifiedEmPoint {
         } else {
             while(lo<hi){auto m=(lo+hi+1)/2;if(nodes[m].energy<=e)lo=m;else hi=m-1;}
         }
+        }
+        if(found)*found=lo;
         const auto& a=nodes[lo];const auto& b=nodes[lo+1];
         float w=std::clamp((e-a.energy)/(b.energy-a.energy),0.f,1.f);
         auto mix=[&](float x,float y){return x+w*(y-x);};
@@ -199,7 +206,7 @@ struct UnifiedEmPoint {
         if(delta_slope)*delta_slope=delta_means?(delta_means[2*lo+2]-delta_means[2*lo])/(b.energy-a.energy)/record->a:0.f;
         return {e,mix(a.full,b.full),mix(a.restricted,b.restricted),mix(a.stopping,b.stopping),mix(a.range,b.range),mix(a.lambda,b.lambda),mix(a.factor,b.factor),mix(a.correction,b.correction),mix(a.dispersion,b.dispersion),mix(a.universal_dispersion,b.universal_dispersion),mix(a.q2,b.q2),a.model,a.fluctuation};
     }
-    float raw(int kind,float x,float* slope=nullptr)const {
+    float raw(int kind,float x,float* slope=nullptr, unsigned* found=nullptr, unsigned shared=~0u)const {
         const auto* v=segments+record->offsets[kind];unsigned lo=0,hi=record->counts[kind]-1;
         const float* lk=nullptr;
         if constexpr(CARBON_EM_SPLIT_SEARCH_KEYS) lk=segment_lower_keys?segment_lower_keys+record->offsets[kind]:nullptr;
@@ -209,20 +216,24 @@ struct UnifiedEmPoint {
             if(slope)*slope=x>0?v[0].y0*(kind==2?2*w/v[0].lower:1/(2*std::sqrt(w)*v[0].lower)):0.f;
             return v[0].y0*(kind==2?w*w:std::sqrt(w));
         }
+        if(shared!=~0u)lo=shared;
+        else {
         bounds(kind+1,x,lo,hi);
         if(lk)while(lo<hi){auto m=(lo+hi+1)/2;if(lk[m]<=x)lo=m;else hi=m-1;}
         else while(lo<hi){auto m=(lo+hi+1)/2;if(v[m].lower<=x)lo=m;else hi=m-1;}
+        }
+        if(found)*found=lo;
         if(slope)*slope=v[lo].derivative(x);
         return v[lo].value(x);
     }
     float factor(float kinetic)const {return at(kinetic/record->a).factor*density_scale;}
     float range(float kinetic)const {return raw(1,kinetic*record->ratio)/(factor(kinetic)*record->ratio);}
     float rate(float kinetic,float pre_factor)const {return std::max(0.f,pre_factor*raw(3,kinetic*record->ratio));}
-    UnifiedEmPointStep prepare(float kinetic)const {
-        const auto& r=*record;float delta=0,variance=0,delta_slope=0,raw_slope=0;const auto n=at(kinetic/r.a,&delta,&variance,&delta_slope);
+    UnifiedEmPointStep prepare(float kinetic,UnifiedEmPrepareIndices* found=nullptr,const UnifiedEmPrepareIndices* shared=nullptr)const {
+        const auto& r=*record;float delta=0,variance=0,delta_slope=0,raw_slope=0;const auto n=at(kinetic/r.a,&delta,&variance,&delta_slope,found?&found->node:nullptr,shared?shared->node:~0u);
         const float f=n.factor*density_scale;
-        const float stop=f*raw(0,kinetic*r.ratio,&raw_slope);
-        return {f,raw(1,kinetic*r.ratio)/(f*r.ratio),stop,
+        const float stop=f*raw(0,kinetic*r.ratio,&raw_slope,found?&found->stopping:nullptr,shared?shared->stopping:~0u);
+        return {f,raw(1,kinetic*r.ratio,nullptr,found?&found->range:nullptr,shared?shared->range:~0u)/(f*r.ratio),stop,
                 n.q2,n.dispersion*density_scale,n.universal_dispersion*density_scale,
                 n.fluctuation==1,delta*density_scale,variance*density_scale,f*r.ratio*raw_slope,delta_slope*density_scale,n.lambda*density_scale};
     }
@@ -276,14 +287,7 @@ struct alignas(16) UnifiedEmState {
     bool covers(float t)const{return valid && lo().covers(t) && hi().covers(t);}
     float range(float t)const{return mix(lo().range(t),hi().range(t));}
     float mean(float t,float h)const{return mix(lo().mean(t,h),hi().mean(t,h));}
-    UnifiedEmStep prepare(float t)const {
-        if constexpr(CARBON_EM_PAIR_PREPARE) {
-            const auto low=lo();
-            const auto high=hi();
-            return {low.prepare(t),high.prepare(t)};
-        }
-        return {lo().prepare(t),hi().prepare(t)};
-    }
+    UnifiedEmStep prepare(float t)const;
     template<bool NonIon=false> float mean(float t,float h,const UnifiedEmStep& pre)const {
         return mix(lo().template mean<NonIon>(t,h,pre.lo),hi().template mean<NonIon>(t,h,pre.hi));
     }
@@ -325,6 +329,7 @@ struct UnifiedEmDevice {
 #if CARBON_EM_INTERVAL_WIDTH_AUDIT
     std::uint64_t* interval_width_audit{};
 #endif
+    bool shared_prepare_grid{false};
     int species_index(unsigned z,unsigned a)const {
         for(int i=0;i<18;++i)if(species[i].z==z && species[i].a==a)return i;
         return -1;
@@ -395,6 +400,17 @@ inline UnifiedEmPoint UnifiedEmState::hi() const {
         ,search_audit
 #endif
         ):UnifiedEmPoint{};
+}
+// Searches are shared only inside this preparation, never cached across steps.
+inline UnifiedEmStep UnifiedEmState::prepare(float t)const {
+    if constexpr(CARBON_EM_PAIR_PREPARE) {
+        const auto low=lo();const auto high=hi();
+        return {low.prepare(t),high.prepare(t)};
+    }
+    UnifiedEmPrepareIndices indices;
+    const auto lower=lo().prepare(t,&indices);
+    if(!tables || !tables->shared_prepare_grid)indices=UnifiedEmPrepareIndices{};
+    return {lower,hi().prepare(t,nullptr,&indices)};
 }
 struct UnifiedEmClock {
     DiscreteDeltaClockCandidate<float> clock;

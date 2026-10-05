@@ -74,7 +74,9 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
             const auto slot=sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
                 sycl::access::address_space::global_space>(material_task_counts[1]).fetch_add(1);
             if(slot>=count_host)break;
-            task=material_tasks[slot];packet_rng=task.rng;packet=f::ElectronEnergyPacket{};
+            if constexpr(BroadBeam)task=material_tasks[electron_order?electron_order[slot]:slot];
+            else task=material_tasks[slot];
+            packet_rng=task.rng;packet=f::ElectronEnergyPacket{};
             if constexpr(region_diagnostics) {
                 for(auto& c:region_counts)c=0;
                 birth_region=6;
@@ -105,15 +107,19 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
             packet.cursor.physical_density_g_cm3=float(task.density);
             packet.status=packet.cursor.valid?ElectronPacketStatus::active:ElectronPacketStatus::invalid;
             task_inside=task_outside=0.f;killed=false;
-            if(packet.status==ElectronPacketStatus::active&&float(task.density)<=electron_roulette_density){
-                // Deterministic per-task roulette from a hash of the task seed;
-                // the transport RNG stream of survivors is untouched.
-                std::uint64_t z=task.rng+0x9e3779b97f4a7c15ULL;
-                z=(z^(z>>30))*0xbf58476d1ce4e5b9ULL;z=(z^(z>>27))*0x94d049bb133111ebULL;z^=z>>31;
-                if(z<electron_roulette_bits){
-                    const float w=packet.weight_MeV/electron_roulette_survival;
-                    vr_gain+=w-packet.weight_MeV;packet.weight_MeV=w;increment(electron_vr_work+1,1);
-                }else{vr_gain-=packet.weight_MeV;killed=true;increment(electron_vr_work,1);}
+            if constexpr(BroadBeam) {
+                const bool tissue_roulette=float(task.density)>electron_tissue_density;
+                if(packet.status==ElectronPacketStatus::active &&
+                   (float(task.density)<=electron_roulette_density || (tissue_roulette && electron_tissue_survival<1.f))){
+                    // Deterministic per-task roulette from a hash of the task seed;
+                    // the transport RNG stream of survivors is untouched.
+                    std::uint64_t z=task.rng+0x9e3779b97f4a7c15ULL;
+                    z=(z^(z>>30))*0xbf58476d1ce4e5b9ULL;z=(z^(z>>27))*0x94d049bb133111ebULL;z^=z>>31;
+                    if(z<(tissue_roulette?electron_tissue_bits:electron_roulette_bits)){
+                        const float w=packet.weight_MeV/(tissue_roulette?electron_tissue_survival:electron_roulette_survival);
+                        vr_gain+=w-packet.weight_MeV;packet.weight_MeV=w;increment(electron_vr_work+1,1);
+                    }else{vr_gain-=packet.weight_MeV;killed=true;increment(electron_vr_work,1);}
+                }
             }
             if(!killed)joint();
             previous=packet;previous_rng=packet_rng;packet_steps=0;need_task=false;

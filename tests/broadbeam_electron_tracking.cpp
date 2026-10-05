@@ -24,8 +24,20 @@ int main() {
         check(failed);
     };
     for(const auto name:{"proton_water_broadbeam","carbon_water_broadbeam","proton_ct_broadbeam","carbon_ct_broadbeam"}) {
-        const auto original=read(root/"config"/(std::string(name)+".yaml"));
+        auto original=read(root/"config"/(std::string(name)+".yaml"));
+        const auto preset=load(original);
+        // Exercise defaults independently of the selected preset opt-ins.
+        for(const auto key:{"broadbeam_electron_tissue_survival:","broadbeam_electron_birth_order:"}) {
+            const auto at=original.find(key);
+            if(at!=std::string::npos) {
+                const auto end=original.find('\n',at);
+                original.erase(at,end==std::string::npos?std::string::npos:end-at+1);
+            }
+        }
         auto on=load(original);check(on.broadbeam_electron_tracking);
+        check(on.broadbeam_electron_tissue_survival==1 && !on.broadbeam_electron_birth_order);
+        if(preset.enable_ct_grid)check(preset.broadbeam_electron_tissue_survival>0);
+
         check(on.broadbeam_independent_electrons==on.enable_ct_grid);
         if(on.enable_ct_grid)check(!on.material_electron_charged_index_file.empty());
         else check(on.material_electron_charged_index_file.empty() && !on.material_electron_retain_bank);
@@ -62,9 +74,20 @@ int main() {
             rejects(without+"\n"+key+" 0\n","(0,1]");
             rejects(without+"\n"+key+" 1.5\n","(0,1]");
             rejects(without+"\nbroadbeam_electron_expected_min_energy_MeV: -1\n","(0,1]");
+            const auto tissue=load(original+"\nbroadbeam_electron_tissue_survival: 0.5\nbroadbeam_electron_birth_order: true\n");
+            check(tissue.broadbeam_electron_tissue_survival==0.5 && tissue.broadbeam_electron_birth_order);
+            const auto tissue_roundtrip=load(tissue.canonical_config_text);
+            check(tissue_roundtrip.broadbeam_electron_tissue_survival==0.5 && tissue_roundtrip.broadbeam_electron_birth_order);
+            const auto tissue_off=load(off_text+"\nbroadbeam_electron_tissue_survival: 0.5\nbroadbeam_electron_birth_order: true\n");
+            check(tissue_off.broadbeam_electron_tissue_survival==1 && !tissue_off.broadbeam_electron_birth_order);
+            for(const auto value:{"0","-0.5","1.5","nan","inf"})
+                rejects(original+"\nbroadbeam_electron_tissue_survival: "+value+"\n","(0,1]");
+
         } else {
             rejects(original+"\nbroadbeam_electron_low_density_survival: 0.5\n","CT broadbeam shared-electron");
             rejects(original+"\nbroadbeam_electron_expected_scoring: true\n","CT broadbeam shared-electron");
+            rejects(original+"\nbroadbeam_electron_tissue_survival: 0.5\n","CT broadbeam shared-electron");
+            rejects(original+"\nbroadbeam_electron_birth_order: true\n","CT broadbeam shared-electron");
         }
         auto roundtrip=load(on.canonical_config_text);check(roundtrip.broadbeam_electron_tracking && roundtrip.broadbeam_independent_electrons==on.enable_ct_grid);
         rejects(original+"\nbroadbeam_independent_electrons: false\n","Unknown configuration key");

@@ -833,10 +833,13 @@ void TransportConfig::validate() const {
         broadbeam_electron_external_air_margin_mm>100))
         throw std::invalid_argument("External-air electron localization requires CT tracking, a pinned BODY mask and margin 0..100 mm");
     if(!std::isfinite(broadbeam_electron_low_density_survival) || broadbeam_electron_low_density_survival<=0 ||
-       broadbeam_electron_low_density_survival>1 || !std::isfinite(broadbeam_electron_expected_min_energy_MeV) ||
+       broadbeam_electron_low_density_survival>1 || !std::isfinite(broadbeam_electron_tissue_survival) ||
+       broadbeam_electron_tissue_survival<=0 || broadbeam_electron_tissue_survival>1 ||
+       !std::isfinite(broadbeam_electron_expected_min_energy_MeV) ||
        broadbeam_electron_expected_min_energy_MeV<0 || broadbeam_electron_expected_min_energy_MeV>1)
-        throw std::invalid_argument("broadbeam_electron_low_density_survival must be in (0,1] and expected min energy in [0,1] MeV");
-    if((broadbeam_electron_low_density_survival!=1 || broadbeam_electron_expected_scoring) &&
+        throw std::invalid_argument("broadbeam electron low-density/tissue survival must be in (0,1] and expected min energy in [0,1] MeV");
+    if((broadbeam_electron_low_density_survival!=1 || broadbeam_electron_tissue_survival!=1 ||
+        broadbeam_electron_birth_order || broadbeam_electron_expected_scoring) &&
        (!broadbeam_electron_tracking || !broadbeam_independent_electrons || !enable_ct_grid))
         throw std::invalid_argument("Low-density electron variance reduction requires CT broadbeam shared-electron tracking");
     if(broadbeam_electron_tracking) {
@@ -1952,11 +1955,14 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.broadbeam_electron_body_mask_file=resolve_input_path_from_config(config.broadbeam_electron_body_mask_file,path);
     else {config.broadbeam_electron_body_mask_file.clear();}
     config.broadbeam_electron_low_density_survival=parse_number(values,"broadbeam_electron_low_density_survival",1.);
+    config.broadbeam_electron_tissue_survival=parse_number(values,"broadbeam_electron_tissue_survival",1.);
+    config.broadbeam_electron_birth_order=parse_bool(values,"broadbeam_electron_birth_order",false);
     config.broadbeam_electron_expected_scoring=parse_bool(values,"broadbeam_electron_expected_scoring",false);
     config.broadbeam_electron_expected_min_energy_MeV=parse_number(values,"broadbeam_electron_expected_min_energy_MeV",0.);
     // Variance-reduction settings are inert when the master switch is off.
     if(!tracking_requested){config.broadbeam_electron_low_density_survival=1;config.broadbeam_electron_expected_scoring=false;
-        config.broadbeam_electron_expected_min_energy_MeV=0;}
+        config.broadbeam_electron_expected_min_energy_MeV=0;config.broadbeam_electron_tissue_survival=1;
+        config.broadbeam_electron_birth_order=false;}
     // Eligible broad-beam full-physics runs benefit from the existing grouped
     // continuation scheduler. Preserve explicit opt-outs and EM-only inputs.
     if (profile == "broadbeam_fast" &&

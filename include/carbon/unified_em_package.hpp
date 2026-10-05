@@ -27,6 +27,9 @@ public:
     std::vector<UnifiedEmRecord> records;
     std::vector<UnifiedEmNode> nodes;
     std::vector<EmCubicSegmentCandidate<float>> segments;
+    // Immutable certificate computed once when the package is parsed.
+    bool shared_prepare_grid{false};
     static UnifiedEmPackage load(const std::filesystem::path&);
 };
+bool unified_em_has_shared_prepare_grid(const UnifiedEmPackage&);
 } // namespace carbon

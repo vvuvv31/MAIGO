@@ -1870,6 +1870,9 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             ,unified_interval_width_audit
 #endif
         };
+        unified_device.shared_prepare_grid=package.shared_prepare_grid;
+        std::cout<<"[em-shared-prepare-grid] certified="<<unified_device.shared_prepare_grid<<"\n";
+
         t_em_device.finish();
         std::cout<<"[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending\n";
     }
@@ -1963,6 +1966,23 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const auto material_queue_chunk=config.material_electron_queue_chunk;
     const auto material_queue_lanes=config.material_electron_queue_lanes;
     const auto material_group_size=config.material_electron_group_size;
+    // Order indices, retaining each birth's draws and transport RNG stream.
+    const bool electron_order_enabled=BroadBeam && use_electron_fp32 &&
+        config.broadbeam_independent_electrons && config.broadbeam_electron_birth_order;
+    constexpr unsigned electron_order_bins=33;
+    std::uint32_t* electron_order=nullptr;
+    unsigned char* electron_order_keys=nullptr;
+    std::uint32_t* electron_order_counts=nullptr;
+    std::uint32_t* electron_order_offsets=nullptr;
+    if(electron_order_enabled) {
+        electron_order=mem_tracker.allocate<std::uint32_t>(material_task_capacity);
+        electron_order_keys=mem_tracker.allocate<unsigned char>(material_task_capacity);
+        electron_order_counts=mem_tracker.allocate<std::uint32_t>(electron_order_bins);
+        electron_order_offsets=mem_tracker.allocate<std::uint32_t>(electron_order_bins);
+        if(!electron_order || !electron_order_keys || !electron_order_counts || !electron_order_offsets)throw std::bad_alloc();
+        std::cout<<"[electron-birth-order] mode=1 bins="<<electron_order_bins<<"\n";
+    }
+
     if(use_electron_fp32) {
 #ifdef CARBON_ELECTRON_SEGMENT_DIAGNOSTICS
         if(!enable_ct_grid||!config.enable_voxel_scoring||config.voxel_dose_mhd_output_file.empty())
@@ -1999,13 +2019,18 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     // A negative density disables a feature: physical densities are positive.
     const bool electron_vr_scope=use_electron_fp32 && config.broadbeam_electron_tracking &&
         config.broadbeam_independent_electrons && config.enable_ct_grid;
-    if((config.broadbeam_electron_low_density_survival!=1 || config.broadbeam_electron_expected_scoring) && !electron_vr_scope)
+    if((config.broadbeam_electron_low_density_survival!=1 || config.broadbeam_electron_tissue_survival!=1 || config.broadbeam_electron_expected_scoring) && !electron_vr_scope)
         throw std::invalid_argument("Low-density electron variance reduction requires the FP32 CT broadbeam shared-electron worker");
 #ifndef CARBON_ELECTRON_VOXEL_CACHE
     if(config.broadbeam_electron_expected_scoring)
         throw std::invalid_argument("Expected-value electron scoring requires CARBON_ELECTRON_VOXEL_CACHE");
 #endif
     const float electron_roulette_survival=static_cast<float>(config.broadbeam_electron_low_density_survival);
+    const float electron_tissue_survival=static_cast<float>(config.broadbeam_electron_tissue_survival);
+    const float electron_tissue_density=electron_vr_scope?static_cast<float>(config.broadbeam_electron_density_threshold):INFINITY;
+    const auto electron_tissue_bits=electron_fp32::probability_threshold(electron_tissue_survival);
+    if(electron_vr_scope)std::cout<<"[electron-tissue-roulette] survival="<<electron_tissue_survival<<" density_gt="<<electron_tissue_density<<"\n";
+
     const float electron_roulette_density=electron_vr_scope && electron_roulette_survival<1.f?
         static_cast<float>(config.broadbeam_electron_density_threshold):-1.f;
     const std::uint64_t electron_roulette_bits=electron_fp32::probability_threshold(electron_roulette_survival);
@@ -5761,6 +5786,37 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             electron_queue_peak=std::max<std::uint64_t>(electron_queue_peak,count_host);
             if(count_host) {
                 const std::uint32_t lanes=static_cast<std::uint32_t>(std::min<std::uint64_t>(count_host,material_queue_lanes));
+                if(electron_order) {
+                    queue.fill(electron_order_counts,0U,electron_order_bins);
+                    electron_events.push_back(queue.parallel_for(sycl::range<1>(count_host),[=](sycl::id<1> index){
+                        namespace f=electron_fp32;
+                        const auto t=material_tasks[index[0]];
+                        unsigned bucket=32;
+                        if(t.birth.source<float_birth.count) {
+                            const auto node=float_birth.nodes[t.birth.source];
+                            const auto e=f::sample_independent_electron_birth(node,float(t.birth.energy),f::Draw{t.birth.cdf_bits}).energy;
+                            const unsigned eb=(e>.001f)+(e>.003f)+(e>.01f)+(e>.03f)+(e>.1f)+(e>.3f)+(e>.65f);
+                            const unsigned db=(t.density>.01)+(t.density>.1)+(t.density>.5);
+                            bucket=db*8+eb;
+                        }
+                        electron_order_keys[index[0]]=static_cast<unsigned char>(bucket);
+                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                            sycl::access::address_space::global_space>(electron_order_counts[bucket]).fetch_add(1U);
+                    }));
+                    electron_events.push_back(queue.single_task([=]{
+                        std::uint32_t offset=0;
+                        for(unsigned b=0;b<electron_order_bins;++b){
+                            electron_order_offsets[b]=offset;offset+=electron_order_counts[b];electron_order_counts[b]=0;
+                        }
+                    }));
+                    electron_events.push_back(queue.parallel_for(sycl::range<1>(count_host),[=](sycl::id<1> index){
+                        const auto b=electron_order_keys[index[0]];
+                        const auto rank=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                            sycl::access::address_space::global_space>(electron_order_counts[b]).fetch_add(1U);
+                        electron_order[electron_order_offsets[b]+rank]=static_cast<std::uint32_t>(index[0]);
+                    }));
+                }
+
 
                     auto launch_float_response=[&](auto region_tag) {
                         constexpr bool region_diagnostics=decltype(region_tag)::value;
@@ -5870,6 +5926,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         queue.copy(material_queue_work,electron_work.data(),3).wait_and_throw();
         free_device(material_queue_work);
         queue.wait_and_throw();free_device(material_tasks);free_device(material_task_counts);
+        free_device(electron_order);free_device(electron_order_keys);free_device(electron_order_counts);free_device(electron_order_offsets);
     }
 
     double electron_kernel_seconds=0;
