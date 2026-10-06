@@ -1,6 +1,6 @@
 # 材料与方法
 
-更新：2026-10-05；工作树基于 ebff981。[English](mm.md)。本文描述当前八个预设。默认离子EM已改为无175密度状态展开的连续26组成路径，见[当前报告](docs/em_continuous_density_20261005.md)。两个CT broadbeam的TOPAS门槛通过；RT07575头部minibeam的0.1%结果仍未达严格>99%。肺CT minibeam与water剂量验收各自独立。所有预设开启离子涨落、使用FP32剂量评分；最大离子步长为broadbeam 0.5 mm、minibeam 0.1 mm。历史[清理验证](docs/repository_cleanup_20261005.md)、[吞吐记录](docs/ct_throughput_20261005.md)、[电子优化](docs/broadbeam_300k_20261005.md)与[EM搜索复用](docs/broadbeam_em_search_20261005.md)数据对应各自记录版本。
+更新：2026-10-06；默认电子26组成迁移。[English](mm.md)。本文描述当前八个预设。默认离子EM已改为无175密度状态展开的连续26组成路径，见[当前报告](docs/em_continuous_density_20261005.md)。两个CT broadbeam的TOPAS门槛通过；RT07575头部minibeam的0.1%结果仍未达严格>99%。肺CT minibeam与water剂量验收各自独立。所有预设开启离子涨落、使用FP32剂量评分；最大离子步长为broadbeam 0.5 mm、minibeam 0.1 mm。历史[清理验证](docs/repository_cleanup_20261005.md)、[吞吐记录](docs/ct_throughput_20261005.md)、[电子优化](docs/broadbeam_300k_20261005.md)与[EM搜索复用](docs/broadbeam_em_search_20261005.md)数据对应各自记录版本。
 
 ## 八个预设
 
@@ -8,8 +8,8 @@
 
 | 预设 | 离子多重散射 | 电子出生选区 | 验证与适用范围 |
 |---|---|---|---|
-| `proton_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 连续26组成 local 1%/1 mm 99.8834%，通过 |
-| `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 连续26组成、涨落开启：local1%/1mm99.7944%，通过；此前结果为历史对照 |
+| `proton_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 连续26组成 local 1%/1 mm 99.8657%，通过 |
+| `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | CT 低密度区及周围5 mm | 连续26组成、涨落开启：local1%/1mm99.7905%，通过；此前结果为历史对照 |
 | `proton_ct_minibeam.yaml` | Urban | CT 内全部 primary 电离损失 | 共用 Urban/FP32；肺 CT 尚未通过新 >99% 门槛 |
 | `carbon_ct_minibeam.yaml` | Urban | CT 内全部 primary 电离损失 | 调度提速1.946倍；输运审计通过；剂量待验收 |
 | `proton_water_broadbeam.yaml` | Gaussian Fermi–Eyges | 单位密度均匀水中选区为空 | 两批 smoke 通过；water 专项验证推迟 |
@@ -23,15 +23,15 @@
 
 最终连续26组成构建通过八个默认预设各两批FP32运行smoke，加独立头部smoke，共18批。此前[涨落默认值检查](docs/ion_straggling_defaults_20261005.md)保留为历史证据。
 
-默认[连续密度离子 EM 路径](docs/em_continuous_density_20261005.md)以 EMCNT001 保存25个Schneider组成＋Water_75eV，共26组成、18粒子、468记录。GPU 按体素真实密度计算 cut/密度效应修正；生产离子路径已无175状态目录、主机展开或密度双节点查询。实际运行 EM/delta 包合计256.46 MB；26组成无损生成源为106.31 MB。另有213.8 kB的小型标量插值表提供 cut 和材料参数，不是各密度的完整 EM 响应。电子包仍保留独立82节点注册表。
+默认[连续密度离子 EM 路径](docs/em_continuous_density_20261005.md)以 EMCNT001 保存25个Schneider组成＋Water_75eV，共26组成、18粒子、468记录。GPU 按体素真实密度计算 cut/密度效应修正；生产离子路径已无175状态目录、主机展开或密度双节点查询。实际运行 EM/delta 包合计256.46 MB；26组成无损生成源为106.31 MB。另有213.8 kB的小型标量插值表提供 cut 和材料参数，不是各密度的完整 EM 响应。电子包现在同样使用26组成，运行时无密度节点。
 
-连续模型 proton/carbon CT broadbeam 的 local 1%/1 mm 分别为99.8834%/99.7944%，开启离子涨落，搜索0.1 mm，均通过。最终包含有界 delta 矩快速分支的构建已重跑两组候选，并核对复用对照，正式剂量、独立积分及运行检查均通过。最终 RT07575 **头部** minibeam 0.1%计划（236,086,480个primary，搜索0.02 mm）已完成：新模型对TOPAS的 local 3%/0.2 mm 为98.9033%，展开模型对照98.9567%，均未过严格>99%门槛。新旧GPU之间通过率99.6249%，剂量L1差异0.9014%，选区剂量和变化+0.003378%。运行审计全部通过；输运墙钟合计50.25分钟，持续吞吐约78,696 primary/s。包缩小或GPU之间相符不能代替TOPAS验收。当前连续模型的吞吐筛查低于原展开接口。原展开解析包已归档到 data/archive/ion_em_analytic_expanded_20261005/。
+历史离子单独验收（使用旧83节点电子包）：连续模型 proton/carbon CT broadbeam 的 local 1%/1 mm 分别为99.8834%/99.7944%，开启离子涨落，搜索0.1 mm，均通过。最终包含有界 delta 矩快速分支的构建已重跑两组候选，并核对复用对照，正式剂量、独立积分及运行检查均通过。最终 RT07575 **头部** minibeam 0.1%计划（236,086,480个primary，搜索0.02 mm）已完成：新模型对TOPAS的 local 3%/0.2 mm 为98.9033%，展开模型对照98.9567%，均未过严格>99%门槛。新旧GPU之间通过率99.6249%，剂量L1差异0.9014%，选区剂量和变化+0.003378%。运行审计全部通过；输运墙钟合计50.25分钟，持续吞吐约78,696 primary/s。包缩小或GPU之间相符不能代替TOPAS验收。当前连续模型的吞吐筛查低于原展开接口。原展开解析包已归档到 data/archive/ion_em_analytic_expanded_20261005/。
 
 ## 材料、源和输运几何
 
 MAIGO 是 C++20/SYCL 蒙特卡罗程序，将带电粒子凝聚输运与 TOPAS/Geant4 提取的物理表、条件终态结合。提取/参考环境为 TOPAS 4.2.p3、Geant4 11.3.2。GPU 上没有运行完整 Geant4 physics list：有限响应库、插值、粒子覆盖范围及下述近似都是方法的一部分，验证结论只适用于指定配置和参考。
 
-CT 输入提供体素尺寸、原点、密度和 Schneider 组成编号。输运采用当前位置的组成及真实密度，不把全部 CT 体素视为按密度缩放的水。离子 EM 表包含26组成、18种带电粒子；电子使用另一套82节点 Schneider 注册表，两者离散方式不同。离子注册种类为 p、d、t、He3/4/6、Li6/7、Be6/7/9/10、B8/10/11、C10/11/12；额外弹性反冲核需要专用阻止本领数据。见 [CT 几何](include/carbon/ct_grid.hpp)、[带电粒子注册表](include/carbon/charged_species.hpp)、[EM 提取](extensions/tools/unified_em/prepare.py)。
+CT 输入提供体素尺寸、原点、密度和 Schneider 组成编号。输运采用当前位置的组成及真实密度，不把全部 CT 体素视为按密度缩放的水。离子 EM 表包含26组成、18种带电粒子；电子也使用25个Schneider组成＋Water_75eV，以连续标量拟合处理密度响应。离子注册种类为 p、d、t、He3/4/6、Li6/7、Be6/7/9/10、B8/10/11、C10/11/12；额外弹性反冲核需要专用阻止本领数据。见 [CT 几何](include/carbon/ct_grid.hpp)、[带电粒子注册表](include/carbon/charged_species.hpp)、[EM 提取](extensions/tools/unified_em/prepare.py)。
 
 水的阻止本领参考为 **TOPAS Water_75eV，平均激发能75 eV**。`data/water_unified/g4_water_material.json` 提供组成/辐射长度信息，其中的 G4_WATER 标识不把阻止本领参考改为78 eV。`minibeam_water_primary_stopping_power_scale` 保持1.0。电子材料 section25 表示水；离子 EM 注册表用 section−1 表示水，两者不可混用。
 
@@ -108,9 +108,9 @@ Minibeam 在进入模体前穿过配置的铜狭缝和空气间隙。铜密度8.
 
 ### 出生分配与能量包估计量
 
-Primary 电离损失按粒子、材料、密度及能量对应的能量加权出生比例分配：剩余部分局部沉积，代表电子的能量进入任务。Proton 与 C12 使用不同出生包，后续电子/光子物理共用。当前 primary-birth 实现不额外生成 secondary ion 的显式电子出生，也不提供铜/空气中的上游电子 cascade。核反冲沉积不混入 primary 出生响应。
+Primary 电离损失按粒子、材料、密度及能量对应的能量加权出生比例分配：剩余部分局部沉积，代表电子的能量进入任务。Proton 与 C12 共用组成壳层律，分别使用母粒子参数；后续电子/光子物理共用。当前 primary-birth 实现不额外生成 secondary ion 的显式电子出生，也不提供铜/空气中的上游电子 cascade。核反冲沉积不混入 primary 出生响应。
 
-任务携带**代表能量 W**和抽到的物理电子动能 **E**，二者不能混用。Group32 用加权 reservoir 将出生贡献合并为代表任务，不等于输运32个 analog 电子。出生能量和极角联合抽样，方位角相对于离子方向抽样。见[出生分布](include/carbon/electron_birth_bank.hpp)、[任务状态](include/carbon/electron_birth_task.hpp)。
+任务携带**代表能量 W**和抽到的物理电子动能 **E**，二者不能混用。Group32 用加权 reservoir 将出生贡献合并为代表任务，不等于输运32个 analog 电子。出生能量和极角联合抽样，方位角相对于离子方向抽样。见[出生分布](include/carbon/electron_cut_birth.hpp)、[任务状态](include/carbon/electron_birth_task.hpp)。
 
 Worker 沿级联的一条能量加权分支推进。软能损为 ΔE 时，标准估计量以 ΔE/E 的概率在抽样位置沉积 W 并结束；否则以物理能量 E−ΔE、原权重 W 继续。硬碰撞的能量加权条件 CDF 选择局部沉积、继续电子、次级电子或光子，也保留 W。这样无需保存整个簇射即可估计提取响应下的期望剂量，但不复现事件多重性或全部簇射关联。分组、轮盘抽样改变方差；有限响应统计及插值也可能影响准确性。见[能量包估计量](include/carbon/electron_charged_packet.hpp)、[FP32 worker](src/detail/sycl_independent_electron_fp32.inc)。
 
@@ -118,17 +118,15 @@ Worker 沿级联的一条能量加权分支推进。软能损为 ΔE 时，标�
 
 Worker 在当前材料和能量下求受限阻止本领、射程、弹性率及硬电离/轫致辐射率。普通步长受 **0.05 mm**、**0.005平均能损比例**、剩余射程、下一个物理体素面及候选相互作用距离共同限制。这些电子设置与离子步长上限不同。材料产生阈值和低能端点来自算子，不使用离子的0.1 MeV截止。
 
-软能损使用提取的电子 Urban 涨落参数；弹性角偏转采用含 Mott 修正的 Geant4 GS 单次弹性散射律。这既不是离子 Urban 多重散射，也不是新提出的低密度凝聚 MCS 近似。硬事件采用已检查的碰撞率上界生成候选，再按实际率接受/拒绝为空碰撞，并从提取的电离/轫致辐射条件终态抽样。跨界后从当前状态在新材料继续；缺覆盖和迭代上限失败会被报告，不转换为成功的局部沉积。见[步进算法](include/carbon/electron_charged_step.hpp)、[弹性散射律](include/carbon/electron_elastic.hpp)、[Urban 能损](include/carbon/electron_urban_fluctuation.hpp)。
+软能损使用提取的电子 Urban 涨落参数；弹性角偏转采用含 Mott 修正的 Geant4 GS 单次弹性散射律。这既不是离子 Urban 多重散射，也不是新提出的低密度凝聚 MCS 近似。硬事件采用已检查的碰撞率上界生成候选，再按实际率接受/拒绝为空碰撞，并从26组成Penelope/Moller、原子退激和SB/2BS模型抽样终态。跨界后从当前状态在新材料继续；缺覆盖和迭代上限失败会被报告，不转换为成功的局部沉积。见[步进算法](include/carbon/electron_charged_step.hpp)、[弹性散射律](include/carbon/electron_elastic.hpp)、[Urban 能损](include/carbon/electron_urban_fluctuation.hpp)。
 
-同一组成内，质量阻止本领/射程及质量反应率在实际密度节点之间插值，再用物理密度转换回来。硬碰撞终态的节点混合按过程反应率加权。带电模型采用较低密度节点的弹性角律与该组成的 Urban 常数；该选择及有限密度插值属于近似，不表示所有密度响应完全相同。见[密度模型](include/carbon/electron_charged_density.hpp)。
+### 默认26组成电子响应
 
-### 电子密度节点与压缩方向
+默认共用包只含 **25个Schneider组成＋Water_75eV**。出生使用 MAIBCA26 壳层模型，在实际母能量和离子EM cut上抽样能量—角度；proton/carbon分别加载44字节的母粒子参数。受限阻止本领、射程、弹性率和产生阈值采用连续密度标量拟合，不再查询或混合相邻密度节点。
 
-当前共用带电电子包有 **82个 Schneider 密度节点＋1个 Water_75eV 节点**，覆盖25个组织组成及水；82不是82种独立材料。出生分布、受限阻止本领、硬碰撞率及条件终态按提取密度节点提供，运行时按同组成相邻节点插值/混合。Joint 已使用组成参考密度缩放空间推进，但不能据此推断全部电子响应都线性随密度变化。
+低于100 keV的硬电离使用Penelope完整终态和原子退激，高能支路使用Moller及原子壳层角度抽样。轫致辐射采用元素相关的Seltzer–Berger谱、2BS角分布和相关母电子反冲。能量包从完整事件中按能量权重选择一条后继；不会显式存储整个cascade。Photon每组成保留一组MAIPHF01标定条件终态，CDF为uint64、能量/角度为FP32。
 
-离子当前使用 **26组成基表＋连续 cut/密度修正**，不展开密度状态，也不是纯线性密度缩放。电子可以采用同样的存储思路：每组成一份共用 Urban/弹性角参数，标量响应使用质量归一化基表＋密度修正，出生/碰撞联合CDF需保留归一化、阈值支持、能量/角度相关性及过程率权重。单纯删除其余密度信息则是尚未验证的新近似。
-
-对当前二进制的只读检查显示：Schneider分区1在ρ=0.05946与0.87963g/cm³时，electron_cut分别约1.60075与52.6970keV；100keV电子的受限质量阻止本领分别0.32525与0.41212MeV·cm³/(mm·g)，相差约26.7%。这包含产生阈值变化，不能通过仅乘ρ重现。建议先压缩重复组成数据与稀疏密度修正，再独立验证出生/碰撞分布压缩；此处尚未替换电子运行包。
+本轮保留三项明确近似：actual-cut硬率按质量缩放、Penelope振子律使用组成标定密度、photon条件终态使用组成标定密度。GPU上的连续密度振子/率修正和连续cut光子末态没有补齐。采用这些近似的完整包已通过两个CT broadbeam的local1%/1mm>99%标准；RT07575头部0.1% minibeam新旧TOPAS gamma为98.9001%/98.9033%，下降0.00323个百分点，满足用户放宽后的≤1个百分点门槛（local3%/0.2mm，搜索0.02mm）。新旧GPU gamma为100%，不是绝对>99%验收。旧82/83节点只保留作显式离线参考，见[完整剂量报告](docs/electron_complete26_20261006.md)。
 
 ### Joint-response 加速
 
@@ -140,7 +138,7 @@ Schneider 覆盖状态可使用紧凑相关 joint 算子推进短段。必须在
 
 共用光子包包含光电吸收、康普顿散射和瑞利散射；当前亚 MeV 覆盖不包含电子对产生。抽取光学厚度 `τ = −ln(U)`，在实际 CT/水体素序列中逐段扣除 `μ × 距离`，直至碰撞或物理逃逸。材料界面本身不沉积能量，也不重抽剩余光学厚度。光子不受离子或电子步长上限限制。
 
-碰撞时先按反应率选择过程，再按能量加权条件终态选择局部沉积、继续光子或交回带电 worker 的电子。质量衰减系数按物理密度缩放；条件终态在密度相邻节点间按几何插值权重混合，这是明确的有限节点近似。能量在抽样的相互作用/沉积位置评分，不沿光子飞行路径摊开。见[光学厚度输运](include/carbon/photon_optical_transport.hpp)、[光子包抽样](include/carbon/photon_response_bank.hpp)。
+碰撞时先按反应率选择过程，再按能量加权条件终态选择局部沉积、继续光子或交回带电 worker 的电子。质量衰减系数按物理密度缩放；条件终态使用每组成一组标定分布，这是明确的标定密度/cut近似，不混合密度节点。能量在抽样的相互作用/沉积位置评分，不沿光子飞行路径摊开。见[光学厚度输运](include/carbon/photon_optical_transport.hpp)、[光子包抽样](include/carbon/photon_response_bank.hpp)。
 
 ### Broadbeam 选区和统计加速
 
@@ -177,21 +175,19 @@ Primary、带电次级和电子工作使用有容量限制的队列/分块。粒
 
 ## 数据包
 
-电子包注册表见 [docs/electron_packages_manifest.json](docs/electron_packages_manifest.json)，共三个包：
+默认包注册表见[清单](docs/electron_packages_manifest.json)。八个预设共用26组成电子输运，仅母粒子参数区分proton/carbon：
 
-| 包 | 运行内容 | Payload 字节数 |
+| 包 | 内容 | Payload字节数 |
 |---|---|---:|
-| `data/electrons/proton/` | 质子 `birth_bank.bin` | 328,620,496 |
-| `data/electrons/carbon/` | C12 `birth_bank.bin` | 1,033,490,328 |
-| `data/electrons/shared/` | `joint.bin`、charged/photon operators 与索引 | 3,837,722,550 |
+| `data/electrons/shared/` | MAIBCA26出生、连续标量、硬率、碰撞模型、光子和空间joint | 1,746,666,256 |
+| `data/electrons/proton/` | `parameters.bin`，MAIEPR26质子参数 | 44 |
+| `data/electrons/carbon/` | `parameters.bin`，MAIEPR26 C12参数 | 44 |
 
-去重后的 payload 共5,199,833,374字节，不含 JSON 清单。每次只加载所选粒子的出生包和共用包。83节点加载器报告的设备数据约为质子3.127 GB、碳3.597 GB，不包括其他物理表、队列、评分器，也不代表进程总占用或加载峰值。
+去重payload合计1,746,666,344字节，不含JSON清单。shared中的`proton26.bin`/`carbon26.bin`是对应参数文件的硬链接，供加载器定位；不额外保存一份参数。共同出生文件为`shared/birth26.bin`，charged/photon索引为`shared/charged.index`（MAIEC026）和`shared/photon.index`（MAIPH026），各26组成入口、零运行密度节点。Joint为MAIJNB02，保留25个Schneider组成的空间响应；Water_75eV走独立电子步进。GPU bank约1.42GB，不是全进程峰值；较小的包没有带来吞吐提升，头部验证常驻约64,566 primary/s。
 
-Birth、charged、photon 各含82个 Schneider 密度节点和1个 Water_75eV 节点。电子材料 section25 表示水，Schneider 仍为0–24。水中电子/光子覆盖至0.8 MeV；Schneider 保持0.65 MeV。水中 primary 出生数据覆盖质子250 MeV、碳300 MeV/u；Schneider 分别为250、255 MeV/u。不能把这些上限解释为任意源均已验证。实际材料/能量覆盖缺失必须报错，不能替换成水或局部沉积。
+旧节点包归档于`data/archive/electron_density_nodes_20261006/`；旧原生碰撞源仍在`data/archive/electron_collision_native_20261005/`。归档只供显式离线提取和历史对照，没有默认回退。材料或能量缺覆盖必须报错，不用水或局部沉积掩盖。八预设迁移smoke与water剂量验收分开，carbon minibeam剂量仍暂缓。
 
-现用格式为 MAIBIR02 birth、MAIJNB02 joint、MAIECB02 charged index、MAIPHB02 photon index。索引为材料编号、密度、相对文件路径三列。检查内容包括尺寸、字节数、材料/粒子身份、有限值、抽样支持及碰撞率上界。运行时和当前提取工具均不再做文件摘要校验。旧配置键直接报错，不提供摘要字段或旧包格式的兼容入口。
-
-其他必要包包括统一 EM/delta moments、粒子特定核反应率/事件、所选弹性/反冲数据、minibeam Urban 表、铜/空气和可选 neutron 数据。活跃依赖见 [docs/package_manifest.json](docs/package_manifest.json)。大文件和患者输入保存在被 Git 忽略的 `data/`、`inputs/` 中，仅克隆仓库不足以运行全部预设。
+其他必要包仍包括统一EM/delta、粒子特定核反应/弹性、minibeam Urban、铜/空气和可选中子。见[活跃依赖](docs/package_manifest.json)。大文件仍在被Git忽略的data/和inputs/；仅克隆仓库不能完整运行。
 
 ## 编译和运行
 
@@ -253,8 +249,10 @@ Carbon CT minibeam 的 `history_chunk_size`、`material_electron_queue_chunk` �
 
 增加共用 worker 数量、缩小错误诊断状态、C12主输运特化及缩小 secondary tail 的候选均未获得明确有效的收益，没有合入。实际 profiler 仍显示大量 local-memory 请求，每条已发射 warp 指令约11个活跃线程；仅降低静态寄存器数未提高运行速度。详见[完整报告](docs/ct_throughput_20261005.md)及[原始数值汇总](docs/ct_throughput_20261005.json)。
 
-本轮 EM 搜索优化完成68个 broadbeam 完整批次，另有12个 CT minibeam 批次和其余六预设各两批回归。离子、EM、电子计数均保持一致，broadbeam 剂量相对 L1 最大4.823e-8，其余预设 smoke 最大1.081e-7。质量、能量、完成数、覆盖及零溢出检查通过。小粒子 smoke 不是 water gamma 或稳定吞吐验证。Water birth 提取每种粒子使用64个原生历史，仍需独立剂量/统计验证。先前清理引入的分支错误及较大统计量修复验证见[清理修正记录](docs/repository_cleanup_20261005.md#larger-statistics-correction)。
+本轮 EM 搜索优化完成68个 broadbeam 完整批次，另有12个 CT minibeam 批次和其余六预设各两批回归。离子、EM、电子计数均保持一致，broadbeam 剂量相对 L1 最大4.823e-8，其余预设 smoke 最大1.081e-7。质量、能量、完成数、覆盖及零溢出检查通过。小粒子 smoke 不是 water gamma 或稳定吞吐验证。该历史Water birth提取每种粒子使用64个原生历史，现已由analytic26出生模型替代；water仍需独立剂量/统计验收。先前清理引入的分支错误及较大统计量修复验证见[清理修正记录](docs/repository_cleanup_20261005.md#larger-statistics-correction)。
 
 计时应分开冷启动、首批及常驻批次，报告 primary/s、kernel 时间、任务量和峰值内存，并记录 GPU、编译器、束流、种子及粒子数。比较相同入射 primary 口径，不能用电子任务或穿过准直器的 primary 替换。`scripts/benchmark_ct_devices.py` 已为四个 CT 预设统一使用原生连续批次，逐批检查，支持 `--smoke-only`；命令见 CT 报告。
 
 每个候选前先查 [failed.md](failed.md)，只有满足记录中的新证据条件才能重试。FP32 原子累加顺序差异本身不否决调度改动，但输运/EM、能量、完成数和队列溢出审计仍必须通过。保留 TOPAS 参考和历史实验记录。Water 专项吞吐与剂量验收仍按要求推迟至 CT 验证之后。
+
+26成分默认切换：八个预设均通过两批FP32 smoke，旧密度节点包打开次数为零。见[切换记录与验证范围](docs/electron26_default_promotion_20261006.md)。

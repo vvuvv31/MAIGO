@@ -94,15 +94,19 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
             voxel_cache.valid=false;
 #endif
             packet.weight_MeV=float(task.weight);packet.material_table_index=task.table;
-            if(float_birth.nodes&&task.birth.source<float_birth.count){
-                const auto node=float_birth.nodes[task.birth.source];
-                const auto sample=f::sample_independent_electron_birth(node,float(task.birth.energy),f::Draw{task.birth.cdf_bits});
+            if(cut_birth26||(float_birth.nodes&&task.birth.source<float_birth.count)){
+                const auto node=cut_birth26?f::ElectronBirthNodeView{}:float_birth.nodes[task.birth.source];
+                const auto physical=cut_birth26?sample_cut_electron_birth_seeded(cut_birth26,task.birth.source,
+                    electron_projectile_parameters,float(task.birth.energy),task.birth.cut,task.birth.cdf_bits):ElectronCutBirthState{};
+                const auto sample=cut_birth26?f::ElectronBirthStateSample{{},physical.energy,physical.cosine}:
+                    f::sample_independent_electron_birth(node,float(task.birth.energy),f::Draw{task.birth.cdf_bits});
                 const auto parent=f::joint_math::unit({task.direction[0],task.direction[1],task.direction[2]});
                 const auto direction=f::independent_electron_direction(parent,sample.cosine,float(uniform()));
                 packet.cursor.position={f::Coordinate(task.position[0]),f::Coordinate(task.position[1]),f::Coordinate(task.position[2])};
                 packet.cursor.direction={direction.x,direction.y,direction.z};packet.cursor.energy_MeV=sample.energy;
-                packet.cursor.section=node.section;packet.cursor.density_g_cm3=node.density;
-                packet.cursor.valid=sample.energy>0&&std::isfinite(f::joint_math::dot(direction,direction));
+                packet.cursor.section=cut_birth26?int(task.birth.source):node.section;
+                packet.cursor.density_g_cm3=cut_birth26?float(task.density):node.density;
+                packet.cursor.valid=(!cut_birth26||physical.valid)&&sample.energy>0&&std::isfinite(f::joint_math::dot(direction,direction));
             }
             packet.cursor.physical_density_g_cm3=float(task.density);
             packet.status=packet.cursor.valid?ElectronPacketStatus::active:ElectronPacketStatus::invalid;

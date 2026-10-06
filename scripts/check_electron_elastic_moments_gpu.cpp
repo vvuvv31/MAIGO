@@ -16,7 +16,7 @@ int main(int argc,char** argv){try{
     if(!rows||!views)throw std::bad_alloc();
     for(unsigned i=0;i<nodes;++i){int section;double density;std::string path;
         in>>section>>density>>path;if(!in)throw std::runtime_error("index row");
-        carbon::ChargedResponseData data(index.parent_path()/path);
+        carbon::ChargedResponseData data(index.parent_path()/path,false);
         if(data.section!=section||data.density!=density)throw std::runtime_error("node identity");
         for(unsigned k=0;k<31*38;++k)rows[i*31*38+k]=float(data.elastic_rows[k]);
         views[i]={rows+i*31*38,float(data.mass),float(data.bc),float(data.xc2)};

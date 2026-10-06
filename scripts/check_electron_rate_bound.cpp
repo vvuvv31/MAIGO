@@ -22,7 +22,7 @@ int main(int argc,char** argv){try{
     must_reject({{1,std::nextafter(1.,2.),{1,1,1,1}}},1,1,6); // Collapses in FP32.
     must_reject({{0,1,{NAN,1,1,1}}},0,1,6);
     for(unsigned i=0;i<n;++i){int section;double density;std::string file;f>>section>>density>>file;
-        carbon::ChargedResponseData d(path.parent_path()/file);
+        carbon::ChargedResponseData d(path.parent_path()/file,false);
         if(!f||section!=d.section||density!=d.density||float(density)<1e-6f||float(density)>1e3f)throw std::runtime_error("density domain");
         for(unsigned p=0;p<2;++p){double m=0;for(const auto& r:d.rate[p])for(double v:r.value)m=std::max(m,6*std::abs(v));
             ratio=std::max(ratio,carbon::electron_rate_bound::certify(d.rate[p],float(d.parameters.front().energy),float(d.parameters.back().energy),std::nextafter(float(m),INFINITY)));pieces+=d.rate[p].size();

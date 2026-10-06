@@ -1939,6 +1939,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const bool defer_material_packets=use_material_electron;
     std::shared_ptr<IndependentElectronFloatDevice> independent_float_bank;
     electron_fp32::ElectronBirthBankView float_birth{};
+    const ElectronCutBirthComposition* cut_birth26=nullptr;
+    auto electron_projectile_parameters=electron_birth_projectile_parameters(config.primary_mass_number);
     electron_fp32::ElectronJointPilotView float_joint{};
     electron_fp32::ChargedBankView float_charged{};
     electron_fp32::PhotonResponseBankView float_photon{};
@@ -2232,10 +2234,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         config.primary_atomic_number,config.primary_mass_number);
                     if(retain_electron_ct){context->impl_->electron_ct.fp32=independent_float_bank;context->impl_->electron_ct.fp32_key=key;}
                     float_birth=independent_float_bank->birth;float_joint=independent_float_bank->joint;
+                    cut_birth26=independent_float_bank->cut_birth26;
+                    electron_projectile_parameters=independent_float_bank->projectile_parameters;
                     float_charged=independent_float_bank->charged;float_photon=independent_float_bank->photon;
                     {std::array<float,256> lows,highs;lows.fill(INFINITY);highs.fill(0);
                     for(const auto& node:independent_float_bank->charged_nodes)if(node.section>=0&&node.section<256){
-                        lows[node.section]=std::min(lows[node.section],node.density);highs[node.section]=std::max(highs[node.section],node.density);}
+                        lows[node.section]=std::min(lows[node.section],node.composition26?node.density_low:node.density);highs[node.section]=std::max(highs[node.section],node.composition26?node.density_high:node.density);}
                     for(std::size_t i=0;i<grid.material_id.size();++i){const int section=grid.material_id[i];const float rho=grid.density_g_per_cm3[i];
                         if(!std::isfinite(rho)||rho<lows[section]||rho>highs[section])throw std::runtime_error("FP32 charged bank misses CT material/density");}}
                     if constexpr(BroadBeam && JointResponse==3) {
@@ -4403,6 +4407,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     float em_continuous_sampled_MeV =
                         urban_range_limited ? energy_MeV : 0.0F;
                     float em_delta_sampled_MeV = 0.0F;
+                    float birth_expected_loss_MeV=urban_range_limited?energy_MeV:0.f;
                     if(!urban_range_limited){
                         auto draw=unified_em_loss<kPrimaryStage==7>(
                             unified_primary_state, unified_primary_clock,
@@ -4424,6 +4429,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         unified_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
                         em_continuous_sampled_MeV = draw.continuous;
                         em_delta_sampled_MeV = draw.delta;
+                        birth_expected_loss_MeV=draw.mean+draw.delta_mean;
                     }
                     const float em_loss_before_scale_MeV = deposited_MeV;
 #if defined(CARBON_ENABLE_MINIBEAM)
@@ -4490,6 +4496,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 {direction_x,direction_y,direction_z});return {p.valid,p.density,p.section};
                         }();
                         electron_fp32::IndependentElectronBirthDraw birth;
+                        float birth_parent_MeVu=energy_MeVu,birth_cut_MeV=0.f;
                         bool selected_birth=true;
                         if constexpr(BroadBeam && JointResponse==3) {
                             if(birth_material.valid) {
@@ -4504,13 +4511,55 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             }
                         }
                         if(birth_material.valid && selected_birth) {
-
+                            if(cut_birth26) {
+                                const auto composition=cut_birth26[birth_material.section];
+                                // Aggregate expectation is not a realizable
+                                // energy jump when it exceeds the parent's KE.
+                                const float parent=sycl::fmax(0.f,energy_MeV-float(along)*sycl::fmin(energy_MeV,birth_expected_loss_MeV));
+                                // Electron section25 is Water_75eV; ion EM uses section-1.
+                                const auto state=unified_device.select(birth_material.section==25?-1:birth_material.section,birth_material.density,unified_primary_species);
+                                if(state.valid&&birth_material.density>=composition.density_low&&
+                                   birth_material.density<=composition.density_high) {
+                                    birth_parent_MeVu=parent*inverse_mass_number;birth_cut_MeV=state.cut();
+                                    const float mass=primary_mass_number==1?938.272013f:11174.863388f;
+                                    const bool bragg=primary_mass_number==1&&parent<=2.f;
+                                    if(bragg)birth_cut_MeV=sycl::fmax(birth_cut_MeV,.00025f*mass/938.272013f);
+                                    const bool support=electron_birth_maximum(birth_parent_MeVu,primary_mass_number)>birth_cut_MeV;
+                                    birth.node=birth_material.section;
+                                    if(!support) {
+                                        // Native delta production is exactly
+                                        // zero below the cut, including below
+                                        // the ion table's energy minimum.
+                                        birth.valid=true;birth.fraction=0.f;
+                                    } else if(state.covers(parent)) {
+                                        const auto point=state.prepare(parent);
+                                        const float restricted=state.mix(point.lo.stopping,point.hi.stopping);
+                                        const float delta=state.mix(point.lo.delta_stopping,point.hi.delta_stopping);
+                                        const float total=restricted+delta;
+                                        birth.valid=sycl::isfinite(total)&&total>0.f&&restricted>=0.f&&delta>=0.f;
+                                        birth.fraction=delta/total;
+                                    }
+                                }
+                            } else {
                                 const auto fresh=electron_fp32::prepare_independent_electron_birth(float_birth,birth_material.section,
                                     birth_material.density,energy_MeVu,float(density_u));
                                 birth=fresh;
-                                                    }
+                            }
+                        }
                         const auto ti=birth.node;
                         if(!birth.valid) {
+                            if(cut_birth26){
+                                sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space> diagnostic(material_untracked_device[2]);
+                                if(diagnostic.fetch_add(1)==0){
+                                    MaterialPacketFailure failure{};failure.history=global_history;failure.step=steps;failure.rng=packet_rng;
+                                    auto& c=failure.before.cursor;c.section=birth_material.section;c.density_g_cm3=birth_material.density;
+                                    c.physical_density_g_cm3=birth_material.density;c.energy_MeV=birth_parent_MeVu*primary_mass_number;
+                                    c.position={electron_fp32::Coordinate(birth_position[0]),electron_fp32::Coordinate(birth_position[1]),electron_fp32::Coordinate(birth_position[2])};
+                                    failure.before.weight_MeV=deposited_MeV;failure.after.status=ElectronPacketStatus::invalid;
+                                    *material_failure_device=failure;
+                                }
+                            }
                             count(1,1);untracked(deposited_MeV,false);
                             local_voxel_deposit_MeV=0;forward_shifted_MeV+=deposited_MeV;
                         } else if(birth.fraction>0 &&
@@ -4525,7 +4574,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             const float weight=deposited_MeV*static_cast<float>(birth.fraction);
                             local_voxel_deposit_MeV-=weight;forward_shifted_MeV+=weight;
 
-                                MaterialBirthTask task{QueuedElectronBirth{energy_MeVu,birth_cdf_bits,birth.node},birth_position,{direction_x,direction_y,direction_z},
+                                MaterialBirthTask task{QueuedElectronBirth{birth_parent_MeVu,birth_cdf_bits,birth.node,birth_cut_MeV},birth_position,{direction_x,direction_y,direction_z},
                                     birth_material.density,packet_rng,global_history,static_cast<std::uint32_t>(steps),
                                     static_cast<std::uint32_t>(ti),weight};
                                 grouped_weight=float(grouped_weight)+weight;
@@ -5804,9 +5853,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         namespace f=electron_fp32;
                         const auto t=material_tasks[index[0]];
                         unsigned bucket=32;
-                        if(t.birth.source<float_birth.count) {
-                            const auto node=float_birth.nodes[t.birth.source];
-                            const auto e=f::sample_independent_electron_birth(node,float(t.birth.energy),f::Draw{t.birth.cdf_bits}).energy;
+                        if(cut_birth26||t.birth.source<float_birth.count) {
+                            const auto e=cut_birth26?sample_cut_electron_birth_seeded(cut_birth26,t.birth.source,
+                                electron_projectile_parameters,float(t.birth.energy),t.birth.cut,t.birth.cdf_bits).energy:
+                                f::sample_independent_electron_birth(float_birth.nodes[t.birth.source],float(t.birth.energy),f::Draw{t.birth.cdf_bits}).energy;
                             const unsigned eb=(e>.001f)+(e>.003f)+(e>.01f)+(e>.03f)+(e>.1f)+(e>.3f)+(e>.65f);
                             const unsigned db=(t.density>.01)+(t.density>.1)+(t.density>.5);
                             bucket=db*8+eb;

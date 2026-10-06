@@ -34,7 +34,45 @@
   charged-fragment fluctuations. Historical carbon CT broadbeam acceptance
   with fluctuations OFF does not validate the current ON configuration.
 
+## Default electron collision representation
+
+- All eight presets select the installed26 composition packages in
+  data/electrons/{shared,proton,carbon}/. Shared MAIEC026/MAIPH026 indices
+  each contain26 entries; no runtime density-node lookup or implicit83 fallback.
+- Birth uses MAIBCA26 actual-parent/cut shell sampling. Projectile-specific
+  MAIEPR26 parameters are44 bytes each; shared aliases are hardlinks to the
+  species files. Shared charged hard outcomes use Penelope/Moller, complete
+  atomic cascades and elemental SB/2BS. Photon terminals use MAIPHF01
+  calibrated composition laws with uint64 CDF and FP32 records.
+- Continuous scalar fits handle stopping/range/cuts. Actual-cut hard rates
+  mass-scale; Penelope laws and photon conditional terminals retain calibration
+  density/cut approximations. Native continuous-density component checks do not
+  imply those refinements are already integrated in this default.
+- Existing25-composition spatial joint remains active; Water_75eV uses
+  independent steps. Electron section25 maps to ion EM water section-1 when
+  preparing birth energy/cut support. All GPU scoring/geometry/loss stays FP32.
+- Old density-node banks are explicit offline references in
+  data/archive/electron_density_nodes_20261006/. Native collision sources
+  remain in data/archive/electron_collision_native_20261005/. No implicit
+  default fallback or local-deposition substitution for missing coverage.
+- CT dose gates pass under the user-authorized minibeam relative1pp criterion;
+  absolute head TOPAS gamma98.9001% remains below99%. Carbon-minibeam dose
+  accuracy is deferred. Migration smoke does not establish water dose acceptance
+  or a throughput gain. See docs/electron_complete26_20261006.{md,json}.
+
 ## GPU performance work
+
+- User-authorized complete electron26 replacement (2026-10-06): build one
+  shared 25-Schneider+Water_75eV electron/photon response and separate
+  proton/carbon parent-dependent parameters; retire all83 runtime density
+  nodes only after the replacement runs independently. No silent83 fallback.
+  For minibeam, use local3%/0.2mm/search0.02mm and require the TOPAS gamma
+  pass percentage to drop by no more than1 percentage point from the matched
+  old-path baseline at identical histories/geometry/normalization. Report
+  absolute TOPAS gamma independently; the former absolute>99% minibeam
+  promotion gate is superseded by this user instruction. Broadbeam remains
+  local1%/1mm/search0.1mm>99%. Carbon-minibeam dose accuracy remains deferred;
+  its runtime/energy/coverage/completion/overflow audits are still mandatory.
 
 - Before proposing or implementing a performance experiment, search
   `failed.md`. Do not repeat a listed failed route unless its documented
@@ -68,3 +106,42 @@
 - The water material probe `data/water_unified/g4_water_material.json` reports
   `G4_WATER` (78 eV) for composition/radiation-length purposes only; it must not
   be treated as the EM stopping material.
+
+## Independent26 electron dose-first experiment (2026-10-06)
+
+- The user explicitly authorized running a complete26-composition candidate
+  before finishing continuous-density hard-rate/terminal refinements. Candidate
+  runtime must never read the old82/83-node banks; offline generation/reference
+  controls may read them explicitly. Default promotion follows the completed CT dose gates and the user
+  authorization to switch; smoke checks runtime integration only.
+- Candidate package: `out/electron_complete26_20261006/gpu_package_v1/`, using
+  MAIEC026/MAIPH026 directories with exactly26 compositions, zero runtime
+  density nodes, and separate44-byte proton/carbon MAIEPR26 birth parameters.
+  Charged outcomes use Penelope/Moller, atomic cascades and SB/2BS. Preserve
+  spatial joint spreading. The whole shared candidate is about1.75GB, not23MB.
+- First-dose approximations are explicit: actual-cut hard-rate mass scaling,
+  calibrated Penelope oscillator laws and photon conditional terminals. Scalar
+  stopping/range/cuts use continuous density fits. Do not claim these unfinished
+  physical refinements are qualified merely because runtime audits pass.
+- Rebuilt GPU v2 passes all four CT smoke/audit screens. File-open tracing
+  verifies zero old-node bank reads. A two-ulp scalar logdomain endpoint guard
+  fixes CPU/GPU log rounding; exact physical density bounds remain enforced.
+- Formal RT07575 head0.1% comparison uses236,086,480 primaries and the matched
+  original83 control. Minibeam TOPAS local3%/0.2mm may decrease by at most1
+  percentage point (search0.02mm); broadbeam remains local1%/1mm>99%
+  (search0.1mm). Carbon minibeam dose acceptance remains deferred. If gamma
+  changes are within the authorized allowance, the user does not require
+  additional component refinement for this dose-first trial.
+
+- Completed dose-first results: all119 head batches /236,086,480 primaries
+  pass runtime/energy/EM/coverage/completion and zero-overflow audits. Original83
+  TOPAS local3%/0.2mm98.90331377%, independent26 98.90008030%, decrease
+  0.00323347pp; matched GPU gamma100%. Both remain below absolute99%,
+  which is separate from the user's relative replacement gate. Proton/carbon
+  broadbeam local1%/1mm99.86565492%/99.79050826% pass. Under the user's
+  dose-first instruction, more physical component refinement is not required
+  by these gamma results. Production preset defaults were switched on2026-10-06 after these dose results; see the migration smoke report.
+  Evidence: docs/electron_complete26_20261006.{md,json} and
+  out/electron_complete26_20261006/dose_summary_v2.json. A v4 diagnostic-only
+  rebuild fixes source-byte double counting and passes a fresh head closeout;
+  formal dose results use the frozen v2 transport binary.

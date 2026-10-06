@@ -1,76 +1,61 @@
 #!/usr/bin/env python3
-"""Check the three electron packages' sizes, schemas, dependencies and coverage.
+"""Check the default three26-composition packages and all eight preset paths.
 
-GPU loaders additionally check numeric fields, conditional support and rate bounds.
+No digests. GPU loaders additionally check numerical support and majorants.
 """
-import argparse
-import json
+import argparse,json,math,os,struct
 from pathlib import Path
-import struct
-
-ROOT = Path(__file__).resolve().parents[1]
-
-
-def require(condition, message):
-    if not condition:
-        raise ValueError(message)
-
-
+import yaml
+ROOT=Path(__file__).resolve().parents[1]
+def require(ok,message):
+    if not ok:raise ValueError(message)
 def verify(root):
-    registry = json.loads((root/'docs/electron_packages_manifest.json').read_text())
-    require(registry['schema'] == 2, 'Registry schema')
-    packages = registry['packages']
-    require(set(packages) == {'proton', 'carbon', 'shared'}, 'Expected three packages')
-    report = {}
-    for name, entry in packages.items():
-        directory = root/entry['root']
-        spec = json.loads((directory/'manifest.json').read_text())
-        require(spec == entry['manifest'], f'{name}: registry mismatch')
-        total = 0
-        for filename, item in spec['files'].items():
-            relative = Path(filename)
-            require(not relative.is_absolute() and '..' not in relative.parts, 'Nonrelative member')
-            path = directory/relative
-            require(path.resolve().is_relative_to(directory.resolve()), 'Member outside package')
-            require(path.is_file() and path.stat().st_size == item['bytes'], f'{name}: size mismatch: {filename}')
-            total += item['bytes']
-        require(total == spec['total_bytes'], f'{name}: total size')
-        for dep in spec.get('requires', []):
-            require(dep['package_id'] == packages['shared']['manifest']['package_id'], 'Shared dependency')
-        if name != 'shared':
-            with (directory/'birth_bank.bin').open('rb') as stream:
-                magic, version, nodes, z, a = struct.unpack('<8s4I', stream.read(24))
-            require((magic, version) == (b'MAIBIR02', 2), 'Birth schema')
-            require([z, a] == spec['projectile'] and nodes == 83, 'Birth projectile/material count')
+    registry=json.loads((root/'docs/electron_packages_manifest.json').read_text())
+    require(registry['schema']==3,'Registry schema')
+    require(json.loads((root/'data/electrons/manifest.json').read_text())==registry,'Installed registry mismatch')
+    packages=registry['packages'];require(set(packages)=={'shared','proton','carbon'},'Three packages required')
+    report={}
+    for name,entry in packages.items():
+        directory=root/entry['root'];spec=json.loads((directory/'manifest.json').read_text())
+        require(spec==entry['manifest'],f'{name}: registry mismatch')
+        require(spec['schema']==3 and spec['compositions']==26 and spec['runtime_density_nodes']==0,'Composition representation')
+        for file,item in spec['files'].items():
+            path=directory/file;require(path.resolve().is_relative_to(directory.resolve()),'Member outside package')
+            require(path.is_file() and path.stat().st_size==item['bytes'],f'{name}: size mismatch {file}')
+        total=sum(item['bytes'] for item in spec['files'].values());require(total==spec['total_bytes'],'Package size')
+        if name!='shared':
+            with (directory/'parameters.bin').open('rb') as f:magic,version,z,a=struct.unpack('<8s3I',f.read(20))
+            require((magic,version)==(b'MAIEPR26',1) and [z,a]==spec['projectile'],'Projectile schema/identity')
+            require((directory/'parameters.bin').stat().st_size==44,'Projectile layout')
+            require(spec['requires']==[dict(package_id=packages['shared']['manifest']['package_id'])],'Shared dependency')
         else:
-            with (directory/'joint.bin').open('rb') as stream:
-                magic, count = struct.unpack('<8sI', stream.read(12))
-            require((magic, count) == (b'MAIJNB02', 25), 'Joint schema/Schneider coverage')
-            for component, magic in [('charged', 'MAIECB02'), ('photon', 'MAIPHB02')]:
-                lines = (directory/component/'index.txt').read_text().splitlines()
-                require(lines[0].split() == [magic, '83'] and len(lines) == 84, 'Operator index/count')
-                keys, sections = set(), set()
-                for row in lines[1:]:
-                    section, density, filename = row.split()
-                    section, density = int(section), float(density)
-                    require(0 <= section <= 25 and density > 0, 'Material/density domain')
-                    require((section, density) not in keys, 'Duplicate density node')
-                    keys.add((section, density)); sections.add(section)
-                    if section == 25:
-                        require(density == 1, 'Water_75eV density')
-                    require(str(Path(component)/filename) in spec['files'], 'Unregistered operator')
-                require(sections == set(range(26)), 'Missing material')
-        report[name] = dict(files=len(spec['files']), bytes=total, verified=True)
-    require(sum(x['bytes'] for x in report.values()) == registry['total_unique_bytes'], 'Combined size')
+            for file,target in spec['runtime_aliases'].items():
+                require(target==f'../{file[:-6]}/parameters.bin','Unexpected runtime alias')
+                require(os.path.samefile(directory/file,directory/target),'Projectile alias must share the same payload')
+            for file,magic,version in [('birth26.bin',b'MAIBCA26',1),('scalar26.bin',b'MAIESC26',1),('penelope26.bin',b'MAIPEN26',1),('brems26.bin',b'MAISB026',2),('rates26.bin',b'MAIERG26',1)]:
+                with (directory/file).open('rb') as f:h=struct.unpack('<8s2I',f.read(16))
+                require(h==(magic,version,26),f'{file}: schema/composition count')
+            with (directory/'joint.bin').open('rb') as f:h=struct.unpack('<8sI',f.read(12))
+            require(h==(b'MAIJNB02',25),'Joint Schneider composition coverage')
+            for component,magic in [('charged','MAIEC026'),('photon','MAIPH026')]:
+                lines=(directory/f'{component}.index').read_text().splitlines();require(lines[0].split()==[magic,'26'] and len(lines)==27,'Index count/schema')
+                for expected,row in enumerate(lines[1:]):
+                    section,density,file=row.split();require(int(section)==expected and math.isfinite(float(density)) and float(density)>0,'Composition identity')
+                    require(file in spec['files'],'Unregistered operator')
+                    with (directory/file).open('rb') as f:
+                        if component=='charged':h=struct.unpack('<8sIIf',f.read(20));require(h[:3]==(b'MAIEL026',1,expected) and h[3]==float(density),'Angular composition identity')
+                        else:h=struct.unpack('<8sIid',f.read(24));require(h==(b'MAIPHF01',1,expected,float(density)),'Photon composition identity')
+        report[name]=dict(files=len(spec['files']),bytes=total,compositions=26,density_nodes=0,verified=True)
+    require(sum(x['bytes'] for x in report.values())==registry['total_unique_bytes'],'Unique size')
+    expected=dict(material_electron_birth_file='data/electrons/shared/birth26.bin',material_electron_joint_pilot_file='data/electrons/shared/joint.bin',material_electron_charged_index_file='data/electrons/shared/charged.index',material_photon_response_index_file='data/electrons/shared/photon.index')
+    for species in ['proton','carbon']:
+        for geometry in ['ct','water']:
+            for beam in ['broadbeam','minibeam']:
+                cfg=yaml.safe_load((root/f'config/{species}_{geometry}_{beam}.yaml').read_text())
+                require(all(cfg.get(k)==v for k,v in expected.items()),'Preset does not select default26')
     return report
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--root', type=Path, default=ROOT)
-    parser.add_argument('--output', type=Path)
-    args = parser.parse_args()
-    text = json.dumps(verify(args.root.resolve()), indent=2) + '\n'
-    if args.output:
-        args.output.write_text(text)
-    print(text, end='')
+if __name__=='__main__':
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,default=ROOT);p.add_argument('--output',type=Path);a=p.parse_args()
+    text=json.dumps(verify(a.root.resolve()),indent=2)+'\n'
+    if a.output:a.output.write_text(text)
+    print(text,end='')

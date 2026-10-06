@@ -13,7 +13,7 @@ int main(int argc,char** argv){try{
     double sum_reference=0,sum_candidate=0,max_norm_error=0,max_rotation_error=0,max_cell_relative=0;
     for(unsigned node=0;node<nodes;++node){
         int section;double density;std::string file;in>>section>>density>>file;
-        carbon::ChargedResponseData data(index.parent_path()/file);const auto view=data.view().elastic;
+        carbon::ChargedResponseData data(index.parent_path()/file,false);const auto view=data.view().elastic;
         for(double energy:{.00010001,.0003,.001,.003,.01,.03,.1,.3,.6499999}){
             double cell_reference=0,cell_candidate=0;
             for(unsigned j=0;j<4096;++j){

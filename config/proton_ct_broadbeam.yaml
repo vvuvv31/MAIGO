@@ -97,10 +97,10 @@ material_electron_queue_chunk: 524288
 material_electron_queue_lanes: 16384
 material_electron_queue_budget_MiB: 576
 material_electron_retain_bank: true
-material_electron_birth_file: data/electrons/proton/birth_bank.bin
+material_electron_birth_file: data/electrons/shared/birth26.bin
 material_electron_joint_pilot_file: data/electrons/shared/joint.bin
-material_photon_response_index_file: data/electrons/shared/photon/index.txt
-material_electron_charged_index_file: data/electrons/shared/charged/index.txt
+material_photon_response_index_file: data/electrons/shared/photon.index
+material_electron_charged_index_file: data/electrons/shared/charged.index
 # true: primary-ionization electrons in density <= threshold plus halo; false: local deposition, no electron packages.
 # Charged nuclear-secondary ionization remains local in either mode.
 broadbeam_electron_tracking: true

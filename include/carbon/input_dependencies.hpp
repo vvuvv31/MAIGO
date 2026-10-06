@@ -20,7 +20,7 @@ inline std::string electron_bank_input_key(const std::filesystem::path& index,
     std::ifstream in(index);
     std::string magic;
     unsigned count{};
-    if(!(in>>magic>>count) || magic!=expected_magic || count==0 || count>4096)
+    if(!(in>>magic>>count) || (magic!=expected_magic&&!(expected_magic=="MAIECB02"&&magic=="MAIEC026")&&!(expected_magic=="MAIPHB02"&&magic=="MAIPH026")) || ((magic=="MAIEC026"||magic=="MAIPH026")&&count!=26) || count==0 || count>4096)
         throw std::runtime_error("Invalid electron bank index: "+index.string());
     for(unsigned i=0;i<count;++i) {
         int section;
@@ -37,6 +37,7 @@ inline std::string electron_bank_input_key(const std::filesystem::path& index,
     }
     std::string extra;
     if(in>>extra)throw std::runtime_error("Trailing electron bank index fields");
+    if(magic=="MAIEC026")for(const char* file:{"scalar26.bin","penelope26.bin","atomic26.bin","brems26.bin","rates26.bin","proton26.bin","carbon26.bin"})key+="|"+input_cache_key(index.parent_path()/file);
     return key;
 }
 

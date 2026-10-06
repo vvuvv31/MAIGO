@@ -1,722 +1,263 @@
 {
-  "schema": 2,
-  "scope": "Projectile-specific primary electron births and common FP32 charged/photon transport for CT and Water_75eV. Joint acceleration covers Schneider sections only.",
+  "schema": 3,
+  "scope": "Default26 composition electron transport; no material-density node bank",
   "packages": {
     "shared": {
       "root": "data/electrons/shared",
       "manifest": {
-        "schema": 2,
-        "package_id": "electrons_shared_v2",
-        "role": "charged_photon_transport",
-        "projectile": null,
+        "schema": 3,
+        "package_id": "electrons_shared_continuous26_v1",
+        "role": "shared26_transport",
         "files": {
-          "charged/index.txt": {
-            "bytes": 3481
+          "atomic26.bin": {
+            "bytes": 16844
           },
-          "charged/node00/operator.bin": {
-            "bytes": 9601888
+          "birth26.bin": {
+            "bytes": 15920
           },
-          "charged/node01/operator.bin": {
-            "bytes": 9265056
+          "brems26.bin": {
+            "bytes": 22942700
           },
-          "charged/node02/operator.bin": {
-            "bytes": 9201488
+          "charged.index": {
+            "bytes": 925
           },
-          "charged/node03/operator.bin": {
-            "bytes": 6395264
+          "elastic00.bin": {
+            "bytes": 9540
           },
-          "charged/node04/operator.bin": {
-            "bytes": 6395264
+          "elastic01.bin": {
+            "bytes": 9540
           },
-          "charged/node05/operator.bin": {
-            "bytes": 6362496
+          "elastic02.bin": {
+            "bytes": 9540
           },
-          "charged/node06/operator.bin": {
-            "bytes": 6362496
+          "elastic03.bin": {
+            "bytes": 9540
           },
-          "charged/node07/operator.bin": {
-            "bytes": 6362496
+          "elastic04.bin": {
+            "bytes": 9540
           },
-          "charged/node08/operator.bin": {
-            "bytes": 6362496
+          "elastic05.bin": {
+            "bytes": 9540
           },
-          "charged/node09/operator.bin": {
-            "bytes": 6362496
+          "elastic06.bin": {
+            "bytes": 9540
           },
-          "charged/node10/operator.bin": {
-            "bytes": 6362496
+          "elastic07.bin": {
+            "bytes": 9540
           },
-          "charged/node11/operator.bin": {
-            "bytes": 6329728
+          "elastic08.bin": {
+            "bytes": 9540
           },
-          "charged/node12/operator.bin": {
-            "bytes": 6329728
+          "elastic09.bin": {
+            "bytes": 9540
           },
-          "charged/node13/operator.bin": {
-            "bytes": 6329728
+          "elastic10.bin": {
+            "bytes": 9540
           },
-          "charged/node14/operator.bin": {
-            "bytes": 6329728
+          "elastic11.bin": {
+            "bytes": 9540
           },
-          "charged/node15/operator.bin": {
-            "bytes": 6329680
+          "elastic12.bin": {
+            "bytes": 9540
           },
-          "charged/node16/operator.bin": {
-            "bytes": 6329680
+          "elastic13.bin": {
+            "bytes": 9540
           },
-          "charged/node17/operator.bin": {
-            "bytes": 6296912
+          "elastic14.bin": {
+            "bytes": 9540
           },
-          "charged/node18/operator.bin": {
-            "bytes": 6296912
+          "elastic15.bin": {
+            "bytes": 9540
           },
-          "charged/node19/operator.bin": {
-            "bytes": 6296912
+          "elastic16.bin": {
+            "bytes": 9540
           },
-          "charged/node20/operator.bin": {
-            "bytes": 6296912
+          "elastic17.bin": {
+            "bytes": 9540
           },
-          "charged/node21/operator.bin": {
-            "bytes": 6264144
+          "elastic18.bin": {
+            "bytes": 9540
           },
-          "charged/node22/operator.bin": {
-            "bytes": 6264144
+          "elastic19.bin": {
+            "bytes": 9540
           },
-          "charged/node23/operator.bin": {
-            "bytes": 6264144
+          "elastic20.bin": {
+            "bytes": 9540
           },
-          "charged/node24/operator.bin": {
-            "bytes": 6264144
+          "elastic21.bin": {
+            "bytes": 9540
           },
-          "charged/node25/operator.bin": {
-            "bytes": 6231376
+          "elastic22.bin": {
+            "bytes": 9540
           },
-          "charged/node26/operator.bin": {
-            "bytes": 6234112
+          "elastic23.bin": {
+            "bytes": 9540
           },
-          "charged/node27/operator.bin": {
-            "bytes": 6201296
+          "elastic24.bin": {
+            "bytes": 9540
           },
-          "charged/node28/operator.bin": {
-            "bytes": 6201296
-          },
-          "charged/node29/operator.bin": {
-            "bytes": 6135712
-          },
-          "charged/node30/operator.bin": {
-            "bytes": 6135712
-          },
-          "charged/node31/operator.bin": {
-            "bytes": 6102944
-          },
-          "charged/node32/operator.bin": {
-            "bytes": 6102944
-          },
-          "charged/node33/operator.bin": {
-            "bytes": 6070176
-          },
-          "charged/node34/operator.bin": {
-            "bytes": 6037408
-          },
-          "charged/node35/operator.bin": {
-            "bytes": 6037408
-          },
-          "charged/node36/operator.bin": {
-            "bytes": 6037360
-          },
-          "charged/node37/operator.bin": {
-            "bytes": 6004592
-          },
-          "charged/node38/operator.bin": {
-            "bytes": 5971776
-          },
-          "charged/node39/operator.bin": {
-            "bytes": 5971776
-          },
-          "charged/node40/operator.bin": {
-            "bytes": 9598208
-          },
-          "charged/node41/operator.bin": {
-            "bytes": 9597312
-          },
-          "charged/node42/operator.bin": {
-            "bytes": 9597376
-          },
-          "charged/node43/operator.bin": {
-            "bytes": 9599328
-          },
-          "charged/node44/operator.bin": {
-            "bytes": 9602144
-          },
-          "charged/node45/operator.bin": {
-            "bytes": 9596352
-          },
-          "charged/node46/operator.bin": {
-            "bytes": 9599040
-          },
-          "charged/node47/operator.bin": {
-            "bytes": 9600992
-          },
-          "charged/node48/operator.bin": {
-            "bytes": 9488464
-          },
-          "charged/node49/operator.bin": {
-            "bytes": 8943328
-          },
-          "charged/node50/operator.bin": {
-            "bytes": 8704112
-          },
-          "charged/node51/operator.bin": {
-            "bytes": 8438368
-          },
-          "charged/node52/operator.bin": {
-            "bytes": 8194960
-          },
-          "charged/node53/operator.bin": {
-            "bytes": 7949072
-          },
-          "charged/node54/operator.bin": {
-            "bytes": 7671648
-          },
-          "charged/node55/operator.bin": {
-            "bytes": 7391056
-          },
-          "charged/node56/operator.bin": {
-            "bytes": 7209808
-          },
-          "charged/node57/operator.bin": {
-            "bytes": 6960336
-          },
-          "charged/node58/operator.bin": {
-            "bytes": 6818736
-          },
-          "charged/node59/operator.bin": {
-            "bytes": 6643936
-          },
-          "charged/node60/operator.bin": {
-            "bytes": 6640208
-          },
-          "charged/node61/operator.bin": {
-            "bytes": 6466208
-          },
-          "charged/node62/operator.bin": {
-            "bytes": 6463120
-          },
-          "charged/node63/operator.bin": {
-            "bytes": 6135712
-          },
-          "charged/node64/operator.bin": {
-            "bytes": 6102944
-          },
-          "charged/node65/operator.bin": {
-            "bytes": 6070176
-          },
-          "charged/node66/operator.bin": {
-            "bytes": 6037408
-          },
-          "charged/node67/operator.bin": {
-            "bytes": 6037360
-          },
-          "charged/node68/operator.bin": {
-            "bytes": 5971824
-          },
-          "charged/node69/operator.bin": {
-            "bytes": 5971824
-          },
-          "charged/node70/operator.bin": {
-            "bytes": 5971776
-          },
-          "charged/node71/operator.bin": {
-            "bytes": 5939008
-          },
-          "charged/node72/operator.bin": {
-            "bytes": 5939008
-          },
-          "charged/node73/operator.bin": {
-            "bytes": 5939008
-          },
-          "charged/node74/operator.bin": {
-            "bytes": 5873472
-          },
-          "charged/node75/operator.bin": {
-            "bytes": 5873424
-          },
-          "charged/node76/operator.bin": {
-            "bytes": 5873424
-          },
-          "charged/node77/operator.bin": {
-            "bytes": 5873424
-          },
-          "charged/node78/operator.bin": {
-            "bytes": 5742304
-          },
-          "charged/node79/operator.bin": {
-            "bytes": 5676720
-          },
-          "charged/node80/operator.bin": {
-            "bytes": 5578368
-          },
-          "charged/node81/operator.bin": {
-            "bytes": 5021024
-          },
-          "charged/water/operator.bin": {
-            "bytes": 6526576
+          "elastic25.bin": {
+            "bytes": 9540
           },
           "joint.bin": {
             "bytes": 1423915788
           },
-          "photon/index.txt": {
-            "bytes": 3481
+          "penelope26.bin": {
+            "bytes": 18932
           },
-          "photon/node00/operator.bin": {
-            "bytes": 22296648
+          "photon.index": {
+            "bytes": 899
           },
-          "photon/node01/operator.bin": {
-            "bytes": 22290184
+          "photon00.bin": {
+            "bytes": 11279432
           },
-          "photon/node02/operator.bin": {
-            "bytes": 22046888
+          "photon01.bin": {
+            "bytes": 11168480
           },
-          "photon/node03/operator.bin": {
-            "bytes": 22045384
+          "photon02.bin": {
+            "bytes": 11189024
           },
-          "photon/node04/operator.bin": {
-            "bytes": 22093992
+          "photon03.bin": {
+            "bytes": 11182976
           },
-          "photon/node05/operator.bin": {
-            "bytes": 22094120
+          "photon04.bin": {
+            "bytes": 11183912
           },
-          "photon/node06/operator.bin": {
-            "bytes": 22081960
+          "photon05.bin": {
+            "bytes": 11176064
           },
-          "photon/node07/operator.bin": {
-            "bytes": 22084424
+          "photon06.bin": {
+            "bytes": 11175536
           },
-          "photon/node08/operator.bin": {
-            "bytes": 22075592
+          "photon07.bin": {
+            "bytes": 11170088
           },
-          "photon/node09/operator.bin": {
-            "bytes": 22082664
+          "photon08.bin": {
+            "bytes": 11176664
           },
-          "photon/node10/operator.bin": {
-            "bytes": 22069000
+          "photon09.bin": {
+            "bytes": 11318528
           },
-          "photon/node11/operator.bin": {
-            "bytes": 22068424
+          "photon10.bin": {
+            "bytes": 11334152
           },
-          "photon/node12/operator.bin": {
-            "bytes": 22062088
+          "photon11.bin": {
+            "bytes": 11344640
           },
-          "photon/node13/operator.bin": {
-            "bytes": 22065352
+          "photon12.bin": {
+            "bytes": 11353016
           },
-          "photon/node14/operator.bin": {
-            "bytes": 22044744
+          "photon13.bin": {
+            "bytes": 11354672
           },
-          "photon/node15/operator.bin": {
-            "bytes": 22052552
+          "photon14.bin": {
+            "bytes": 11360792
           },
-          "photon/node16/operator.bin": {
-            "bytes": 22067656
+          "photon15.bin": {
+            "bytes": 11367968
           },
-          "photon/node17/operator.bin": {
-            "bytes": 22069800
+          "photon16.bin": {
+            "bytes": 11365400
           },
-          "photon/node18/operator.bin": {
-            "bytes": 22276616
+          "photon17.bin": {
+            "bytes": 11370632
           },
-          "photon/node19/operator.bin": {
-            "bytes": 22271048
+          "photon18.bin": {
+            "bytes": 11377520
           },
-          "photon/node20/operator.bin": {
-            "bytes": 22299656
+          "photon19.bin": {
+            "bytes": 11378408
           },
-          "photon/node21/operator.bin": {
-            "bytes": 22293800
+          "photon20.bin": {
+            "bytes": 11381576
           },
-          "photon/node22/operator.bin": {
-            "bytes": 22318760
+          "photon21.bin": {
+            "bytes": 11385968
           },
-          "photon/node23/operator.bin": {
-            "bytes": 22309896
+          "photon22.bin": {
+            "bytes": 11384048
           },
-          "photon/node24/operator.bin": {
-            "bytes": 22326568
+          "photon23.bin": {
+            "bytes": 11387552
           },
-          "photon/node25/operator.bin": {
-            "bytes": 22322632
+          "photon24.bin": {
+            "bytes": 11660864
           },
-          "photon/node26/operator.bin": {
-            "bytes": 22333416
+          "photon25.bin": {
+            "bytes": 11164232
           },
-          "photon/node27/operator.bin": {
-            "bytes": 22325640
+          "rates26.bin": {
+            "bytes": 5188176
           },
-          "photon/node28/operator.bin": {
-            "bytes": 22351848
-          },
-          "photon/node29/operator.bin": {
-            "bytes": 22338056
-          },
-          "photon/node30/operator.bin": {
-            "bytes": 22336904
-          },
-          "photon/node31/operator.bin": {
-            "bytes": 22352232
-          },
-          "photon/node32/operator.bin": {
-            "bytes": 22362536
-          },
-          "photon/node33/operator.bin": {
-            "bytes": 22348840
-          },
-          "photon/node34/operator.bin": {
-            "bytes": 22365288
-          },
-          "photon/node35/operator.bin": {
-            "bytes": 22355816
-          },
-          "photon/node36/operator.bin": {
-            "bytes": 22371496
-          },
-          "photon/node37/operator.bin": {
-            "bytes": 22370120
-          },
-          "photon/node38/operator.bin": {
-            "bytes": 22377384
-          },
-          "photon/node39/operator.bin": {
-            "bytes": 22373384
-          },
-          "photon/node40/operator.bin": {
-            "bytes": 22291208
-          },
-          "photon/node41/operator.bin": {
-            "bytes": 22294952
-          },
-          "photon/node42/operator.bin": {
-            "bytes": 22298856
-          },
-          "photon/node43/operator.bin": {
-            "bytes": 22296968
-          },
-          "photon/node44/operator.bin": {
-            "bytes": 22295528
-          },
-          "photon/node45/operator.bin": {
-            "bytes": 22294280
-          },
-          "photon/node46/operator.bin": {
-            "bytes": 22289672
-          },
-          "photon/node47/operator.bin": {
-            "bytes": 22289800
-          },
-          "photon/node48/operator.bin": {
-            "bytes": 22290568
-          },
-          "photon/node49/operator.bin": {
-            "bytes": 22051048
-          },
-          "photon/node50/operator.bin": {
-            "bytes": 22054568
-          },
-          "photon/node51/operator.bin": {
-            "bytes": 22051944
-          },
-          "photon/node52/operator.bin": {
-            "bytes": 22048392
-          },
-          "photon/node53/operator.bin": {
-            "bytes": 22052872
-          },
-          "photon/node54/operator.bin": {
-            "bytes": 22046408
-          },
-          "photon/node55/operator.bin": {
-            "bytes": 22046024
-          },
-          "photon/node56/operator.bin": {
-            "bytes": 22047528
-          },
-          "photon/node57/operator.bin": {
-            "bytes": 22046152
-          },
-          "photon/node58/operator.bin": {
-            "bytes": 22051656
-          },
-          "photon/node59/operator.bin": {
-            "bytes": 22052008
-          },
-          "photon/node60/operator.bin": {
-            "bytes": 22045224
-          },
-          "photon/node61/operator.bin": {
-            "bytes": 22045832
-          },
-          "photon/node62/operator.bin": {
-            "bytes": 22058952
-          },
-          "photon/node63/operator.bin": {
-            "bytes": 22341800
-          },
-          "photon/node64/operator.bin": {
-            "bytes": 22349704
-          },
-          "photon/node65/operator.bin": {
-            "bytes": 22352520
-          },
-          "photon/node66/operator.bin": {
-            "bytes": 22361736
-          },
-          "photon/node67/operator.bin": {
-            "bytes": 22369512
-          },
-          "photon/node68/operator.bin": {
-            "bytes": 22372040
-          },
-          "photon/node69/operator.bin": {
-            "bytes": 22368712
-          },
-          "photon/node70/operator.bin": {
-            "bytes": 22374120
-          },
-          "photon/node71/operator.bin": {
-            "bytes": 22382888
-          },
-          "photon/node72/operator.bin": {
-            "bytes": 22378792
-          },
-          "photon/node73/operator.bin": {
-            "bytes": 22389576
-          },
-          "photon/node74/operator.bin": {
-            "bytes": 22387176
-          },
-          "photon/node75/operator.bin": {
-            "bytes": 22383272
-          },
-          "photon/node76/operator.bin": {
-            "bytes": 22387144
-          },
-          "photon/node77/operator.bin": {
-            "bytes": 22401864
-          },
-          "photon/node78/operator.bin": {
-            "bytes": 22390312
-          },
-          "photon/node79/operator.bin": {
-            "bytes": 22392008
-          },
-          "photon/node80/operator.bin": {
-            "bytes": 22392616
-          },
-          "photon/node81/operator.bin": {
-            "bytes": 22898280
-          },
-          "photon/water/operator.bin": {
-            "bytes": 22050664
+          "scalar26.bin": {
+            "bytes": 325888
           }
         },
-        "electron_materials": {
-          "Schneider_sections": [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-            21,
-            22,
-            23,
-            24
-          ],
-          "Water_75eV_section": 25,
-          "material_density_nodes": 83
-        },
-        "total_bytes": 3837722550,
-        "coverage": {
-          "Schneider_electron_photon_max_MeV": 0.65,
-          "Water_75eV_electron_photon_max_MeV": 0.8,
-          "joint_sections": [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-            21,
-            22,
-            23,
-            24
-          ],
-          "water_joint_acceleration": false
-        },
-        "dose_acceptance": {
-          "proton_CT": "Previously validated logic; cleanup regression passed",
-          "carbon_CT_minibeam": "Pending",
-          "water": "Transport smoke only; dose acceptance deferred"
+        "total_bytes": 1746666256,
+        "compositions": 26,
+        "runtime_density_nodes": 0,
+        "approximations": [
+          "native-grid hard rates mass-scaled at actual cut; density correction deferred",
+          "Penelope oscillators at composition calibration density",
+          "photon calibrated conditional terminals with continuous mass-scaled rates"
+        ],
+        "runtime_aliases": {
+          "proton26.bin": "../proton/parameters.bin",
+          "carbon26.bin": "../carbon/parameters.bin"
         }
       }
     },
     "proton": {
       "root": "data/electrons/proton",
       "manifest": {
-        "schema": 2,
-        "package_id": "electrons_proton_v2",
-        "role": "primary_ionization_births",
+        "schema": 3,
+        "package_id": "electrons_proton_parameters26_v1",
+        "role": "projectile_birth_parameters",
+        "files": {
+          "parameters.bin": {
+            "bytes": 44
+          }
+        },
+        "total_bytes": 44,
+        "compositions": 26,
+        "runtime_density_nodes": 0,
         "projectile": [
           1,
           1
         ],
-        "files": {
-          "birth_bank.bin": {
-            "bytes": 328620496
-          }
-        },
-        "electron_materials": {
-          "Schneider_sections": [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-            21,
-            22,
-            23,
-            24
-          ],
-          "Water_75eV_section": 25,
-          "material_density_nodes": 83
-        },
         "requires": [
           {
-            "package_id": "electrons_shared_v2"
+            "package_id": "electrons_shared_continuous26_v1"
           }
-        ],
-        "total_bytes": 328620496,
-        "coverage": {
-          "Schneider_primary_max_MeVu": 250,
-          "Water_75eV_primary_max_MeVu": 250,
-          "water_birth_histories": 64
-        },
-        "dose_acceptance": {
-          "proton_CT": "Previously validated logic; cleanup regression passed",
-          "carbon_CT_minibeam": "Pending",
-          "water": "Transport smoke only; dose acceptance deferred"
-        }
+        ]
       }
     },
     "carbon": {
       "root": "data/electrons/carbon",
       "manifest": {
-        "schema": 2,
-        "package_id": "electrons_carbon_v2",
-        "role": "primary_ionization_births",
+        "schema": 3,
+        "package_id": "electrons_carbon_parameters26_v1",
+        "role": "projectile_birth_parameters",
+        "files": {
+          "parameters.bin": {
+            "bytes": 44
+          }
+        },
+        "total_bytes": 44,
+        "compositions": 26,
+        "runtime_density_nodes": 0,
         "projectile": [
           6,
           12
         ],
-        "files": {
-          "birth_bank.bin": {
-            "bytes": 1033490328
-          }
-        },
-        "electron_materials": {
-          "Schneider_sections": [
-            0,
-            1,
-            2,
-            3,
-            4,
-            5,
-            6,
-            7,
-            8,
-            9,
-            10,
-            11,
-            12,
-            13,
-            14,
-            15,
-            16,
-            17,
-            18,
-            19,
-            20,
-            21,
-            22,
-            23,
-            24
-          ],
-          "Water_75eV_section": 25,
-          "material_density_nodes": 83
-        },
         "requires": [
           {
-            "package_id": "electrons_shared_v2"
+            "package_id": "electrons_shared_continuous26_v1"
           }
-        ],
-        "total_bytes": 1033490328,
-        "coverage": {
-          "Schneider_primary_max_MeVu": 255,
-          "Water_75eV_primary_max_MeVu": 300,
-          "water_birth_histories": 64
-        },
-        "dose_acceptance": {
-          "proton_CT": "Previously validated logic; cleanup regression passed",
-          "carbon_CT_minibeam": "Pending",
-          "water": "Transport smoke only; dose acceptance deferred"
-        }
+        ]
       }
     }
   },
-  "total_unique_bytes": 5199833374
+  "total_unique_bytes": 1746666344,
+  "archive": "data/archive/electron_density_nodes_20261006"
 }

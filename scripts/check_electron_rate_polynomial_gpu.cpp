@@ -24,7 +24,7 @@ int main(int argc,char** argv){try{
     std::vector<Row> host;std::vector<Lookup> queries;
     for(unsigned i=0;i<nodes;++i){
         int section;double density;std::string file;in>>section>>density>>file;
-        carbon::ChargedResponseData data(path.parent_path()/file);
+        carbon::ChargedResponseData data(path.parent_path()/file,false);
         if(!in||section!=data.section||density!=data.density)throw std::runtime_error("node metadata");
         for(unsigned process=0;process<2;++process){
             double bound=0;for(const auto& r:data.rate[process])for(double y:r.value)bound=std::max(bound,6*std::abs(y));

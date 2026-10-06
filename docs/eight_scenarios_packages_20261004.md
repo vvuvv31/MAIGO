@@ -1,19 +1,19 @@
 # 八个当前预设与数据包
 
-核对日期：2026-10-05。此清单替代2026-10-04的旧目录清单；历史物理验证保留在各自报告中。当前只有八个 config YAML 入口。RT07575 是头部病例，两个默认 CT minibeam 使用肺 CT，是独立场景。
+核对日期：2026-10-06。此清单替代2026-10-04的旧目录清单；历史物理验证保留在各自报告中。当前只有八个 config YAML 入口。RT07575 是头部病例，两个默认 CT minibeam 使用肺 CT，是独立场景。
 
 ## 当前运行路径
 
 | config/ 预设 | 离子散射 | 最大离子步长 mm | 电子包 |
 |---|---|---:|---|
-| carbon_ct_broadbeam.yaml | Gaussian Fermi–Eyges | 0.5 | data/electrons/carbon/birth_bank.bin + data/electrons/shared/ |
-| carbon_ct_minibeam.yaml | Urban | 0.1 | data/electrons/carbon/birth_bank.bin + data/electrons/shared/ |
+| carbon_ct_broadbeam.yaml | Gaussian Fermi–Eyges | 0.5 | data/electrons/shared/ + data/electrons/carbon/parameters.bin |
+| carbon_ct_minibeam.yaml | Urban | 0.1 | data/electrons/shared/ + data/electrons/carbon/parameters.bin |
 | carbon_water_broadbeam.yaml | Gaussian Fermi–Eyges | 0.5 | 均匀水选区为空，不加载电子worker响应 |
-| carbon_water_minibeam.yaml | Urban | 0.1 | data/electrons/carbon/birth_bank.bin + data/electrons/shared/ |
-| proton_ct_broadbeam.yaml | Gaussian Fermi–Eyges | 0.5 | data/electrons/proton/birth_bank.bin + data/electrons/shared/ |
-| proton_ct_minibeam.yaml | Urban | 0.1 | data/electrons/proton/birth_bank.bin + data/electrons/shared/ |
+| carbon_water_minibeam.yaml | Urban | 0.1 | data/electrons/shared/ + data/electrons/carbon/parameters.bin |
+| proton_ct_broadbeam.yaml | Gaussian Fermi–Eyges | 0.5 | data/electrons/shared/ + data/electrons/proton/parameters.bin |
+| proton_ct_minibeam.yaml | Urban | 0.1 | data/electrons/shared/ + data/electrons/proton/parameters.bin |
 | proton_water_broadbeam.yaml | Gaussian Fermi–Eyges | 0.5 | 均匀水选区为空，不加载电子worker响应 |
-| proton_water_minibeam.yaml | Urban | 0.1 | data/electrons/proton/birth_bank.bin + data/electrons/shared/ |
+| proton_water_minibeam.yaml | Urban | 0.1 | data/electrons/shared/ + data/electrons/proton/parameters.bin |
 
 四个 broadbeam 共用 broadbeam_fast；broadbeam_electron_tracking 默认开启，CT 选区为低密度体素及5 mm邻域，均匀水选区为空。四个 minibeam 共用已经接入的 Urban/FP32电子worker，按粒子选择出生分布。全部预设开启 primary/secondary ion 涨落。队列、能量、输运和电子完成审计保留；carbon minibeam 正式剂量验收仍待完成。
 
@@ -21,9 +21,15 @@
 
 所有预设使用 data/em/unified_em_v1.bin (EMCNT001) 和 unified_em_delta_moments_v2.bin (EMDMOMT2)，共256,458,544字节。只有26组成（25 Schneider＋Water_75eV）、18粒子、468记录；离子运行路径没有175状态目录、主机展开或GPU密度双节点插值。
 
-每组成参考响应按真实密度和产生阈值连续修正，射程采用积分拟合。213,824字节材料标量表含密度采样，但不是完整EM响应状态。106,313,320字节的26组成基础源仅用于离线生成。电子数据仍有独立82节点，不能因离子26组成模型验收而宣称电子同样可以无误差缩减。
+每组成参考响应按真实密度和产生阈值连续修正，射程采用积分拟合。213,824字节材料标量表含密度采样，但不是完整EM响应状态。106,313,320字节的26组成基础源仅用于离线生成。电子现已独立替换为26组成，剂量验证和保留近似见下文；离子验收不代替电子验收。
 
 当前方法、验证和吞吐限制见[EM包说明](physics/unified_em_v1.md)、[连续密度报告](em_continuous_density_20261005.md)及[材料与方法](../mm_zh.md)。
+
+## 当前电子包
+
+三包结构为 shared 共用传播和出生组成律，以及 proton/carbon 各44字节的特定出生参数。charged/photon索引各26组成，运行时无82/83密度节点或隐式旧包回退。Shared含出生、连续标量、Penelope、原子退激、制动辐射、硬率、26个弹性表、26个photon表及保留的空间joint。共用登记载荷1,746,666,256字节，三包独立载荷合计1,746,666,344字节；shared/proton26.bin与carbon26.bin是对应参数的硬链接别名，不重复占载荷。
+
+保留actual-cut硬率质量缩放、组成标定Penelope振子律和photon条件终态近似。CT broadbeam local1%/1mm为proton99.8657%、carbon99.7905%，均>99%。RT07575头部0.1% full plan local3%/0.2mm为98.9001%，比原包98.9033%下降0.00323个百分点，符合≤1个百分点退化门槛，但不是绝对>99%验收。搜索步长分别0.1/0.02mm。Water剂量与carbon minibeam准确性仍待独立验收。见[剂量报告](electron_complete26_20261006.md)及[切换记录](electron26_default_promotion_20261006.md)。
 
 ## 归档
 
@@ -31,13 +37,14 @@
 
 | 目录 | 内容 |
 |---|---|
+| data/archive/electron_density_nodes_20261006/ | 原82/83节点电子运行包，显式离线参考 |
 | data/archive/ion_em_native_20261005/ | 原生逐密度提取 |
 | data/archive/ion_em_density_residual_20261005/ | 26组成＋稀疏密度残差压缩 |
 | data/archive/ion_em_analytic_expanded_20261005/ | 原解析模型175状态展开接口及旧生成元数据 |
 
 ## 当前 YAML 声明的文件与目录
 
-以下逐项从当前YAML生成，便于核对。它是显式声明清单，不穷尽index/bundle引用的传递文件，也不把条件关闭的组件称为实际加载。核反应、铜/空气散射与反冲数据仍各有用途；不能随离子EM归档一起删除。
+逐项来自当前YAML；包含条件组件的声明，不表示均实际加载，也不穷尽传递依赖。均匀水broadbeam选区为空。
 
 ### carbon_ct_broadbeam.yaml
 
@@ -58,9 +65,9 @@
 | em_package_file | data/em/unified_em_v1.bin |
 | ct_schneider_primary_cinel03_file | data/schneider/cinel03_c12_targets_v2_1.bin |
 | material_electron_joint_pilot_file | data/electrons/shared/joint.bin |
-| material_electron_birth_file | data/electrons/carbon/birth_bank.bin |
-| material_photon_response_index_file | data/electrons/shared/photon/index.txt |
-| material_electron_charged_index_file | data/electrons/shared/charged/index.txt |
+| material_electron_birth_file | data/electrons/shared/birth26.bin |
+| material_photon_response_index_file | data/electrons/shared/photon.index |
+| material_electron_charged_index_file | data/electrons/shared/charged.index |
 
 ### carbon_ct_minibeam.yaml
 
@@ -88,10 +95,10 @@
 | all_ion_elastic_file | data/schneider/all_ion_elastic_v1.bin |
 | elastic_recoil_stopping_file | data/schneider/elastic_recoil_stopping_v1.bin |
 | minibeam_copper_loss_range_file | data/carbon_urban/active_copper005.csv |
-| material_electron_birth_file | data/electrons/carbon/birth_bank.bin |
+| material_electron_birth_file | data/electrons/shared/birth26.bin |
 | material_electron_joint_pilot_file | data/electrons/shared/joint.bin |
-| material_electron_charged_index_file | data/electrons/shared/charged/index.txt |
-| material_photon_response_index_file | data/electrons/shared/photon/index.txt |
+| material_electron_charged_index_file | data/electrons/shared/charged.index |
+| material_photon_response_index_file | data/electrons/shared/photon.index |
 
 ### carbon_water_broadbeam.yaml
 
@@ -107,6 +114,10 @@
 | em_delta_moments_file | data/em/unified_em_delta_moments_v2.bin |
 | em_package_file | data/em/unified_em_v1.bin |
 | ct_schneider_primary_cinel03_file | data/schneider/cinel03_c12_targets_v2_1.bin |
+| material_electron_birth_file | data/electrons/shared/birth26.bin |
+| material_electron_joint_pilot_file | data/electrons/shared/joint.bin |
+| material_electron_charged_index_file | data/electrons/shared/charged.index |
+| material_photon_response_index_file | data/electrons/shared/photon.index |
 
 ### carbon_water_minibeam.yaml
 
@@ -134,10 +145,10 @@
 | minibeam_air_urban_package_file | data/air_urban_v2_20260926/urban_mcs_v2.bin |
 | ct_schneider_primary_cinel03_file | data/schneider/cinel03_c12_targets_v2_1.bin |
 | urban_mcs_package_file | data/ct_urban/ct_copper_52.bin |
-| material_electron_birth_file | data/electrons/carbon/birth_bank.bin |
+| material_electron_birth_file | data/electrons/shared/birth26.bin |
 | material_electron_joint_pilot_file | data/electrons/shared/joint.bin |
-| material_photon_response_index_file | data/electrons/shared/photon/index.txt |
-| material_electron_charged_index_file | data/electrons/shared/charged/index.txt |
+| material_photon_response_index_file | data/electrons/shared/photon.index |
+| material_electron_charged_index_file | data/electrons/shared/charged.index |
 
 ### proton_ct_broadbeam.yaml
 
@@ -157,10 +168,10 @@
 | spots_upstream_air_stopping_power_file | data/proton_copper_20260926/proton_air_stopping.csv |
 | primary_stopping_power_file | data/proton_therapy_20260926/proton_water_stopping.csv |
 | tps_spots_file | inputs/proton_rt07575/part_01/spots.csv |
-| material_electron_birth_file | data/electrons/proton/birth_bank.bin |
+| material_electron_birth_file | data/electrons/shared/birth26.bin |
 | material_electron_joint_pilot_file | data/electrons/shared/joint.bin |
-| material_photon_response_index_file | data/electrons/shared/photon/index.txt |
-| material_electron_charged_index_file | data/electrons/shared/charged/index.txt |
+| material_photon_response_index_file | data/electrons/shared/photon.index |
+| material_electron_charged_index_file | data/electrons/shared/charged.index |
 
 ### proton_ct_minibeam.yaml
 
@@ -188,10 +199,10 @@
 | ct_schneider_file | data/HUtoMaterialSchneider.txt |
 | all_ion_elastic_file | data/proton_therapy_20260926/all_ion_elastic_proton_v1.bin |
 | elastic_recoil_stopping_file | data/proton_therapy_20260926/elastic_recoil_stopping_water75.bin |
-| material_electron_birth_file | data/electrons/proton/birth_bank.bin |
+| material_electron_birth_file | data/electrons/shared/birth26.bin |
 | material_electron_joint_pilot_file | data/electrons/shared/joint.bin |
-| material_photon_response_index_file | data/electrons/shared/photon/index.txt |
-| material_electron_charged_index_file | data/electrons/shared/charged/index.txt |
+| material_photon_response_index_file | data/electrons/shared/photon.index |
+| material_electron_charged_index_file | data/electrons/shared/charged.index |
 
 ### proton_water_broadbeam.yaml
 
@@ -209,6 +220,10 @@
 | em_package_file | data/em/unified_em_v1.bin |
 | all_ion_elastic_file | data/proton_therapy_20260926/all_ion_elastic_proton_v1.bin |
 | elastic_recoil_stopping_file | data/proton_therapy_20260926/elastic_recoil_stopping_water75.bin |
+| material_electron_birth_file | data/electrons/shared/birth26.bin |
+| material_electron_joint_pilot_file | data/electrons/shared/joint.bin |
+| material_electron_charged_index_file | data/electrons/shared/charged.index |
+| material_photon_response_index_file | data/electrons/shared/photon.index |
 
 ### proton_water_minibeam.yaml
 
@@ -237,7 +252,7 @@
 | neutron_package_file | data/neutron/native/package.json |
 | neutron_recoil_stopping_manifest | data/neutron/recoil/package.json |
 | urban_mcs_package_file | data/ct_urban/ct_copper_52.bin |
-| material_electron_birth_file | data/electrons/proton/birth_bank.bin |
+| material_electron_birth_file | data/electrons/shared/birth26.bin |
 | material_electron_joint_pilot_file | data/electrons/shared/joint.bin |
-| material_photon_response_index_file | data/electrons/shared/photon/index.txt |
-| material_electron_charged_index_file | data/electrons/shared/charged/index.txt |
+| material_photon_response_index_file | data/electrons/shared/photon.index |
+| material_electron_charged_index_file | data/electrons/shared/charged.index |

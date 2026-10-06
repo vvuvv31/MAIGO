@@ -16,7 +16,7 @@ int main(int argc,char** argv){try{
     std::ofstream out(argv[4]);out<<std::setprecision(17)<<"node,cell,energy,length,native_m1,native_m2,native_n,m1,m2,n,invalid,stops,delta_incident_fraction,se,passed\n";
     unsigned cells=0,failed=0;std::uint64_t invalid=0;double max_delta=0;
     for(unsigned node=0;node<nodes;++node){int sec;double density;std::string file;in>>sec>>density>>file;
-        carbon::ChargedResponseData data(path.parent_path()/file);const auto v=data.view();
+        carbon::ChargedResponseData data(path.parent_path()/file,false);const auto v=data.view();
         std::vector<f::ChargedParameter> par;for(auto p:data.parameters)par.push_back({float(p.energy),float(p.elastic_mfp),float(p.dedx),float(p.range),{float(p.diagnostic_raw_rate[0]),float(p.diagnostic_raw_rate[1])}});
         std::vector<f::ChargedRatePiece> rates[2];for(unsigned k=0;k<2;++k)for(auto r:data.rate[k])rates[k].push_back({float(r.low),float(r.high),{float(r.value[0]),float(r.value[1]),float(r.value[2]),float(r.value[3])}});
         f::ChargedResponseView model{};model.parameters=par.data();model.parameter_count=par.size();

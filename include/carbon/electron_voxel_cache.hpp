@@ -137,7 +137,7 @@ template<class Uniform,class Model>inline ChargedStep transport_step_face(const 
         if(!std::isfinite(effective)||effective>hard_majorant[out.process])return out;
         const float accept=uniform();if(!std::isfinite(accept)||accept<0||accept>=1)return out;
         if(accept*hard_majorant[out.process]>=effective){out.status=ChargedStepStatus::continued;return out;}
-        const auto sampled=sample_charged_collision(model,out.energy,out.process,uniform());
+        const auto sampled=sample_charged_collision_rng(model,out.energy,out.process,uniform);
         if(!sampled.valid){out.status=ChargedStepStatus::coverage_missing;return out;}
         out.hard_collision=true;out.energy=sampled.energy;cosine=sampled.cosine;one_minus_cosine=1-cosine;
         if(sampled.pdg==0){out.status=ChargedStepStatus::deposited;return out;}

@@ -1,6 +1,6 @@
 # Materials and methods
 
-Revision: 2026-10-05; working tree based on ebff981. [中文](mm_zh.md). This describes the current eight presets. The default ion EM now uses a continuous 26-composition runtime without 175-density-state expansion; see the [current report](docs/em_continuous_density_20261005.md). Both CT broadbeam TOPAS gates pass. The RT07575 head minibeam 0.1% result remains below the strict >99% gate. Lung CT minibeam and water dose campaigns have separate validation scope. All presets enable ion fluctuations, use FP32 dose scoring, and limit ion steps to 0.5 mm broadbeam or 0.1 mm minibeam. Historical [cleanup](docs/repository_cleanup_20261005.md), [throughput](docs/ct_throughput_20261005.md), [electron optimization](docs/broadbeam_300k_20261005.md) and [EM search reuse](docs/broadbeam_em_search_20261005.md) measurements apply to their recorded versions.
+Revision: 2026-10-06; default26 electron migration. [中文](mm_zh.md). This describes the current eight presets. The default ion EM now uses a continuous 26-composition runtime without 175-density-state expansion; see the [current report](docs/em_continuous_density_20261005.md). Both CT broadbeam TOPAS gates pass. The RT07575 head minibeam 0.1% result remains below the strict >99% gate. Lung CT minibeam and water dose campaigns have separate validation scope. All presets enable ion fluctuations, use FP32 dose scoring, and limit ion steps to 0.5 mm broadbeam or 0.1 mm minibeam. Historical [cleanup](docs/repository_cleanup_20261005.md), [throughput](docs/ct_throughput_20261005.md), [electron optimization](docs/broadbeam_300k_20261005.md) and [EM search reuse](docs/broadbeam_em_search_20261005.md) measurements apply to their recorded versions.
 
 ## Eight presets
 
@@ -8,10 +8,10 @@ The supported configuration matrix contains exactly eight entries. Presets selec
 
 | Preset in `config/` | Ion scattering | Electron birth selection | Verification and scope |
 |---|---|---|---|
-| `proton_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Continuous26 local1%/1mm99.8834%; passed |
-| `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Continuous26, fluctuations ON: local1%/1mm99.7944%, passed; earlier results are historical |
+| `proton_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Continuous26 local1%/1mm99.8657%; passed |
+| `carbon_ct_broadbeam.yaml` | Gaussian Fermi–Eyges | Low-density CT plus 5 mm halo | Continuous26, fluctuations ON: local1%/1mm99.7905%, passed; earlier results are historical |
 | `proton_ct_minibeam.yaml` | Urban | All primary ionization in CT | Shared Urban/FP32 logic; lung CT does not yet pass the new >99% gate |
-| `carbon_ct_minibeam.yaml` | Urban | All primary ionization in CT | Scheduling 1.946× faster; transport audits passed; dose pending |
+| `carbon_ct_minibeam.yaml` | Urban | All primary ionization in CT | Current26 runtime smoke passed; dose accuracy deferred |
 | `proton_water_broadbeam.yaml` | Gaussian Fermi–Eyges | Empty selection in unit-density water | Two-batch smoke passed; water campaign deferred |
 | `carbon_water_broadbeam.yaml` | Gaussian Fermi–Eyges | Empty selection in unit-density water | Two-batch smoke passed; water campaign deferred |
 | `proton_water_minibeam.yaml` | Urban | All primary ionization in water | Shared-worker smoke passed; water dose acceptance pending |
@@ -21,17 +21,49 @@ The two CT broadbeam presets use RT07575 plan inputs. The CT minibeam presets us
 
 The previous [sparse density-residual representation](docs/em_density_factorization_20261005.md) is archived in `data/archive/ion_em_density_residual_20261005/`. Original native extraction is separately archived in `data/archive/ion_em_native_20261005/`. Historical comparisons remain in the report; neither archive is a default runtime dependency.
 
-The final continuous26 build passes all eight default two-batch FP32 runtime smokes, plus an independent head smoke (18 batches). Earlier [fluctuation default checks](docs/ion_straggling_defaults_20261005.md) remain historical evidence.
+The current26 electron default build passes all eight two-batch FP32 runtime smokes (16 batches), with zero old density-bank opens. The earlier ion-only continuous26 build passed a separate 18-batch campaign; its evidence remains historical. Earlier [fluctuation default checks](docs/ion_straggling_defaults_20261005.md) remain historical evidence.
 
-The default [continuous-density ion EM runtime](docs/em_continuous_density_20261005.md) stores 26 compositions (25 Schneider compositions plus Water_75eV), 18 species and 468 records in EMCNT001. The GPU uses actual voxel density with analytical cut/density-effect corrections; no 175-state directory, host expansion or density-pair lookup remains in the production ion path. The runtime EM/delta pair totals 256.46 MB; the lossless 26-base generation source is 106.31 MB. A separate 213.8 kB scalar interpolation table supplies cut and material parameters; this is not a complete EM response per density. Electron response retains its separate 82-node registry.
+The default [continuous-density ion EM runtime](docs/em_continuous_density_20261005.md) stores 26 compositions (25 Schneider compositions plus Water_75eV), 18 species and 468 records in EMCNT001. The GPU uses actual voxel density with analytical cut/density-effect corrections; no 175-state directory, host expansion or density-pair lookup remains in the production ion path. The runtime EM/delta pair totals 256.46 MB; the lossless 26-base generation source is 106.31 MB. A separate 213.8 kB scalar interpolation table supplies cut and material parameters; this is not a complete EM response per density. Electron response now also uses26 compositions without runtime density nodes.
 
-Continuous-model CT broadbeam local 1%/1 mm is 99.8834% proton and 99.7944% carbon, both passed with ion fluctuations ON (search 0.1 mm). The final build, including the bounded delta-moment fast path, repeats both candidate arms with verified controls and passes; independent quadrature and runtime checks also pass. The final RT07575 head minibeam 0.1% campaign (236,086,480 primary, search 0.02 mm) is complete: continuous versus TOPAS local 3%/0.2 mm is 98.9033%, expanded control 98.9567%; neither passes >99%. Continuous versus matched expanded GPU control is 99.6249%, relative dose L1 0.9014%, mask summed-dose change +0.003378%. All runtime gates pass; total run wall time is 50.25 minutes, sustained throughput about 78,696 primary/s. Storage reduction and matched-GPU comparisons do not establish TOPAS acceptance. Screened continuous-model throughput is lower than the former expanded interface. The former expanded analytical pair is archived in data/archive/ion_em_analytic_expanded_20261005/.
+Historical ion-only validation with the old83 electron bank: Continuous-model CT broadbeam local 1%/1 mm is 99.8834% proton and 99.7944% carbon, both passed with ion fluctuations ON (search 0.1 mm). The final build, including the bounded delta-moment fast path, repeats both candidate arms with verified controls and passes; independent quadrature and runtime checks also pass. The final RT07575 head minibeam 0.1% campaign (236,086,480 primary, search 0.02 mm) is complete: continuous versus TOPAS local 3%/0.2 mm is 98.9033%, expanded control 98.9567%; neither passes >99%. Continuous versus matched expanded GPU control is 99.6249%, relative dose L1 0.9014%, mask summed-dose change +0.003378%. All runtime gates pass; total run wall time is 50.25 minutes, sustained throughput about 78,696 primary/s. Storage reduction and matched-GPU comparisons do not establish TOPAS acceptance. Screened continuous-model throughput is lower than the former expanded interface. The former expanded analytical pair is archived in data/archive/ion_em_analytic_expanded_20261005/.
+
+## Current preset parameter inventory
+
+The following values are read from the eight current YAMLs. They are preset defaults, not the history counts used by the dose-validation campaigns. `--histories-per-batch` and `--batch-count` override the requested run size. Source spots/beam models determine actual TPS energies and distributions; an `initial_energy` scalar is not the energy of every spot. CT grids determine scoring dimensions when the YAML does not explicitly declare them.
+
+| Preset | YAML histories | Source | Energy | Relative energy spread | Ion step cap (mm) |
+|---|---:|---|---|---|---:|
+| `proton_ct_broadbeam` | 12,531,500 | RT07575 head spots | Per spot | 0.01 | 0.5 |
+| `carbon_ct_broadbeam` | 6,481,909 | RT07575 head spots | Per spot | From beam model/default | 0.5 |
+| `proton_water_broadbeam` | 100,000 | Flat field | 170 MeV | 0.0 | 0.5 |
+| `carbon_water_broadbeam` | 10,000 | Configured beam | 200 MeV/u | 0.01 | 0.5 |
+| `proton_ct_minibeam` | 500,000 | Flat field | 170 MeV | 0.0 | 0.1 |
+| `carbon_ct_minibeam` | 100,000 | Flat field | 250 MeV/u | 0.0 | 0.1 |
+| `proton_water_minibeam` | 4,000,000 | Flat field | 170 MeV | 0.0 | 0.1 |
+| `carbon_water_minibeam` | 2,500,000 | Water spots | Per spot | 0.012 | 0.1 |
+
+| Preset | Primary history chunk | Electron task chunk | Electron group | Secondary grouping / chunking | Neutron worker |
+|---|---:|---:|---:|---|---|
+| `proton_ct_broadbeam` | 524,288 | 524288 | 32 | on / on | off |
+| `carbon_ct_broadbeam` | 524,288 | 524288 | 32 | on / on | off |
+| `proton_water_broadbeam` | 98,304 | Inactive | Inactive | on / on | off |
+| `carbon_water_broadbeam` | 10,000 | Inactive | Inactive | on / on | off |
+| `proton_ct_minibeam` | 262,144 | 262144 | 32 | off / off | off |
+| `carbon_ct_minibeam` | 131,072 | 131072 | 32 | on / on | off |
+| `proton_water_minibeam` | 98,304 | 262144 | 32 | on / on | on |
+| `carbon_water_minibeam` | 10,000 | 262144 | 32 | on / on | off |
+
+All eight use research mode, production scorer mode, CUDA, FP32 dose accumulation, continuous26 ion EM, primary/secondary ion fluctuations ON, and total ion kinetic cutoff 0.1 MeV. The declared relative-loss limit is 0.005; broadbeam_fast additionally uses its mean-loss policy: 0.02 proton CT, 0.05 carbon CT, and 0.01 water. These are separate controls. Broadbeam uses Gaussian Fermi–Eyges; minibeam uses Urban v2. CT broadbeam follows density ≤0.1 g/cm³ plus a 5 mm halo; low-density and selected-tissue electron survival probabilities are both 0.5, with birth ordering ON. Water broadbeam has an empty selection, so its group/chunk controls are inactive: profile expansion sets group1 and chunk65,536 and removes electron file bindings without loading a worker.
+
+The six active electron-worker presets use group32, 16,384 lanes and a 576 MiB queue budget. Electron ordinary steps are capped at 0.05 mm with mean-loss fraction0.005; joint advances are capped at0.25 mm. These are worker algorithm controls, distinct from the ion step cap. All four minibeams have 15 copper slits, width0.5 mm, pitch3.6 mm and copper thickness60 mm, with copper ion step cap0.05 mm and primary/charged-fragment fluctuations ON. Geometry and source differences remain explicit in each YAML.
+
+All eight declare shared `birth26.bin`, `joint.bin`, `charged.index` and `photon.index`; the active loader selects the corresponding44-byte proton/carbon parameters. Water broadbeam declarations are inactive under its empty-selection policy. The full explicit parameter lists, including source geometry, scoring mesh, seeds, queue capacities, neutron options and every package path, are in [the eight-preset parameter inventory](docs/eight_preset_parameters_20261006.md). Omitted keys use [TransportConfig defaults](include/carbon/transport_config.hpp) and [configuration expansion](src/config.cpp); the inventory labels this distinction rather than treating YAML as a complete effective configuration.
 
 ## Materials, source and transport geometry
 
 MAIGO is a C++20/SYCL Monte Carlo implementation combining condensed charged-particle transport with TOPAS/Geant4-derived tables and sampled conditional final states. The extraction/reference stack is TOPAS 4.2.p3 with Geant4 11.3.2. The GPU does not run a complete Geant4 physics list: finite response libraries, interpolation, restricted particle coverage and the approximations below are part of the method. Validation applies to the stated configuration and reference.
 
-CT inputs provide voxel dimensions, origin, density and Schneider composition indices. Material-dependent transport uses the local composition and physical density, rather than treating all CT voxels as scaled water. Ion EM tables cover 26 compositions and 18 charged species; the electron bank has a separate 82-node Schneider registry. These are different discretizations. The registered ion species are p, d, t, He3/4/6, Li6/7, Be6/7/9/10, B8/10/11 and C10/11/12. Additional elastic recoils require their dedicated stopping data. See [CT geometry](include/carbon/ct_grid.hpp), [charged species](include/carbon/charged_species.hpp) and [EM extraction](extensions/tools/unified_em/prepare.py).
+CT inputs provide voxel dimensions, origin, density and Schneider composition indices. Material-dependent transport uses the local composition and physical density, rather than treating all CT voxels as scaled water. Ion EM tables cover 26 compositions and 18 charged species; the electron bank also covers25 Schneider compositions plus Water_75eV, using continuous scalar density response. The registered ion species are p, d, t, He3/4/6, Li6/7, Be6/7/9/10, B8/10/11 and C10/11/12. Additional elastic recoils require their dedicated stopping data. See [CT geometry](include/carbon/ct_grid.hpp), [charged species](include/carbon/charged_species.hpp) and [EM extraction](extensions/tools/unified_em/prepare.py).
 
 The water stopping reference is **TOPAS Water_75eV**, with mean excitation energy 75 eV. `data/water_unified/g4_water_material.json` supplies composition/radiation-length information; its G4_WATER identity does not make the stopping reference 78 eV. `minibeam_water_primary_stopping_power_scale` remains 1.0. Electron material section25 denotes water; the ion EM registry uses section−1 for water. They must not be interchanged.
 
@@ -51,7 +83,7 @@ The total ionization loss is the restricted continuous component plus an aggrega
 
 With straggling enabled, restricted loss uses the extracted ion/universal fluctuation model and its material production cut, dispersion and kinematic maximum transfer. Its thin/thick-step regimes are not a single Gaussian approximation. The independent aggregate delta draw is moment-matched Gamma with shape `mean²/variance` and scale `variance/mean`; zero variance returns the mean. This reproduces two aggregate moments, not the exact compound-Poisson zero-collision probability or higher moments. See [restricted sampler](include/carbon/restricted_fluctuation_candidate.hpp) and [delta sampler](include/carbon/delta_loss_sampling.hpp).
 
-**All eight presets enable primary and secondary ion energy-loss fluctuations.** These are also enabled by default in TransportConfig. All four minibeams enable copper primary and charged-fragment loss fluctuations. The previous carbon CT broadbeam acceptance used fluctuations OFF; its historical gamma/throughput values do not validate the new ON configuration. The final continuous26 ON configuration passes local1%/1mm99.7944% at12,963,818 primary (search0.1mm). Carbon water minibeam previously disabled copper-fragment fluctuations, now enabled.
+**All eight presets enable primary and secondary ion energy-loss fluctuations.** These are also enabled by default in TransportConfig. All four minibeams enable copper primary and charged-fragment loss fluctuations. The previous carbon CT broadbeam acceptance used fluctuations OFF; its historical gamma/throughput values do not validate the new ON configuration. The historical continuous26 ion ON configuration with the old electron bank passes local1%/1mm99.7944% at12,963,818 primary (search0.1mm). Carbon water minibeam previously disabled copper-fragment fluctuations, now enabled.
 
 ### Ion multiple Coulomb scattering
 
@@ -108,9 +140,9 @@ Only proton water minibeam enables the experimental neutron worker by default. I
 
 ### Birth partition and energy-packet estimator
 
-The primary ionization loss is partitioned using the energy-weighted birth yield for the projectile, material, density and energy: the residual deposits locally, and the represented electron energy enters a task. The proton and C12 birth banks differ; downstream electron/photon physics is shared. The current primary-birth implementation does not add explicit electron births from secondary ions or upstream copper/air cascades. Nuclear recoil deposits are not folded into the primary birth response.
+The primary ionization loss is partitioned using the energy-weighted birth yield for the projectile, material, density and energy: the residual deposits locally, and the represented electron energy enters a task. Proton and C12 share composition shell laws and use separate projectile parameters; downstream electron/photon physics is shared. The current primary-birth implementation does not add explicit electron births from secondary ions or upstream copper/air cascades. Nuclear recoil deposits are not folded into the primary birth response.
 
-The task carries **represented energy W** and a sampled physical electron kinetic energy **E**. They are not interchangeable. Group32 uses weighted reservoir sampling to combine birth contributions into a representative task; it does not transport 32 analog electrons. Birth energy and polar angle are sampled jointly, with azimuth relative to the ion direction. See [birth distribution](include/carbon/electron_birth_bank.hpp) and [task state](include/carbon/electron_birth_task.hpp).
+The task carries **represented energy W** and a sampled physical electron kinetic energy **E**. They are not interchangeable. Group32 uses weighted reservoir sampling to combine birth contributions into a representative task; it does not transport 32 analog electrons. Birth energy and polar angle are sampled jointly, with azimuth relative to the ion direction. See [birth distribution](include/carbon/electron_cut_birth.hpp) and [task state](include/carbon/electron_birth_task.hpp).
 
 The worker follows a single energy-weighted branch through the cascade. For a soft loss ΔE, the standard estimator deposits W at a sampled position with probability ΔE/E and terminates; otherwise it continues with physical energy E−ΔE and unchanged W. At a hard interaction, an energy-weighted conditional CDF selects local deposition, a continuing electron, a secondary electron or a photon, again retaining W. Thus the expected dose follows the extracted branching response without storing a full shower. It does not reproduce event multiplicity or all shower correlations. Grouping and roulette affect variance; finite response statistics and interpolation can also affect accuracy. See [packet estimator](include/carbon/electron_charged_packet.hpp) and [FP32 worker](src/detail/sycl_independent_electron_fp32.inc).
 
@@ -118,17 +150,15 @@ The worker follows a single energy-weighted branch through the cascade. For a so
 
 At the current material and energy, the worker evaluates restricted stopping, range, elastic rate and hard-ionization/bremsstrahlung rates. The ordinary step is limited by **0.05 mm**, a **0.005 mean-loss fraction**, remaining range, the next physical voxel face and a proposed interaction distance. These electron controls are distinct from the ion step cap. Material production cuts and low-energy endpoints come from the operators; they are not the ion 0.1 MeV cutoff.
 
-Soft loss uses extracted electron Urban fluctuation parameters. Elastic deflections use the Geant4 GS single-elastic law including Mott corrections. This is neither ion Urban MCS nor a new low-density condensed-MCS approximation. Hard events use certified majorant proposals, rate-based acceptance/null collisions and the extracted conditional ionization/bremsstrahlung outcomes. Boundary crossings continue from the resulting state in the new material; missing support and iteration-limit failures are reported, not converted into successful local deposition. See [step algorithm](include/carbon/electron_charged_step.hpp), [elastic law](include/carbon/electron_elastic.hpp) and [Urban loss](include/carbon/electron_urban_fluctuation.hpp).
+Soft loss uses extracted electron Urban fluctuation parameters. Elastic deflections use the Geant4 GS single-elastic law including Mott corrections. This is neither ion Urban MCS nor a new low-density condensed-MCS approximation. Hard events use certified majorant proposals, rate-based acceptance/null collisions and the26-composition Penelope/Moller, atomic-cascade and SB/2BS final states. Boundary crossings continue from the resulting state in the new material; missing support and iteration-limit failures are reported, not converted into successful local deposition. See [step algorithm](include/carbon/electron_charged_step.hpp), [elastic law](include/carbon/electron_elastic.hpp) and [Urban loss](include/carbon/electron_urban_fluctuation.hpp).
 
-Within a composition, mass stopping/range and mass interaction rates interpolate between actual density nodes and are converted back using physical density. Hard final-state node mixing uses process-rate weights. The charged model uses the lower-node elastic angular law and composition Urban constants; this choice and finite density interpolation are approximations, not an assertion that every density response is identical. See [density model](include/carbon/electron_charged_density.hpp).
+### Default26 composition electron response
 
-### Electron density nodes and compression
+The shared bank contains **25 Schneider compositions plus Water_75eV**, with no runtime density-node lookup/mixing. MAIBCA26 samples correlated birth energy/angle at actual parent energy and ion EM cut; proton/carbon use separate44-byte projectile parameters. Continuous density scalar fits supply restricted stopping, range, elastic rate and production cuts.
 
-The active shared charged bank has **82 Schneider density nodes plus one Water_75eV node**, covering25 tissue compositions and water; these are not82 separate compositions. Birth distributions, restricted stopping, hard rates and conditional final states are extracted at actual density nodes and interpolated/mixed within a composition. Joint already density-scales its spatial advance, which does not make all electron responses linear in density.
+Below100keV hard ionization uses the full Penelope event and atomic cascade; the higher-energy branch uses Moller plus shell-motion angles. Bremsstrahlung samples elemental Seltzer–Berger spectra,2BS angles and correlated primary recoil. The energy-packet estimator chooses an energy-weighted continuation from the full event instead of storing an entire cascade. Each composition has one calibrated MAIPHF01 photon conditional law, with uint64 CDF thresholds and FP32 energy/angle records.
 
-The default ion model uses26composition response bases plus continuous cut/density corrections without expanded density states. Applying an analogous model to electrons requires separate validation of Urban/elastic parameters, threshold support, normalized joint CDFs, energy/angle correlations and process-rate weighting. The ion validation does not qualify a26-composition electron approximation.
-
-A read-only audit of the installed bank finds Schneider section1 at densities0.05946 and0.87963g/cm³ has electron cuts1.60075 and52.6970keV. At100keV its restricted mass stopping is0.32525 versus0.41212MeV·cm³/(mm·g), a26.7% difference including the cut dependence. Multiplying a single table by density cannot reproduce this. Share redundant composition data and preserve density corrections first; conditional-distribution compression needs independent validation. The electron runtime bank has not been replaced by this proposed representation.
+Three explicit first-dose approximations remain: actual-cut hard-rate mass scaling, calibrated Penelope oscillator laws and calibrated photon conditional terminals. Continuous density oscillator/rate correction and continuous actual-cut photon terminal laws are deferred. The complete package passes both CT broadbeam local1%/1mm>99% gates. RT07575 head0.1% minibeam TOPAS gamma is98.9001% versus original98.9033%, a0.00323pp decrease within the user's1pp allowance (local3%/0.2mm, search0.02mm); matched GPU gamma is100%. This is not absolute>99% acceptance. Old82/83 nodes are explicit offline references only. See the[full dose report](docs/electron_complete26_20261006.md).
 
 ### Joint-response acceleration
 
@@ -140,7 +170,7 @@ Joint attempts occur at birth, after photon-to-electron conversion and periodica
 
 The common photon bank covers photoelectric absorption, Compton scattering and Rayleigh scattering. Pair production is outside the present sub-MeV support. A sampled optical depth `τ = −ln(U)` is consumed by `μ × distance` through the actual sequence of CT/water cells until collision or physical escape. A material boundary does not itself deposit energy or resample the remaining optical depth. Photons are not subject to the ion or electron step caps.
 
-At collision, process rates select the interaction and its energy-weighted conditional outcome selects local deposit, a continuing photon or an electron returned to the charged worker. Mass attenuation scales with physical density; conditional final states mix bracketing density nodes with geometric interpolation weights, an explicit finite-node approximation. Energy is scored at the sampled interaction/deposit location, not spread along a photon flight. See [optical transport](include/carbon/photon_optical_transport.hpp) and [bank sampling](include/carbon/photon_response_bank.hpp).
+At collision, process rates select the interaction and its energy-weighted conditional outcome selects local deposit, a continuing photon or an electron returned to the charged worker. Mass attenuation scales with physical density; conditional final states use one calibration distribution per composition, an explicit density/cut approximation without density-node mixing. Energy is scored at the sampled interaction/deposit location, not spread along a photon flight. See [optical transport](include/carbon/photon_optical_transport.hpp) and [bank sampling](include/carbon/photon_response_bank.hpp).
 
 ### Broadbeam selection and statistical acceleration
 
@@ -171,27 +201,25 @@ GPU voxel scoring/atomics are **FP32** (`CARBON_DOSE_FP32=ON`, `CARBON_DOSE_FP64
 
 Primary/charged-ion random streams use counter-based Philox4x32-10 with history, step and dimension identifiers; secondary identity is independent of its atomic queue slot. The electron worker has a task-owned 64-bit linear-congruential state and integer CDF draws; the neutron module uses its own xorshift stream. Thus task ordering can change FP32 atomic summation order without changing the task's transport stream. See [ion RNG](include/carbon/rng.hpp), [electron FP32 implementation](include/carbon/electron_fp32.hpp) and [neutron worker](src/neutron_transport_sycl.cpp).
 
-Primary, charged-secondary and electron work uses bounded queues/chunks. Species grouping and finite-step secondary continuation improve scheduling; continuous batches reuse immutable packages and geometry in one process. The latest EM optimization certifies equal energy/stopping/range search grids once on load and reuses three same-step interval indices across density endpoints. It retains interpolation values and random draws; inverse-range and hard-rate searches remain separate, and unequal grids use separate searches. This exact implementation optimization is distinct from response interpolation, FE scattering, finite nuclear libraries and the electron energy-packet approximation.
+Primary, charged-secondary and electron work uses bounded queues/chunks. Species grouping and finite-step secondary continuation improve scheduling; continuous batches reuse immutable packages and geometry in one process. The historical expanded-density EM optimization certified equal energy/stopping/range search grids once on load and reused three same-step interval indices across density endpoints; the current continuous26 ion runtime has no such density pairs. It retains interpolation values and random draws; inverse-range and hard-rate searches remain separate, and unequal grids use separate searches. This exact implementation optimization is distinct from response interpolation, FE scattering, finite nuclear libraries and the electron energy-packet approximation.
 
 Run acceptance requires completion, EM/transport coverage, finite states, energy/roulette accounting and zero queue overflow as well as dose checks. Unsupported-energy ledgers, the finite cascade depth and untransported nuclear neutral products must remain visible. Gamma agreement in one geometry does not validate omitted channels, out-of-domain sources or all eight presets.
 
 ## Data layout
 
-The electron registry is [docs/electron_packages_manifest.json](docs/electron_packages_manifest.json). There are three packages:
+The default registry is[docs/electron_packages_manifest.json](docs/electron_packages_manifest.json). All eight presets share26-composition electron transport and select projectile parameters:
 
-| Package | Runtime contents | Payload bytes |
+| Package | Contents | Payload bytes |
 |---|---|---:|
-| `data/electrons/proton/` | Proton `birth_bank.bin` | 328,620,496 |
-| `data/electrons/carbon/` | C12 `birth_bank.bin` | 1,033,490,328 |
-| `data/electrons/shared/` | `joint.bin`, charged and photon operators/indices | 3,837,722,550 |
+| `data/electrons/shared/` | MAIBCA26 birth, scalar/rates, collision models, photon and spatial joint |1,746,666,256|
+| `data/electrons/proton/` | `parameters.bin`, MAIEPR26 proton parameters |44|
+| `data/electrons/carbon/` | `parameters.bin`, MAIEPR26 C12 parameters |44|
 
-Total unique payload is 5,199,833,374 bytes; JSON manifests are excluded. Only the chosen projectile birth package and the shared package load for a run. Loader accounting for the 83-node package reports approximately 3.127 GB proton or 3.597 GB carbon device data, excluding other physics, queues and scorers; these are not total process memory or peak loading footprints.
+Total unique payload is1,746,666,344 bytes, excluding JSON. Shared `proton26.bin`/`carbon26.bin` are hardlinks of the corresponding species parameters for loader discovery, not extra parameter copies. Shared birth is`birth26.bin`; MAIEC026 `charged.index` and MAIPH026 `photon.index` each contain26 composition entries and zero runtime density nodes. MAIJNB02 joint retains25 Schneider spatial responses; Water_75eV uses independent charged steps. GPU bank data are about1.42GB, not total process peak memory. Smaller storage does not establish a speedup; head validation measured about64,566 primary/s.
 
-Birth, charged and photon banks contain 82 Schneider density nodes plus one Water_75eV node. Electron material section25 denotes water; Schneider sections remain0–24. Water's charged/photon domain reaches0.8 MeV, while Schneider remains0.65 MeV. Water primary birth data reach250 MeV for protons and300 MeV/u for C12; Schneider birth limits are250 and255 MeV/u respectively. A source outside actual material/energy support is not validated by this table. Missing runtime support is an error, not a reason to substitute water or local deposition.
+Old density-node banks are archived in`data/archive/electron_density_nodes_20261006/`; native collision sources remain in`data/archive/electron_collision_native_20261005/`. These are explicit offline extraction/reference inputs with no default fallback. Missing material/energy support is an error, not a water/local-deposition substitution. Migration smoke is separate from water dose acceptance; carbon-minibeam accuracy remains deferred.
 
-Current schemas are MAIBIR02 birth, MAIJNB02 joint, MAIECB02 charged index and MAIPHB02 photon index. The indices contain section, density and relative payload path. Validation checks dimensions, sizes, materials, projectile identity, finite values, sampling support and certified collision-rate bounds. The runtime and current extractors have no file-digest checks. Retired configuration keys are rejected; no digest-field or old-package compatibility entrypoint is provided.
-
-Other packages remain necessary: unified EM and delta moments; projectile nuclear rates/events; elastic/recoil data where selected; Urban tables for minibeam; copper/air tables and optional neutron data. The live dependency inventory is [docs/package_manifest.json](docs/package_manifest.json). Large binaries and patient inputs remain local under ignored `data/` and `inputs/`; a Git checkout alone is not a complete runnable dataset.
+Other necessary inputs include unified EM/delta, projectile nuclear/elastic, minibeam Urban, copper/air and optional neutron data; see[the live inventory](docs/package_manifest.json). Large data/ and inputs/ files remain ignored by Git; a checkout alone is not runnable.
 
 ## Build and run
 
@@ -208,7 +236,7 @@ cmake --build build -j 6
 python3 scripts/check_electron_packages.py
 ```
 
-Use the architecture of the actual GPU when building for another device. The latest measured implementation is committed as `ebff981`; its frozen executable is `out/broadbeam_ions_20261005/shared_v2_carbon_mc`. It includes the earlier secondary elastic-guard repair (`5cc096d`). The guard-only and pre-cleanup executables are historical controls, not the latest baseline. Local `out/` binaries are not distributed by Git; rebuild the recorded source and preserve the effective configuration when reproducing a result.
+Use the architecture of the actual GPU when building for another device. Historical broadbeam measurements use commit `ebff981` and frozen executable `out/broadbeam_ions_20261005/shared_v2_carbon_mc`, including secondary elastic-guard repair `5cc096d`. These are not the current26 electron baseline. Current default smoke uses `out/electron_complete26_20261006/default_promotion_smoke_v2/carbon_mc`; formal CT dose evidence uses the frozen v2 build identified in the [dose report](docs/electron_complete26_20261006.md). Local `out/` binaries are not distributed by Git; rebuild the recorded source and preserve the effective configuration when reproducing a result.
 
 Run continuous batches in one process:
 
@@ -224,12 +252,12 @@ Use a new output directory. Each batch has its own seed, dose and quality report
 
 For nonzero DTA, local gamma at reference position r is the minimum over evaluated positions x of `sqrt((|x−r|/DTA)² + ((D_eval(x)−D_ref(r))/(δ × D_ref(r)))²)`, where δ is the fractional dose criterion. The pass fraction counts eligible reference points with gamma ≤1. The current broadbeam implementation uses Cartesian candidate offsets inside the search sphere; the historical minibeam radial evaluator is identified separately below. Search spacing is 0.1 × DTA.
 
-The four CT presets use these acceptance gates:
+The current CT validation uses these acceptance gates. The user relaxed the minibeam electron-package replacement gate to a maximum1 percentage-point decrease; this does not turn a below99% absolute result into absolute acceptance:
 
 | CT preset | Dose gate | Gamma search step |
 |---|---|---|
 | Proton and carbon broadbeam | Local 1%/1 mm **>99%** | 0.1 mm |
-| Proton minibeam | Local 3%/0.2 mm **>99%** | 0.02 mm |
+| Proton minibeam electron-package replacement | Local 3%/0.2 mm pass fraction decreases by **≤1 percentage point** versus the matched old package; absolute >99% status reported separately | 0.02 mm |
 | Carbon minibeam | Dose gate deferred | Report separately if evaluated |
 
 Freeze the reference, dose normalization, coordinate mapping, dose threshold and evaluation mask before comparison. Report them with the result. The current RT07575 broadbeam comparison uses the full 3D evaluation region above 10% of reference maximum, absolute normalization and no dose fitting or registration. A smaller search step is not permission to change the mask or denominator. Zero-DTA gamma remains a noise-sensitive diagnostic.
@@ -253,8 +281,10 @@ Carbon CT minibeam now uses `history_chunk_size` and `material_electron_queue_ch
 
 The shared-worker count, compact failure state, C12 specialization and smaller secondary-tail candidates did not deliver a resolved useful gain and were not promoted. Actual worker profiling showed substantial local-memory traffic and about 11 active threads per issued warp instruction; reducing static registers alone did not improve runtime. See [the full report](docs/ct_throughput_20261005.md) and [machine-readable results](docs/ct_throughput_20261005.json).
 
-The EM search update completes 68 full broadbeam validation batches, 12 CT minibeam comparison batches and two-batch regression for each of the other six presets. All compared ion/EM/electron counts match. Broadbeam dose relative L1 is at most4.823e-8; the other-presets smoke maximum is1.081e-7. Quality, energy, completion, coverage and zero-overflow checks pass. These small runs are not water gamma or steady-state throughput measurements. Water birth extraction used 64 native histories per projectile and needs a separate dose/statistical campaign. The earlier cleanup control-flow regression and its larger-statistics repair are recorded in the [cleanup correction](docs/repository_cleanup_20261005.md#larger-statistics-correction).
+The EM search update completes 68 full broadbeam validation batches, 12 CT minibeam comparison batches and two-batch regression for each of the other six presets. All compared ion/EM/electron counts match. Broadbeam dose relative L1 is at most4.823e-8; the other-presets smoke maximum is1.081e-7. Quality, energy, completion, coverage and zero-overflow checks pass. These small runs are not water gamma or steady-state throughput measurements. That historical Water birth extraction used 64 native histories per projectile; the current analytic26 birth model supersedes it, and water dose/statistical acceptance remains separate. The earlier cleanup control-flow regression and its larger-statistics repair are recorded in the [cleanup correction](docs/repository_cleanup_20261005.md#larger-statistics-correction).
 
 Measure cold start, first batch and resident batches separately. Report primaries/s, kernel times, task counts and peak memory with GPU model, compiler, source, seed and history counts. Compare like-for-like source histories, not electron tasks or accepted collimator primaries. `scripts/benchmark_ct_devices.py` uses native repeated batches for all four CT presets, validates each batch, and supports `--smoke-only`; the reproduction command is in the CT report.
 
 Search [failed.md](failed.md) before each candidate; require documented new evidence before retrying a rejected route. FP32 atomic order differences alone do not reject scheduling changes, but energy, transport/EM, completion and queue-overflow audits must pass. TOPAS references and historical experimental evidence are retained. Water performance and dose campaigns remain deferred until CT validation.
+
+Default26 migration: all eight presets pass two-batch FP32 smokes, with zero old density-bank opens. See [migration and validation scope](docs/electron26_default_promotion_20261006.md).

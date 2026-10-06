@@ -1,6 +1,6 @@
 {
   "schema": 2,
-  "scope": "Eight preset inputs plus expanded electron payloads. Auxiliary inputs referenced inside other package metadata are validated by their loaders.",
+  "scope": "Eight default26 preset inputs; archived density-node packages are offline references",
   "presets": {
     "carbon_ct_broadbeam": {
       "config": "config/carbon_ct_broadbeam.yaml",
@@ -28,9 +28,9 @@
         "em_package_file": "data/em/unified_em_v1.bin",
         "ct_schneider_primary_cinel03_file": "data/schneider/cinel03_c12_targets_v2_1.bin",
         "material_electron_joint_pilot_file": "data/electrons/shared/joint.bin",
-        "material_electron_birth_file": "data/electrons/carbon/birth_bank.bin",
-        "material_photon_response_index_file": "data/electrons/shared/photon/index.txt",
-        "material_electron_charged_index_file": "data/electrons/shared/charged/index.txt"
+        "material_electron_birth_file": "data/electrons/shared/birth26.bin",
+        "material_photon_response_index_file": "data/electrons/shared/photon.index",
+        "material_electron_charged_index_file": "data/electrons/shared/charged.index"
       }
     },
     "carbon_ct_minibeam": {
@@ -66,10 +66,10 @@
         "all_ion_elastic_file": "data/schneider/all_ion_elastic_v1.bin",
         "elastic_recoil_stopping_file": "data/schneider/elastic_recoil_stopping_v1.bin",
         "minibeam_copper_loss_range_file": "data/carbon_urban/active_copper005.csv",
-        "material_electron_birth_file": "data/electrons/carbon/birth_bank.bin",
+        "material_electron_birth_file": "data/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/electrons/shared/joint.bin",
-        "material_electron_charged_index_file": "data/electrons/shared/charged/index.txt",
-        "material_photon_response_index_file": "data/electrons/shared/photon/index.txt"
+        "material_electron_charged_index_file": "data/electrons/shared/charged.index",
+        "material_photon_response_index_file": "data/electrons/shared/photon.index"
       }
     },
     "carbon_water_broadbeam": {
@@ -89,7 +89,11 @@
         "ct_schneider_physics_bundle_file": "data/schneider/schneider_physics_bundle_v2_1.json",
         "em_delta_moments_file": "data/em/unified_em_delta_moments_v2.bin",
         "em_package_file": "data/em/unified_em_v1.bin",
-        "ct_schneider_primary_cinel03_file": "data/schneider/cinel03_c12_targets_v2_1.bin"
+        "ct_schneider_primary_cinel03_file": "data/schneider/cinel03_c12_targets_v2_1.bin",
+        "material_electron_birth_file": "data/electrons/shared/birth26.bin",
+        "material_electron_joint_pilot_file": "data/electrons/shared/joint.bin",
+        "material_electron_charged_index_file": "data/electrons/shared/charged.index",
+        "material_photon_response_index_file": "data/electrons/shared/photon.index"
       }
     },
     "carbon_water_minibeam": {
@@ -124,10 +128,10 @@
         "minibeam_air_urban_package_file": "data/air_urban_v2_20260926/urban_mcs_v2.bin",
         "ct_schneider_primary_cinel03_file": "data/schneider/cinel03_c12_targets_v2_1.bin",
         "urban_mcs_package_file": "data/ct_urban/ct_copper_52.bin",
-        "material_electron_birth_file": "data/electrons/carbon/birth_bank.bin",
+        "material_electron_birth_file": "data/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/electrons/shared/joint.bin",
-        "material_photon_response_index_file": "data/electrons/shared/photon/index.txt",
-        "material_electron_charged_index_file": "data/electrons/shared/charged/index.txt",
+        "material_photon_response_index_file": "data/electrons/shared/photon.index",
+        "material_electron_charged_index_file": "data/electrons/shared/charged.index",
         "em_delta_moments_file": "data/em/unified_em_delta_moments_v2.bin"
       }
     },
@@ -156,10 +160,10 @@
         "spots_upstream_air_stopping_power_file": "data/proton_copper_20260926/proton_air_stopping.csv",
         "primary_stopping_power_file": "data/proton_therapy_20260926/proton_water_stopping.csv",
         "tps_spots_file": "inputs/proton_rt07575/part_01/spots.csv",
-        "material_electron_birth_file": "data/electrons/proton/birth_bank.bin",
+        "material_electron_birth_file": "data/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/electrons/shared/joint.bin",
-        "material_photon_response_index_file": "data/electrons/shared/photon/index.txt",
-        "material_electron_charged_index_file": "data/electrons/shared/charged/index.txt"
+        "material_photon_response_index_file": "data/electrons/shared/photon.index",
+        "material_electron_charged_index_file": "data/electrons/shared/charged.index"
       }
     },
     "proton_ct_minibeam": {
@@ -195,10 +199,10 @@
         "ct_schneider_file": "data/HUtoMaterialSchneider.txt",
         "all_ion_elastic_file": "data/proton_therapy_20260926/all_ion_elastic_proton_v1.bin",
         "elastic_recoil_stopping_file": "data/proton_therapy_20260926/elastic_recoil_stopping_water75.bin",
-        "material_electron_birth_file": "data/electrons/proton/birth_bank.bin",
+        "material_electron_birth_file": "data/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/electrons/shared/joint.bin",
-        "material_photon_response_index_file": "data/electrons/shared/photon/index.txt",
-        "material_electron_charged_index_file": "data/electrons/shared/charged/index.txt"
+        "material_photon_response_index_file": "data/electrons/shared/photon.index",
+        "material_electron_charged_index_file": "data/electrons/shared/charged.index"
       }
     },
     "proton_water_broadbeam": {
@@ -220,7 +224,11 @@
         "em_delta_moments_file": "data/em/unified_em_delta_moments_v2.bin",
         "em_package_file": "data/em/unified_em_v1.bin",
         "all_ion_elastic_file": "data/proton_therapy_20260926/all_ion_elastic_proton_v1.bin",
-        "elastic_recoil_stopping_file": "data/proton_therapy_20260926/elastic_recoil_stopping_water75.bin"
+        "elastic_recoil_stopping_file": "data/proton_therapy_20260926/elastic_recoil_stopping_water75.bin",
+        "material_electron_birth_file": "data/electrons/shared/birth26.bin",
+        "material_electron_joint_pilot_file": "data/electrons/shared/joint.bin",
+        "material_electron_charged_index_file": "data/electrons/shared/charged.index",
+        "material_photon_response_index_file": "data/electrons/shared/photon.index"
       }
     },
     "proton_water_minibeam": {
@@ -257,524 +265,14 @@
         "neutron_package_file": "data/neutron/native/package.json",
         "neutron_recoil_stopping_manifest": "data/neutron/recoil/package.json",
         "urban_mcs_package_file": "data/ct_urban/ct_copper_52.bin",
-        "material_electron_birth_file": "data/electrons/proton/birth_bank.bin",
+        "material_electron_birth_file": "data/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/electrons/shared/joint.bin",
-        "material_photon_response_index_file": "data/electrons/shared/photon/index.txt",
-        "material_electron_charged_index_file": "data/electrons/shared/charged/index.txt"
+        "material_photon_response_index_file": "data/electrons/shared/photon.index",
+        "material_electron_charged_index_file": "data/electrons/shared/charged.index"
       }
     }
   },
   "files": {
-    "data/electrons/carbon/birth_bank.bin": {
-      "bytes": 1033490328
-    },
-    "data/electrons/shared/charged/index.txt": {
-      "bytes": 3481
-    },
-    "data/electrons/shared/charged/node00/operator.bin": {
-      "bytes": 9601888
-    },
-    "data/electrons/shared/charged/node01/operator.bin": {
-      "bytes": 9265056
-    },
-    "data/electrons/shared/charged/node02/operator.bin": {
-      "bytes": 9201488
-    },
-    "data/electrons/shared/charged/node03/operator.bin": {
-      "bytes": 6395264
-    },
-    "data/electrons/shared/charged/node04/operator.bin": {
-      "bytes": 6395264
-    },
-    "data/electrons/shared/charged/node05/operator.bin": {
-      "bytes": 6362496
-    },
-    "data/electrons/shared/charged/node06/operator.bin": {
-      "bytes": 6362496
-    },
-    "data/electrons/shared/charged/node07/operator.bin": {
-      "bytes": 6362496
-    },
-    "data/electrons/shared/charged/node08/operator.bin": {
-      "bytes": 6362496
-    },
-    "data/electrons/shared/charged/node09/operator.bin": {
-      "bytes": 6362496
-    },
-    "data/electrons/shared/charged/node10/operator.bin": {
-      "bytes": 6362496
-    },
-    "data/electrons/shared/charged/node11/operator.bin": {
-      "bytes": 6329728
-    },
-    "data/electrons/shared/charged/node12/operator.bin": {
-      "bytes": 6329728
-    },
-    "data/electrons/shared/charged/node13/operator.bin": {
-      "bytes": 6329728
-    },
-    "data/electrons/shared/charged/node14/operator.bin": {
-      "bytes": 6329728
-    },
-    "data/electrons/shared/charged/node15/operator.bin": {
-      "bytes": 6329680
-    },
-    "data/electrons/shared/charged/node16/operator.bin": {
-      "bytes": 6329680
-    },
-    "data/electrons/shared/charged/node17/operator.bin": {
-      "bytes": 6296912
-    },
-    "data/electrons/shared/charged/node18/operator.bin": {
-      "bytes": 6296912
-    },
-    "data/electrons/shared/charged/node19/operator.bin": {
-      "bytes": 6296912
-    },
-    "data/electrons/shared/charged/node20/operator.bin": {
-      "bytes": 6296912
-    },
-    "data/electrons/shared/charged/node21/operator.bin": {
-      "bytes": 6264144
-    },
-    "data/electrons/shared/charged/node22/operator.bin": {
-      "bytes": 6264144
-    },
-    "data/electrons/shared/charged/node23/operator.bin": {
-      "bytes": 6264144
-    },
-    "data/electrons/shared/charged/node24/operator.bin": {
-      "bytes": 6264144
-    },
-    "data/electrons/shared/charged/node25/operator.bin": {
-      "bytes": 6231376
-    },
-    "data/electrons/shared/charged/node26/operator.bin": {
-      "bytes": 6234112
-    },
-    "data/electrons/shared/charged/node27/operator.bin": {
-      "bytes": 6201296
-    },
-    "data/electrons/shared/charged/node28/operator.bin": {
-      "bytes": 6201296
-    },
-    "data/electrons/shared/charged/node29/operator.bin": {
-      "bytes": 6135712
-    },
-    "data/electrons/shared/charged/node30/operator.bin": {
-      "bytes": 6135712
-    },
-    "data/electrons/shared/charged/node31/operator.bin": {
-      "bytes": 6102944
-    },
-    "data/electrons/shared/charged/node32/operator.bin": {
-      "bytes": 6102944
-    },
-    "data/electrons/shared/charged/node33/operator.bin": {
-      "bytes": 6070176
-    },
-    "data/electrons/shared/charged/node34/operator.bin": {
-      "bytes": 6037408
-    },
-    "data/electrons/shared/charged/node35/operator.bin": {
-      "bytes": 6037408
-    },
-    "data/electrons/shared/charged/node36/operator.bin": {
-      "bytes": 6037360
-    },
-    "data/electrons/shared/charged/node37/operator.bin": {
-      "bytes": 6004592
-    },
-    "data/electrons/shared/charged/node38/operator.bin": {
-      "bytes": 5971776
-    },
-    "data/electrons/shared/charged/node39/operator.bin": {
-      "bytes": 5971776
-    },
-    "data/electrons/shared/charged/node40/operator.bin": {
-      "bytes": 9598208
-    },
-    "data/electrons/shared/charged/node41/operator.bin": {
-      "bytes": 9597312
-    },
-    "data/electrons/shared/charged/node42/operator.bin": {
-      "bytes": 9597376
-    },
-    "data/electrons/shared/charged/node43/operator.bin": {
-      "bytes": 9599328
-    },
-    "data/electrons/shared/charged/node44/operator.bin": {
-      "bytes": 9602144
-    },
-    "data/electrons/shared/charged/node45/operator.bin": {
-      "bytes": 9596352
-    },
-    "data/electrons/shared/charged/node46/operator.bin": {
-      "bytes": 9599040
-    },
-    "data/electrons/shared/charged/node47/operator.bin": {
-      "bytes": 9600992
-    },
-    "data/electrons/shared/charged/node48/operator.bin": {
-      "bytes": 9488464
-    },
-    "data/electrons/shared/charged/node49/operator.bin": {
-      "bytes": 8943328
-    },
-    "data/electrons/shared/charged/node50/operator.bin": {
-      "bytes": 8704112
-    },
-    "data/electrons/shared/charged/node51/operator.bin": {
-      "bytes": 8438368
-    },
-    "data/electrons/shared/charged/node52/operator.bin": {
-      "bytes": 8194960
-    },
-    "data/electrons/shared/charged/node53/operator.bin": {
-      "bytes": 7949072
-    },
-    "data/electrons/shared/charged/node54/operator.bin": {
-      "bytes": 7671648
-    },
-    "data/electrons/shared/charged/node55/operator.bin": {
-      "bytes": 7391056
-    },
-    "data/electrons/shared/charged/node56/operator.bin": {
-      "bytes": 7209808
-    },
-    "data/electrons/shared/charged/node57/operator.bin": {
-      "bytes": 6960336
-    },
-    "data/electrons/shared/charged/node58/operator.bin": {
-      "bytes": 6818736
-    },
-    "data/electrons/shared/charged/node59/operator.bin": {
-      "bytes": 6643936
-    },
-    "data/electrons/shared/charged/node60/operator.bin": {
-      "bytes": 6640208
-    },
-    "data/electrons/shared/charged/node61/operator.bin": {
-      "bytes": 6466208
-    },
-    "data/electrons/shared/charged/node62/operator.bin": {
-      "bytes": 6463120
-    },
-    "data/electrons/shared/charged/node63/operator.bin": {
-      "bytes": 6135712
-    },
-    "data/electrons/shared/charged/node64/operator.bin": {
-      "bytes": 6102944
-    },
-    "data/electrons/shared/charged/node65/operator.bin": {
-      "bytes": 6070176
-    },
-    "data/electrons/shared/charged/node66/operator.bin": {
-      "bytes": 6037408
-    },
-    "data/electrons/shared/charged/node67/operator.bin": {
-      "bytes": 6037360
-    },
-    "data/electrons/shared/charged/node68/operator.bin": {
-      "bytes": 5971824
-    },
-    "data/electrons/shared/charged/node69/operator.bin": {
-      "bytes": 5971824
-    },
-    "data/electrons/shared/charged/node70/operator.bin": {
-      "bytes": 5971776
-    },
-    "data/electrons/shared/charged/node71/operator.bin": {
-      "bytes": 5939008
-    },
-    "data/electrons/shared/charged/node72/operator.bin": {
-      "bytes": 5939008
-    },
-    "data/electrons/shared/charged/node73/operator.bin": {
-      "bytes": 5939008
-    },
-    "data/electrons/shared/charged/node74/operator.bin": {
-      "bytes": 5873472
-    },
-    "data/electrons/shared/charged/node75/operator.bin": {
-      "bytes": 5873424
-    },
-    "data/electrons/shared/charged/node76/operator.bin": {
-      "bytes": 5873424
-    },
-    "data/electrons/shared/charged/node77/operator.bin": {
-      "bytes": 5873424
-    },
-    "data/electrons/shared/charged/node78/operator.bin": {
-      "bytes": 5742304
-    },
-    "data/electrons/shared/charged/node79/operator.bin": {
-      "bytes": 5676720
-    },
-    "data/electrons/shared/charged/node80/operator.bin": {
-      "bytes": 5578368
-    },
-    "data/electrons/shared/charged/node81/operator.bin": {
-      "bytes": 5021024
-    },
-    "data/electrons/shared/charged/water/operator.bin": {
-      "bytes": 6526576
-    },
-    "data/electrons/shared/joint.bin": {
-      "bytes": 1423915788
-    },
-    "data/electrons/shared/photon/index.txt": {
-      "bytes": 3481
-    },
-    "data/electrons/shared/photon/node00/operator.bin": {
-      "bytes": 22296648
-    },
-    "data/electrons/shared/photon/node01/operator.bin": {
-      "bytes": 22290184
-    },
-    "data/electrons/shared/photon/node02/operator.bin": {
-      "bytes": 22046888
-    },
-    "data/electrons/shared/photon/node03/operator.bin": {
-      "bytes": 22045384
-    },
-    "data/electrons/shared/photon/node04/operator.bin": {
-      "bytes": 22093992
-    },
-    "data/electrons/shared/photon/node05/operator.bin": {
-      "bytes": 22094120
-    },
-    "data/electrons/shared/photon/node06/operator.bin": {
-      "bytes": 22081960
-    },
-    "data/electrons/shared/photon/node07/operator.bin": {
-      "bytes": 22084424
-    },
-    "data/electrons/shared/photon/node08/operator.bin": {
-      "bytes": 22075592
-    },
-    "data/electrons/shared/photon/node09/operator.bin": {
-      "bytes": 22082664
-    },
-    "data/electrons/shared/photon/node10/operator.bin": {
-      "bytes": 22069000
-    },
-    "data/electrons/shared/photon/node11/operator.bin": {
-      "bytes": 22068424
-    },
-    "data/electrons/shared/photon/node12/operator.bin": {
-      "bytes": 22062088
-    },
-    "data/electrons/shared/photon/node13/operator.bin": {
-      "bytes": 22065352
-    },
-    "data/electrons/shared/photon/node14/operator.bin": {
-      "bytes": 22044744
-    },
-    "data/electrons/shared/photon/node15/operator.bin": {
-      "bytes": 22052552
-    },
-    "data/electrons/shared/photon/node16/operator.bin": {
-      "bytes": 22067656
-    },
-    "data/electrons/shared/photon/node17/operator.bin": {
-      "bytes": 22069800
-    },
-    "data/electrons/shared/photon/node18/operator.bin": {
-      "bytes": 22276616
-    },
-    "data/electrons/shared/photon/node19/operator.bin": {
-      "bytes": 22271048
-    },
-    "data/electrons/shared/photon/node20/operator.bin": {
-      "bytes": 22299656
-    },
-    "data/electrons/shared/photon/node21/operator.bin": {
-      "bytes": 22293800
-    },
-    "data/electrons/shared/photon/node22/operator.bin": {
-      "bytes": 22318760
-    },
-    "data/electrons/shared/photon/node23/operator.bin": {
-      "bytes": 22309896
-    },
-    "data/electrons/shared/photon/node24/operator.bin": {
-      "bytes": 22326568
-    },
-    "data/electrons/shared/photon/node25/operator.bin": {
-      "bytes": 22322632
-    },
-    "data/electrons/shared/photon/node26/operator.bin": {
-      "bytes": 22333416
-    },
-    "data/electrons/shared/photon/node27/operator.bin": {
-      "bytes": 22325640
-    },
-    "data/electrons/shared/photon/node28/operator.bin": {
-      "bytes": 22351848
-    },
-    "data/electrons/shared/photon/node29/operator.bin": {
-      "bytes": 22338056
-    },
-    "data/electrons/shared/photon/node30/operator.bin": {
-      "bytes": 22336904
-    },
-    "data/electrons/shared/photon/node31/operator.bin": {
-      "bytes": 22352232
-    },
-    "data/electrons/shared/photon/node32/operator.bin": {
-      "bytes": 22362536
-    },
-    "data/electrons/shared/photon/node33/operator.bin": {
-      "bytes": 22348840
-    },
-    "data/electrons/shared/photon/node34/operator.bin": {
-      "bytes": 22365288
-    },
-    "data/electrons/shared/photon/node35/operator.bin": {
-      "bytes": 22355816
-    },
-    "data/electrons/shared/photon/node36/operator.bin": {
-      "bytes": 22371496
-    },
-    "data/electrons/shared/photon/node37/operator.bin": {
-      "bytes": 22370120
-    },
-    "data/electrons/shared/photon/node38/operator.bin": {
-      "bytes": 22377384
-    },
-    "data/electrons/shared/photon/node39/operator.bin": {
-      "bytes": 22373384
-    },
-    "data/electrons/shared/photon/node40/operator.bin": {
-      "bytes": 22291208
-    },
-    "data/electrons/shared/photon/node41/operator.bin": {
-      "bytes": 22294952
-    },
-    "data/electrons/shared/photon/node42/operator.bin": {
-      "bytes": 22298856
-    },
-    "data/electrons/shared/photon/node43/operator.bin": {
-      "bytes": 22296968
-    },
-    "data/electrons/shared/photon/node44/operator.bin": {
-      "bytes": 22295528
-    },
-    "data/electrons/shared/photon/node45/operator.bin": {
-      "bytes": 22294280
-    },
-    "data/electrons/shared/photon/node46/operator.bin": {
-      "bytes": 22289672
-    },
-    "data/electrons/shared/photon/node47/operator.bin": {
-      "bytes": 22289800
-    },
-    "data/electrons/shared/photon/node48/operator.bin": {
-      "bytes": 22290568
-    },
-    "data/electrons/shared/photon/node49/operator.bin": {
-      "bytes": 22051048
-    },
-    "data/electrons/shared/photon/node50/operator.bin": {
-      "bytes": 22054568
-    },
-    "data/electrons/shared/photon/node51/operator.bin": {
-      "bytes": 22051944
-    },
-    "data/electrons/shared/photon/node52/operator.bin": {
-      "bytes": 22048392
-    },
-    "data/electrons/shared/photon/node53/operator.bin": {
-      "bytes": 22052872
-    },
-    "data/electrons/shared/photon/node54/operator.bin": {
-      "bytes": 22046408
-    },
-    "data/electrons/shared/photon/node55/operator.bin": {
-      "bytes": 22046024
-    },
-    "data/electrons/shared/photon/node56/operator.bin": {
-      "bytes": 22047528
-    },
-    "data/electrons/shared/photon/node57/operator.bin": {
-      "bytes": 22046152
-    },
-    "data/electrons/shared/photon/node58/operator.bin": {
-      "bytes": 22051656
-    },
-    "data/electrons/shared/photon/node59/operator.bin": {
-      "bytes": 22052008
-    },
-    "data/electrons/shared/photon/node60/operator.bin": {
-      "bytes": 22045224
-    },
-    "data/electrons/shared/photon/node61/operator.bin": {
-      "bytes": 22045832
-    },
-    "data/electrons/shared/photon/node62/operator.bin": {
-      "bytes": 22058952
-    },
-    "data/electrons/shared/photon/node63/operator.bin": {
-      "bytes": 22341800
-    },
-    "data/electrons/shared/photon/node64/operator.bin": {
-      "bytes": 22349704
-    },
-    "data/electrons/shared/photon/node65/operator.bin": {
-      "bytes": 22352520
-    },
-    "data/electrons/shared/photon/node66/operator.bin": {
-      "bytes": 22361736
-    },
-    "data/electrons/shared/photon/node67/operator.bin": {
-      "bytes": 22369512
-    },
-    "data/electrons/shared/photon/node68/operator.bin": {
-      "bytes": 22372040
-    },
-    "data/electrons/shared/photon/node69/operator.bin": {
-      "bytes": 22368712
-    },
-    "data/electrons/shared/photon/node70/operator.bin": {
-      "bytes": 22374120
-    },
-    "data/electrons/shared/photon/node71/operator.bin": {
-      "bytes": 22382888
-    },
-    "data/electrons/shared/photon/node72/operator.bin": {
-      "bytes": 22378792
-    },
-    "data/electrons/shared/photon/node73/operator.bin": {
-      "bytes": 22389576
-    },
-    "data/electrons/shared/photon/node74/operator.bin": {
-      "bytes": 22387176
-    },
-    "data/electrons/shared/photon/node75/operator.bin": {
-      "bytes": 22383272
-    },
-    "data/electrons/shared/photon/node76/operator.bin": {
-      "bytes": 22387144
-    },
-    "data/electrons/shared/photon/node77/operator.bin": {
-      "bytes": 22401864
-    },
-    "data/electrons/shared/photon/node78/operator.bin": {
-      "bytes": 22390312
-    },
-    "data/electrons/shared/photon/node79/operator.bin": {
-      "bytes": 22392008
-    },
-    "data/electrons/shared/photon/node80/operator.bin": {
-      "bytes": 22392616
-    },
-    "data/electrons/shared/photon/node81/operator.bin": {
-      "bytes": 22898280
-    },
-    "data/electrons/shared/photon/water/operator.bin": {
-      "bytes": 22050664
-    },
     "data/em/unified_em_delta_moments_v2.bin": {
       "bytes": 206977416
     },
@@ -862,9 +360,6 @@
     "inputs/carbon_water_minibeam/spots.csv": {
       "bytes": 47
     },
-    "data/electrons/proton/birth_bank.bin": {
-      "bytes": 328620496
-    },
     "data/proton_copper_20260926/proton_air_stopping.csv": {
       "bytes": 97878
     },
@@ -918,8 +413,198 @@
     },
     "data/neutron/recoil/package.json": {
       "bytes": 1406
+    },
+    "data/electrons/shared/atomic26.bin": {
+      "bytes": 16844
+    },
+    "data/electrons/shared/birth26.bin": {
+      "bytes": 15920
+    },
+    "data/electrons/shared/brems26.bin": {
+      "bytes": 22942700
+    },
+    "data/electrons/shared/charged.index": {
+      "bytes": 925
+    },
+    "data/electrons/shared/elastic00.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic01.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic02.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic03.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic04.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic05.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic06.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic07.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic08.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic09.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic10.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic11.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic12.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic13.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic14.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic15.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic16.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic17.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic18.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic19.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic20.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic21.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic22.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic23.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic24.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/elastic25.bin": {
+      "bytes": 9540
+    },
+    "data/electrons/shared/joint.bin": {
+      "bytes": 1423915788
+    },
+    "data/electrons/shared/penelope26.bin": {
+      "bytes": 18932
+    },
+    "data/electrons/shared/photon.index": {
+      "bytes": 899
+    },
+    "data/electrons/shared/photon00.bin": {
+      "bytes": 11279432
+    },
+    "data/electrons/shared/photon01.bin": {
+      "bytes": 11168480
+    },
+    "data/electrons/shared/photon02.bin": {
+      "bytes": 11189024
+    },
+    "data/electrons/shared/photon03.bin": {
+      "bytes": 11182976
+    },
+    "data/electrons/shared/photon04.bin": {
+      "bytes": 11183912
+    },
+    "data/electrons/shared/photon05.bin": {
+      "bytes": 11176064
+    },
+    "data/electrons/shared/photon06.bin": {
+      "bytes": 11175536
+    },
+    "data/electrons/shared/photon07.bin": {
+      "bytes": 11170088
+    },
+    "data/electrons/shared/photon08.bin": {
+      "bytes": 11176664
+    },
+    "data/electrons/shared/photon09.bin": {
+      "bytes": 11318528
+    },
+    "data/electrons/shared/photon10.bin": {
+      "bytes": 11334152
+    },
+    "data/electrons/shared/photon11.bin": {
+      "bytes": 11344640
+    },
+    "data/electrons/shared/photon12.bin": {
+      "bytes": 11353016
+    },
+    "data/electrons/shared/photon13.bin": {
+      "bytes": 11354672
+    },
+    "data/electrons/shared/photon14.bin": {
+      "bytes": 11360792
+    },
+    "data/electrons/shared/photon15.bin": {
+      "bytes": 11367968
+    },
+    "data/electrons/shared/photon16.bin": {
+      "bytes": 11365400
+    },
+    "data/electrons/shared/photon17.bin": {
+      "bytes": 11370632
+    },
+    "data/electrons/shared/photon18.bin": {
+      "bytes": 11377520
+    },
+    "data/electrons/shared/photon19.bin": {
+      "bytes": 11378408
+    },
+    "data/electrons/shared/photon20.bin": {
+      "bytes": 11381576
+    },
+    "data/electrons/shared/photon21.bin": {
+      "bytes": 11385968
+    },
+    "data/electrons/shared/photon22.bin": {
+      "bytes": 11384048
+    },
+    "data/electrons/shared/photon23.bin": {
+      "bytes": 11387552
+    },
+    "data/electrons/shared/photon24.bin": {
+      "bytes": 11660864
+    },
+    "data/electrons/shared/photon25.bin": {
+      "bytes": 11164232
+    },
+    "data/electrons/shared/rates26.bin": {
+      "bytes": 5188176
+    },
+    "data/electrons/shared/scalar26.bin": {
+      "bytes": 325888
+    },
+    "data/electrons/proton/parameters.bin": {
+      "bytes": 44
+    },
+    "data/electrons/carbon/parameters.bin": {
+      "bytes": 44
     }
   },
-  "total_unique_bytes": 10966038651,
-  "electron_registry": "docs/electron_packages_manifest.json"
+  "total_unique_bytes": 6175670097,
+  "electron_registry": "docs/electron_packages_manifest.json",
+  "unique_bytes_method": "Physical payload counted once per device/inode; JSON manifests excluded from electron payload registry"
 }

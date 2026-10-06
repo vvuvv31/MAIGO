@@ -48,18 +48,20 @@ def case_identity(case):
     return 'lung CT; accuracy deferred'
 
 
-def run(case,arm,tag,n,h,seed,binary,package_pair=None):
+def run(case,arm,tag,n,h,seed,binary,package_pair=None,config_updates=None,runtime_env=None):
     directory=OUT/'runs'/f'{case}_{arm}_{tag}';directory.mkdir(parents=True,exist_ok=False)
     cfg=config(case);cfg['random_seed']=seed
     package_root=ROOT/({'native':'data/archive/ion_em_native_20261005', 'factorized':'data/archive/ion_em_density_residual_20261005'}.get(arm,'data/em'))
     em_file,delta_file=package_pair if package_pair is not None else (package_root/'unified_em_v1.bin',package_root/'unified_em_delta_moments_v2.bin')
     cfg['em_package_file']=str(Path(em_file).resolve())
     cfg['em_delta_moments_file']=str(Path(delta_file).resolve())
+    if config_updates:cfg.update(config_updates)
     file=directory/'case.yaml';file.write_text(yaml.safe_dump(cfg,sort_keys=False))
     command=[str(binary),'--config',str(file),'--batch-count',str(n),'--histories-per-batch',str(h),'--batch-output',str(directory/'batches')]
     save(directory/'command.json',command)
     env={k:v for k,v in os.environ.items() if not k.startswith('CARBON_')}
     env.update(LD_LIBRARY_PATH='/home/wuwei/sycl_workspace/llvm/build/install/lib',CARBON_RUNTIME_BREAKDOWN='1',OPENBLAS_NUM_THREADS='1',OMP_NUM_THREADS='1')
+    if runtime_env:env.update(runtime_env)
     start=time.monotonic()
     with (directory/'gpu.log').open('w') as log:
         p=subprocess.run(command,cwd=ROOT,env=env,stdout=log,stderr=subprocess.STDOUT)
@@ -102,6 +104,7 @@ def run(case,arm,tag,n,h,seed,binary,package_pair=None):
     times=[float(x) for x in re.findall(r'\[batch-wall\] index=\d+ seconds=([\d.eE+-]+)',text)];assert len(times)==n
     rec=dict(case=case,arm=arm,tag=tag,binary=str(binary),seed=seed,n=n,h=h,histories=n*h,wall_seconds=time.monotonic()-start,batch_wall_seconds=times,resident_primary_s=(n-1)*h/sum(times[1:]) if n>1 else None,max_energy_residual=max(quality),runtime_pass=True,ion_maximum_step_mm=cfg['maximum_step_mm'],case_identity=case_identity(case))
     rec['spot_allocation']=plan_summary
+    rec['config_updates']=config_updates or {};rec['runtime_env']=runtime_env or {}
     rec['em_package_file']=cfg['em_package_file'];rec['em_delta_moments_file']=cfg['em_delta_moments_file']
     save(directory/'execution.json',rec);print(json.dumps(rec),flush=True);return directory,rec
 

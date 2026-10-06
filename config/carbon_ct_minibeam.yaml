@@ -123,7 +123,7 @@ primary_atomic_number: 6
 primary_mass_number: 12
 initial_energy_MeVu: 250
 minibeam_air_slit_max_step_mm: 0.05
-material_electron_birth_file: data/electrons/carbon/birth_bank.bin
+material_electron_birth_file: data/electrons/shared/birth26.bin
 material_electron_joint_pilot_file: data/electrons/shared/joint.bin
-material_electron_charged_index_file: data/electrons/shared/charged/index.txt
-material_photon_response_index_file: data/electrons/shared/photon/index.txt
+material_electron_charged_index_file: data/electrons/shared/charged.index
+material_photon_response_index_file: data/electrons/shared/photon.index

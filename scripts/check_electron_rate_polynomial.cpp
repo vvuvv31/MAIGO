@@ -16,7 +16,7 @@ int main(int argc,char** argv){try{
     double max_absolute_to_majorant=0,max_relative=0,max_reference_error=0,max_candidate_error=0,max_bound_ratio=0;
     for(unsigned node=0;node<nodes;++node){
         int section;double density;std::string file;in>>section>>density>>file;
-        carbon::ChargedResponseData data(path.parent_path()/file);
+        carbon::ChargedResponseData data(path.parent_path()/file,false);
         if(!in||section!=data.section||density!=data.density)throw std::runtime_error("node metadata");
         for(unsigned process=0;process<2;++process){
             double bound=0;for(const auto& r:data.rate[process])for(double y:r.value)bound=std::max(bound,6*std::abs(y));

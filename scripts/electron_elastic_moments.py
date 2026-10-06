@@ -27,7 +27,7 @@ def read_nodes(index):
         with path.open('rb') as stream:
             header = stream.read(9600)
         fields = struct.unpack_from('<8sIidIIIIQdddd', header)
-        if fields[0] != b'MAIECH02' or fields[1] != 2:
+        if (fields[0], fields[1]) not in [(b'MAIECH02', 2), (b'MAIECF01', 1)]:
             raise ValueError('charged format')
         if fields[2] != int(section) or fields[3] != float(density):
             raise ValueError('node identity')
