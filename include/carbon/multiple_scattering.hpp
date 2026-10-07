@@ -12,16 +12,6 @@ constexpr double highland_energy_constant_MeV = 13.6;
 // Geant4 material mass radiation lengths (g/cm2), measured with the
 // CarbonMaterialPropertiesNtuple TOPAS extension.  Keep these in mass units:
 // the local CT density below converts the transported step to areal density.
-// NOTE: This 4-class function is legacy-only and forbidden in production schneider-25 mode.
-constexpr double ct_material_radiation_length_g_per_cm2(const unsigned material_class) {
-    switch (material_class) {
-        case 0U: return 36.6161;  // G4_AIR
-        case 1U: return 36.4162;  // G4_LUNG_ICRP
-        case 3U: return 30.4866;  // G4_BONE_COMPACT_ICRU
-        default: return 36.0830;  // G4_WATER / soft tissue class
-    }
-}
-
 // 25 exact Schneider section mass radiation lengths (g/cm^2), derived from
 // the TOPAS/Geant4 11.03.p02 material truth product:
 // X0_mass = X0_length [cm] * density [g/cm^3].
@@ -52,13 +42,6 @@ inline constexpr double kSchneiderSectionRadiationLengthGPerCm2[25] = {
     26.994240, // sec 23 (HU 2247, High-density bone)
     16.163298  // sec 24 (HU 2995, Titanium implant)
 };
-
-constexpr double schneider_section_radiation_length_g_per_cm2(const unsigned section_id) noexcept {
-    if (section_id >= 25U) {
-        return 36.0830;
-    }
-    return kSchneiderSectionRadiationLengthGPerCm2[section_id];
-}
 
 // Shared X0 selector for primary AND secondary MCS in Schneider CT.
 // Selection only: no scale, no scattering-formula change. Both transport

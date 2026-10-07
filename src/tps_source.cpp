@@ -1,8 +1,7 @@
 #include "carbon/tps_source.hpp"
 
 #include "carbon/ct_grid.hpp"
-#include "carbon/topas_spots.hpp"
-#include "carbon/upstream_air_scattering.hpp"
+#include "carbon/source_pose.hpp"
 #include <optional>
 
 #include <algorithm>
@@ -192,7 +191,7 @@ TpsSourcePose central_pose(const TransportConfig& config, const TpsSpot& spot) {
     Matrix3 machine{};
     const auto gantry_angle_deg = std::isfinite(spot.gantry_angle_deg)
                                       ? spot.gantry_angle_deg
-                                      : config.tps_gantry_angle_deg;
+                                      : config.tps_beam_angle_deg;
     const auto couch_angle_deg = std::isfinite(spot.couch_angle_deg)
                                      ? spot.couch_angle_deg
                                      : config.tps_couch_angle_deg;
@@ -200,8 +199,7 @@ TpsSourcePose central_pose(const TransportConfig& config, const TpsSpot& spot) {
         std::isfinite(spot.collimator_angle_deg)
             ? spot.collimator_angle_deg
             : config.tps_collimator_angle_deg;
-    if (config.tps_angle_convention == "dicom_lps" ||
-        config.tps_angle_convention == "topas_patient_rot_z") {
+    if (config.tps_angle_convention == "dicom_lps") {
         machine = dicom_lps_beam_frame(
             gantry_angle_deg, couch_angle_deg, collimator_angle_deg);
     } else {
@@ -265,7 +263,7 @@ TpsSourcePose central_pose(const TransportConfig& config, const TpsSpot& spot) {
         world_pose.uz_x = world.uz_x;
         world_pose.uz_y = world.uz_y;
         world_pose.uz_z = world.uz_z;
-        const auto ct = transform_tps_90_pose_to_ct(
+        const auto ct = transform_world_pose_to_ct(
             world_pose, config.spots_patient_trans_x_mm,
             config.spots_patient_trans_y_mm, config.spots_patient_trans_z_mm,
             config.spots_patient_rot_z_deg, config.spots_ct_axis_min_mm);
@@ -371,15 +369,9 @@ TpsSourcePlan TpsSourcePlan::from_csv(const std::filesystem::path& path) {
     const auto header = split_csv_line(line);
     std::unordered_map<std::string, std::size_t> columns;
     for (std::size_t index = 0; index < header.size(); ++index) {
-        columns[normalized_header(header[index])] = index;
+        if (!columns.emplace(normalized_header(header[index]), index).second)
+            throw std::runtime_error("Duplicate TPS spots CSV column: " + header[index]);
     }
-    const auto has_energy_mevu = columns.contains("energy_mevu");
-    const auto has_energy_mev =
-        columns.contains("energy_mev") || columns.contains("energy");
-    const auto has_x = columns.contains("x_mm") || columns.contains("x");
-    const auto has_y = columns.contains("y_mm") || columns.contains("y");
-    const auto has_mu = columns.contains("mu_weight");
-    const auto has_weight = columns.contains("weight");
     constexpr std::array<const char*, 6> explicit_pose_columns{
         "source_x_mm", "source_y_mm", "source_z_mm",
         "direction_x", "direction_y", "direction_z"};
@@ -392,13 +384,12 @@ TpsSourcePlan TpsSourcePlan::from_csv(const std::filesystem::path& path) {
             "TPS spots CSV explicit source pose requires source_x/y/z_mm and "
             "direction_x/y/z together: " + path.string());
     }
-    if ((!has_energy_mevu && !has_energy_mev) || !has_x || !has_y ||
-        (!has_mu && !has_weight)) {
-        throw std::runtime_error(
-            "TPS spots CSV needs energy (energy_MeVu or energy_MeV), x, y, "
-            "and weight (mu_weight or weight): " +
-            path.string());
-    }
+    for (const char* retired : {"energy_mevu", "energy", "x", "y", "mu_weight"})
+        if (columns.contains(retired))
+            throw std::runtime_error("Unsupported TPS spots CSV column: " + std::string(retired));
+    if (!columns.contains("energy_mev") || !columns.contains("x_mm") ||
+        !columns.contains("y_mm") || !columns.contains("weight"))
+        throw std::runtime_error("TPS spots CSV requires energy_MeV, x_mm, y_mm, weight: " + path.string());
 
     TpsSourcePlan plan;
     while (std::getline(input, line)) {
@@ -415,29 +406,10 @@ TpsSourcePlan TpsSourcePlan::from_csv(const std::filesystem::path& path) {
         const auto id = parse_optional(fields, columns, "spot_id");
         spot.spot_id = std::isfinite(id) ? static_cast<int>(std::llround(id))
                                         : static_cast<int>(plan.spots.size() + 1);
-        if (has_energy_mevu) {
-            spot.energy_MeVu =
-                parse_required(fields, columns, "energy_mevu", path, line_number);
-        } else if (columns.contains("energy_mev")) {
-            spot.energy_total_MeV =
-                parse_required(fields, columns, "energy_mev", path, line_number);
-        } else {
-            spot.energy_total_MeV =
-                parse_required(fields, columns, "energy", path, line_number);
-        }
-        spot.x_mm = parse_required(
-            fields, columns, columns.contains("x_mm") ? "x_mm" : "x", path,
-            line_number);
-        spot.y_mm = parse_required(
-            fields, columns, columns.contains("y_mm") ? "y_mm" : "y", path,
-            line_number);
-        if (has_mu) {
-            spot.mu_weight =
-                parse_required(fields, columns, "mu_weight", path, line_number);
-        } else {
-            spot.mu_weight =
-                parse_required(fields, columns, "weight", path, line_number);
-        }
+        spot.energy_total_MeV = parse_required(fields, columns, "energy_mev", path, line_number);
+        spot.x_mm = parse_required(fields, columns, "x_mm", path, line_number);
+        spot.y_mm = parse_required(fields, columns, "y_mm", path, line_number);
+        spot.mu_weight = parse_required(fields, columns, "weight", path, line_number);
         spot.energy_spread_percent =
             parse_optional(fields, columns, "energy_spread_percent");
         spot.sigma_x_mm = parse_optional(fields, columns, "sigma_x_mm");
@@ -475,9 +447,7 @@ TpsSourcePlan TpsSourcePlan::from_csv(const std::filesystem::path& path) {
                     path.string() + ":" + std::to_string(line_number));
             }
         }
-        const auto energy_ok = std::isfinite(spot.energy_total_MeV)
-                                   ? spot.energy_total_MeV > 0.0
-                                   : spot.energy_MeVu > 0.0;
+        const auto energy_ok = std::isfinite(spot.energy_total_MeV) && spot.energy_total_MeV > 0.0;
         if (!energy_ok || spot.mu_weight < 0.0) {
             throw std::runtime_error(
                 "TPS spot energy must be positive and weight nonnegative at " +
@@ -506,26 +476,21 @@ TpsSourcePlan TpsSourcePlan::from_config(const TransportConfig& config) {
     if (!config.tps_spots_file.empty()) {
         auto plan = from_csv(config.tps_spots_file);
         if (!config.tps_beam_model_file.empty()) {
-            plan.apply_beam_model(config.tps_beam_model_file,
-                                  config.primary_mass_number);
+            plan.apply_beam_model(config.tps_beam_model_file);
         }
         return plan;
     }
     TpsSourcePlan plan;
     TpsSpot spot;
     spot.spot_id = 1;
-    spot.energy_MeVu = config.initial_energy_MeVu;
+    spot.energy_total_MeV = config.initial_energy_MeVu * config.primary_mass_number;
     spot.mu_weight = 1.0;
     plan.spots.push_back(spot);
     plan.total_mu = 1.0;
     return plan;
 }
 
-void TpsSourcePlan::apply_beam_model(const std::filesystem::path& path,
-                                      const int primary_mass_number) {
-    if (primary_mass_number <= 0) {
-        throw std::invalid_argument("TPS beam model requires a positive primary mass number");
-    }
+void TpsSourcePlan::apply_beam_model(const std::filesystem::path& path) {
     std::ifstream input(path);
     if (!input) {
         throw std::runtime_error("Cannot open TPS beam model: " + path.string());
@@ -549,12 +514,15 @@ void TpsSourcePlan::apply_beam_model(const std::filesystem::path& path,
         if (!trim(line).empty() && trim(line).front() != '#') {
             const auto header = split_csv_line(line);
             for (std::size_t index = 0; index < header.size(); ++index) {
-                columns[normalized_header(header[index])] = index;
+                if (!columns.emplace(normalized_header(header[index]), index).second)
+                    throw std::runtime_error("Duplicate TPS beam model column: " + header[index]);
             }
             break;
         }
     }
-    const auto energy_key = columns.contains("energy_mev") ? "energy_mev" : "energy";
+    if (columns.contains("energy"))
+        throw std::runtime_error("Unsupported TPS beam model column: energy");
+    constexpr const char* energy_key = "energy_mev";
     for (const char* required :
          {energy_key, "sigma_x_mm", "sigma_xp_rad", "corr_x", "sigma_y_mm",
           "sigma_yp_rad", "corr_y", "energy_spread_percent"}) {
@@ -622,9 +590,7 @@ void TpsSourcePlan::apply_beam_model(const std::filesystem::path& path,
         return out;
     };
     for (auto& spot : spots) {
-        const auto energy = std::isfinite(spot.energy_total_MeV)
-                                ? spot.energy_total_MeV
-                                : spot.energy_MeVu * static_cast<double>(primary_mass_number);
+        const auto energy = spot.energy_total_MeV;
         const auto optics = interpolate(energy);
         if (!std::isfinite(spot.sigma_x_mm)) {
             spot.sigma_x_mm = optics.sigma_x_mm;
@@ -788,10 +754,6 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
         return enter;
     };
     std::vector<PrimarySpotBatchEntry> batch;
-    std::optional<AirMomentTable> air_moments;
-    if (config.spots_enable_upstream_air_mcs) {
-        air_moments=AirMomentTable::read(config.spots_upstream_air_mcs_file);
-    }
     batch.reserve(active_spot_count());
     std::uint64_t history_begin = 0;
     for (std::size_t index = 0; index < spots.size(); ++index) {
@@ -820,9 +782,7 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
         entry.history_begin = history_begin;
         entry.history_end = history_begin + allocation[index];
         entry.random_seed = config.random_seed + index * 1'000'003ULL;
-        const auto total_energy_MeV = std::isfinite(spot.energy_total_MeV)
-            ? spot.energy_total_MeV
-            : spot.energy_MeVu * static_cast<double>(config.primary_mass_number);
+        const auto total_energy_MeV = spot.energy_total_MeV;
         const auto entry_energy_MeV =
             upstream_air_stopping_power == nullptr
                 ? total_energy_MeV
@@ -838,22 +798,6 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
         entry.emittance_sigma_y_prime() = static_cast<float>(sigma_y_prime);
         entry.emittance_correlation_x() = static_cast<float>(correlation_x);
         entry.emittance_correlation_y() = static_cast<float>(correlation_y);
-        if (config.spots_enable_upstream_air_mcs) {
-            if (upstream_air_stopping_power == nullptr)
-                throw std::invalid_argument("Air MCS requires the upstream stopping table");
-            const auto length = distance_to_ct_entry(pose);
-            if (config.primary_atomic_number!=6 || config.primary_mass_number!=12)
-                throw std::invalid_argument("Measured air moment table supports C12 only");
-            const auto moments=air_moments->sample(total_energy_MeV/12.,length);
-            const auto x = add_measured_air_covariance({sigma_x_mm, sigma_x_prime, correlation_x}, length, moments);
-            const auto y = add_measured_air_covariance({sigma_y_mm, sigma_y_prime, correlation_y}, length, moments);
-            entry.emittance_sigma_x_mm() = static_cast<float>(x.sigma_position_mm);
-            entry.emittance_sigma_y_mm() = static_cast<float>(y.sigma_position_mm);
-            entry.emittance_sigma_x_prime() = static_cast<float>(x.sigma_angle_rad);
-            entry.emittance_sigma_y_prime() = static_cast<float>(y.sigma_angle_rad);
-            entry.emittance_correlation_x() = static_cast<float>(x.correlation);
-            entry.emittance_correlation_y() = static_cast<float>(y.correlation);
-        }
         entry.source_origin_x_mm() = static_cast<float>(pose.origin_x_mm);
         entry.source_origin_y_mm() = static_cast<float>(pose.origin_y_mm);
         entry.source_origin_z_mm() =

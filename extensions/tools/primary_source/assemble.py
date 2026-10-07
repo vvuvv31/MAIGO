@@ -8,14 +8,19 @@ from campaign import REPO, dump
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--work', type=Path, required=True)
+    p.add_argument('--reference-bank', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     a = p.parse_args()
-    out = a.output.resolve()
+    data = a.output.resolve() / 'data'
+    out = data/'elastic/schneider/proton'
+    out.mkdir(parents=True,exist_ok=True)
+    if any(out.iterdir()):
+        raise ValueError('Refuse to overwrite nonempty proton elastic output')
+    (data/'stopping/water').mkdir(parents=True,exist_ok=True)
     work = a.work.resolve()
-    shared = out / 'shared'
-    old = shared / 'all_ion_elastic_v1.bin'
+    old = a.reference_bank.resolve()
     raw = work / 'elastic/raw/z1a1.bin'
-    new = out / 'all_ion_elastic_proton_v1.bin'
+    new = out / 'all_ion.bin'
     pins = json.loads((work / 'elastic/provenance.json').read_text())
     with open(old, 'rb') as f:
         magic = f.read(8)
@@ -54,7 +59,7 @@ def main():
     meta.update(bytes=new.stat().st_size, new_proton_raw=[str(raw)], new_proton_input_pins=pins, water_reference='Proton row: Water_75eV; other projectile rows retained from parent bank', scope='New proton elastic row; 17 unchanged projectile rows from pinned reference extraction')
     dump(new.with_suffix('.metadata.json'), meta)
     recoil = work / 'recoil/raw/recoil_stopping.bin'
-    dest = out / 'elastic_recoil_stopping_water75.bin'
+    dest = out / 'recoil_stopping.bin'
     rp = json.loads((work / 'recoil/provenance.json').read_text())
     shutil.copy2(recoil, dest)
     with open(dest, 'rb') as f:
@@ -70,11 +75,8 @@ def main():
     values = np.loadtxt(raw_water)
     if values.shape != (4001, 5) or not np.isfinite(values).all() or (not np.all(values[:, 2] > 0)):
         raise ValueError('Water stopping raw')
-    np.savetxt(out / 'proton_water_stopping.csv', values[:, [0, 2]], delimiter=',', fmt='%.12g', header='Water_75eV; proton unrestricted electronic stopping\nenergy_MeVu,stopping_power_MeV_per_mm')
-    dump(out / 'proton_water_stopping.metadata.json', dict(projectile={'z': 1, 'a': 1}, water_material='Water_75eV', mean_excitation_energy_eV=75))
-    for name in ['ion_stopping_power_water_geant4_11_3_2.csv']:
-        shutil.copy2(REPO / 'data' / name, shared / name)
-    shutil.copy2(REPO / 'data/water_unified/g4_water_material.json', shared / 'g4_water_material.json')
+    np.savetxt(data / 'stopping/water/proton.csv', values[:, [0, 2]], delimiter=',', fmt='%.12g', header='Water_75eV; proton unrestricted electronic stopping\nenergy_MeVu,stopping_power_MeV_per_mm')
+    dump(data / 'stopping/water/proton.metadata.json', dict(projectile={'z': 1, 'a': 1}, water_material='Water_75eV', mean_excitation_energy_eV=75))
     print(out)
 if __name__ == '__main__':
     main()

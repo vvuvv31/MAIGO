@@ -1,193 +1,39 @@
 #include "carbon/cli.hpp"
-
-#include <fstream>
 #include <charconv>
 #include <iostream>
 #include <stdexcept>
-#include <string>
-
+#include <string_view>
 namespace carbon {
 namespace {
-std::size_t positive_count(const std::string& text) {
-    std::size_t value{};
-    const auto [end, ec] = std::from_chars(text.data(), text.data()+text.size(), value);
-    if (ec != std::errc{} || end != text.data()+text.size() || value == 0)
-        throw std::invalid_argument("Batch counts must be positive integers: " + text);
-    return value;
+std::uint64_t integer(std::string_view value) {
+    std::uint64_t n{};
+    const auto [end,error]=std::from_chars(value.data(),value.data()+value.size(),n);
+    if(error!=std::errc{} || end!=value.data()+value.size())
+        throw std::invalid_argument("Invalid unsigned integer: "+std::string(value));
+    return n;
 }
 }
-
-
-void print_usage(const char* executable) {
-    std::cout << "Usage: " << executable
-              << " [--config FILE] [--device DEVICE] [--histories N]"
-                 " [--spots FILE] [--straggling-scale X] [--output FILE]"
-                 " [--dose-output FILE] [--scorer-let|--no-scorer-let]"
-                 " [--let-output FILE] [--write-canonical-config FILE]"
-                 " [--minibeam-phase-space-output FILE]"
-                 " [--minibeam-fragment-phase-space-output FILE]"
-                 " [--plan-manifest FILE] [--plan-only] [--plan-preflight]"
-                 " [--batch-count N --histories-per-batch N --batch-output DIR]"
-                 " [--sequential-spots]\n"
-                 "  --batch-count N --histories-per-batch H --batch-output DIR\n"
-                 "                       Repeat one configuration N times in one session;\n"
-                 "                       H total incident primaries per batch, isolated\n"
-                 "                       outputs, independent seeds, retained packages.\n"
-                 "                       Plan weights are normalized across all N*H primaries.\n"
-                 "  --plan-manifest FILE  Run each config listed in FILE sequentially in\n"
-                 "                       one process, reusing validated read-only physics\n"
-                 "                       data across shards\n"
-                 "  --device DEVICE      serial | cpu | gpu | default |\n"
-                 "                       cuda|nvidia | level_zero|intel|arc | opencl\n"
-                 "                       (gpu respects ONEAPI_DEVICE_SELECTOR;\n"
-                 "                        cuda/level_zero pin the SYCL backend)\n"
-                 "  --spots FILE         TOPAS-format spots_*.txt; repeat to concatenate files\n"
-                 "  --spot-weights FILE  One optimization weight per concatenated spot\n"
-                 "  --histories N        With weights: total plan histories; otherwise per spot\n"
-                 "  --random-seed N|auto Override the configured RNG seed\n"
-                 "  --ct-grid FILE       Override the configured CCTG patient grid\n"
-                 "  --ct-stopping-power-scale X  Override the CT mass stopping-power scale\n"
-                 "  --auto-device-tuning   Derive USM budget/queue capacity from the\n"
-                 "                       selected SYCL device's global memory\n"
-                 "  --secondary-queue-capacity N  Override charged secondary queue capacity\n"
-                 "  --neutral-queue-capacity N  Override neutral queue capacity\n"
-                 "  --write-canonical-config FILE  Write strict normalized YAML input\n"
-                 "  --plan-only          Parse/allocate/transform plan without transport\n"
-                 "  --plan-preflight     Validate every manifest shard (config, CLI\n"
-                 "                       overrides, device consistency, output collisions)\n"
-                 "                       without transport or output; used before splitting\n"
-                 "                       a manifest across concurrent processes\n"
-                 "  --sequential-spots   Disable batched SYCL plan launch\n"
-                 "  --output FILE        MeV energy-deposition scorer CSV\n"
-                 "  --dose-output FILE   Dose scorer CSV (total Gy); empty disables\n"
-                 "  --scorer-let         Enable primary and all-hadron LET_d scoring\n"
-                 "  --no-scorer-let      Disable LET_d scoring (overrides YAML scorerLET)\n"
-                 "  --let-output FILE    LET_d CSV including raw numerator/denominator\n"
-                 "  --voxel-dose-mhd FILE  Override dense voxel dose MHD output\n";
-    std::cout << "  --minibeam-phase-space-output FILE  Write primary water-entry CSV\n";
-    std::cout << "  --minibeam-fragment-phase-space-output FILE  Write Copper-fragment water-entry CSV\n";
-}
-
-void parse_config_and_help(int argc, char** argv, CliState& state) {
-    for (int index = 1; index < argc; ++index) {
-        const std::string argument = argv[index];
-        if (argument == "--config" && index + 1 < argc) {
-            state.config_path = argv[++index];
-        } else if (argument == "--plan-manifest" && index + 1 < argc) {
-            state.plan_manifest = argv[++index];
-        } else if (argument == "--batch-count" && index + 1 < argc) {
-            state.batch_count = positive_count(argv[++index]);
-        } else if (argument == "--histories-per-batch" && index + 1 < argc) {
-            state.histories_per_batch = positive_count(argv[++index]);
-        } else if (argument == "--batch-output" && index + 1 < argc) {
-            state.batch_output = argv[++index];
-        } else if (argument == "--write-canonical-config" && index + 1 < argc) {
-            state.canonical_config_output_path = argv[++index];
-        } else if (argument == "--plan-preflight") {
-            state.plan_preflight = true;
-        } else if (argument == "--help" || argument == "-h") {
-            state.help = true;
-        }
+CliState parse_cli(int argc,char** argv) {
+    CliState state;
+    for(int i=1;i<argc;++i) {
+        const std::string_view key=argv[i];
+        if(key=="--help" || key=="-h"){state.help=true;continue;}
+        if(i+1==argc)throw std::invalid_argument("Missing value for "+std::string(key));
+        const std::string_view value=argv[++i];
+        if(key=="--config")state.config_path=value;
+        else if(key=="--batch-count")state.batch_count=integer(value);
+        else if(key=="--histories-per-batch")state.histories_per_batch=integer(value);
+        else if(key=="--batch-output")state.batch_output=value;
+        else if(key=="--histories"){state.histories=integer(value);state.histories_overridden=true;}
+        else if(key=="--seed"){state.seed=integer(value);state.seed_overridden=true;}
+        else throw std::invalid_argument("Unknown argument: "+std::string(key));
     }
+    const bool batches=state.batch_count || state.histories_per_batch || !state.batch_output.empty();
+    if(batches && (!state.batch_count || !state.histories_per_batch || state.batch_output.empty() || state.histories_overridden))
+        throw std::invalid_argument("Use --batch-count N --histories-per-batch H --batch-output NEW_DIR together; do not combine with --histories");
+    if(state.histories_overridden && !state.histories)throw std::invalid_argument("Histories must be positive");
+    return state;
 }
-
-void apply_cli_overrides(int argc, char** argv, TransportConfig& config, CliState& state) {
-    bool spots_cli_override = false;
-    for (int index = 1; index < argc; ++index) {
-        const std::string argument = argv[index];
-        if (argument == "--config") {
-            ++index;
-        } else if (argument == "--plan-manifest" && index + 1 < argc) {
-            ++index;
-        } else if ((argument == "--batch-count" || argument == "--histories-per-batch" ||
-                    argument == "--batch-output") && index + 1 < argc) {
-            ++index;
-        } else if (argument == "--write-canonical-config" && index + 1 < argc) {
-            ++index;
-        } else if (argument == "--device" && index + 1 < argc) {
-            config.device = argv[++index];
-        } else if (argument == "--histories" && index + 1 < argc) {
-            config.number_of_histories = std::stoull(argv[++index]);
-            state.histories_overridden = true;
-        } else if (argument == "--random-seed" && index + 1 < argc) {
-            config.random_seed = parse_random_seed(argv[++index]);
-        } else if (argument == "--ct-grid" && index + 1 < argc) {
-            config.ct_grid_file = argv[++index];
-        } else if (argument == "--ct-stopping-power-scale" && index + 1 < argc) {
-            throw std::invalid_argument("--ct-stopping-power-scale is obsolete; Unified EM uses native material stopping");
-        } else if (argument == "--auto-device-tuning") {
-            config.auto_device_tuning = true;
-        } else if (argument == "--ct-schneider-stopping-power-file" && index + 1 < argc) {
-            throw std::invalid_argument("--ct-schneider-stopping-power-file is obsolete; use em_package_file in YAML");
-        } else if (argument == "--spots" && index + 1 < argc) {
-            if (!spots_cli_override) {
-                config.topas_spots_file.clear();
-                config.topas_spots_files.clear();
-                spots_cli_override = true;
-            }
-            config.topas_spots_files.emplace_back(argv[++index]);
-        } else if (argument == "--spot-weights" && index + 1 < argc) {
-            config.spot_weights_file = argv[++index];
-        } else if (argument == "--straggling-scale" && index + 1 < argc) {
-            if (std::stod(argv[++index]) != 1.0)
-                throw std::invalid_argument("--straggling-scale is obsolete; Unified EM uses native fluctuations");
-        } else if (argument == "--output" && index + 1 < argc) {
-            config.output_file = argv[++index];
-        } else if (argument == "--dose-output" && index + 1 < argc) {
-            const std::string path = argv[++index];
-            config.dose_output_file =
-                path.empty() ? std::filesystem::path{} : std::filesystem::path{path};
-        } else if (argument == "--scorer-let") {
-            config.enable_let_scoring = true;
-        } else if (argument == "--no-scorer-let") {
-            config.enable_let_scoring = false;
-        } else if (argument == "--let-output" && index + 1 < argc) {
-            config.let_output_file = argv[++index];
-        } else if (argument == "--voxel-dose-mhd" && index + 1 < argc) {
-            config.voxel_dose_mhd_output_file = argv[++index];
-        } else if (argument == "--minibeam-phase-space-output" &&
-                   index + 1 < argc) {
-            config.minibeam_phase_space_output_file = argv[++index];
-        } else if (argument == "--minibeam-fragment-phase-space-output" &&
-                   index + 1 < argc) {
-            config.minibeam_fragment_phase_space_output_file = argv[++index];
-        } else if (argument == "--plan-only") {
-            state.plan_only = true;
-        } else if (argument == "--plan-preflight") {
-            // Mode flag, consumed here so shard parsing accepts it.
-        } else if (argument == "--sequential-spots") {
-            state.sequential_spots = true;
-        } else if (argument != "--help" && argument != "-h") {
-            throw std::invalid_argument("Unknown or incomplete argument: " + argument);
-        }
-    }
+void print_usage(){std::cout<<"carbon_mc --config config/<preset>.yaml [--seed N] [--histories N]\n"
+    <<"carbon_mc --config config/<preset>.yaml --batch-count N --histories-per-batch H --batch-output NEW_DIR\n";}
 }
-
-std::vector<std::filesystem::path> load_plan_manifest(
-    const std::filesystem::path& manifest_path) {
-    std::ifstream input(manifest_path);
-    if (!input) {
-        throw std::runtime_error("Cannot open plan manifest: " +
-                                 manifest_path.string());
-    }
-    const auto base = manifest_path.parent_path();
-    std::vector<std::filesystem::path> entries;
-    std::string line;
-    while (std::getline(input, line)) {
-        // Trim leading/trailing whitespace without extra dependencies.
-        const auto first = line.find_first_not_of(" \t\r\n");
-        if (first == std::string::npos) continue;
-        const auto last = line.find_last_not_of(" \t\r\n");
-        const auto trimmed = line.substr(first, last - first + 1);
-        if (trimmed.empty() || trimmed[0] == '#') continue;
-        std::filesystem::path entry(trimmed);
-        if (entry.is_relative() && !base.empty()) entry = base / entry;
-        entries.push_back(std::move(entry));
-    }
-    if (entries.empty()) {
-        throw std::runtime_error("Plan manifest is empty: " + manifest_path.string());
-    }
-    return entries;
-}
-
-}  // namespace carbon

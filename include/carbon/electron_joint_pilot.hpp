@@ -28,11 +28,10 @@ inline bool joint_homogeneous(const ElectronCtGeometry& g,const std::array<doubl
 }
 // Counters: eligible, started, advances, fallback, below-table terminal draws,
 // deposited, escaped, photon gap, invalid. W stays with the original packet.
-template<class Uniform,class Tally,class Score=NoExpectedScore>
+template<class Uniform,class Tally>
 inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
     ElectronJointPilotView pilot,const ElectronMaterialIdentity& material,
-    const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally,
-    Score&& score=Score{},double expected_density=-1.,double expected_min_energy=0.) {
+    const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally) {
     using namespace electron_joint_research;
     if(pilot.sections) {
         if(material.section<0 || unsigned(material.section)>=pilot.section_count)return packet;
@@ -116,36 +115,6 @@ inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
         }
         ++packet.advances;tally(2,1);
         const auto coin=uniform();
-        if(pdg==11 && f[0]<1 && packet.cursor.physical_density_g_cm3<=expected_density && energy>=expected_min_energy) {
-            // Expected-value estimator of the energy-packet branch: score the
-            // conditional mean W*f0 at a uniform chord point, keep W(1-f0) and
-            // select a surviving branch with probability f[c]/(1-f0).
-            if(f[0]>0) {
-                const double along=uniform();const auto at=p+along*delta;
-                const double w=packet.weight_MeV,rest=w-w*f[0];
-                score(std::array<double,3>{at.x,at.y,at.z},w-rest);packet.weight_MeV=rest;
-            }
-            const double x=(f[1]+f[2]+f[3])*coin;
-            unsigned channel=1;double cumulative=f[1];
-            while(channel<3 && (x>=cumulative || !(f[channel]>0))){++channel;cumulative+=f[channel];}
-            while(channel>1 && !(f[channel]>0))--channel;
-            p=endpoint;
-            if(!(f[channel]>0))return invalid();
-            energy*=f[channel];
-            if(channel==1) {
-                if(exact) {
-                    cursor=g->next;
-                    if(cursor==-2)d=rotate(target,project(original,g->postdir));
-                    else if(cursor<0)return invalid();
-                }else d=rotate(sample_frame,s->post);
-            }else {
-                cursor=exact?g->child[channel-2]:s->child[channel-2];
-                if(cursor<0 || std::uint32_t(cursor)>=m.graph_count)return invalid();
-                if(m.graph[cursor].pdg==22)++packet.photon_children;else ++packet.electron_children;
-                if(!exact){original=basis(s->source);target=sample_frame;}
-            }
-            continue;
-        }
         if(coin<f[0]) {
             p=p+(pdg==11?uniform():1.)*delta;
             packet.deposit_position={p.x,p.y,p.z};packet.status=ElectronPacketStatus::deposited;
@@ -173,12 +142,11 @@ inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
 }
 // This overload needs only the physical material identity; it never binds a
 // material continuation record on leaving homogeneous joint support.
-template<class Uniform,class Tally,class Score=NoExpectedScore>
+template<class Uniform,class Tally>
 inline ElectronEnergyPacket transport_joint_independent(ElectronEnergyPacket packet,
-    ElectronJointPilotView pilot,const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally,
-    Score&& score=Score{},double expected_density=-1.,double expected_min_energy=0.){
+    ElectronJointPilotView pilot,const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally){
     ElectronMaterialIdentity identity{};identity.section=packet.cursor.section;
     identity.density_g_cm3=packet.cursor.physical_density_g_cm3;
-    return transport_joint_pilot(packet,pilot,identity,geometry,uniform,tally,score,expected_density,expected_min_energy);
+    return transport_joint_pilot(packet,pilot,identity,geometry,uniform,tally);
 }
 } // namespace carbon

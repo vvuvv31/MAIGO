@@ -1,9 +1,0 @@
-# Ion fluctuation defaults — 2026-10-05
-
-All eight presets and TransportConfig defaults now enable primary and secondary ion energy-loss fluctuations. All four minibeams enable copper primary and charged-fragment fluctuations. The actual disabled overrides were carbon CT broadbeam primary/secondary fluctuations and carbon water minibeam copper-fragment fluctuations; these are now enabled. Both methods documents reflect the effective defaults.
-
-The FP32-dose / FP64-OFF build completed successfully. All eight presets passed two batches of 20,000 histories, including quality, finite nonnegative dose, energy accounting, EM audit, electron completion/coverage and zero-overflow checks. Maximum physical relative energy residual was 5.43908e-06. Small smokes do not establish dose acceptance or stable throughput. Carbon CT broadbeam with fluctuations ON has now been independently gamma-qualified: 12,963,818 primary, local1%/1mm 99.795512%, spherical lattice step0.1mm, full-reference >=10% maximum mask. All14 full-plan batches pass the runtime gates. See the current-control runs under `out/em_analytic_density_20261005/validation_v3/`; historical OFF results remain historical.
-
-Electron packages have not changed. The ion default is 26 composition bases plus sparse density corrections preserving the 175-node extraction, with host reconstruction of dense GPU tables. This is storage compression, not a demonstrated 26-node transport approximation. Removing density residuals requires separate physics validation; density-dependent production thresholds, restricted response and fluctuation/delta moments need treatment beyond leading density scaling.
-
-Machine-readable evidence: [JSON](ion_straggling_defaults_20261005.json). Raw smoke evidence: `out/ion_straggling_defaults_20261005/runs/`.

@@ -3,14 +3,14 @@ from pathlib import Path
 import json,sys,shutil
 import numpy as np
 R=Path(__file__).resolve().parents[3]
-sys.path.insert(0,str(R/'tools'))
+sys.path.insert(0,str(Path(__file__).resolve().parent))
 from audit_schneider_response_scope import schneider_identity
 import argparse,math
 parser=argparse.ArgumentParser();parser.add_argument('--output',type=Path,required=True);parser.add_argument('--runtime-root',help='Path seen by TOPAS; defaults to --output absolute path');args=parser.parse_args()
 out=args.output.resolve();remote=args.runtime_root or str(out);out.mkdir(parents=True,exist_ok=True)
-meta=json.loads((R/'data/schneider/schneider_stopping_v1.metadata.json').read_text())['section_manifest']
-species=json.loads((R/'data/schneider/schneider_ion_section_stopping_v1.metadata.json').read_text())['species_za']
-identities=[schneider_identity(R/'data/HUtoMaterialSchneider.txt',hu) for hu in range(-1000,2996)]
+meta=json.loads((R/'extensions/reference/schneider_sections.metadata.json').read_text())['section_manifest']
+species=json.loads((R/'extensions/reference/ion_species.metadata.json').read_text())['species_za']
+identities=[schneider_identity(R/'data/materials/schneider/hu_to_material.txt',hu) for hu in range(-1000,2996)]
 elements=['Hydrogen','Carbon','Nitrogen','Oxygen','Magnesium','Phosphorus','Sulfur','Chlorine','Argon','Calcium','Sodium','Potassium','Titanium']
 materials=[dict(name='JEM_W',section=-1,density_g_cm3=1.,material='Water_75eV')];text=''
 for sid in range(25):

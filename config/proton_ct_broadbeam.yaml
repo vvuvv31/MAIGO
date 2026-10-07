@@ -1,15 +1,11 @@
-# Default broadbeam: shared FP32 electron transport; RT07575 local 1%/1mm >99% accepted.
-# Use native repeated batches on 2080Ti; this is not the default broadbeam path.
+# proton_ct_broadbeam: RT07575 head; current26 EM/electrons, FP32 dose.
 run_mode: research
-scorer_mode: production
 enable_ct_grid: true
 number_of_histories: 12531500
-initial_energy_MeV: 112.5
-primary_particle: proton
+initial_energy_MeVu: 112.5
 beam_energy_spread: 0.01
 random_seed: 940075769
 water_density_g_per_cm3: 1.0
-phantom_length_mm: 208.5
 maximum_step_mm: 0.5
 maximum_relative_energy_loss: 0.005
 energy_cutoff_MeV: 0.1
@@ -20,59 +16,51 @@ voxel_bins_z: 417
 voxel_size_x_mm: 0.5
 voxel_size_y_mm: 2.0
 voxel_size_z_mm: 0.5
-depth_bin_width_mm: 0.5
 scorer_area_mm2: 17675.0
 enable_multiple_scattering: true
 multiple_scattering_model: fermi_eyges
-fermi_eyges_species: all_charged
-fermi_eyges_parameter_set: species_water
 fermi_eyges_max_segment_mm: 0.6
 enable_inelastic: true
 nuclear_model: geant4
 enable_secondary_transport: true
-cinel02_max_secondary_inelastic_generations: 2
+max_secondary_inelastic_generations: 2
 secondary_out_of_scope_nuclear_policy: em_only
-ct_schneider_primary_rate_file: data/proton_therapy_20260926/proton_rates.bin
-ct_schneider_primary_cinel03_file: data/proton_therapy_20260926/proton_cinel03.bin
-ct_schneider_secondary_rate_file: data/schneider/secondary_inelastic_rates_v2_1.bin
-ct_schneider_secondary_cinel03_file: data/schneider/cinel03_secondary_targets_v2_1_14p.bin
-ct_schneider_physics_bundle_file: data/proton_therapy_20260926/physics_bundle.json
+ct_schneider_primary_rate_file: data/nuclear/schneider/proton/inelastic_rates.bin
+ct_schneider_primary_cinel03_file: data/nuclear/schneider/proton/final_states.bin
+ct_schneider_secondary_rate_file: data/nuclear/schneider/secondary/inelastic_rates.bin
+ct_schneider_secondary_cinel03_file: data/nuclear/schneider/secondary/final_states.bin
+ct_schneider_physics_bundle_file: data/nuclear/schneider/proton/bundle.json
 max_device_memory_fraction: 0.8
 dose_to_medium: true
 dose_to_medium_type: mhd
 dose_to_medium_name: dose
 LET: false
 device: cuda
-em_model: g4_material_joint_v1
-em_delta_moments_file: data/em/unified_em_delta_moments_v2.bin
-# EMCNT001:26 composition responses; continuous density; no density-state expansion.
-em_package_file: data/em/unified_em_v1.bin
+em_delta_moments_file: data/em/ions/delta_moments.bin
+em_package_file: data/em/ions/continuous26.bin
 enable_energy_straggling: true
 enable_secondary_energy_straggling: true
 ct_secondary_exact_faces: true
 history_chunk_size: 524288
 secondary_species_grouping: true
 secondary_step_chunking: true
-all_ion_elastic_file: data/proton_therapy_20260926/all_ion_elastic_proton_v1.bin
-elastic_recoil_stopping_file: data/proton_therapy_20260926/elastic_recoil_stopping_water75.bin
+all_ion_elastic_file: data/elastic/schneider/proton/all_ion.bin
+elastic_recoil_stopping_file: data/elastic/schneider/proton/recoil_stopping.bin
 secondary_local_deposit_cutoff_MeV: 0.1
 dose_output_scale: 1.0
 minibeam: false
 enable_charged_origin_voxel_scoring: false
-enable_neutron_transport: false
-water_primary_specialization: false
 transport_profile: broadbeam_fast
 primary_atomic_number: 1
 primary_mass_number: 1
-ct_grid_file: inputs/proton_rt07575/patient_packed.bin
+ct_grid_file: inputs/rt07575_head/proton/ct.bin
 enable_ct_material_mcs: true
 ct_skip_homogeneous_face_clamp: true
 fermi_eyges_gaussian_only: true
-fermi_eyges_sampling: segmented
 tpsSource: true
 enable_tps_coordinate_system: true
 tps_angle_convention: dicom_lps
-tps_beam_model_file: inputs/proton_rt07575/beam_model.csv
+tps_beam_model_file: inputs/rt07575_head/proton/beam_model.csv
 tps_spot_weight_mode: histories
 tps_histories_scale: 1.0
 tps_virtual_scanning_magnet_x_mm: 6227.8
@@ -87,31 +75,23 @@ spots_patient_trans_z_mm: 1.3617
 spots_patient_rot_z_deg: 90.0
 spots_ct_axis_min_mm: -104.25
 spots_enable_upstream_air_energy_loss: true
-spots_upstream_air_stopping_power_file: data/proton_copper_20260926/proton_air_stopping.csv
-primary_stopping_power_file: data/proton_therapy_20260926/proton_water_stopping.csv
+spots_upstream_air_stopping_power_file: data/stopping/air/proton.csv
+primary_stopping_power_file: data/stopping/water/proton.csv
 enable_flat_source: false
-tps_spots_file: inputs/proton_rt07575/part_01/spots.csv
+tps_spots_file: inputs/rt07575_head/proton/spots.csv
 broadbeam_maximum_mean_loss_fraction: 0.02
 material_electron_group_size: 32
 material_electron_queue_chunk: 524288
 material_electron_queue_lanes: 16384
 material_electron_queue_budget_MiB: 576
 material_electron_retain_bank: true
-material_electron_birth_file: data/electrons/shared/birth26.bin
-material_electron_joint_pilot_file: data/electrons/shared/joint.bin
-material_photon_response_index_file: data/electrons/shared/photon.index
-material_electron_charged_index_file: data/electrons/shared/charged.index
-# true: primary-ionization electrons in density <= threshold plus halo; false: local deposition, no electron packages.
-# Charged nuclear-secondary ionization remains local in either mode.
+material_electron_birth_file: data/em/electrons/shared/birth26.bin
+material_electron_joint_pilot_file: data/em/electrons/shared/joint.bin
+material_photon_response_index_file: data/em/electrons/shared/photon.index
+material_electron_charged_index_file: data/em/electrons/shared/charged.index
 broadbeam_electron_tracking: true
 broadbeam_electron_density_threshold: 0.1
 broadbeam_electron_halo_mm: 5.0
-# Low-density (density <= threshold) electron births: unbiased per-task Russian roulette.
-# 0.5 (with 524288 chunks): RT07575 resident throughput x1.53 proton / x1.64 carbon, BODY noise
-# unchanged, external-air precision per unit time x1.04 / x0.91. 1.0 disables; see
-# docs/broadbeam_air_roulette_20261004.md.
 broadbeam_electron_low_density_survival: 0.5
-# Order shared electron tasks; unbiased W/p roulette for selected tissue births.
 broadbeam_electron_birth_order: true
 broadbeam_electron_tissue_survival: 0.5
-# RTX2080Ti full preset: use --batch-count 10 --histories-per-batch 1253150 --batch-output NEW_DIR.

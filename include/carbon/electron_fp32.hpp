@@ -15,11 +15,7 @@
 #include <sycl/sycl.hpp>
 #endif
 namespace carbon::electron_fp32 {
-#ifdef CARBON_ELECTRON_FP64_GEOMETRY
-using Coordinate=double;
-#else
 using Coordinate=float;
-#endif
 using Position=std::array<Coordinate,3>;
 // All call sites use bounded azimuths in [0, 2*pi]; avoid the generic
 // libdevice large-angle reduction, which contains FP64 arithmetic.
@@ -387,116 +383,22 @@ template<class Uniform>inline ElectronUrbanLoss sample_electron_urban_loss(
     }
     out.loss=loss*scaling;out.valid=good&&std::isfinite(out.loss)&&out.loss>=0;return out;
 }
-template<class Uniform>inline ElectronUrbanLoss sample_electron_urban_loss_precise_gate(
-    ElectronUrbanMaterial p,float energy,float mean,float cut,Uniform& uniform,double mean_for_gate) {
-    ElectronUrbanLoss out;
-    if(!std::isfinite(energy)||energy<=0||!std::isfinite(mean)||mean<0||!std::isfinite(cut)||cut<=0||
-       !std::isfinite(p.mass)||p.mass<=0||!std::isfinite(p.excitation)||p.excitation<=0||
-       !std::isfinite(p.e0)||p.e0<=0||!std::isfinite(p.e1)||p.e1<=0||!std::isfinite(p.e2)||p.e2<=0||
-       !std::isfinite(p.f1)||p.f1<0||!std::isfinite(p.f2)||p.f2<0)return out;
-    if(!std::isfinite(mean_for_gate)||mean_for_gate<0)return out;
-    if(mean_for_gate<1e-5||double(cut)<=double(p.e0))return {true,mean,0};
-    bool good=true;
-    auto u=[&](){if(++out.random_draws>16384){good=false;return .5f;}
-        const float x=uniform();if(!std::isfinite(x)||x<=0||x>=1){good=false;return .5f;}return x;};
-    auto poisson=[&](float mu){if(!std::isfinite(mu)||mu<0||mu>8.00001f){good=false;return 0;}
-        const float stop=std::exp(-mu);float product=1;int n=0;
-        do{++n;product*=u();}while(product>stop&&good);return n-1;};
-    auto normal=[&](){const float a=u(),b=u();return std::sqrt(-2*std::log(a))*cos32(6.2831853071795864769f*b);};
-    auto gauss=[&](float m,float variance){const float sigma=std::sqrt(variance);if(m<.25f*sigma)return 2*u()*m;
-        float x;do{x=m+sigma*normal();}while((x<0||x>2*m)&&good);return x;};
-    const float gamma=1+energy/p.mass,beta2=energy*(energy+2*p.mass)/((energy+p.mass)*(energy+p.mass));
-    const float scaling=std::min(1+.0005f/cut,1.5f),adjusted=mean/scaling;
-    const float w2=cut>p.excitation?std::log(2*p.mass*beta2*gamma*gamma)-beta2:0;
-    float a1=0,a2=0,e1=p.e1,e2=p.e2;
-    if(cut>p.excitation&&w2>std::log(p.excitation)){
-        if(w2>std::log(e2)){
-            const float c=adjusted*.44f/(w2-std::log(p.excitation));
-            a1=c*p.f1*(w2-std::log(e1))/e1;a2=c*p.f2*(w2-std::log(e2))/e2;
-        }else a1=adjusted*.44f/e1;
-        const float width=a1<42?.5f+3.5f*std::sqrt(a1/42):4;a1/=width;e1*=width;
-    }
-    const float w1=cut/p.e0;
-    float a3=.56f*adjusted*(cut-p.e0)/(p.e0*cut*std::log(w1));if(a1+a2<=0)a3/=.56f;
-    float loss=0,m=0,variance=0;
-    auto excitation=[&](float a,float e){if(a>8){m+=a*e;variance+=a*e*e;}
-        else if(a>0){const int n=poisson(a);if(n>0)loss+=(n+1-2*u())*e;}};
-    excitation(a1,e1);excitation(a2,e2);if(variance>0)loss+=gauss(m,variance);
-    if(a3>0){
-        float alpha=1,p3=a3;m=variance=0;
-        if(a3>8){
-            alpha=w1*(8+a3)/(8*w1+a3);const float alpha1=alpha*std::log(alpha)/(alpha-1);
-            // Stable algebraic form of native namean and a3-namean.
-            const float count=a3*(a3/(8+a3));p3=8*(a3/(8+a3));
-            m=count*p.e0*alpha1;variance=p.e0*p.e0*count*(alpha-alpha1*alpha1);
-        }
-        const float low=alpha*p.e0;
-        if(cut>low){const float fraction=(cut-low)/cut;const int n=poisson(p3);for(int i=0;i<n&&good;++i)loss+=low/(1-fraction*u());}
-        if(variance>0)loss+=gauss(m,variance);
-    }
-    out.loss=loss*scaling;out.valid=good&&std::isfinite(out.loss)&&out.loss>=0;return out;
-}
 
 // electron_charged_response.hpp
 
-struct ChargedParameter {float energy{},elastic_mfp{},dedx{},range{},diagnostic_raw_rate[2]{};};
-struct ChargedRatePiece {float low{},high{},value[4]{};};
-struct ChargedOutcome {Probability cdf{};float fraction{},cosine{};std::int32_t pdg{},pad{};};
-struct ChargedChannel {std::uint64_t offset{},count{};};
 struct ChargedResponseView {
     const electron_composition26::CollisionComposition26* composition26{};
     const electron_composition26::NativeGridRateView* rate26{};
-    const ElectronCutBirthComposition* moller26{};
-    const ChargedParameter* parameters{};const ChargedRatePiece* rate[2]{};
-    const float* edges{};const ChargedChannel* channels{};const ChargedOutcome* outcomes{};
     ElectronElasticView elastic{};ElectronUrbanMaterial urban{};
-    unsigned parameter_count{},rate_count[2]{},bins{};std::uint64_t outcome_count{};
     int section{-1};float density{},electron_cut{},photon_cut{},lowest_energy{},linear_loss_limit{};
     float density_low{},density_high{};
 };
-inline float charged_raw_rate(const ChargedResponseView& v,unsigned process,float energy) {
-    if(process>=2||!v.rate[process]||!v.rate_count[process]||!std::isfinite(energy))return NAN;
-    const auto* rows=v.rate[process];const auto count=v.rate_count[process];
-    if(energy<rows[0].low||energy>rows[count-1].high)return NAN;
-    unsigned lo=0,hi=count;
-    while(lo+1<hi){const auto m=lo+(hi-lo)/2;if(rows[m].low>energy)hi=m;else lo=m;}
-    const auto& r=rows[lo];const float t=(energy-r.low)/(r.high-r.low);
-    // Native cubic represented by its values at 1/8,3/8,5/8,7/8.
-    constexpr float x[4]={.125f,.375f,.625f,.875f};float result=0;
-    for(unsigned j=0;j<4;++j){float term=r.value[j];for(unsigned k=0;k<4;++k)if(k!=j)term*=(t-x[k])/(x[j]-x[k]);result+=term;}
-    return result;
-}
+
 struct ChargedParameters {bool valid{};float elastic_rate{},dedx{},range{},hard_rate[2]{};};
-inline ChargedParameters charged_parameters(const ChargedResponseView& v,float energy) {
-    ChargedParameters out;
-    if(!v.parameters||v.parameter_count<2||!std::isfinite(energy)||energy<v.parameters[0].energy||energy>v.parameters[v.parameter_count-1].energy)return out;
-    unsigned lo=0,hi=v.parameter_count-1;
-    while(lo+1<hi){const auto m=lo+(hi-lo)/2;if(v.parameters[m].energy>energy)hi=m;else lo=m;}
-    const auto a=v.parameters[lo],b=v.parameters[hi];const float f=(energy-a.energy)/(b.energy-a.energy);
-    out.elastic_rate=1/(a.elastic_mfp+f*(b.elastic_mfp-a.elastic_mfp));
-    out.dedx=a.dedx+f*(b.dedx-a.dedx);out.range=a.range+f*(b.range-a.range);
-    for(unsigned p=0;p<2;++p){const float r=charged_raw_rate(v,p,energy);if(!std::isfinite(r))return {};out.hard_rate[p]=std::max(0.f,r);}
-    out.valid=std::isfinite(out.elastic_rate)&&out.elastic_rate>0&&std::isfinite(out.dedx)&&out.dedx>0&&std::isfinite(out.range)&&out.range>0;return out;
-}
-inline ChargedParameters charged_parameters_certified(const ChargedResponseView& v,float energy) {
-    ChargedParameters out;
-    if(!v.parameters||v.parameter_count<2||!std::isfinite(energy)||energy<v.parameters[0].energy||energy>v.parameters[v.parameter_count-1].energy)return out;
-    unsigned lo=0,hi=v.parameter_count-1;
-    while(lo+1<hi){const auto m=lo+(hi-lo)/2;if(v.parameters[m].energy>energy)hi=m;else lo=m;}
-    const auto a=v.parameters[lo],b=v.parameters[hi];const float f=(energy-a.energy)/(b.energy-a.energy);
-    out.elastic_rate=1/(a.elastic_mfp+f*(b.elastic_mfp-a.elastic_mfp));
-    out.dedx=a.dedx+f*(b.dedx-a.dedx);out.range=a.range+f*(b.range-a.range);
-    // Hard rates are covered by the host interval certificate.
-    out.valid=std::isfinite(out.elastic_rate)&&out.elastic_rate>0&&std::isfinite(out.dedx)&&out.dedx>0&&std::isfinite(out.range)&&out.range>0;return out;
-}
+
 // Approximate inverse of the monotonic native restricted-range samples.
 // Return unsupported for sub-table ranges; never clamp energy to coverage.
-inline float charged_inverse_range(const ChargedResponseView& v,float range) {
-    if(!v.parameters||v.parameter_count<2||!std::isfinite(range)||range<v.parameters[0].range||range>v.parameters[v.parameter_count-1].range)return NAN;
-    unsigned lo=0,hi=v.parameter_count-1;
-    while(lo+1<hi){const auto m=lo+(hi-lo)/2;if(v.parameters[m].range>range)hi=m;else lo=m;}
-    const auto a=v.parameters[lo],b=v.parameters[hi];return a.energy+(range-a.range)/(b.range-a.range)*(b.energy-a.energy);
-}
+
 struct ChargedLoss {bool valid{},stopped{};float mean{},raw{},deposit{},remaining{};};
 // G4VEnergyLossProcess AlongStep accounting with PIXE/subcut disabled as in
 // the extraction. Cut and MaxSecondaryEnergy are model-specific: PenIoni
@@ -512,27 +414,16 @@ template<class Uniform,class Model>inline ChargedLoss sample_charged_loss(const 
     if(length>=p.range){out.valid=out.stopped=true;out.mean=out.raw=out.deposit=energy;return out;}
     if(length==0){out.valid=true;out.remaining=energy;return out;}
     out.mean=length*p.dedx;
-#ifdef CARBON_ELECTRON_FP64_LOSS_GATE
-    double precise_mean=double(length)*double(p.dedx);
-#endif
     if(out.mean>v.linear_loss_limit*energy){
         const float remaining=charged_inverse_range(v,p.range-length);
         if(!std::isfinite(remaining))return out;
-        const float loss=energy-remaining;if(loss>0){out.mean=loss;
-#ifdef CARBON_ELECTRON_FP64_LOSS_GATE
-            precise_mean=double(loss); // Nonlinear range result remains FP32.
-#endif
-        }
+        const float loss=energy-remaining;if(loss>0)out.mean=loss;
     }
     out.raw=out.mean;
     if(out.mean>=energy)out.raw=energy;
     else {
         const float tmax=energy<=.1f?energy:.5f*energy;
-        #ifdef CARBON_ELECTRON_FP64_LOSS_GATE
-        const auto sampled=sample_electron_urban_loss_precise_gate(v.urban,energy,out.mean,std::min(v.electron_cut,tmax),uniform,precise_mean);
-#else
         const auto sampled=sample_electron_urban_loss(v.urban,energy,out.mean,std::min(v.electron_cut,tmax),uniform);
-#endif
         if(!sampled.valid)return out;out.raw=sampled.loss;
     }
     const float final_energy=energy-out.raw;
@@ -549,27 +440,16 @@ template<class Uniform,class Model>inline ChargedLoss sample_charged_loss_prepar
     if(length>=p.range){out.valid=out.stopped=true;out.mean=out.raw=out.deposit=energy;return out;}
     if(length==0){out.valid=true;out.remaining=energy;return out;}
     out.mean=length*p.dedx;
-#ifdef CARBON_ELECTRON_FP64_LOSS_GATE
-    double precise_mean=double(length)*double(p.dedx);
-#endif
     if(out.mean>v.linear_loss_limit*energy){
         const float remaining=charged_inverse_range(v,p.range-length);
         if(!std::isfinite(remaining))return out;
-        const float loss=energy-remaining;if(loss>0){out.mean=loss;
-#ifdef CARBON_ELECTRON_FP64_LOSS_GATE
-            precise_mean=double(loss); // Nonlinear range result remains FP32.
-#endif
-        }
+        const float loss=energy-remaining;if(loss>0)out.mean=loss;
     }
     out.raw=out.mean;
     if(out.mean>=energy)out.raw=energy;
     else {
         const float tmax=energy<=.1f?energy:.5f*energy;
-        #ifdef CARBON_ELECTRON_FP64_LOSS_GATE
-        const auto sampled=sample_electron_urban_loss_precise_gate(v.urban,energy,out.mean,std::min(v.electron_cut,tmax),uniform,precise_mean);
-#else
         const auto sampled=sample_electron_urban_loss(v.urban,energy,out.mean,std::min(v.electron_cut,tmax),uniform);
-#endif
         if(!sampled.valid)return out;out.raw=sampled.loss;
     }
     const float final_energy=energy-out.raw;
@@ -578,138 +458,60 @@ template<class Uniform,class Model>inline ChargedLoss sample_charged_loss_prepar
     out.valid=true;return out;
 }
 struct ChargedCollision {bool valid{};std::int32_t pdg{};float energy{},cosine{};unsigned process{};};
-inline ChargedCollision sample_charged_collision(const ChargedResponseView& v,float energy,unsigned process,Draw u) {
-    ChargedCollision out;out.process=process;
-    if(process>=2||!std::isfinite(u)||u<0||u>=1||!std::isfinite(energy)||!v.edges||!v.bins||!v.channels||!v.outcomes||energy<v.edges[0]||energy>v.edges[v.bins])return out;
-    const float rate=charged_raw_rate(v,process,energy);if(!std::isfinite(rate)||rate<=0)return out;
-    unsigned lo=0,hi=v.bins;while(lo+1<hi){const auto m=lo+(hi-lo)/2;if(v.edges[m]>energy)hi=m;else lo=m;}
-    const auto ch=v.channels[2*lo+process];if(!ch.count||ch.offset>v.outcome_count||ch.count>v.outcome_count-ch.offset)return out;
-    auto a=ch.offset,b=a+ch.count-1;while(a<b){const auto m=a+(b-a)/2;if(u<v.outcomes[m].cdf)b=m;else a=m+1;}
-    const auto s=v.outcomes[a];out.energy=energy*s.fraction;out.cosine=s.cosine;out.pdg=s.pdg;out.valid=out.energy>0;return out;
-}
 
 // electron_charged_density.hpp
 
-// Interpolate mass stopping/range and mass cross sections between actual
-// density nodes in one composition, then restore the actual physical density.
-// Rates are mixed after native max(raw,0); conditional final states are then
-// mixed with process-rate weights, not with an unconditional density coin.
+// Production26 composition response at actual density; no density-node mixing.
 struct ChargedDensityModel {
     const electron_composition26::CollisionComposition26* composition26{};
     const electron_composition26::NativeGridRateView* rate26{};
-    const ElectronCutBirthComposition* moller26{};
-    const ChargedResponseView* lower{};const ChargedResponseView* upper{};float fraction{};
     int section{-1};float density{},electron_cut{},photon_cut{},lowest_energy{},linear_loss_limit{};
     ElectronUrbanMaterial urban{};ElectronElasticView elastic{};
 };
 // Node descriptions are immutable and outlive this borrowed model. Accept
 // pointers explicitly so a temporary view cannot silently leave dangling refs.
 inline ChargedDensityModel charged_density_model(const ChargedResponseView* lower,const ChargedResponseView* upper,float density) {
-    ChargedDensityModel out;if(!lower||!upper)return out;
-    const auto& low=*lower;const auto& high=*upper;
-    if(low.composition26){
-        if(low.section!=high.section||!std::isfinite(density)||density<low.density_low||density>low.density_high)return out;
+    ChargedDensityModel out;
+    if(!lower||!upper||!lower->composition26||!lower->rate26)return out;
+    const auto& low=*lower;const auto& high=*upper;if(low.section!=high.section||!std::isfinite(density)||density<low.density_low||density>low.density_high)return out;
         const auto scalar=electron_continuous_scalar(low.composition26->scalar,density,low.composition26->scalar.energy[0]);
         if(!scalar.valid)return out;
-        out.lower=lower;out.upper=lower;out.section=low.section;out.density=density;out.composition26=low.composition26;
-        out.rate26=low.rate26;out.moller26=low.moller26;out.urban=low.urban;out.elastic=low.elastic;
+        out.section=low.section;out.density=density;out.composition26=low.composition26;
+        out.rate26=low.rate26;out.urban=low.urban;out.elastic=low.elastic;
         out.lowest_energy=low.lowest_energy;out.linear_loss_limit=low.linear_loss_limit;
         // Explicit cut-fit approximation constrained to the extracted domain.
         out.electron_cut=std::clamp(scalar.electron_cut,out.rate26[0].cut_low,out.rate26[0].cut_high);
         out.photon_cut=std::clamp(scalar.photon_cut,out.rate26[1].cut_low,out.rate26[1].cut_high);return out;
-    }
-    if(low.section!=high.section||!std::isfinite(density)||density<low.density||density>high.density||low.density<=0||high.density<low.density)return out;
-    out.lower=lower;out.upper=upper;out.fraction=low.density==high.density?0:(density-low.density)/(high.density-low.density);
-    out.section=low.section;out.density=density;out.lowest_energy=low.lowest_energy;out.linear_loss_limit=low.linear_loss_limit;
-    out.electron_cut=low.electron_cut+out.fraction*(high.electron_cut-low.electron_cut);
-    out.photon_cut=low.photon_cut+out.fraction*(high.photon_cut-low.photon_cut);
-    // All82 extracted Urban constants are identical within each composition.
-    // Mott angular functions differ <1e-6 relatively across density nodes;
-    // use the lower-node angle law as an explicit, separately audited choice.
-    out.rate26=low.rate26;out.moller26=low.moller26;out.urban=low.urban;out.elastic=low.elastic;return out;
 }
 inline float charged_raw_rate(const ChargedDensityModel& m,unsigned process,float energy) {
-    if(!m.lower||!m.upper||m.section<0)return NAN;
-    // Low-energy Penelope rates remain paired with retained empirical
-    // terminals; changing rates alone can activate absent terminal bins.
-    if(m.rate26&&process<2&&(m.composition26||process==1||energy>.1f))return electron_composition26::native_grid_rate(m.rate26[process],m.density,
+    if(!m.composition26||!m.rate26||m.section<0||process>=2)return NAN;
+    return electron_composition26::native_grid_rate(m.rate26[process],m.density,
         process?m.photon_cut:m.electron_cut,energy);
-    const float low=charged_raw_rate(*m.lower,process,energy),high=charged_raw_rate(*m.upper,process,energy);
-    if(!std::isfinite(low)||!std::isfinite(high))return NAN;
-    return m.density*((1-m.fraction)*std::max(0.f,low)/m.lower->density+m.fraction*std::max(0.f,high)/m.upper->density);
 }
 inline ChargedParameters charged_parameters(const ChargedDensityModel& m,float energy) {
-    if(m.composition26){
-        const auto scalar=electron_continuous_scalar(m.composition26->scalar,m.density,energy);if(!scalar.valid)return {};
+    if(!m.composition26)return {};
+const auto scalar=electron_continuous_scalar(m.composition26->scalar,m.density,energy);if(!scalar.valid)return {};
         ChargedParameters out;out.valid=true;out.elastic_rate=scalar.elastic_rate;out.dedx=scalar.stopping;out.range=scalar.range;
         for(unsigned p=0;p<2;++p){out.hard_rate[p]=charged_raw_rate(m,p,energy);if(!std::isfinite(out.hard_rate[p]))return {};}
         return out;
-    }
-    if(!m.lower||!m.upper||m.section<0)return {};
-    const auto a=charged_parameters(*m.lower,energy),b=charged_parameters(*m.upper,energy);if(!a.valid||!b.valid||m.section<0)return {};
-    ChargedParameters out;const float f=m.fraction;
-    const float low_scale=(1-f)*m.density/m.lower->density,high_scale=f*m.density/m.upper->density;
-    out.elastic_rate=low_scale*a.elastic_rate+high_scale*b.elastic_rate;
-    out.dedx=low_scale*a.dedx+high_scale*b.dedx;
-    out.range=((1-f)*m.lower->density*a.range+f*m.upper->density*b.range)/m.density;
-    for(unsigned p=0;p<2;++p){out.hard_rate[p]=m.rate26?charged_raw_rate(m,p,energy):
-        low_scale*a.hard_rate[p]+high_scale*b.hard_rate[p];if(!std::isfinite(out.hard_rate[p]))return {};}out.valid=true;return out;
 }
 inline ChargedParameters charged_parameters_certified(const ChargedDensityModel& m,float energy) {
-    if(m.composition26){
-        const auto scalar=electron_continuous_scalar(m.composition26->scalar,m.density,energy);if(!scalar.valid)return {};
+    if(!m.composition26)return {};
+const auto scalar=electron_continuous_scalar(m.composition26->scalar,m.density,energy);if(!scalar.valid)return {};
         ChargedParameters out;out.valid=true;out.elastic_rate=scalar.elastic_rate;out.dedx=scalar.stopping;out.range=scalar.range;
         return out;
-    }
-    if(!m.lower||!m.upper||m.section<0)return {};
-    const auto a=charged_parameters_certified(*m.lower,energy),b=charged_parameters_certified(*m.upper,energy);if(!a.valid||!b.valid||m.section<0)return {};
-    ChargedParameters out;const float f=m.fraction;
-    const float low_scale=(1-f)*m.density/m.lower->density,high_scale=f*m.density/m.upper->density;
-    out.elastic_rate=low_scale*a.elastic_rate+high_scale*b.elastic_rate;
-    out.dedx=low_scale*a.dedx+high_scale*b.dedx;
-    out.range=((1-f)*m.lower->density*a.range+f*m.upper->density*b.range)/m.density;
-    out.valid=true;return out;
 }
 inline float charged_inverse_range(const ChargedDensityModel& m,float range) {
-    if(m.composition26)return electron_composition26::continuous_inverse_range26(m.composition26->scalar,m.density,range);
-    if(!m.lower||!m.upper||m.section<0||!std::isfinite(range)||m.lower->parameter_count<2||m.lower->parameter_count!=m.upper->parameter_count)return NAN;
-    const auto* a=m.lower->parameters;const auto* b=m.upper->parameters;const float f=m.fraction;
-    auto r=[&](unsigned i){return ((1-f)*m.lower->density*a[i].range+f*m.upper->density*b[i].range)/m.density;};
-    unsigned lo=0,hi=m.lower->parameter_count-1;if(range<r(lo)||range>r(hi))return NAN;
-    while(lo+1<hi){const auto mid=lo+(hi-lo)/2;if(r(mid)>range)hi=mid;else lo=mid;}
-    if(a[lo].energy!=b[lo].energy||a[hi].energy!=b[hi].energy)return NAN;
-    return a[lo].energy+(range-r(lo))/(r(hi)-r(lo))*(a[hi].energy-a[lo].energy);
-}
-inline ChargedCollision sample_charged_collision(const ChargedDensityModel& m,float energy,unsigned process,Draw u) {
-    if(!m.lower||!m.upper||m.section<0||!std::isfinite(u)||u<0||u>=1)return {};
-    const float lr=charged_raw_rate(*m.lower,process,energy),hr=charged_raw_rate(*m.upper,process,energy);
-    if(!std::isfinite(lr)||!std::isfinite(hr))return {};
-    const float a=(1-m.fraction)*std::max(0.f,lr)/m.lower->density,b=m.fraction*std::max(0.f,hr)/m.upper->density,total=a+b;if(total<=0)return {};
-    const float cut=a/total;
-    if(u<cut)return sample_charged_collision(*m.lower,energy,process,u.remap(0,probability_threshold(cut)));
-    if(b<=0)return {};
-    // Rounding can produce exactly1 when u<1; move the draw (not KE) to the
-    // greatest representable value below1, preserving inverse-CDF semantics.
-    return sample_charged_collision(*m.upper,energy,process,u.remap(probability_threshold(cut),UINT64_MAX));
+    if(!m.composition26)return NAN;
+    return electron_composition26::continuous_inverse_range26(m.composition26->scalar,m.density,range);
 }
 
 template<class Uniform,class Model>inline ChargedCollision sample_charged_collision_rng(const Model& m,float energy,unsigned process,Uniform& uniform){
     return sample_charged_collision(m,energy,process,uniform());
 }
 template<class Uniform>inline ChargedCollision sample_charged_collision_rng(const ChargedDensityModel& m,float energy,unsigned process,Uniform& uniform){
-    if(m.composition26){
-        const auto draw=electron_composition26::sample_collision_composition26(*m.composition26,energy,m.electron_cut,m.photon_cut,process,uniform);
+const auto draw=electron_composition26::sample_collision_composition26(*m.composition26,energy,m.electron_cut,m.photon_cut,process,uniform);
         return {draw.valid,draw.pdg,draw.energy,draw.cosine,process};
-    }
-    if(m.moller26&&process==0&&energy>.1f){
-        if(energy<=2.f*m.electron_cut)return {true,11,energy,1.f,process};
-        const auto pair=electron_composition26::sample_moller_pair(*m.moller26,energy,m.electron_cut,uniform);
-        if(!pair.valid)return {};
-        const bool secondary=float(uniform())<pair.secondary_energy/energy;
-        return {true,11,secondary?pair.secondary_energy:pair.primary_energy,
-            secondary?pair.secondary_cosine:pair.primary_cosine,process};
-    }
-    return sample_charged_collision(m,energy,process,uniform());
 }
 
 // electron_charged_bank.hpp
@@ -720,26 +522,19 @@ struct ChargedBankView {
 };
 struct ChargedDensityBracket {bool valid{};unsigned low{},high{};float fraction{};};
 inline ChargedDensityBracket charged_density_bracket(ChargedBankView bank,int section,float density){
-    if(!bank.nodes||!bank.node_order||!bank.section_offsets||section<0||section>=kElectronMaterialCount||!std::isfinite(density)||density<=0)return {};
+    if(!bank.nodes||!bank.node_order||!bank.section_offsets||bank.count!=26||section<0||section>=26||!std::isfinite(density)||density<=0)return {};
     const auto first=bank.section_offsets[section],end=bank.section_offsets[section+1];
-    if(bank.count==26&&first+1==end){const auto index=bank.node_order[first];const auto& v=bank.nodes[index];
-        if(v.composition26)return {density>=v.density_low&&density<=v.density_high,index,index,0.f};}
-
-    if(first>=end||end>bank.count||density<bank.nodes[bank.node_order[first]].density||density>bank.nodes[bank.node_order[end-1]].density)return {};
-    unsigned hi=first;while(hi+1<end&&bank.nodes[bank.node_order[hi]].density<density)++hi;
-    const unsigned lo=bank.nodes[bank.node_order[hi]].density==density?hi:hi-1;
-    const auto l=bank.node_order[lo],h=bank.node_order[hi];return {true,l,h,l==h?0:(density-bank.nodes[l].density)/(bank.nodes[h].density-bank.nodes[l].density)};
+    if(first+1!=end||end>bank.count)return {};
+    const auto index=bank.node_order[first];const auto& v=bank.nodes[index];
+    return {v.composition26&&density>=v.density_low&&density<=v.density_high,index,index,0.f};
 }
 inline std::array<float,2> charged_density_majorant(ChargedBankView bank,ChargedDensityBracket b,float density){
-    std::array<float,2> out{};if(!b.valid||!bank.majorants)return out;
-    const auto model=charged_density_model(bank.nodes+b.low,bank.nodes+b.high,density);
-    if(model.composition26){for(unsigned p=0;p<2;++p)out[p]=electron_composition26::native_grid_cut_majorant(model.rate26[p],density,p?model.photon_cut:model.electron_cut);return out;}
-    if(model.rate26){for(unsigned p=0;p<2;++p)out[p]=electron_composition26::native_grid_cut_majorant(
+    std::array<float,2> out{};
+    if(!b.valid)return out;
+    const auto model=charged_density_model(bank.nodes+b.low,bank.nodes+b.low,density);
+    if(!model.composition26||!model.rate26)return out;
+    for(unsigned p=0;p<2;++p)out[p]=electron_composition26::native_grid_cut_majorant(
         model.rate26[p],density,p?model.photon_cut:model.electron_cut);
-        // The same process clock also covers retained below100keV rates.
-        out[0]=std::max(out[0],density*((1-b.fraction)*bank.majorants[b.low][0]/bank.nodes[b.low].density+
-            b.fraction*bank.majorants[b.high][0]/bank.nodes[b.high].density));return out;}
-    for(unsigned p=0;p<2;++p)out[p]=density*((1-b.fraction)*bank.majorants[b.low][p]/bank.nodes[b.low].density+b.fraction*bank.majorants[b.high][p]/bank.nodes[b.high].density);
     return out;
 }
 
@@ -777,12 +572,6 @@ struct ChargedStep {
     ChargedStepStatus status{ChargedStepStatus::invalid};Position position{};std::array<float,3> direction{};
     float energy{};Coordinate length{};float raw_loss{},physical_deposit{};
     bool face{},elastic{},hard_proposal{},hard_collision{},stopped{};unsigned process{};
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-    unsigned limiter_mask{};
-#endif
-    // Expected-value scoring only: deposited fraction of E and its sampled
-    // along-step point. Zero unless the caller requested expected scoring.
-    float ev_fraction{};Position ev_position{};
 };
 // Single-energy-weighted-packet step: W remains unchanged. Sample the branch
 // using soft-loss/E, then all positive hard parent/child/local outcomes.
@@ -795,7 +584,7 @@ struct ChargedStep {
 template<class Uniform,class Model>inline ChargedStep transport_charged_step(const Model& model,
     const ElectronCtGeometry& geometry,Position start,std::array<float,3> direction,
     float energy,const std::array<float,2>& hard_majorant,Uniform& uniform,
-    float maximum_step=.05f,float mean_loss_fraction=.005f,bool expected=false) {
+    float maximum_step=.05f,float mean_loss_fraction=.005f) {
     ChargedStep out;out.position=start;out.direction=direction;out.energy=energy;
     if(!std::isfinite(energy)||energy<=0||!std::isfinite(maximum_step)||maximum_step<=0||maximum_step>.25f||!std::isfinite(mean_loss_fraction)||mean_loss_fraction<=0||mean_loss_fraction>.01f)return out;
     const auto face=next_charged_face(geometry,start,direction);if(!face.valid)return out;
@@ -804,17 +593,10 @@ template<class Uniform,class Model>inline ChargedStep transport_charged_step(con
     // density interpolation must be supplied and independently validated.
     if(face.section!=model.section||float(face.density)!=model.density){out.status=ChargedStepStatus::coverage_missing;return out;}
     if(energy<=model.lowest_energy){out.physical_deposit=energy;out.stopped=true;out.status=ChargedStepStatus::deposited;return out;}
-    #ifdef CARBON_ELECTRON_CERTIFIED_RATES
     const auto p=charged_parameters_certified(model,energy);
-#else
-    const auto p=charged_parameters(model,energy);
-#endif
     if(!p.valid){out.status=ChargedStepStatus::coverage_missing;return out;}
     float hard=0;for(unsigned k=0;k<2;++k){
         if(!std::isfinite(hard_majorant[k])||hard_majorant[k]<0)return out;
-#ifndef CARBON_ELECTRON_CERTIFIED_RATES
-        if(hard_majorant[k]<p.hard_rate[k])return out;
-#endif
         hard+=hard_majorant[k];
     }
     const float rate=p.elastic_rate+hard;
@@ -822,33 +604,16 @@ template<class Uniform,class Model>inline ChargedStep transport_charged_step(con
     const float flight=-std::log(u)/rate;
     out.length=std::min(std::min(Coordinate(maximum_step),Coordinate(mean_loss_fraction*energy/p.dedx)),std::min(Coordinate(p.range),std::min(face.distance,Coordinate(flight))));
     if(!std::isfinite(out.length)||out.length<=0)return out;
-    #ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-    // Exact ties remain a bitmask: max step, mean loss, range, face, flight.
-    out.limiter_mask=(out.length==maximum_step?1u:0u)
-        |(out.length==mean_loss_fraction*energy/p.dedx?2u:0u)
-        |(out.length==p.range?4u:0u)|(out.length==face.distance?8u:0u)
-        |(out.length==flight?16u:0u);
-#endif
     out.face=out.length==face.distance;
     if(out.face)out.position=face.position;else for(unsigned k=0;k<3;++k)out.position[k]=start[k]+out.length*direction[k];
-    #ifdef CARBON_ELECTRON_REUSE_PARAMETERS
     const auto loss=sample_charged_loss_prepared(model,energy,out.length,uniform,p);
-#else
-    const auto loss=sample_charged_loss(model,energy,out.length,uniform);
-#endif
     if(!loss.valid){out.status=ChargedStepStatus::coverage_missing;return out;}
     out.raw_loss=loss.raw;out.physical_deposit=loss.deposit;out.stopped=loss.stopped;
     const auto branch=uniform();if(!std::isfinite(branch)||branch<0||branch>=1)return out;
-    if((!expected&&branch<loss.deposit/energy)||loss.stopped){
+    if(branch<loss.deposit/energy||loss.stopped){
         const float along=uniform();if(!std::isfinite(along)||along<0||along>=1)return out;
         for(unsigned k=0;k<3;++k)out.position[k]=start[k]+along*out.length*direction[k];
         out.status=ChargedStepStatus::deposited;return out;
-    }
-    if(expected){
-        // Expected-value scoring of the packet branch: the unconditioned branch
-        // draw is the uniform along-step point; all later draws are unchanged.
-        out.ev_fraction=loss.deposit/energy;
-        for(unsigned k=0;k<3;++k)out.ev_position[k]=start[k]+branch*out.length*direction[k];
     }
     out.energy=loss.remaining;
     if(out.length!=flight||out.face){out.status=ChargedStepStatus::continued;return out;}
@@ -879,55 +644,21 @@ template<class Uniform,class Model>inline ChargedStep transport_charged_step(con
 
 // electron_charged_packet.hpp
 
-template<class Uniform,class Tally,class Score=NoExpectedScore>
+template<class Uniform,class Tally>
 inline ElectronEnergyPacket transport_independent_charged_packet(ElectronEnergyPacket packet,
-    ChargedBankView bank,const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally,
-    Score&& score=Score{},float expected_density=-1.f,float expected_min_energy=0.f){
+    ChargedBankView bank,const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally){
     tally(0,1);
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-    const float diagnostic_energy=packet.cursor.energy_MeV;
-    const unsigned energy_bin=diagnostic_energy<1e-4f?0u:diagnostic_energy<1e-3f?1u:
-        diagnostic_energy<1e-2f?2u:diagnostic_energy<1e-1f?3u:diagnostic_energy<1.f?4u:5u;
-    // One matrix entry per charged call, including pre-step exits. No RNG draws.
-    const auto diagnostic=[&](unsigned mask,unsigned event){tally(8+(energy_bin*32+mask)*8+event,1);};
-#endif
     const auto face=next_charged_face(geometry,packet.cursor.position,packet.cursor.direction);
     if(!face.valid){
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-        diagnostic(0,7);
-#endif
         packet.status=ElectronPacketStatus::invalid;tally(7,1);return packet;}
     if(face.escaped){
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-        diagnostic(0,5);
-#endif
         packet.status=ElectronPacketStatus::escaped;return packet;}
     const auto bracket=charged_density_bracket(bank,face.section,face.density);
     if(!bracket.valid){
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-        diagnostic(0,6);
-#endif
         packet.status=ElectronPacketStatus::invalid;tally(6,1);return packet;}
     const auto model=charged_density_model(bank.nodes+bracket.low,bank.nodes+bracket.high,face.density);
-    // Expected scoring is selected by the current voxel; it never alters steps.
-    const bool expected=face.density<=expected_density&&packet.cursor.energy_MeV>=expected_min_energy;
     const auto result=transport_charged_step(model,geometry,packet.cursor.position,packet.cursor.direction,
-        packet.cursor.energy_MeV,charged_density_majorant(bank,bracket,face.density),uniform,.05f,.005f,expected);
-    if(result.ev_fraction>0){
-        // Exact telescoping split: scored + remaining == previous weight.
-        const float w=packet.weight_MeV,rest=w-w*result.ev_fraction;
-        score(result.ev_position,w-rest);packet.weight_MeV=rest;
-    }
-    #ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-    // A flight-limited soft-loss termination never draws an event category;
-    // keep it deposited rather than inventing an elastic/hard classification.
-    const unsigned event=result.status==ChargedStepStatus::invalid?7u:
-        result.status==ChargedStepStatus::coverage_missing?6u:
-        result.status==ChargedStepStatus::escaped?5u:
-        result.hard_collision?3u:result.hard_proposal?2u:result.elastic?1u:
-        result.status==ChargedStepStatus::deposited?4u:0u;
-    diagnostic(result.limiter_mask,event);
-#endif
+        packet.cursor.energy_MeV,charged_density_majorant(bank,bracket,face.density),uniform,.05f,.005f);
     packet.cursor.section=face.section;packet.cursor.density_g_cm3=face.density;packet.cursor.physical_density_g_cm3=face.density;
     packet.cursor.position=result.position;packet.cursor.direction=result.direction;packet.cursor.energy_MeV=result.energy;
     packet.cursor.row=kElectronContinuationEnd;++packet.advances;
@@ -1094,16 +825,11 @@ struct PhotonResponseBankView {
 };
 struct PhotonDensityBracket {bool valid{};unsigned low{},high{};float upper_weight{};};
 inline PhotonDensityBracket photon_density_bracket(PhotonResponseBankView bank,int section,float density) {
-    PhotonDensityBracket out;
-    if(!bank.nodes||!bank.section_offsets||section<0||section>=kElectronMaterialCount||!std::isfinite(density)||density<=0)return out;
+    if(!bank.nodes||!bank.section_offsets||bank.count!=26||section<0||section>=26||!std::isfinite(density)||density<=0)return {};
     const auto first=bank.section_offsets[section],end=bank.section_offsets[section+1];
-    if(bank.count==26&&first+1==end&&bank.nodes[first].density_low>0.f){const auto& v=bank.nodes[first];
-        return {density>=v.density_low&&density<=v.density_high,first,first,0.f};}
-
-    if(first>=end||end>bank.count||density<bank.nodes[first].density||density>bank.nodes[end-1].density)return out;
-    unsigned hi=first;while(hi+1<end&&bank.nodes[hi].density<density)++hi;
-    const unsigned lo=bank.nodes[hi].density==density?hi:hi-1;
-    out={true,lo,hi,lo==hi?0:(density-bank.nodes[lo].density)/(bank.nodes[hi].density-bank.nodes[lo].density)};return out;
+    if(first+1!=end||end>bank.count)return {};
+    const auto& v=bank.nodes[first];
+    return {density>=v.density_low&&density<=v.density_high,first,first,0.f};
 }
 inline PhotonAttenuation photon_bank_attenuation(PhotonResponseBankView bank,int section,float density,float energy) {
     const auto bracket=photon_density_bracket(bank,section,density);if(!bracket.valid)return {};
@@ -1139,9 +865,9 @@ inline IndependentPhotonResult transport_independent_photon(PhotonResponseBankVi
         const float density_u=uniform();if(!std::isfinite(density_u)||density_u<0||density_u>=1)return out;
         out.node=density_u<bracket.upper_weight?bracket.high:bracket.low;
         const auto model=bank.nodes[out.node];
-        // Optical depth used actual density. Collision final-state tables at
-        // bracketing cut/density nodes are mixed with their geometric weights.
-        // This finite-density interpolation remains an explicit approximation.
+        // Optical depth uses actual density; conditional final states use the
+        // composition calibration law. Retain the degenerate density draw
+        // to preserve the established RNG sequence.
         const float process_u=uniform();const auto outcome_u=uniform();const float azimuth_u=uniform();
         const auto draw=sample_photon_collision(model,model.section,model.density,out.energy,
             {out.direction[0],out.direction[1],out.direction[2]},process_u,outcome_u,azimuth_u);
@@ -1155,52 +881,9 @@ inline IndependentPhotonResult transport_independent_photon(PhotonResponseBankVi
     return out; // iteration cap is a failure, never dose/escape
 }
 
-// electron_birth_bank.hpp
-
-struct ElectronBirthChannel {float low{},high{},fraction{};std::uint64_t offset{},count{};};
+// Actual-cut birth26 output and shared direction construction.
 struct ElectronBirthStateSample {Probability cdf{};float energy{},cosine{};};
-struct ElectronBirthNodeView {
-    int section{-1};float density{};
-    const ElectronBirthChannel* channels{};const ElectronBirthStateSample* samples{};
-    std::uint64_t sample_count{};unsigned channel_count{};
-};
-struct ElectronBirthBankView {
-    const ElectronBirthNodeView* nodes{};unsigned count{};
-    const unsigned* section_offsets{};
-};
-struct IndependentElectronBirthDraw {
-    bool valid{};float fraction{};unsigned node{};
-};
-inline const ElectronBirthChannel* electron_birth_channel(const ElectronBirthNodeView& n,float energy) {
-    if(!n.channels || !n.channel_count || !std::isfinite(energy) || energy<n.channels[0].low || energy>n.channels[n.channel_count-1].high)return nullptr;
-    unsigned lo=0,hi=n.channel_count;
-    while(lo+1<hi){const auto mid=lo+(hi-lo)/2;if(n.channels[mid].low<=energy)lo=mid;else hi=mid;}
-    const auto* c=n.channels+lo;return energy<=c->high?c:nullptr;
-}
-// Birth yield and joint (energy,angle) are separately measured at every density
-// node. Only geometry in the electron propagation bank is density-scaled.
-inline IndependentElectronBirthDraw prepare_independent_electron_birth(
-    ElectronBirthBankView bank,int section,float density,float energy,float mix) {
-    IndependentElectronBirthDraw out;
-    if(!bank.nodes||!bank.section_offsets||section<0||section>=kElectronMaterialCount||!std::isfinite(density)||density<=0||!std::isfinite(mix)||mix<0||mix>=1)return out;
-    const auto first=bank.section_offsets[section],end=bank.section_offsets[section+1];
-    if(first>=end||end>bank.count||density<bank.nodes[first].density||density>bank.nodes[end-1].density)return out;
-    unsigned hi=first;while(hi+1<end&&bank.nodes[hi].density<density)++hi;
-    const auto lo=bank.nodes[hi].density==density?hi:hi-1;
-    const auto* a=electron_birth_channel(bank.nodes[lo],energy);const auto* b=electron_birth_channel(bank.nodes[hi],energy);
-    if(!a||!b)return out;
-    const float blend=lo==hi?0:(density-bank.nodes[lo].density)/(bank.nodes[hi].density-bank.nodes[lo].density);
-    const float left=(1-blend)*a->fraction,right=blend*b->fraction,total=left+right;
-    if(!std::isfinite(total)||total<0||total>1)return out;
-    out.node=(right>0&&(left==0||mix>=left/total))?hi:lo;out.fraction=total;out.valid=true;return out;
-}
-inline ElectronBirthStateSample sample_independent_electron_birth(const ElectronBirthNodeView& n,float energy,Draw u) {
-    const auto* c=electron_birth_channel(n,energy);
-    if(!c||!std::isfinite(u)||u<0||u>=1||!c->count||!n.samples||c->offset>n.sample_count||c->count>n.sample_count-c->offset)return {};
-    auto lo=c->offset,hi=lo+c->count-1;
-    while(lo<hi){const auto mid=lo+(hi-lo)/2;if(u<n.samples[mid].cdf)hi=mid;else lo=mid+1;}
-    return n.samples[lo];
-}
+struct ElectronBirthPartition {bool valid{};float fraction{};unsigned node{};};
 inline joint_math::V independent_electron_direction(
     joint_math::V parent,float cosine,float spin) {
     using namespace joint_math;
@@ -1235,11 +918,10 @@ inline bool joint_homogeneous(const ElectronCtGeometry& g,const Position& p,
 }
 // Counters: eligible, started, advances, fallback, below-table terminal draws,
 // deposited, escaped, photon gap, invalid. W stays with the original packet.
-template<class Uniform,class Tally,class Score=NoExpectedScore>
+template<class Uniform,class Tally>
 inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
     ElectronJointPilotView pilot,const ElectronMaterialIdentity& material,
-    const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally,
-    Score&& score=Score{},float expected_density=-1.f,float expected_min_energy=0.f) {
+    const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally) {
     using namespace joint_math;
     if(pilot.sections) {
         if(material.section<0 || unsigned(material.section)>=pilot.section_count)return packet;
@@ -1323,36 +1005,6 @@ inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
         }
         ++packet.advances;tally(2,1);
         const auto coin=uniform();
-        if(pdg==11 && f[0]<1 && packet.cursor.physical_density_g_cm3<=expected_density && energy>=expected_min_energy) {
-            // Expected-value estimator of the energy-packet branch: score the
-            // conditional mean W*f0 at a uniform chord point, keep W(1-f0) and
-            // select a surviving branch with probability f[c]/(1-f0).
-            if(f[0]>0) {
-                const float along=uniform();const auto at=p+along*delta;
-                const float w=packet.weight_MeV,rest=w-w*f[0];
-                score(Position{at.x,at.y,at.z},w-rest);packet.weight_MeV=rest;
-            }
-            const float x=(f[1]+f[2]+f[3])*coin;
-            unsigned channel=1;float cumulative=f[1];
-            while(channel<3 && (x>=cumulative || !(f[channel]>0))){++channel;cumulative+=f[channel];}
-            while(channel>1 && !(f[channel]>0))--channel;
-            p=endpoint;
-            if(!(f[channel]>0))return invalid();
-            energy*=f[channel];
-            if(channel==1) {
-                if(exact) {
-                    cursor=g->next;
-                    if(cursor==-2)d=rotate(target,project(original,g->postdir));
-                    else if(cursor<0)return invalid();
-                }else d=rotate(sample_frame,s->post);
-            }else {
-                cursor=exact?g->child[channel-2]:s->child[channel-2];
-                if(cursor<0 || std::uint32_t(cursor)>=m.graph_count)return invalid();
-                if(m.graph[cursor].pdg==22)++packet.photon_children;else ++packet.electron_children;
-                if(!exact){original=basis(s->source);target=sample_frame;}
-            }
-            continue;
-        }
         const auto* cuts=exact?g->cuts:s->cuts;
         if(coin<Probability{cuts[0]}) {
             p=p+(pdg==11?uniform():1.f)*delta;
@@ -1381,13 +1033,12 @@ inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
 }
 // This overload needs only the physical material identity; it never binds a
 // material continuation record on leaving homogeneous joint support.
-template<class Uniform,class Tally,class Score=NoExpectedScore>
+template<class Uniform,class Tally>
 inline ElectronEnergyPacket transport_joint_independent(ElectronEnergyPacket packet,
-    ElectronJointPilotView pilot,const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally,
-    Score&& score=Score{},float expected_density=-1.f,float expected_min_energy=0.f){
+    ElectronJointPilotView pilot,const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally){
     ElectronMaterialIdentity identity{};identity.section=packet.cursor.section;
     identity.density_g_cm3=packet.cursor.physical_density_g_cm3;
-    return transport_joint_pilot(packet,pilot,identity,geometry,uniform,tally,score,expected_density,expected_min_energy);
+    return transport_joint_pilot(packet,pilot,identity,geometry,uniform,tally);
 }
 
 } // namespace carbon::electron_fp32

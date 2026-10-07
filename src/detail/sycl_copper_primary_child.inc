@@ -184,7 +184,7 @@ while (child_energy > energy_cutoff_MeV &&
                 auto uniform = [&]() { return (rng::random_u32(
                     spot_seed, child_rng_stream, (std::uint64_t(child_step) << 32) | draw_index++, 124) >> 8) * 0x1p-24f; };
                 const auto draw = copper_proton_total_fluctuation(
-                    child_energy, product.rest_mass, mean_child_loss, child_transport_path, minibeam_copper_density, uniform, copper_proton_finite_cut);
+                    child_energy, product.rest_mass, mean_child_loss, child_transport_path, minibeam_copper_density, uniform);
                 sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                     sycl::memory_scope::device, sycl::access::address_space::global_space>(
                     minibeam_event_counts_device[draw.valid ? copper_proton_fragment_loss_slot : copper_proton_loss_failure_slot]).fetch_add(1U);
@@ -341,10 +341,6 @@ while (child_energy > energy_cutoff_MeV &&
                         const auto& cascade_product =
                             minibeam_copper_products_device[
                                 cascade_flat];
-                        record_neutron_birth(neutron_birth_buffer,cascade_product,
-                            child_x,child_y,child_z,child_direction,fragment_cos,fragment_sin,
-                            global_history,child_rng_stream,child_step,cascade_index,1,
-                            -2,product.z,product.a);
                         replay_product_energy += sycl::fmax(
                             0.0F,
                             cascade_product.kinetic_energy_MeV);
@@ -780,7 +776,6 @@ if (secondary_queue_device != nullptr) {
         child.birth_region =
             minibeam_birth_region_copper;
         secondary_queue_device[output] = child;
-#if defined(CARBON_ENABLE_MINIBEAM)
         if (minibeam_fragment_phase_space_device != nullptr) {
             sycl::atomic_ref<
                 std::uint32_t,
@@ -806,7 +801,6 @@ if (secondary_queue_device != nullptr) {
                     phase_index] = record;
             }
         }
-#endif
         queued_energy += child_energy;
         sycl::atomic_ref<
             std::uint64_t,

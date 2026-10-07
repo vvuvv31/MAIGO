@@ -5,20 +5,20 @@
 
 namespace carbon {
 // G4_Cu constants queried from Geant4 11.3.2, not dose-fit coefficients.
-// Proton-only G4UniversalFluctuation with either cut=tmax (diagnostic) or
-// the native 0.05 mm Cu production cut plus compound-Poisson delta transfers.
+// Proton-only G4UniversalFluctuation with the native 0.05 mm Cu production
+// cut plus compound-Poisson delta transfers.
 // Delta energies are removed from the proton; electrons are not transported.
 // Finite-cut validation: evidence/copper_loss_20260927/finite_slab_comparison.json.
 template<class Uniform>
 RestrictedFluctuationDraw<float> copper_proton_total_fluctuation(
     float kinetic, float mass, float mean, float length, float density,
-    Uniform& uniform, bool finite_cut = false, float restricted_mean = -1.f) {
+    Uniform& uniform, float restricted_mean = -1.f) {
     // An optional native AlongStep mean is already restricted to the cut.
     // Add the separately sampled delta mean only for the bookkeeping below.
     if (restricted_mean >= 0.f) mean = restricted_mean;
     if (!(kinetic>0 && mass>0 && mean>=0 && length>=0 && density>0) ||
         !std::isfinite(kinetic+mass+mean+length+density)) return {};
-    if (finite_cut && std::abs(density-8.96f)>1e-5f) return {};
+    if (std::abs(density-8.96f)>1e-5f) return {};
     if (mean==0 || length==0) return {0.f,true};
     constexpr float electron_mass=.51099891f;
     const float tau=kinetic/mass;
@@ -28,7 +28,7 @@ RestrictedFluctuationDraw<float> copper_proton_total_fluctuation(
     // 2*pi*r_e^2*m_e times native electron density (1/mm^3).
     constexpr float classical_electron_radius_mm=2.8179403262e-12f;
     constexpr float electron_density_per_mm3=2.4624709586328329e21f;
-    const float cut=finite_cut ? std::min(tmax,.16144811353831331f) : tmax;
+    const float cut=std::min(tmax,.16144811353831331f);
     const float variance=(tmax/beta2-.5f*cut)*
         (6.283185307179586f*electron_mass*classical_electron_radius_mm*
          classical_electron_radius_mm*electron_density_per_mm3)*length*(density/8.96f);

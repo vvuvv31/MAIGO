@@ -1,0 +1,13 @@
+{
+  "changed_files": [
+    "src/config.cpp",
+    "src/neutron_package.cpp",
+    "src/neutron_transport_sycl.cpp",
+    "include/carbon/neutron_package.hpp",
+    "scripts/check_interfaces.py",
+    "scripts/check_package_contracts.py"
+  ],
+  "runtime_added_lines": 18,
+  "runtime_removed_lines": 48,
+  "runtime_net_removed_lines": 30
+}

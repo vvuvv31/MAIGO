@@ -186,15 +186,15 @@ def synthesize(bases,metadata,output,delta_output):
         response_compositions=26,density_residual_tables=0,materials=len(mats),species=ns,nodes=nn,segments=voff,
         em_package=str(output),delta_package=str(delta_output),elapsed_seconds=time.monotonic()-start,
         no_target_response_input=True,default_promoted=False)
-    output.with_suffix('.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2),flush=True)
+    output.with_suffix('.metadata.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2),flush=True)
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);sub=p.add_subparsers(dest='command',required=True)
     e=sub.add_parser('extract');e.add_argument('--source',type=Path,required=True);e.add_argument('--output',type=Path,required=True)
     e.add_argument('--lossless',action='store_true',help='Lossless ZIP compression; no change to stored FP32 arrays')
     m=sub.add_parser('material-inputs');m.add_argument('--bases',type=Path,required=True)
-    m.add_argument('--section-metadata',type=Path,default=Path('data/schneider/schneider_stopping_v1.metadata.json'));m.add_argument('--output',type=Path,required=True)
-    s=sub.add_parser('synthesize');s.add_argument('--bases',type=Path,default=Path('data/archive/ion_em_analytic_expanded_20261005/ion_em_26_composition_bases.npz'));s.add_argument('--metadata',type=Path,default=Path('data/archive/ion_em_analytic_expanded_20261005/ion_em_analytic_density_metadata.txt'))
+    m.add_argument('--section-metadata',type=Path,default=Path('data/stopping/schneider/carbon.metadata.json'));m.add_argument('--output',type=Path,required=True)
+    s=sub.add_parser('synthesize');s.add_argument('--bases',type=Path,required=True);s.add_argument('--metadata',type=Path,required=True)
     s.add_argument('--output',type=Path,required=True);s.add_argument('--delta-output',type=Path,required=True)
     a=p.parse_args()
     if a.command=='extract':extract(a.source,a.output,a.lossless)

@@ -41,9 +41,7 @@ std::size_t SchneiderRateTable::target_index_from_z(int target_z) {
 
 SchneiderRateTable SchneiderRateTable::from_binary(
     const std::filesystem::path& binary_path,
-    const std::filesystem::path& metadata_path,
-    const std::string& expected_magic,
-    std::uint32_t expected_version) {
+    const std::filesystem::path& metadata_path) {
     std::ifstream in(binary_path, std::ios::binary);
     if (!in) {
         throw std::runtime_error("Cannot open Schneider rate binary file: " + binary_path.string());
@@ -55,12 +53,11 @@ SchneiderRateTable SchneiderRateTable::from_binary(
         throw std::runtime_error("Truncated header in Schneider rate binary: " + binary_path.string());
     }
 
-    if (std::strncmp(header.magic, expected_magic.c_str(), 8) != 0 ||
-        std::strlen(expected_magic.c_str()) != 8) {
+    if (std::memcmp(header.magic, "SCHNRATE", 8) != 0) {
         throw std::runtime_error("Invalid magic in Schneider rate binary: " + binary_path.string());
     }
     // Only the current domain-masked rate schema is supported.
-    if (header.version != expected_version) {
+    if (header.version != 3) {
         throw std::runtime_error("Schneider rate version mismatch in: " + binary_path.string());
     }
     if (header.num_sections != kSchneiderNumSections) {
@@ -163,7 +160,7 @@ SchneiderRateTable SchneiderRateTable::from_binary(
     }
 
     // Companion metadata requires the full schema with binary<->metadata equality on
-    // filename, SHA, magic, version, target order, grid, and domains.
+    // filename, magic, version, target order, grid, and domains.
     std::filesystem::path resolved_meta = metadata_path;
     if (resolved_meta.empty()) {
         const std::string s = binary_path.string();
@@ -185,7 +182,7 @@ SchneiderRateTable SchneiderRateTable::from_binary(
         {
             minjson::Parser parser(meta_content);
             const minjson::Value meta = parser.parse();
-            if (meta.contains("projectile")) {
+            {
                 const auto& projectile = meta.at("projectile");
                 const auto z = minjson::require_uint(projectile.at("z"), "projectile.z");
                 const auto a = minjson::require_uint(projectile.at("a"), "projectile.a");
@@ -202,7 +199,7 @@ SchneiderRateTable SchneiderRateTable::from_binary(
                                          binary_path.filename().string() + "'");
             }
             const std::string magic = minjson::require_string(meta.at("binary_magic"), "binary_magic");
-            if (magic != expected_magic) {
+            if (magic != "SCHNRATE") {
                 throw std::runtime_error("SchneiderRateTable: metadata binary_magic mismatch: " + magic);
             }
             if (minjson::require_uint(meta.at("binary_version"), "binary_version") != header.version) {

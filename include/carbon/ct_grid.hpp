@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -39,7 +40,6 @@ struct SchneiderMaterialTable {
     std::array<SchneiderElement, element_count> elements{};
     std::array<SchneiderMaterialSection, section_count> sections{};
 
-    static SchneiderMaterialTable builtin();
     static SchneiderMaterialTable from_topas_file(const std::filesystem::path& path);
     [[nodiscard]] std::uint8_t section_id(int hu) const noexcept;
 };
@@ -50,18 +50,13 @@ struct SchneiderMaterialTable {
 //   z: patient inferior/superior, normal to the axial slices
 // Beam direction is independent of these axes. Clinical transport must rotate
 // the source, not repack the CT so that a beam happens to point along +z.
-// Legacy angle-specific CCTG files may still contain a beam-repacked volume;
-// their metadata identifies the axis mapping and they are compatibility input.
+// Production input requires CCTG v3 with all 25 Schneider compositions.
 // File magic "CCTG" little-endian.
-// v1: density float[] + material_id uint8[] (legacy 4-class 0..3)
-// v2: + n u32 + mass_sp_factor float[n]  (energy-independent Z/A factor)
 // v3: + n u32 + za_rel float[n] + I_eV float[n]
 //     SP = SP_water(E) * mass_sp_energy_factor(za,I,E) * density
 struct CtGrid {
     static constexpr std::uint32_t magic_value = 0x47544343U;  // 'CCTG'
     static constexpr std::uint32_t version_value = 3U;
-    static constexpr std::uint32_t version_v2 = 2U;
-    static constexpr std::uint32_t version_legacy = 1U;
 
     std::uint32_t nx{0};
     std::uint32_t ny{0};
@@ -73,14 +68,11 @@ struct CtGrid {
     float spacing_y_mm{1.0F};
     float spacing_z_mm{1.0F};
     std::vector<float> density_g_per_cm3{};
-    // v1: 0=air..3=bone; v2/v3: Schneider section index
     std::vector<std::uint8_t> material_id{};
     // (Z/A)_section / (Z/A)_water  — high-energy limit mass-SP factor
     std::vector<float> mass_sp_za_rel{};
     // Bragg mean excitation energy I [eV] per Schneider section
     std::vector<float> mass_sp_I_eV{};
-    // Legacy constant factors (filled for v2 / diagnostics)
-    std::vector<float> mass_sp_factor{};
     std::uint32_t file_version{version_value};
 
     [[nodiscard]] std::size_t number_of_voxels() const noexcept {
@@ -101,91 +93,20 @@ struct CtGrid {
     }
 
     [[nodiscard]] bool has_mass_sp_factors() const noexcept {
-        return !mass_sp_za_rel.empty() || !mass_sp_factor.empty();
+        return mass_sp_za_rel.size() == 25 && mass_sp_I_eV.size() == 25;
     }
 
     [[nodiscard]] bool uses_schneider_mass_sp() const noexcept {
-        return file_version != version_legacy && has_mass_sp_factors();
+        return file_version == version_value && has_mass_sp_factors();
     }
 
     static CtGrid from_binary(const std::filesystem::path& path);
     static CtGrid from_config(const TransportConfig& config);
     // File: CCTG binary. Directory or .dcm: CT Image series + Schneider HU map.
-    static CtGrid load(const std::filesystem::path& path,
-                       const std::filesystem::path& schneider_file = {},
-                       std::string_view origin_mode = "centered");
-    static CtGrid from_dicom_directory(const std::filesystem::path& directory,
-                                       const std::filesystem::path& schneider_file = {},
-                                       std::string_view origin_mode = "centered");
+    static CtGrid load(const std::filesystem::path& path);
+
     void write_binary(const std::filesystem::path& path) const;
 };
-
-struct SchneiderHuTable {
-    std::vector<int> density_hu_edges;
-    std::vector<double> density_offset;
-    std::vector<double> density_factor;
-    std::vector<double> density_factor_offset;
-    std::vector<double> density_correction;
-    int density_correction_hu0{-1000};
-    std::vector<int> material_hu_edges;
-    std::vector<float> za_rel;
-    std::vector<float> I_eV;
-
-    static SchneiderHuTable builtin();
-    static SchneiderHuTable from_topas_file(const std::filesystem::path& path);
-    [[nodiscard]] float density_g_per_cm3(float hu) const noexcept;
-    [[nodiscard]] std::uint8_t section_id(float hu) const noexcept;
-};
-
-float hu_to_density_g_per_cm3(float hu) noexcept;
-std::uint8_t density_to_material_id(float density_g_per_cm3) noexcept;
-
-// Collapse TOPAS/Schneider sections to the legacy material tables used by the
-// current CT XS/SP implementation. Schneider bounds are:
-//   0 air, 1 lung, 2..8 soft tissue/water-like, 9+ bone-like.
-// Section 8 is HU 80..120 in the TOPAS Schneider table and retains a
-// soft-tissue composition. Section 9 (HU 120..200) is the first material with
-// a substantial calcium fraction and is the bone-family boundary.
-// CCTG v1 already stores these four class IDs directly.
-inline std::uint8_t ct_material_class(const std::uint8_t material_id,
-                                      const bool schneider_section_id) noexcept {
-    if (!schneider_section_id) {
-        return material_id < 4U ? material_id : 3U;
-    }
-    if (material_id == 0U) {
-        return 0U;
-    }
-    if (material_id == 1U) {
-        return 1U;
-    }
-    return material_id < 9U ? 2U : 3U;
-}
-
-// Reference densities of the Geant4 materials used to generate the optional
-// four-class macroscopic cross-section tables. The transport converts those
-// tables to a mass cross section before applying the CT voxel density.
-inline constexpr float ct_material_reference_density_g_per_cm3(
-    const std::uint8_t material_class) noexcept {
-    switch (material_class) {
-        case 0U:
-            return 0.00120479F;  // G4_AIR
-        case 1U:
-            return 1.04F;        // G4_LUNG_ICRP
-        case 3U:
-            return 1.85F;        // G4_BONE_COMPACT_ICRU
-        default:
-            return 1.0F;         // Water_75eV
-    }
-}
-
-inline std::uint8_t ct_cross_section_material_index(
-    const std::uint8_t material_id,
-    const bool schneider_section_id,
-    const bool use_schneider_cross_sections) noexcept {
-    return schneider_section_id && use_schneider_cross_sections
-               ? material_id
-               : ct_material_class(material_id, schneider_section_id);
-}
 
 inline std::size_t ct_linear_index(const std::uint32_t ix,
                                    const std::uint32_t iy,
@@ -575,14 +496,16 @@ inline float clamp_step_to_ct_faces(const float step_mm,
                                     const float spacing_x,
                                     const float spacing_y,
                                     const float spacing_z,
-                                    CtClampPath* path_out = nullptr,
-                                    const std::uint32_t nx = 0,
-                                    const std::uint32_t ny = 0,
-                                    const std::uint32_t nz = 0) noexcept {
+                                    CtClampPath* path_out,
+                                    const std::uint32_t nx,
+                                    const std::uint32_t ny,
+                                    const std::uint32_t nz) noexcept {
     if (path_out != nullptr) {
         *path_out = CtClampPath::three_axis;
     }
-    if (nx > 0 && ny > 0 && nz > 0) {
+    if (nx == 0 || ny == 0 || nz == 0)
+        return std::numeric_limits<float>::quiet_NaN();
+    {
         CtDdaState state{};
         if (ct_dda_init(x_mm, y_mm, z_mm, dx, dy, dz, origin_x, origin_y, origin_z,
                         spacing_x, spacing_y, spacing_z, nx, ny, nz, state)) {
@@ -593,7 +516,7 @@ inline float clamp_step_to_ct_faces(const float step_mm,
             return step_mm;
         }
     }
-    // Fallback without grid dimensions (legacy / unit tests).
+    // Outside the grid, limit to the next physical voxel-face plane.
     auto step = step_mm;
     const auto tx = distance_to_next_ct_face_1d(x_mm, origin_x, spacing_x, dx);
     const auto ty = distance_to_next_ct_face_1d(y_mm, origin_y, spacing_y, dy);

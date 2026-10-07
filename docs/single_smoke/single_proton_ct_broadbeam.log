@@ -1,0 +1,57 @@
+[material-indexing] mode: schneider-25
+SYCL device: NVIDIA GeForce RTX 2080 Ti | NVIDIA Corporation | backend cuda | driver CUDA 12.6 | fp64=yes atomic64=yes
+[broadbeam-electron-tracking] requested=1 effective=shared_fp32 density_threshold=0.1 halo_mm=5
+[transport-profile] requested=broadbeam_fast compiled_kernel=broadbeam_fe_independent
+[schneider-bundle] domains and projectile registry verified: 14 projectiles
+[em-performance] local_audit=0
+[device-physics-cache] em miss resident_bytes=0
+[physics-cache] unified_em=miss nodes=3843866
+[delta-moments] condensed_partition_v1; aggregate Gamma; nodes=3843866
+[em-continuous-density] compositions=26 density_response_states=0 range_degree=23
+[em-shared-prepare-grid] certified=1
+[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending
+[electron-birth-order] mode=1 bins=33
+[electron-tissue-roulette] survival=0.5 density_gt=0.1
+[electron-variance-reduction] roulette_survival=0.5 roulette_density_le=0.1
+[material-response-queue] capacity=5807497 task_bytes=104 max_chunk=524288 lanes=16384 group_size=32
+[electron-step-refill] enabled=1 transactions_per_iteration=1
+[electron-geometry-cache] miss medium=Schneider_CT
+[broadbeam-electron-region] density_threshold=0.1 metric=box halo_mm=5 selected_voxels=5079410 total_voxels=7370475 continuation=unrestricted
+[electron-rate26] compositions=26 density_nodes=0 explicit_cut=interpolated_terminal_cut certificate=coefficient_triangle reserve=0.02 status=experimental_active_rate_unqualified shared_terminals=composition26 joint=composition_spatial
+[electron-cut-birth26] compositions=26 density_states=0 parent_energy=actual cut=ion_EM angular=G4DeltaAngle status=experimental
+[electron-complete26] compositions=26 charged_density_nodes=0 photon_density_nodes=0 old82_reads=0 fallback=0 cut=continuous_fit hard_rates=actual_cut_mass_scale penelope=calibration photon_terminals=calibration status=default26
+[electron-arithmetic] precision=4 transport=FP32 geometry=FP32 CDF=uint64 dose=FP32
+[independent-fp32-bank] cache=miss bytes=1421039828 mapped_bytes=290125056 source_bytes=1746664476 legacy_loaded=0 legacy_fallback=0
+[schneider-primary-xs] mode=primary-masked-binary-v3
+[physics-cache] schneider hits=0 misses=4
+[ion-mcs] model=fermi_eyges gaussian_only=1 species=all_charged parameters=species_water max_segment_mm=0.6
+[input-cache] hits=0 misses=2
+[broadbeam-ct-specialize] primary=1 secondary=1
+[minibeam-primary-specialization] 0
+[ct-minibeam-split] 0
+[nonion-primary] enabled=0
+[ct-queued-primary-specialize] enabled=0
+[minibeam-candidates] water_energy_buckets=0
+[beamline-order] enabled=0
+[primary-compact] enabled=0 entry_bytes=64
+[electron-joint-pilot-work] eligible=70174 started=28822 advances=820271 fallback=16679 below=0 deposited=12140 escaped=0 photon_gap=0 invalid=0
+[independent-charged-work] calls=1803018 elastic=1302371 hard_proposals=149655 hard_collisions=3256 faces=26036 stopped=39 coverage_missing=0 invalid=0
+[independent-photon-work] calls=5 interactions=7 voxel_crossings=370 electron=3 deposited=0 escaped=2 coverage_missing=0 invalid=0
+[electron-queue-time] seconds=0.102943 tasks=31114 peak_tasks=31114 advances=2623277 source_restarts=0 boundary_restarts=0
+[progress] primary batches completed: 10000/10000 histories (1 launches)
+[secondary-schedule] group=1; particle state and RNG identities preserved
+[segmented-secondary] step_limit=16 tail_threshold=8192 state_bytes=224 capacity=5547
+[segmented-secondary] rounds=1 tail_rounds=1 tail_s=0.0252477 kernel_s=0.0252477 compaction_s=0 begin=0 end=5547
+[progress] secondary batch completed: [0, 5547) particles; queued=5655
+[segmented-secondary] step_limit=16 tail_threshold=8192 state_bytes=224 capacity=108
+[segmented-secondary] rounds=1 tail_rounds=1 tail_s=0.00574048 kernel_s=0.00574048 compaction_s=0 begin=5547 end=5655
+[progress] secondary batch completed: [5547, 5655) particles; queued=5655
+[secondary-schedule] grouping_seconds=0.0003505
+[all-ion-elastic] primary=2082 secondary=53 bad_queries=0 unsupported_recoils=0
+[elastic-failure-sites] primary_rate=0 primary_draw=0 recoil_stopping=0 secondary_rate=0 secondary_draw=0 null_post_em=0
+[unified-em-audit] 0 2711960 80176 0 0 1060654562349 47388463759 0
+[electron-variance-reduction-work] roulette_killed=15540 roulette_survived=15574 weight_gain_MeV=-15.4008
+[independent-fp32-completion] expected=31114 completed=31114
+Quality status: non_production
+Quality report: "out/single_proton_ct_broadbeam/quality_report.json"
+[batch-wall] index=0 seconds=1.72795 histories=10000

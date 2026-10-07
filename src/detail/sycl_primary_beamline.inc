@@ -1,7 +1,7 @@
 // Shared source, Cu/air transport, and medium-entry handoff.
 // Included inside the primary kernel; all step/RNG/ledger operations stay inline.
 // kUrbanBeamlinePath describes upstream physics, independent of water/CT downstream.
-                if constexpr (kPrimaryStage != 2 && kPrimaryStage != 4) {
+                if constexpr (kPrimaryStage != 4) {
                 const PrimarySpotBatchEntry* spot = nullptr;
                 std::uint64_t rng_history = global_history;
                 if (primary_spot_count > 0) {
@@ -39,13 +39,11 @@
                     }
                 }
 
-#if defined(CARBON_ENABLE_MINIBEAM)
                 // Offline history-cohort attribution. Inactive source slots have
                 // zero incident energy, retain original history/RNG identity, and
                 // generate no descendants. This is not a production pruning mode.
                 if (copper_history_mask_device && !copper_history_mask_device[global_history])
                     energy_MeV = 0.0F;
-#endif
                 const auto sampled_initial_energy_MeVu = energy_MeV * inverse_mass_number;
                 // Store the energy actually transported after source sampling/cutoff.
                 // This does not consume RNG or change the source distribution.
@@ -90,18 +88,10 @@
                         sigma_x_prime * (rho_x * g0 + sycl::sqrt(1.0F - rho_x * rho_x) * g1);
                     const auto y_prime =
                         sigma_y_prime * (rho_y * g2 + sycl::sqrt(1.0F - rho_y * rho_y) * g3);
-                    // PBS reference: fixed source plane; add scanning angles to
-                    // sampled angular emittance before taking tangents. Legacy
-                    // rotated-frame slope emittance remains unchanged.
+                    // Sample angular emittance in the current spot beam frame.
                     auto slope_x = x_prime;
                     auto slope_y = y_prime;
-                    if (minibeam_pbs_source) {
-                        const auto wx = spot ? spot->floats[17] : beam_uz_x;
-                        const auto wy = spot ? spot->floats[18] : beam_uz_y;
-                        const auto wz = spot ? spot->floats[19] : beam_uz_z;
-                        slope_x = sycl::tan(sycl::atan2(wx, wz) + x_prime);
-                        slope_y = sycl::tan(sycl::atan2(wy, wz) + y_prime);
-                    }
+
                     const auto inv_norm =
                         sycl::rsqrt(1.0F + slope_x * slope_x + slope_y * slope_y);
                     local_dx = slope_x * inv_norm;
@@ -131,14 +121,7 @@
                 auto direction_x = composed_direction.x;
                 auto direction_y = composed_direction.y;
                 auto direction_z = composed_direction.z;
-                if (minibeam_pbs_source) {
-                    position_x_mm = origin_x + local_x_mm;
-                    position_y_mm = origin_y + local_y_mm;
-                    position_z_mm = origin_z;
-                    direction_x = local_dx;
-                    direction_y = local_dy;
-                    direction_z = local_dz;
-                }
+
                 {
                     const auto inv_n = sycl::rsqrt(sycl::fmax(
                         1.0e-20F, direction_x * direction_x + direction_y * direction_y +
@@ -148,7 +131,6 @@
                     direction_z *= inv_n;
                 }
 
-#if defined(CARBON_ENABLE_MINIBEAM)
                 float beamline_air_loss_MeV = 0.0F;
                 const auto minibeam_block_entrance_z =
                     minibeam_block_center_z - 0.5F * minibeam_block_thickness;
@@ -163,14 +145,13 @@
                 auto advance_air = [&](const float boundary_path, const UrbanV2SafetyCtx& safety, const float ceiling) {
                     UrbanV2Material material{};
                     const auto reference = air_urban_device.materials[0];
-                    material.table.active_context = air_urban_device.at(0, air_urban_projectile, energy_MeV);
+                    material.loss_context = air_urban_device.at(0, air_urban_projectile, energy_MeV);
                     material.zeff = reference.zeff;
                     material.radlen_mm = reference.radiation_length_mm;
                     material.density_g_per_cm3 = reference.density;
                     material.projectile_z = primary_atomic_number;
                     material.projectile_a = primary_mass_number;
                     material.mass_mev = air_urban_device.species[air_urban_projectile].mass_mev;
-                    material.mfp_kind = 2;
                     float ion_distance=std::numeric_limits<float>::infinity();
                     if(air_ion_count) {
                         if(energy_MeV<air_ion_e_device[0]*primary_mass_number ||
@@ -234,23 +215,8 @@
                     }
                     return true;
                 };
-                if (kPrimaryStage != 5 && minibeam_air_urban) {
+                if (minibeam_air_urban) {
                     if (!advance_air_to_plane(minibeam_block_entrance_z)) energy_MeV=0.0F;
-                }
-                if (kPrimaryStage != 5 && minibeam_copper_transport && !minibeam_air_urban && direction_z > 1.0e-8F) {
-                    const auto entrance_air_distance = sycl::fmax(
-                        0.0F, (minibeam_block_entrance_z - position_z_mm) /
-                                  direction_z);
-                    const auto entrance_air_loss = sycl::fmin(
-                        energy_MeV,
-                        minibeam_linear_table(
-                            minibeam_air_sp_energies_device,
-                            minibeam_air_sp_values_device,
-                            minibeam_air_sp_count,
-                            energy_MeV * inverse_mass_number) *
-                            entrance_air_distance);
-                    energy_MeV -= entrance_air_loss;
-                    beamline_air_loss_MeV += entrance_air_loss;
                 }
                 const auto minibeam_hits_copper = enable_minibeam &&
                     minibeam_ray_hits_cylindrical_copper(
@@ -266,8 +232,7 @@
                 auto minibeam_source_slit = 0;
 
                 // Versioned touch state (history scope): flushed to the
-                // phase-space record after transport.  Legacy copper_touched
-                // keeps the initial-ray meaning; ever_in_copper and the Cu
+                // phase-space record after transport. ever_in_copper and the Cu
                 // true-path accumulator below are the actual-touch observables.
                 auto beamline_ever_in_copper_hist = false;
                 auto beamline_cu_true_path_hist_mm = 0.0F;
@@ -318,7 +283,7 @@
                         slit_u, minibeam_slit_pitch);
                 }
 
-                if (kPrimaryStage != 5 && minibeam_copper_transport && (minibeam_hits_copper || minibeam_air_urban) &&
+                if (minibeam_copper_transport && (minibeam_hits_copper || minibeam_air_urban) &&
                     direction_z > 1.0e-8F) {
                     const auto incident_beamline_energy = energy_MeV;
                     const auto air_loss_at_block_entry = beamline_air_loss_MeV;
@@ -352,11 +317,7 @@
                     urban_v2_geom.slit_offset_mm = minibeam_slit_offset;
                     urban_v2_geom.block_entrance_z_mm = minibeam_block_entrance_z;
                     urban_v2_geom.block_exit_z_mm = minibeam_block_exit_z;
-                    UrbanV2LossTable urban_v2_loss_table{
-                        minibeam_copper_loss_e_device,
-                        minibeam_copper_loss_r_device,
-                        minibeam_copper_loss_d_device,
-                        static_cast<int>(minibeam_copper_loss_count)};
+                    UrbanMcsContext copper_loss_context{};
                     // (touch accumulators live at history scope:
                     // beamline_ever_in_copper_hist / beamline_cu_true_path_hist_mm)
                     constexpr std::uint64_t maximum_beamline_steps = 100000;
@@ -403,7 +364,7 @@
                             minibeam_slit_pitch, 0.5F * minibeam_slit_length,
                             minibeam_slit_offset);
                         if (!in_copper) {
-                            if (kPrimaryStage != 5 && minibeam_air_urban) {
+                            if (minibeam_air_urban) {
                                 UrbanV2SafetyCtx safety{}; safety.kind=0; safety.cu=urban_v2_geom;
                                 air_urban_boundary=air_urban_boundary || urban_v2_prev_in_cu;
                                 if (!advance_air(path_step,safety,air_slit_max_step)) break;
@@ -428,15 +389,10 @@
                             urban_v2_prev_in_cu = false;
                             continue;
                         }
-                        if (kPrimaryStage != 5 && minibeam_air_urban) { air_urban_boundary=true; beamline_ever_in_copper_hist=true; }
+                        if (minibeam_air_urban) { air_urban_boundary=true; beamline_ever_in_copper_hist=true; }
                         if (copper_diagnostic_device) ++copper_history_diag.copper_proposals;
                         const auto energy_u = energy_MeV * inverse_mass_number;
-                        const auto stopping_scale = minibeam_survivor_stopping_scale(
-                            energy_u, minibeam_copper_survivor_energy_loss_scale,
-                            minibeam_survivor_calibration_energies.data(),
-                            minibeam_survivor_calibration_scales.data(),
-                            minibeam_survivor_calibration_count);
-                        const auto stopping = stopping_scale * minibeam_linear_table(
+                        const auto stopping = minibeam_linear_table(
                             minibeam_copper_sp_energies_device,
                             minibeam_copper_sp_values_device,
                             minibeam_copper_sp_count, energy_u);
@@ -480,9 +436,8 @@
                         auto correlated_scattering = CorrelatedScatteringStep{
                             pre_scatter_direction, Direction3F{0.0F, 0.0F, 0.0F}};
                         if (minibeam_copper_enable_mcs &&
-                            minibeam_copper_correlated_scattering &&
                             energy_MeV > energy_cutoff_MeV) {
-                            if (minibeam_copper_urban_v2_msc) {
+                            {
                                 // Re-entry after air also starts at a
                                 // geometry boundary (reference stepStatus).
                                 urban_v2_at_boundary = urban_v2_at_boundary ||
@@ -492,10 +447,9 @@
                                 // geometry truncation -> final true -> scatter.
                                 // boundary_path_mm is the geometry-reachable
                                 // length (exact material boundaries honored).
-                                // The legacy E/stopping range is never used;
-                                // currentRange comes from the loss table.
+                                // currentRange comes from the packaged loss context.
                                 if ((kUrbanBeamlinePath || global_urban)) {
-                                    urban_v2_loss_table.active_context = urban_device.at(
+                                    copper_loss_context = urban_device.at(
                                         urban_device.material(-2, minibeam_copper_density),
                                         urban_device.projectile(primary_atomic_number, primary_mass_number),
                                         energy_MeV);
@@ -513,23 +467,22 @@
                                         position_z_mm, direction_x, direction_y,
                                         direction_z, urban_v2_geom,
                                         urban_v2_at_boundary, urban_v2_state,
-                                        urban_v2_loss_table,
+                                        copper_loss_context,
                                         minibeam_copper_density,
                                         minibeam_copper_radiation_length,
                                         minibeam_copper_mcs_scale, spot_seed,
-                                        rng_history, beamline_step, 0U, 50, primary_mcs_mass_override_MeV);
+                                        rng_history, beamline_step, 0U, 50, primary_copper_scattering_mass_MeV);
                                 urban_v2_at_boundary =
                                     correlated_scattering.boundary_crossed;
                                 urban_v2_prev_in_cu = true;
                             }
                         }
                         // R4: explicit step proposal/finalization contract for
-                        // urban_v2 only (legacy/highland/FE/urban untouched).
+                        // Update the Urban v2 track state.
                         // Geometry consumes final g; loss/fluctuation and the
                         // reaction path below consume final t.  No post-hoc
                         // t/g rescaling of the ledger.
                         const auto urban_v2_proposal =
-                            minibeam_copper_urban_v2_msc &&
                             correlated_scattering.proposal_valid;
                         // Fix B5/C2.3: an invalid Urban proposal must fail the
                         // run and stop this history (flag + record; the host
@@ -538,7 +491,7 @@
                         // as normal transport. Field contract reasons 1-5,8
                         // (no segment loop here: single advance, so no
                         // progress reasons; overshoot is structural).
-                        if (minibeam_copper_urban_v2_msc) {
+                        {
                             const int cu_reason = correlated_scattering.limit_reason < 0
                                 ? -correlated_scattering.limit_reason
                                 : urban_step_field_reason(correlated_scattering);
@@ -591,14 +544,7 @@
                         const auto midpoint_energy_u = sycl::fmax(
                             0.0F, (energy_MeV - 0.5F * predictor_loss) *
                                       inverse_mass_number);
-                        const auto midpoint_stopping_scale =
-                            minibeam_survivor_stopping_scale(
-                                midpoint_energy_u,
-                                minibeam_copper_survivor_energy_loss_scale,
-                                minibeam_survivor_calibration_energies.data(),
-                                minibeam_survivor_calibration_scales.data(),
-                                minibeam_survivor_calibration_count);
-                        const auto midpoint_stopping = midpoint_stopping_scale *
+                        const auto midpoint_stopping =
                             minibeam_linear_table(
                                 minibeam_copper_sp_energies_device,
                                 minibeam_copper_sp_values_device,
@@ -606,7 +552,7 @@
                         const auto mean_loss = midpoint_stopping * true_loss_path_mm;
                         float native_restricted_mean = -1.0F;
                         if (copper_primary_native_mean) {
-                            const auto context = urban_v2_loss_table.active_context;
+                            const auto context = copper_loss_context;
                             if (!context.valid()) {
                                 urban_record_first_failure(minibeam_event_counts_device,
                                     rng_history, beamline_step, 0U, 8);
@@ -663,7 +609,7 @@
                                 auto uniform = [&]() { return (rng::random_u32(
                                     spot_seed, rng_history, (std::uint64_t(beamline_step) << 32) | draw_index++, 124) >> 8) * 0x1p-24f; };
                                 const auto draw = copper_proton_total_fluctuation(
-                                    energy_MeV, primary_rest_mass_MeV, mean_loss, true_loss_path_mm, minibeam_copper_density, uniform, copper_proton_finite_cut, native_restricted_mean);
+                                    energy_MeV, primary_rest_mass_MeV, mean_loss, true_loss_path_mm, minibeam_copper_density, uniform, native_restricted_mean);
                                 sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                     sycl::memory_scope::device, sycl::access::address_space::global_space>(
                                     minibeam_event_counts_device[draw.valid ? copper_proton_primary_loss_slot : copper_proton_loss_failure_slot]).fetch_add(1U);
@@ -690,7 +636,7 @@
                         if (in_copper) {
                             beamline_ever_in_copper_hist = true;
                             beamline_cu_true_path_hist_mm += true_loss_path_mm;
-                            if (minibeam_copper_urban_v2_msc) {
+                            {
                                 ++beamline_cu_steps_hist;
                                 const auto& sc = correlated_scattering;
                                 beamline_g_sum_hist_mm +=
@@ -746,23 +692,7 @@
                                   minibeam_copper_xs_count, collision_energy_u)
                             : 0.0F;
                         const auto total_nuclear_rate = elastic_rate + inelastic_rate;
-                        if (minibeam_copper_enable_mcs &&
-                            !minibeam_copper_correlated_scattering &&
-                            energy_MeV > energy_cutoff_MeV) {
-                            const auto theta = minibeam_copper_mcs_scale *
-                                highland_projected_rms_angle_device(
-                                    energy_MeV, primary_atomic_number,
-                                    primary_mass_number, transport_path,
-                                    minibeam_copper_density,
-                                    minibeam_copper_radiation_length, primary_mcs_mass_override_MeV);
-                            const auto scattered = scatter_direction(
-                                Direction3F{direction_x, direction_y, direction_z},
-                                theta, spot_seed, rng_history, beamline_step, 50);
-                            direction_x = scattered.x;
-                            direction_y = scattered.y;
-                            direction_z = scattered.z;
-                        } else if (minibeam_copper_enable_mcs &&
-                                   minibeam_copper_correlated_scattering) {
+                        if (minibeam_copper_enable_mcs) {
                             direction_x = correlated_scattering.direction.x;
                             direction_y = correlated_scattering.direction.y;
                             direction_z = correlated_scattering.direction.z;
@@ -836,11 +766,6 @@
                                         if (flat_index >= minibeam_copper_product_count) break;
                                         const auto& product =
                                             minibeam_copper_products_device[flat_index];
-                                        record_neutron_birth(neutron_birth_buffer, product,
-                                            position_x_mm, position_y_mm, position_z_mm,
-                                            {direction_x,direction_y,direction_z}, event_cos,event_sin,
-                                            global_history,rng_history,beamline_step,product_index,0,
-                                            -2,primary_atomic_number,primary_mass_number);
                                         if ((product.role != 0 && product.role != 1) ||
                                             product.z <= 0 || product.a <= 0 ||
                                             product.kinetic_energy_MeV <= energy_cutoff_MeV) {
@@ -895,11 +820,9 @@
                     MinibeamPhaseSpaceRecord record{};
                     record.history = global_history;
                     record.slit = minibeam_source_slit;
-                    record.copper_touched = minibeam_hits_copper ? 1U : 0U;
                     record.copper_elastic = minibeam_primary_elastic ? 1U : 0U;
                     record.valid = 1U;
-                    // Versioned touch: legacy field frozen as initial-ray;
-                    // actual-touch observables below.
+                    // Record the initial ray and actual copper traversal separately.
                     record.initial_ray_hits_copper =
                         minibeam_hits_copper ? 1U : 0U;
                     record.ever_in_copper =
@@ -929,45 +852,13 @@
                     record.direction_z = direction_z;
                     minibeam_phase_space_device[global_history] = record;
                 };
-                if (kPrimaryStage != 5 && phase_at_copper_exit && minibeam_phase_space_device != nullptr &&
+                if (phase_at_copper_exit && minibeam_phase_space_device != nullptr &&
                     energy_MeV > energy_cutoff_MeV && direction_z > 1.0e-8F &&
                     sycl::fabs(position_z_mm-minibeam_block_exit_z) < 1.0e-3F) {
                     record_primary_phase();
                 }
-                if (kPrimaryStage != 5 && minibeam_air_urban && energy_MeV>energy_cutoff_MeV) {
+                if (minibeam_air_urban && energy_MeV>energy_cutoff_MeV) {
                     if (!advance_air_to_plane(0.0F)) energy_MeV=0.0F;
-                }
-                if (kPrimaryStage != 5 && minibeam_copper_transport && !minibeam_air_urban &&
-                    energy_MeV > energy_cutoff_MeV &&
-                    direction_z > 1.0e-8F) {
-                    auto remaining_air_distance =
-                        -minibeam_block_exit_z / direction_z;
-                    if (!minibeam_hits_copper) {
-                        remaining_air_distance +=
-                            minibeam_block_thickness / direction_z;
-                    }
-                    std::uint32_t air_step = 0;
-                    while (remaining_air_distance > 0.0F &&
-                           energy_MeV > energy_cutoff_MeV &&
-                           air_step < 1024U) {
-                        const auto step_mm =
-                            sycl::fmin(1.0F, remaining_air_distance);
-                        const auto air_loss = sycl::fmin(
-                            energy_MeV,
-                            minibeam_linear_table(
-                                minibeam_air_sp_energies_device,
-                                minibeam_air_sp_values_device,
-                                minibeam_air_sp_count,
-                                energy_MeV * inverse_mass_number) *
-                                step_mm);
-                        energy_MeV -= air_loss;
-                        beamline_air_loss_MeV += air_loss;
-                        remaining_air_distance -= step_mm;
-                        ++air_step;
-                    }
-                    if (energy_MeV <= energy_cutoff_MeV) {
-                        energy_MeV = 0.0F;
-                    }
                 }
                 if (enable_minibeam) {
                     beamline_air_loss_device[global_history] =
@@ -976,7 +867,6 @@
                 if (enable_minibeam && energy_MeV > energy_cutoff_MeV) {
                     beamline_primary_survivor_device[global_history] = energy_MeV;
                 }
-#endif
 
                 if (enable_tps_source) {
                     auto t_enter = 0.0F;
@@ -1003,7 +893,7 @@
                             hit = false;
                         }
                     };
-                    if ((kProductionPrimaryPath || enable_voxel_scoring)) {
+                    if ((enable_voxel_scoring)) {
                         intersect_slab(position_x_mm, direction_x, voxel_min_x_mm, voxel_max_x_mm);
                         intersect_slab(position_y_mm, direction_y, voxel_min_y_mm, voxel_max_y_mm);
                     }
@@ -1023,17 +913,12 @@
                     }
                 }
 
-#if defined(CARBON_ENABLE_MINIBEAM)
-                if (kPrimaryStage != 5 && !phase_at_copper_exit && minibeam_phase_space_device != nullptr &&
+                if (!phase_at_copper_exit && minibeam_phase_space_device != nullptr &&
                     energy_MeV > energy_cutoff_MeV &&
                     position_z_mm >= 0.0F && position_z_mm < phantom_length_mm) {
                     record_primary_phase();
                 }
 
-#endif
-
                 entry = {rng_history, spot_seed, global_history, spot_initial_energy_MeV, energy_MeV, sampled_initial_energy_MeVu, position_x_mm, position_y_mm, position_z_mm, direction_x, direction_y, direction_z};
-#if defined(CARBON_ENABLE_MINIBEAM)
                 if(copper_capture_entry_device)copper_capture_entry_device[global_history]=entry;
-#endif
                 }

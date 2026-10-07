@@ -3,7 +3,7 @@
   "scope": "Default26 composition electron transport; no material-density node bank",
   "packages": {
     "shared": {
-      "root": "data/electrons/shared",
+      "root": "data/em/electrons/shared",
       "manifest": {
         "schema": 3,
         "package_id": "electrons_shared_continuous26_v1",
@@ -208,7 +208,7 @@
       }
     },
     "proton": {
-      "root": "data/electrons/proton",
+      "root": "data/em/electrons/proton",
       "manifest": {
         "schema": 3,
         "package_id": "electrons_proton_parameters26_v1",
@@ -233,7 +233,7 @@
       }
     },
     "carbon": {
-      "root": "data/electrons/carbon",
+      "root": "data/em/electrons/carbon",
       "manifest": {
         "schema": 3,
         "package_id": "electrons_carbon_parameters26_v1",
@@ -258,6 +258,5 @@
       }
     }
   },
-  "total_unique_bytes": 1746666344,
-  "archive": "data/archive/electron_density_nodes_20261006"
+  "total_unique_bytes": 1746666344
 }

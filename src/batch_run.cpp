@@ -1,5 +1,5 @@
 #include "carbon/batch_run.hpp"
-#include "carbon/plan_run.hpp"
+#include "carbon/stopping_power.hpp"
 #include "carbon/tps_source.hpp"
 #include <algorithm>
 #include <cmath>
@@ -33,19 +33,8 @@ std::vector<std::size_t> allocate(const std::vector<long double>& weights, std::
     return counts;
 }
 void relocate_outputs(TransportConfig& c,const std::filesystem::path& dir) {
-    const auto move=[&](auto& p){if(!p.empty()) p=dir/p.filename();};
-    move(c.output_file);move(c.fragment_species_output_file);move(c.let_output_file);
-    move(c.fragment_species_let_output_file);move(c.light_isotope_let_output_file);
-    move(c.fragment_birth_spectrum_output_file);move(c.minibeam_phase_space_output_file);
-    move(c.minibeam_water_primary_plane_output_file);move(c.minibeam_fragment_phase_space_output_file);
-    move(c.neutral_origin_voxel_output_file);
-    move(c.neutron_birth_output_file);move(c.neutron_proton_birth_output_file);
-    move(c.let_voxel_mhd_output_file);move(c.voxel_dose_output_file);
-    move(c.charged_origin_voxel_output_file);move(c.charged_origin_voxel_dose_Gy_output_file);
-    move(c.charged_origin_voxel_mhd_output_prefix);move(c.dose_output_file);
-    move(c.fragment_species_dose_output_file);move(c.voxel_dose_Gy_output_file);
-    move(c.voxel_dose_mhd_output_file);move(c.primary_voxel_fluence_mhd_output_file);
-    c.validation_output_directory=dir;
+    if (!c.voxel_dose_mhd_output_file.empty())
+        c.voxel_dose_mhd_output_file=dir/c.voxel_dose_mhd_output_file.filename();
 }
 }
 std::vector<RunShard> make_repeated_batches(const RunShard& original,const CliState& cli,
@@ -53,9 +42,6 @@ std::vector<RunShard> make_repeated_batches(const RunShard& original,const CliSt
     const auto n=cli.batch_count,h=cli.histories_per_batch;
     if(!n || !h || cli.batch_output.empty())
         throw std::invalid_argument("Use --batch-count, --histories-per-batch and --batch-output together");
-    if(!cli.plan_manifest.empty() || original.histories_overridden || original.sequential_spots ||
-       !cli.canonical_config_output_path.empty())
-        throw std::invalid_argument("Repeated batches cannot combine with --plan-manifest, --histories, --sequential-spots or --write-canonical-config");
     if(h>std::numeric_limits<std::size_t>::max()/n)
         throw std::invalid_argument("Total batch history count overflows");
     const auto total=h*n;
@@ -69,7 +55,6 @@ std::vector<RunShard> make_repeated_batches(const RunShard& original,const CliSt
         air=&inputs.get<StoppingPowerTable>(input_cache_key(base.spots_upstream_air_stopping_power_file),[&]{
             return StoppingPowerTable::from_csv(base.spots_upstream_air_stopping_power_file);});
     if(base.enable_tps_source) {
-        if(base.device=="serial") throw std::invalid_argument("TPS batches require SYCL");
         auto plan=TpsSourcePlan::from_config(base);
         for(auto& spot:plan.spots) {
             if(spot.mu_weight>0) {weights.push_back(spot.mu_weight);spot.mu_weight=1;}
@@ -79,23 +64,8 @@ std::vector<RunShard> make_repeated_batches(const RunShard& original,const CliSt
         prototypes=plan.make_primary_batch(template_config,air);
         base.enable_emittance_source=std::any_of(prototypes.begin(),prototypes.end(),[](const auto& p){
             return p.floats[2]>0 || p.floats[3]>0 || p.floats[4]>0 || p.floats[5]>0;});
-    } else {
-        auto files=base.topas_spots_files;
-        if(files.empty() && !base.topas_spots_file.empty()) files.push_back(base.topas_spots_file);
-        if(!files.empty()) {
-            if(base.device=="serial") throw std::invalid_argument("Spot batches require SYCL");
-            auto plan=TopasSpotPlan::from_files(files);plan.sad_mm=base.spots_sad_mm;
-            if(!base.spot_weights_file.empty()) plan.apply_weights_from_csv(base.spot_weights_file,std::max(total,plan.spots.size()));
-            for(std::size_t i=0;i<plan.spots.size();++i) {
-                const auto& spot=plan.spots[i];
-                weights.push_back(base.spot_weights_file.empty()?spot.number_of_histories:spot.plan_weight);
-                auto c=base;apply_spot_to_config(c,plan,spot,i,base.random_seed,air);c.validate();
-                prototypes.push_back(make_spot_batch_entry(c,0));
-            }
-            base.enable_emittance_source=!base.enable_flat_source;
-        }
     }
-    if ((base.enable_tps_source || !base.topas_spots_file.empty() || !base.topas_spots_files.empty()) && weights.empty())
+    if (base.enable_tps_source && weights.empty())
         throw std::invalid_argument("Batch plan has no positive source weights");
     if(weights.size()!=prototypes.size()) throw std::runtime_error("Batch source/weight mismatch");
     constexpr std::uint64_t spot_stride=1000003;
@@ -118,7 +88,7 @@ std::vector<RunShard> make_repeated_batches(const RunShard& original,const CliSt
         std::ostringstream name;name<<"batch"<<std::setfill('0')<<std::setw(6)<<i;
         auto shard=original;shard.config=base;shard.output_directory=root/name.str();
         auto& c=shard.config;c.number_of_histories=h;c.random_seed=base.random_seed+i*streams*spot_stride;
-        if (c.device!="serial" && c.enable_ct_grid &&
+        if (c.enable_ct_grid &&
             (!c.material_electron_charged_index_file.empty()) && c.run_mode==RunMode::research)
             c.material_electron_retain_bank=true;
         std::uint64_t begin=0;

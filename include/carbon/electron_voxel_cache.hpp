@@ -68,7 +68,7 @@ inline bool prepare_material(ChargedBankView bank,const ElectronCtGeometry& geom
 template<class Uniform,class Model>inline ChargedStep transport_step_face(const Model& model,
     const ChargedFace& face,Position start,std::array<float,3> direction,
     float energy,const std::array<float,2>& hard_majorant,Uniform& uniform,
-    float maximum_step=.05f,float mean_loss_fraction=.005f,bool expected=false) {
+    float maximum_step=.05f,float mean_loss_fraction=.005f) {
     ChargedStep out;out.position=start;out.direction=direction;out.energy=energy;
     if(!std::isfinite(energy)||energy<=0||!std::isfinite(maximum_step)||maximum_step<=0||maximum_step>.25f||!std::isfinite(mean_loss_fraction)||mean_loss_fraction<=0||mean_loss_fraction>.01f)return out;
     if(!face.valid)return out;
@@ -77,17 +77,10 @@ template<class Uniform,class Model>inline ChargedStep transport_step_face(const 
     // density interpolation must be supplied and independently validated.
     if(face.section!=model.section||float(face.density)!=model.density){out.status=ChargedStepStatus::coverage_missing;return out;}
     if(energy<=model.lowest_energy){out.physical_deposit=energy;out.stopped=true;out.status=ChargedStepStatus::deposited;return out;}
-    #ifdef CARBON_ELECTRON_CERTIFIED_RATES
     const auto p=charged_parameters_certified(model,energy);
-#else
-    const auto p=charged_parameters(model,energy);
-#endif
     if(!p.valid){out.status=ChargedStepStatus::coverage_missing;return out;}
     float hard=0;for(unsigned k=0;k<2;++k){
         if(!std::isfinite(hard_majorant[k])||hard_majorant[k]<0)return out;
-#ifndef CARBON_ELECTRON_CERTIFIED_RATES
-        if(hard_majorant[k]<p.hard_rate[k])return out;
-#endif
         hard+=hard_majorant[k];
     }
     const float rate=p.elastic_rate+hard;
@@ -95,33 +88,16 @@ template<class Uniform,class Model>inline ChargedStep transport_step_face(const 
     const float flight=-std::log(u)/rate;
     out.length=std::min(std::min(Coordinate(maximum_step),Coordinate(mean_loss_fraction*energy/p.dedx)),std::min(Coordinate(p.range),std::min(face.distance,Coordinate(flight))));
     if(!std::isfinite(out.length)||out.length<=0)return out;
-    #ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-    // Exact ties remain a bitmask: max step, mean loss, range, face, flight.
-    out.limiter_mask=(out.length==maximum_step?1u:0u)
-        |(out.length==mean_loss_fraction*energy/p.dedx?2u:0u)
-        |(out.length==p.range?4u:0u)|(out.length==face.distance?8u:0u)
-        |(out.length==flight?16u:0u);
-#endif
     out.face=out.length==face.distance;
     if(out.face)out.position=face.position;else for(unsigned k=0;k<3;++k)out.position[k]=start[k]+out.length*direction[k];
-    #ifdef CARBON_ELECTRON_REUSE_PARAMETERS
     const auto loss=sample_charged_loss_prepared(model,energy,out.length,uniform,p);
-#else
-    const auto loss=sample_charged_loss(model,energy,out.length,uniform);
-#endif
     if(!loss.valid){out.status=ChargedStepStatus::coverage_missing;return out;}
     out.raw_loss=loss.raw;out.physical_deposit=loss.deposit;out.stopped=loss.stopped;
     const auto branch=uniform();if(!std::isfinite(branch)||branch<0||branch>=1)return out;
-    if((!expected&&branch<loss.deposit/energy)||loss.stopped){
+    if(branch<loss.deposit/energy||loss.stopped){
         const float along=uniform();if(!std::isfinite(along)||along<0||along>=1)return out;
         for(unsigned k=0;k<3;++k)out.position[k]=start[k]+along*out.length*direction[k];
         out.status=ChargedStepStatus::deposited;return out;
-    }
-    if(expected){
-        // Expected-value scoring of the packet branch: the unconditioned branch
-        // draw is the uniform along-step point; all later draws are unchanged.
-        out.ev_fraction=loss.deposit/energy;
-        for(unsigned k=0;k<3;++k)out.ev_position[k]=start[k]+branch*out.length*direction[k];
     }
     out.energy=loss.remaining;
     if(out.length!=flight||out.face){out.status=ChargedStepStatus::continued;return out;}
@@ -150,55 +126,21 @@ template<class Uniform,class Model>inline ChargedStep transport_step_face(const 
     if(out.status!=ChargedStepStatus::photon)out.status=ChargedStepStatus::continued;return out;
 }
 
-template<class Uniform,class Tally,class Score=NoExpectedScore>
+template<class Uniform,class Tally>
 inline ElectronEnergyPacket transport_packet(ElectronEnergyPacket packet,
-    ChargedBankView bank,const ElectronCtGeometry& geometry,Cache& cache,Uniform& uniform,Tally& tally,
-    Score&& score=Score{},float expected_density=-1.f,float expected_min_energy=0.f){
+    ChargedBankView bank,const ElectronCtGeometry& geometry,Cache& cache,Uniform& uniform,Tally& tally){
     tally(0,1);
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-    const float diagnostic_energy=packet.cursor.energy_MeV;
-    const unsigned energy_bin=diagnostic_energy<1e-4f?0u:diagnostic_energy<1e-3f?1u:
-        diagnostic_energy<1e-2f?2u:diagnostic_energy<1e-1f?3u:diagnostic_energy<1.f?4u:5u;
-    // One matrix entry per charged call, including pre-step exits. No RNG draws.
-    const auto diagnostic=[&](unsigned mask,unsigned event){tally(8+(energy_bin*32+mask)*8+event,1);};
-#endif
     const auto face=cached_face(geometry,packet.cursor.position,packet.cursor.direction,cache);
     if(!face.valid){
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-        diagnostic(0,7);
-#endif
         packet.status=ElectronPacketStatus::invalid;tally(7,1);return packet;}
     if(face.escaped){
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-        diagnostic(0,5);
-#endif
         packet.status=ElectronPacketStatus::escaped;return packet;}
     const bool material_valid=prepare_material(bank,geometry,face,cache);
     if(!material_valid){
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-        diagnostic(0,6);
-#endif
         packet.status=ElectronPacketStatus::invalid;tally(6,1);return packet;}
     const auto& model=cache.model;
-    // Expected scoring is selected by the current voxel; it never alters steps.
-    const bool expected=face.density<=expected_density&&packet.cursor.energy_MeV>=expected_min_energy;
     const auto result=transport_step_face(model,face,packet.cursor.position,packet.cursor.direction,
-        packet.cursor.energy_MeV,cache.majorant,uniform,.05f,.005f,expected);
-    if(result.ev_fraction>0){
-        // Exact telescoping split: scored + remaining == previous weight.
-        const float w=packet.weight_MeV,rest=w-w*result.ev_fraction;
-        score(result.ev_position,w-rest);packet.weight_MeV=rest;
-    }
-    #ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-    // A flight-limited soft-loss termination never draws an event category;
-    // keep it deposited rather than inventing an elastic/hard classification.
-    const unsigned event=result.status==ChargedStepStatus::invalid?7u:
-        result.status==ChargedStepStatus::coverage_missing?6u:
-        result.status==ChargedStepStatus::escaped?5u:
-        result.hard_collision?3u:result.hard_proposal?2u:result.elastic?1u:
-        result.status==ChargedStepStatus::deposited?4u:0u;
-    diagnostic(result.limiter_mask,event);
-#endif
+        packet.cursor.energy_MeV,cache.majorant,uniform,.05f,.005f);
     packet.cursor.section=face.section;packet.cursor.density_g_cm3=face.density;packet.cursor.physical_density_g_cm3=face.density;
     packet.cursor.position=result.position;packet.cursor.direction=result.direction;packet.cursor.energy_MeV=result.energy;
     packet.cursor.row=kElectronContinuationEnd;++packet.advances;

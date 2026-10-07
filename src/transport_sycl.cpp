@@ -1,94 +1,31 @@
 #include "carbon/immutable_input_cache.hpp"
-#ifdef CARBON_ELECTRON_SEGMENT_DIAGNOSTICS
-#include "carbon/electron_segment_diagnostics.hpp"
-#endif
-#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
-#include "carbon/electron_range_guard.hpp"
-#endif
 #include "carbon/input_dependencies.hpp"
 #include "carbon/nuclear_collision.hpp"
-#include "carbon/fe_moments.hpp"
 #include "carbon/charged_species.hpp"
 #include "carbon/secondary_schedule.hpp"
 #include "carbon/delta_moments_data.hpp"
 #include "carbon/host_prefetch.hpp"
 #include "carbon/runtime_timing.hpp"
 #include "carbon/unified_em_view.hpp"
-#ifndef CARBON_SECONDARY_STEP_PROFILE
-#define CARBON_SECONDARY_STEP_PROFILE 0
-#endif
-#ifndef CARBON_SECONDARY_CONTEXT_POINTER
-#define CARBON_SECONDARY_CONTEXT_POINTER 0
-#endif
-#ifndef CARBON_SECONDARY_EXPLICIT_ND_RANGE
-#define CARBON_SECONDARY_EXPLICIT_ND_RANGE 0
-#endif
-#ifndef CARBON_SECONDARY_ND_RANGE_SIZE
-#define CARBON_SECONDARY_ND_RANGE_SIZE 64
-#endif
-#ifndef CARBON_SECONDARY_REUSE_PROJECTILE_INDEX
-#define CARBON_SECONDARY_REUSE_PROJECTILE_INDEX 0
-#endif
-#ifndef CARBON_SECONDARY_PRODUCTION_SPECIALIZE
-#define CARBON_SECONDARY_PRODUCTION_SPECIALIZE 0
-#endif
-#ifndef CARBON_PRIMARY_PRODUCTION_SPECIALIZE
-#define CARBON_PRIMARY_PRODUCTION_SPECIALIZE 0
-#endif
-// Pass the immutable primary-kernel closures (Schneider CT context and unified
-// EM device view) through a device-resident context pointer instead of capturing
-// them by value. Required on GPU backends whose kernel-argument limit is 2048 B
-// (Intel Arc OpenCL/Level Zero); harmless and ABI-compatible on CUDA.
-#ifndef CARBON_PRIMARY_CONTEXT_POINTER
-#define CARBON_PRIMARY_CONTEXT_POINTER 0
-#endif
-// When the primary context pointer is enabled, also move the unified EM device
-// view out of the argument list. Set to 0 to keep unified_device by value (only
-// SchneiderCtDeviceContext moved) for isolation/debugging.
-#ifndef CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
-#define CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED 1
-#endif
-#ifndef CARBON_SECONDARY_KNOWN_SPECIES_PROBE
-#define CARBON_SECONDARY_KNOWN_SPECIES_PROBE 0
-#endif
-#ifndef CARBON_SECONDARY_NON_HE4_PROBE
-#define CARBON_SECONDARY_NON_HE4_PROBE 0
-#endif
-#ifndef CARBON_SECONDARY_EXACT_SPECIES_PROBE
-#define CARBON_SECONDARY_EXACT_SPECIES_PROBE -1
-#endif
-#ifndef CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE
-#define CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE 0
-#endif
-#if CARBON_SECONDARY_CONTEXT_POINTER
-#define CARBON_SECONDARY_CONTEXT_FIELD(name) secondary_transport_ctx->name
-#else
-#define CARBON_SECONDARY_CONTEXT_FIELD(name) name
-#endif
 #include <fstream>
 #include <charconv>
 #include <sstream>
 #include "carbon/cross_section.hpp"
-#include "carbon/hadronic_cache_candidate.hpp"
+#include "carbon/hadronic_rate_cache.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/electron_ct_birth_position.hpp"
 #include "carbon/device.hpp"
 #include "carbon/broadbeam_electron_region.hpp"
 #include "carbon/broadbeam_electron_distance.hpp"
-#include "carbon/broadbeam_body_mask.hpp"
 #include "carbon/electron_charged_packet.hpp"
 #include "carbon/electron_birth_task.hpp"
 #include "carbon/electron_fp32_device.hpp"
-#ifdef CARBON_ELECTRON_VOXEL_CACHE
 #include "carbon/electron_voxel_cache.hpp"
-#endif
 #include "carbon/copper_proton_fluctuation.hpp"
 #include "carbon/inelastic.hpp"
-#include "carbon/inelastic_package_v2.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/particle.hpp"
 #include "carbon/rng.hpp"
-#include "carbon/slab_phantom.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/tps_source.hpp"
 #include "carbon/nuclear_elastic_scattering.hpp"
@@ -102,11 +39,7 @@
 #include "carbon/inelastic_package_v3.hpp"
 #include "carbon/cinel03_event_rotation.hpp"
 #include "carbon/schneider_ct_device_context.hpp"
-#if defined(CARBON_ENABLE_MINIBEAM)
 #include "carbon/minibeam_collimator.hpp"
-#endif
-
-#ifdef CARBON_HAS_SYCL
 
 #include <sycl/sycl.hpp>
 
@@ -134,9 +67,8 @@
 
 namespace carbon {
 // JointResponse: 0 disabled, 1 inline, 2 separate selected-response replay.
-template<bool ProductionPath = false, bool UniformWaterPath = false, int Stage = 0, bool BroadBeam = false, bool Gaussian = false, int JointResponse = 0>
+template<bool UniformWaterPath, int Stage, bool BroadBeam, int JointResponse>
 class CarbonPrimaryTransportKernel;
-template<bool Gaussian> class FeJointReplayKernel;
 // A single transfer at the beamline/medium boundary. All physics-specific
 // step states remain private to their own stage; RNG identity is preserved.
 struct PrimaryMediumEntryState {
@@ -147,20 +79,19 @@ struct PrimaryMediumEntryState {
 };
 static_assert(sizeof(PrimaryMediumEntryState) == 64);
 
-template<bool ProductionPath = false, int ExactSpecies = -1, bool BroadBeam = false, bool Gaussian = false, int JointResponse = 0>
+template<bool ProductionPath = false, int ExactSpecies = -1, bool BroadBeam = false, int JointResponse = 0>
 class CarbonSecondaryTransportKernel;
 
 #include "detail/sycl_dose_atomic.inc"
 #include "detail/sycl_profile.inc"
 #include "detail/sycl_transport_context_impl.inc"
 #include "detail/sycl_transport_context_methods.inc"
-#include "detail/sycl_cinel02_device.inc"
+#include "detail/sycl_ion_ledger_device.inc"
 
 namespace {
 
 #include "detail/sycl_minibeam_copper_diagnostic.inc"
 
-#if defined(CARBON_ENABLE_MINIBEAM)
 constexpr std::size_t minibeam_event_counter_count = 158;
 constexpr std::size_t air_ion_proposal_slot = 156;
 constexpr std::size_t air_ion_step_slot = 157;
@@ -191,18 +122,11 @@ constexpr std::size_t minibeam_fragment_ignored_probability_micro_slot = 112;
 constexpr std::size_t minibeam_fragment_generation_interaction_slot = 121;
 constexpr std::size_t minibeam_fragment_generation_hit_slot = 124;
 constexpr std::size_t minibeam_fragment_generation_miss_slot = 127;
-constexpr std::size_t minibeam_secondary_c12_fe_step_slot = 130;
-constexpr std::size_t minibeam_secondary_c12_fe_segment_slot = 131;
-constexpr std::size_t minibeam_secondary_c12_raw_loss_micro_slot = 132;
-constexpr std::size_t minibeam_secondary_c12_scaled_loss_micro_slot = 133;
-constexpr std::size_t minibeam_secondary_c12_scaled_loss_step_slot = 134;
 // Diagnostic: water-Urban subdivision iterations beyond any physical need
 // (legit worst case ~200 micro-segments for sub-table-floor energies; normal
 // use needs <= 4). Trips indicate a non-progress pathology, never physics.
-constexpr std::size_t minibeam_water_urban_subdiv_cap_slot = 135;
 // Diagnostic: secondary-C12 Urban step entries (proves the research branch
 // executes; the cap slot above only fires on pathology).
-constexpr std::size_t minibeam_water_secondary_c12_urban_step_slot = 136;
 // Hard failure: invalid Urban proposal, zero-progress segment, or
 // subdivision-cap trip (fix B5). Any nonzero count fails the run (throw on
 // host): a partial space path with full-macro-step energy loss must never
@@ -225,17 +149,13 @@ constexpr std::size_t minibeam_urban_firstfail_stepseg_slot = 141;
 constexpr std::size_t minibeam_urban_firstfail_reason_slot = 142;
 // Diagnostic: sub-ulp remainder completions (FP32 granularity, position
 // error < 2 ulp of the macro step; counted, non-fatal).
-constexpr std::size_t minibeam_urban_subulp_drop_slot = 143;
 // First numeric-guard evidence (fix C2.3 investigation): 144 = claim flag,
 // 145 = site tag (1 Cu, 2 water primary, 3 secondary), 146..151 = float
 // bits of (g_final, g_prop, t_msc, lambda0, range, par1), 152 = float bits
 // of par3. First trip only; lets the host reproduce the exact inputs.
 constexpr std::size_t minibeam_urban_guardev_claim_slot = 144;
 constexpr std::size_t minibeam_urban_guardev_base_slot = 145;
-constexpr std::size_t minibeam_urban_guardev_count = 8;
-#endif
 
-#if defined(CARBON_ENABLE_MINIBEAM)
 struct CopperElasticRecord {
     float energy_MeV_per_u{};
     float macroscopic_rate_per_mm{};
@@ -289,26 +209,6 @@ inline float minibeam_linear_table(const float* energies, const float* values,
     }
     const auto fraction = (energy - energies[low]) / (energies[high] - energies[low]);
     return values[low] + fraction * (values[high] - values[low]);
-}
-
-inline float minibeam_survivor_stopping_scale(
-    float energy_MeV_per_u, float fallback, const float* energies,
-    const float* scales, std::size_t count) noexcept {
-    if (!energies || !scales || count == 0) return fallback;
-    if (energy_MeV_per_u <= energies[0]) return scales[0];
-    if (energy_MeV_per_u >= energies[count - 1]) return scales[count - 1];
-    std::size_t low = 0;
-    std::size_t high = count - 1;
-    while (high - low > 1) {
-        const auto middle = low + (high - low) / 2;
-        if (energies[middle] <= energy_MeV_per_u) low = middle;
-        else high = middle;
-    }
-    const auto fraction = sycl::clamp(
-        (energy_MeV_per_u - energies[low]) /
-            (energies[high] - energies[low]),
-        0.0F, 1.0F);
-    return scales[low] + fraction * (scales[high] - scales[low]);
 }
 
 inline float minibeam_copper_ion_stopping(
@@ -453,8 +353,6 @@ inline std::uint32_t minibeam_elastic_local_sample(
     return begin + offset;
 }
 
-#endif
-
 #ifndef CARBON_EM_AUDIT_SHARDS
 #define CARBON_EM_AUDIT_SHARDS 64
 #endif
@@ -487,9 +385,6 @@ struct alignas(16) SecondaryResumeStateT {
     // Preserve optical depth and the rate cache across scheduler slices.
     UnifiedEmClock urban_ionization_clock{};
     UnifiedEmState unified_secondary_state{};
-#if CARBON_EM_LOCAL_AUDIT
-    std::array<std::uint64_t,8> unified_secondary_audit{};
-#endif
     uint32_t sec_steps{};
     std::uint64_t local_sec_rate_queries{};
     std::uint64_t local_sec_steps{};
@@ -551,43 +446,6 @@ inline void flush_unified_em_audit(std::uint64_t* global,
 #include "detail/sycl_device_math.inc"
 #include "detail/sycl_urban_global.inc"
 
-// Read-only, opt-in capture. It neither samples RNG nor modifies dose/ledgers.
-struct NeutronBirthBuffer {
-    NeutronBirthRecord* records{};
-    std::uint64_t* count{};
-    std::uint64_t capacity{};
-};
-inline void record_neutron_birth(
-    NeutronBirthBuffer buffer, const Cinel03DeviceProduct& product,
-    float x, float y, float z, Direction3F parent_direction,
-    float event_cos, float event_sin, std::uint64_t history,
-    std::uint64_t parent_stream, std::uint32_t collision,
-    std::uint32_t product_index, std::uint32_t generation,
-    int material, int parent_z, int parent_a, float parent_weight = 1.f) {
-    if (!buffer.records || product.pdg != 2112) return;
-    const auto local = rotate_cinel03_event_azimuth(
-        product.local_direction_x, product.local_direction_y,
-        product.local_direction_z, event_cos, event_sin);
-    const auto direction = rotate_local_direction(local.x, local.y, local.z, parent_direction);
-    sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-        sycl::memory_scope::device, sycl::access::address_space::global_space> count(*buffer.count);
-    const auto index = count.fetch_add(1);
-    if (index >= buffer.capacity) return; // Host rejects truncation unconditionally.
-    NeutronBirthRecord r{};
-    r.history=history; r.collision=collision; r.product_index=product_index;
-    r.rng_stream=rng::event_product_stream(parent_stream, collision,
-        generation == 0 ? rng::branch_role_primary_neutral : rng::branch_role_cascade_neutral,
-        product_index);
-    r.generation=generation; r.material_section=material;
-    r.parent_z=parent_z; r.parent_a=parent_a; r.role=product.role;
-    r.kinetic_energy_MeV=product.kinetic_energy_MeV;
-    r.x_mm=x; r.y_mm=y; r.z_mm=z;
-    r.direction_x=direction.x; r.direction_y=direction.y; r.direction_z=direction.z;
-    r.weight=parent_weight*product.weight;
-    buffer.records[index]=r;
-}
-
-
 // Fix C2.3: Urban accepted-step contract checks (device-side).
 // Reason codes (0 = accept): 1 invalid proposal (includes the RNG
 // outer/segment guard reject), 2 non-positive g, 3 non-finite t/g/delta,
@@ -638,31 +496,7 @@ inline int urban_step_field_reason(const CorrelatedScatteringStep& s) noexcept {
 // Returns 0 (accept: caller advances traversed by g), 6 (FP32 stall with
 // significant remainder: fault), 7 (overshoot: fault), or sets
 // subulp_complete (caller completes the macro step exactly + counts).
-inline int urban_step_progress_reason(const CorrelatedScatteringStep& s,
-                                      const float traversed_mm,
-                                      const float step_mm,
-                                      const float allowance_mm,
-                                      bool& subulp_complete) noexcept {
-    subulp_complete = false;
-    const float g = s.final_geom_path_mm;
-    const float allow_ulp = urban_ulp_above(allowance_mm);
-    if (g > allowance_mm + allow_ulp) return 7;
-    const float next = traversed_mm + g;
-    if (next > traversed_mm) {
-        const float step_ulp = urban_ulp_above(step_mm);
-        if (next > step_mm + step_ulp) return 7;
-        return 0;
-    }
-    const float rem = step_mm - traversed_mm;
-    const float step_ulp = urban_ulp_above(step_mm);
-    if (rem <= 2.0F * step_ulp) {
-        subulp_complete = true;
-        return 0;
-    }
-    return 6;
-}
 
-#if defined(CARBON_ENABLE_MINIBEAM)
 namespace {
 inline void urban_record_first_failure(std::uint64_t* counts,
                                        const std::uint64_t history_id,
@@ -692,9 +526,7 @@ inline void urban_record_first_failure(std::uint64_t* counts,
     fatal.fetch_add(1U);
 }
 }  // namespace
-#endif
 
-#if defined(CARBON_ENABLE_MINIBEAM)
 namespace {
 inline void urban_record_guard_evidence(std::uint64_t* counts,
                                         const std::uint64_t site_tag,
@@ -717,8 +549,6 @@ inline void urban_record_guard_evidence(std::uint64_t* counts,
     }
 }
 }  // namespace
-#endif
-#include "detail/sycl_score_device.inc"
 
 using carbon::detail::DeviceMemoryTracker;
 
@@ -1024,19 +854,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 
 // Content identity for cached read-only tables: FNV-1a over the bytes that are
 // actually uploaded. Paths are never used as equivalence proof.
-inline std::uint64_t fnv1a64_bytes(const void* data, std::size_t bytes,
-                                   std::uint64_t h = 1469598103934665603ULL) {
-    const auto* p = static_cast<const unsigned char*>(data);
-    for (std::size_t i = 0; i < bytes; ++i) {
-        h ^= p[i];
-        h *= 1099511628211ULL;
-    }
-    return h;
-}
-template <class T>
-inline std::uint64_t fnv1a64_vec(const std::vector<T>& values, std::uint64_t h) {
-    return fnv1a64_bytes(values.data(), values.size() * sizeof(T), h);
-}
 
 }  // namespace
 
@@ -1050,7 +867,7 @@ inline std::uint64_t fnv1a64_vec(const std::vector<T>& values, std::uint64_t h) 
     ctx.mode = config.material_physics_mode;
     ctx.unified_water = config.unified_water_nuclear_transport;
 
-    if (!ctx.uses_cinel03() || config.is_primary_attenuation_only_mode()) {
+    if (!ctx.uses_cinel03()) {
         return ctx;
     }
     PureWaterMaterial water_material{};
@@ -1058,7 +875,7 @@ inline std::uint64_t fnv1a64_vec(const std::vector<T>& values, std::uint64_t h) 
     if (ctx.unified_water) {
         water_material = PureWaterMaterial::from_probe(config.unified_water_material_file);
         water_source_materials = SchneiderMaterialTable::from_topas_file(
-            config.ct_schneider_file.empty() ? std::filesystem::path("data/HUtoMaterialSchneider.txt") : config.ct_schneider_file);
+            config.ct_schneider_file.empty() ? std::filesystem::path("data/materials/schneider/hu_to_material.txt") : config.ct_schneider_file);
         ctx.water_radiation_length_g_cm2 = water_material.radiation_length_g_cm2;
     }
     const auto upload_water_rates = [&](const MaterialNuclearRates& rates) {
@@ -1101,20 +918,9 @@ inline std::uint64_t fnv1a64_vec(const std::vector<T>& values, std::uint64_t h) 
         if (ctx.unified_water) ctx.water_primary_rates = upload_water_rates(
             MaterialNuclearRates::water_primary(*rate_table,water_source_materials,water_material.hydrogen_mass_fraction,
                 config.primary_atomic_number,config.primary_mass_number));
-        const auto cdf_size = target_sampler->cdf_table().size();
-        const auto tot_size = target_sampler->total_mass_rates().size();
-        float* dev_cdf = mem_tracker.allocate<float>(cdf_size);
-        float* dev_total_rates = mem_tracker.allocate<float>(tot_size);
-        if (dev_cdf == nullptr || dev_total_rates == nullptr) {
-            throw std::bad_alloc();
-        }
-        queue.copy(target_sampler->cdf_table().data(), dev_cdf, cdf_size);
-        queue.copy(target_sampler->total_mass_rates().data(), dev_total_rates, tot_size);
         ctx.primary_sampler = target_sampler->device_table();
-        ctx.primary_sampler.cdf_table = dev_cdf;
-        ctx.primary_sampler.total_mass_rates = dev_total_rates;
-        // v3: raw partials + per-target domain for the masked device path.
-        if (target_sampler->rate_version() == 3) {
+        // Current masked partials and per-target domains only.
+        {
             const auto& partials = target_sampler->partial_rates();
             float* dev_partial = mem_tracker.allocate<float>(partials.size());
             float* dev_emin = mem_tracker.allocate<float>(target_sampler->domain_emin().size());
@@ -1139,50 +945,6 @@ inline std::uint64_t fnv1a64_vec(const std::vector<T>& values, std::uint64_t h) 
         }
     }
 
-    // 1b. Elastic C12 SCHNELXS sampler (diagnostic only; absent file
-    // keeps elastic disabled with zero behavior change).
-    if (!config.ct_elastic_section_rate_file.empty()) {
-        const auto elastic_table = SchneiderRateTable::from_binary(
-            config.ct_elastic_section_rate_file, {}, "SCHNELXS", 3);
-        const SchneiderTargetSampler elastic_sampler(elastic_table);
-        const auto cdf_size = elastic_sampler.cdf_table().size();
-        const auto tot_size = elastic_sampler.total_mass_rates().size();
-        float* dev_cdf = mem_tracker.allocate<float>(cdf_size);
-        float* dev_total_rates = mem_tracker.allocate<float>(tot_size);
-        if (dev_cdf == nullptr || dev_total_rates == nullptr) {
-            throw std::bad_alloc();
-        }
-        queue.copy(elastic_sampler.cdf_table().data(), dev_cdf, cdf_size);
-        queue.copy(elastic_sampler.total_mass_rates().data(), dev_total_rates, tot_size);
-        ctx.elastic_sampler = elastic_sampler.device_table();
-        ctx.elastic_sampler.cdf_table = dev_cdf;
-        ctx.elastic_sampler.total_mass_rates = dev_total_rates;
-        const auto& partials = elastic_sampler.partial_rates();
-        float* dev_partial = mem_tracker.allocate<float>(partials.size());
-        float* dev_emin = mem_tracker.allocate<float>(elastic_sampler.domain_emin().size());
-        float* dev_emax = mem_tracker.allocate<float>(elastic_sampler.domain_emax().size());
-        unsigned char* dev_has =
-            mem_tracker.allocate<unsigned char>(elastic_sampler.domain_has().size());
-        if (dev_partial == nullptr || dev_emin == nullptr || dev_emax == nullptr ||
-            dev_has == nullptr) {
-            throw std::bad_alloc();
-        }
-        queue.copy(partials.data(), dev_partial, partials.size());
-        queue.copy(elastic_sampler.domain_emin().data(), dev_emin,
-                   elastic_sampler.domain_emin().size());
-        queue.copy(elastic_sampler.domain_emax().data(), dev_emax,
-                   elastic_sampler.domain_emax().size());
-        queue.copy(elastic_sampler.domain_has().data(), dev_has,
-                   elastic_sampler.domain_has().size());
-        ctx.elastic_sampler.partial_rates = dev_partial;
-        ctx.elastic_sampler.domain_emin = dev_emin;
-        ctx.elastic_sampler.domain_emax = dev_emax;
-        ctx.elastic_sampler.domain_has = dev_has;
-        std::cout << "[schneider-elastic-rates] mode=elastic-diagnostic sections=25 "
-                  << "targets=13 energies=921 source="
-                  << config.ct_elastic_section_rate_file << '\n';
-    }
-
     // 2. Primary C12 CINEL03 Package
     if (std::filesystem::exists(c12_cinel_file)) {
         const Cinel03DeviceTables* c12_dev = nullptr;
@@ -1204,11 +966,8 @@ inline std::uint64_t fnv1a64_vec(const std::vector<T>& values, std::uint64_t h) 
         }
         const auto& primary_package = host_cache && host_cache->primary_package
             ? *host_cache->primary_package : *local_c12_pkg;
-        if (config.primary_rest_mass_MeV > 0.0 ||
-            config.primary_atomic_number != 6 || config.primary_mass_number != 12) {
-            for (const auto& event : primary_package.interactions())
-                config.require_primary_reference_mass(event.projectile_rest_mass, "Primary CINEL03 package");
-        }
+        for (const auto& event : primary_package.interactions())
+            config.require_primary_reference_mass(event.projectile_rest_mass, "Primary CINEL03 package", PrimaryMassConvention::Kinematic);
         for (const auto& node : c12_dev->energy_nodes) {
             if (node.projectile_z != config.primary_atomic_number ||
                 node.projectile_a != config.primary_mass_number)
@@ -1258,23 +1017,16 @@ inline std::uint64_t fnv1a64_vec(const std::vector<T>& values, std::uint64_t h) 
         }
         if (ctx.unified_water) ctx.water_secondary_rates = upload_water_rates(
             MaterialNuclearRates::water_secondary(*sec_rate_table,water_source_materials,water_material.hydrogen_mass_fraction));
-        std::vector<float> sec_total_rates_float(sec_rate_table->mass_total_rates().size());
-        for (std::size_t i = 0; i < sec_rate_table->mass_total_rates().size(); ++i) {
-            sec_total_rates_float[i] = static_cast<float>(sec_rate_table->mass_total_rates()[i]);
-        }
         std::vector<float> sec_partial_rates_float(sec_rate_table->mass_partial_rates().size());
         for (std::size_t i = 0; i < sec_rate_table->mass_partial_rates().size(); ++i) {
             sec_partial_rates_float[i] = static_cast<float>(sec_rate_table->mass_partial_rates()[i]);
         }
-        float* dev_sec_total = mem_tracker.allocate<float>(sec_total_rates_float.size());
         float* dev_sec_partial = mem_tracker.allocate<float>(sec_partial_rates_float.size());
-        if (dev_sec_total == nullptr || dev_sec_partial == nullptr) {
+        if (dev_sec_partial == nullptr) {
             throw std::bad_alloc();
         }
-        queue.copy(sec_total_rates_float.data(), dev_sec_total, sec_total_rates_float.size());
         queue.copy(sec_partial_rates_float.data(), dev_sec_partial, sec_partial_rates_float.size());
 
-        ctx.sec_total_rates = dev_sec_total;
         ctx.sec_partial_rates = dev_sec_partial;
         // v3: bundle-ordered projectile registry + per-(projectile,target)
         // domain for the only supported, masked device path.
@@ -1384,10 +1136,9 @@ UnifiedEmRequest unified_em_request(const TransportConfig& config) {
                 : config.em_delta_moments_file};
 }
 
-template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
+template<bool BroadBeam, int JointResponse = 0>
 [[gnu::noinline]] TransportResult transport_sycl_impl(const TransportConfig& config,
                                const StoppingPowerTable& stopping_power,
-                               const CrossSectionTable& cross_section,
                                const std::string& device_name,
                                SyclTransportContext* context) {
     using SecondaryResumeState = SecondaryResumeStateT<BroadBeam>;
@@ -1398,6 +1149,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     RuntimeScope runtime_transport("transport_total");
     RuntimeScope runtime_setup("transport_setup_including_upload");
     config.validate();
+    if (device_name != "cuda") throw std::invalid_argument("device must be cuda");
     std::cout<<"[transport-profile] requested="<<config.transport_profile
              <<" compiled_kernel="<<(BroadBeam?(JointResponse==3?"broadbeam_fe_independent":"broadbeam_fe"):"reference_detailed")<<"\n";
     validate_schneider_ct_startup(config);
@@ -1408,19 +1160,16 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         SchneiderCtDeviceContext uses{};
         uses.mode = config.material_physics_mode;
         uses.unified_water = config.unified_water_nuclear_transport;
-        if (uses.uses_cinel03() && !config.is_primary_attenuation_only_mode() &&
+        if (uses.uses_cinel03() &&
             !(context != nullptr && context->impl_->schneider_host_cache.valid)) {
             prefetch_cinel03(config.ct_schneider_primary_cinel03_file);
             prefetch_cinel03(config.ct_schneider_secondary_cinel03_file);
         }
-#if defined(CARBON_ENABLE_MINIBEAM)
-        if ((!BroadBeam && config.enable_minibeam) && config.minibeam_transport_mode == "copper_em" &&
+        if ((!BroadBeam && config.enable_minibeam) &&
             !inputs.contains<LoadedCinel03>(input_cache_key(config.minibeam_copper_inclxx_file)))
             prefetch_cinel03(config.minibeam_copper_inclxx_file);
-#endif
         if ( !(context != nullptr && context->impl_->unified_em_cache.valid))
             prefetch_unified_em(unified_em_request(config));
-        if ((!BroadBeam && config.enable_neutron_transport)) prefetch_neutron_inputs(config,&inputs);
     }
 
     const auto start = std::chrono::steady_clock::now();
@@ -1430,15 +1179,15 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     }
 
     const auto resolved_device_name =
-        device_name.empty() ? std::string("gpu") : device_name;
+        device_name;
 
     sycl::queue local_queue = (context != nullptr)
                                   ? context->impl_->queue
                                   : make_sycl_queue(resolved_device_name);
     auto& queue = local_queue;
     const auto device = queue.get_device();
-    const auto backend = queue.get_backend();
-    const bool is_cuda_backend = backend == sycl::backend::ext_oneapi_cuda;
+    if (!device.is_gpu() || queue.get_backend() != sycl::backend::ext_oneapi_cuda)
+        throw std::invalid_argument("Transport requires a CUDA GPU queue");
 
     const auto device_memory_budget_bytes =
         config.device_memory_budget_gib > 0.0
@@ -1455,60 +1204,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const auto number_of_bins = config.number_of_bins();
     const auto number_of_voxels = config.number_of_voxels();
     const auto table_size = stopping_power.values().size();
-    // Independent nuclear/recoil lookup tables retain their reference grid.
-    const auto cross_section_table_size = table_size;
 
-    const bool reuse_immutable_buffers = context != nullptr;
-    if (context != nullptr) {
-        // Identity covers the reference energy grid and nuclear cross sections,
-        // not the file path. A zero cross-section hashes differently
-        // from a real one.
-        std::uint64_t physics_hash = 1469598103934665603ULL;
-        physics_hash = fnv1a64_vec(stopping_power.energies(), physics_hash);
-        physics_hash = fnv1a64_vec(cross_section.energies(), physics_hash);
-        physics_hash = fnv1a64_vec(cross_section.values(), physics_hash);
-        const std::string physics_signature = std::to_string(physics_hash);
-        context->impl_->ensure_initialized(stopping_power, cross_section,
-                                           physics_signature);
-    }
-
-    float* cross_section_device =
-        context != nullptr ? context->impl_->cross_section_device
-                           : mem_tracker.allocate<float>(cross_section_table_size);
-    float* target_h_fraction_device =
-        mem_tracker.allocate<float>(cross_section_table_size);
-
-    const auto free_immutable_device = [&](auto* pointer) {
-        if (!reuse_immutable_buffers && pointer != nullptr) {
-            mem_tracker.free(pointer);
-        }
-    };
-
-    float* schneider_primary_xs_device = nullptr;
-    std::uint32_t schneider_xs_sections = 0;
-    std::uint32_t schneider_xs_energies = 0;
-    float schneider_xs_e_min = 0.0F;
-    float schneider_xs_inv_dE = 0.0F;
     const bool use_unified_water = config.unified_water_nuclear_transport;
 
     bool use_schneider_primary_xs = use_unified_water;
-    Cinel02DeviceInteraction* cinel02_interactions_device = nullptr;
-    Cinel02DeviceProduct* cinel02_products_device = nullptr;
-    Cinel02EnergyNode* cinel02_energy_nodes_device = nullptr;
-    std::uint32_t* cinel02_event_offsets_device = nullptr;
-    std::uint32_t* cinel02_event_indices_device = nullptr;
-    Cinel02RateGroup* cinel02_rate_groups_device = nullptr;
-    Cinel02RateSample* cinel02_rate_samples_device = nullptr;
-    Cinel02MaterialRateGroup* cinel02_ct_rate_groups_device = nullptr;
-    Cinel02RateSample* cinel02_ct_rate_samples_device = nullptr;
-    std::uint32_t cinel02_interaction_count = 0U;
-    std::uint32_t cinel02_product_count = 0U;
-    std::uint32_t cinel02_energy_node_count = 0U;
-    std::uint32_t cinel02_rate_group_count = 0U;
-    std::uint32_t cinel02_rate_sample_count = 0U;
-    std::uint32_t cinel02_ct_rate_group_count = 0U;
-    std::uint32_t cinel02_ct_rate_sample_count = 0U;
-    float cinel02_ct_rate_reference_density_g_per_cm3 = 1.0F;
     constexpr std::size_t kSchneiderDiagSlots =
         static_cast<std::size_t>(SchneiderDiagSlot::Count);
     constexpr std::size_t kSchneiderFloatSlots =
@@ -1524,37 +1223,36 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     SchneiderUnsupportedTrack* schneider_track_log_device = nullptr;
     std::uint32_t* schneider_miss_count_device = nullptr;
     std::uint32_t* schneider_track_count_device = nullptr;
-    constexpr std::size_t kCinel02SpeciesEnergySlots =
+    constexpr std::size_t kIonSpeciesEnergySlots =
         TransportResult::species_ledger_species_count *
         TransportResult::species_ledger_metric_count;
-    float* cinel02_species_energy_device = nullptr;
+    float* ion_species_energy_device = nullptr;
     double* grid_deposited_in_device = nullptr;
     double* grid_deposited_out_device = nullptr;
-    constexpr std::size_t kCinel02SpeciesTerminalSlots =
-        Cinel02SpeciesLedgerSchema::species_count *
-        Cinel02SpeciesLedgerSchema::terminal_reason_count;
-    std::uint64_t* cinel02_species_terminal_device = nullptr;
-    // CINEL02-only package/rate uploads and diagnostic allocations retired.
+    constexpr std::size_t kIonSpeciesTerminalSlots =
+        IonSpeciesLedgerSchema::species_count *
+        IonSpeciesLedgerSchema::terminal_reason_count;
+    std::uint64_t* ion_species_terminal_device = nullptr;
 
     // Read-only species ledger is mode-independent: secondary EM transport
     // records per-species deposited/escaped energy unconditionally on device
     // (null-checked increments), so these two buffers remain in the shared
     // CINEL03 framework. No physics effect:
     // ledger writes are isolated atomics into dedicated buffers.
-    if (cinel02_species_energy_device == nullptr) {
-        cinel02_species_energy_device =
-            mem_tracker.allocate<float>(kCinel02SpeciesEnergySlots);
-        if (cinel02_species_energy_device == nullptr) throw std::bad_alloc();
+    if (ion_species_energy_device == nullptr) {
+        ion_species_energy_device =
+            mem_tracker.allocate<float>(kIonSpeciesEnergySlots);
+        if (ion_species_energy_device == nullptr) throw std::bad_alloc();
     }
-    if (cinel02_species_terminal_device == nullptr) {
-        cinel02_species_terminal_device =
-            mem_tracker.allocate<std::uint64_t>(kCinel02SpeciesTerminalSlots);
-        if (cinel02_species_terminal_device == nullptr) throw std::bad_alloc();
+    if (ion_species_terminal_device == nullptr) {
+        ion_species_terminal_device =
+            mem_tracker.allocate<std::uint64_t>(kIonSpeciesTerminalSlots);
+        if (ion_species_terminal_device == nullptr) throw std::bad_alloc();
     }
-    queue.fill(cinel02_species_energy_device, 0.0F,
-               kCinel02SpeciesEnergySlots).wait_and_throw();
-    queue.fill(cinel02_species_terminal_device, std::uint64_t{0},
-               kCinel02SpeciesTerminalSlots).wait_and_throw();
+    queue.fill(ion_species_energy_device, 0.0F,
+               kIonSpeciesEnergySlots).wait_and_throw();
+    queue.fill(ion_species_terminal_device, std::uint64_t{0},
+               kIonSpeciesTerminalSlots).wait_and_throw();
 
     // Explicit in-grid/outside-grid deposited-energy sinks (global MeV).
     // Every site crediting deposited ledgers splits the same amount here
@@ -1571,50 +1269,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     queue.fill(grid_deposited_in_device, 0.0, 1).wait_and_throw();
     queue.fill(grid_deposited_out_device, 0.0, 1).wait_and_throw();
 
-    // Slab layers
-    const auto enable_layered_phantom = config.enable_layered_phantom;
-    const auto slab_layer_count =
-        enable_layered_phantom ? config.slab_layers.size() : std::size_t{0};
-    std::vector<float> slab_z_ends_host(slab_layer_count);
-    std::vector<float> slab_densities_host(slab_layer_count);
-    std::vector<float> slab_radiation_lengths_host(slab_layer_count);
-    for (std::size_t i = 0; i < slab_layer_count; ++i) {
-        slab_z_ends_host[i] = static_cast<float>(config.slab_layers[i].z_end_mm);
-        slab_densities_host[i] = static_cast<float>(config.slab_layers[i].density_g_per_cm3);
-        slab_radiation_lengths_host[i] =
-            i < config.slab_radiation_lengths_g_per_cm2.size()
-                ? static_cast<float>(config.slab_radiation_lengths_g_per_cm2[i])
-                : static_cast<float>(water_radiation_length_g_per_cm2);
-    }
-    float* slab_z_ends_device = slab_layer_count > 0
-                                   ? mem_tracker.allocate<float>(slab_layer_count)
-                                   : nullptr;
-    float* slab_densities_device = slab_layer_count > 0
-                                       ? mem_tracker.allocate<float>(slab_layer_count)
-                                       : nullptr;
-    float* slab_radiation_lengths_device =
-        slab_layer_count > 0
-            ? mem_tracker.allocate<float>(slab_layer_count)
-            : nullptr;
-    if (slab_layer_count > 0) {
-        queue.copy(slab_z_ends_host.data(), slab_z_ends_device, slab_layer_count);
-        queue.copy(slab_densities_host.data(), slab_densities_device, slab_layer_count);
-        queue.copy(slab_radiation_lengths_host.data(), slab_radiation_lengths_device,
-                   slab_layer_count).wait_and_throw();
-    }
-
-    const auto enable_hetero_insert = config.enable_hetero_insert;
-    const auto insert_x_min = static_cast<float>(config.hetero_insert.x_min_mm);
-    const auto insert_x_max = static_cast<float>(config.hetero_insert.x_max_mm);
-    const auto insert_y_min = static_cast<float>(config.hetero_insert.y_min_mm);
-    const auto insert_y_max = static_cast<float>(config.hetero_insert.y_max_mm);
-    const auto insert_z_min = static_cast<float>(config.hetero_insert.z_min_mm);
-    const auto insert_z_max = static_cast<float>(config.hetero_insert.z_max_mm);
-    const auto insert_density_g_per_cm3 =
-        static_cast<float>(config.hetero_insert.density_g_per_cm3);
-    const auto insert_radiation_length_g_per_cm2 =
-        static_cast<float>(config.insert_radiation_length_g_per_cm2);
-
     // CT grid
     const auto enable_ct_grid = config.enable_ct_grid;
     float ct_origin_x = 0.0F, ct_origin_y = 0.0F, ct_origin_z = 0.0F;
@@ -1623,19 +1277,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     float* ct_density_device = nullptr;
     std::uint8_t* ct_material_device = nullptr;
     float* ct_xs_device = nullptr;
-    bool use_ct_material_xs = false;
     bool ct_material_ids_are_schneider_sections = false;
     const auto ct_skip_homogeneous_face_clamp = config.ct_skip_homogeneous_face_clamp;
 
-    if (std::getenv("CARBON_JOINT_EM_DATA") || std::getenv("CARBON_DIAGNOSTIC_PRIMARY_START_DEDX"))
-        throw std::invalid_argument("Obsolete isolated EM environment switch; use em_model: g4_material_joint_v1");
     // Water/Schneider charged-particle energy loss has one implementation.
-    const float em_primary_step_scale=static_cast<float>(config.em_primary_step_scale);
     const float maximum_mean_loss_fraction = BroadBeam ? static_cast<float>(config.broadbeam_maximum_mean_loss_fraction) : .01f;
-    const float em_secondary_step_scale=static_cast<float>(config.em_secondary_step_scale);
-    std::cout<<"[em-performance] material_cache="<<CARBON_EM_MATERIAL_CACHE
-        <<" step_cache="<<CARBON_EM_STEP_CACHE<<" local_audit="<<CARBON_EM_LOCAL_AUDIT
-        <<" exact_index="<<CARBON_EM_EXACT_INDEX<<"\n";
+    std::cout<<"[em-performance] local_audit="<<CARBON_EM_LOCAL_AUDIT<<"\n";
     UnifiedEmDevice unified_device;
     UnifiedEmMaterial* unified_materials=nullptr;
     UnifiedEmSpecies* unified_species=nullptr;
@@ -1647,8 +1294,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     UnifiedEmNode* unified_nodes=nullptr;
     float* delta_mean_device=nullptr;
     EmCubicSegmentCandidate<float>* unified_segments=nullptr;
-    const float* unified_node_energy_keys=nullptr;
-    const float* unified_segment_lower_keys=nullptr;
     std::uint64_t* unified_audit=nullptr;
     std::uint64_t* unified_empty_bucket_audit=nullptr;
     std::uint64_t* unified_interval_width_audit=nullptr;
@@ -1663,19 +1308,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     }
     const bool global_urban=!BroadBeam && config.multiple_scattering_model=="urban_v2";
     const bool uses_urban_package=global_urban;
-    const bool retain_physics_device = context != nullptr && [] {
-        const char* value=std::getenv("CARBON_RETAIN_PHYSICS_DEVICE");
-        if (!value || std::string_view(value)=="1") return true;
-        if (std::string_view(value)=="0") return false;
-        throw std::invalid_argument("CARBON_RETAIN_PHYSICS_DEVICE must be 0 or 1");
-    }();
-    if (context && !retain_physics_device) {
-        context->impl_->resident_em.reset(); context->impl_->resident_urban.reset();
-        context->impl_->resident_air.reset();
-    }
+    const bool retain_physics_device = context != nullptr;
     if (context && retain_physics_device) {
         if (!uses_urban_package) context->impl_->resident_urban.reset();
-        if (config.minibeam_air_mcs_model != "urban_v2") context->impl_->resident_air.reset();
+        if (BroadBeam || !config.enable_minibeam) context->impl_->resident_air.reset();
     }
     const auto resident_tables = [&](auto& slot,const std::string& key,const char* name) {
         const bool hit=slot && slot->signature==key;
@@ -1697,7 +1333,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             const auto index = package.view().projectile(config.primary_atomic_number, config.primary_mass_number);
             if (index < 0) throw std::invalid_argument("Urban package lacks the YAML primary projectile");
             config.require_primary_reference_mass(package.species[index].mass_mev, "Urban package");
-            if ((!BroadBeam && config.enable_minibeam) && config.minibeam_copper_mcs_model == "urban_v2" &&
+            if ((!BroadBeam && config.enable_minibeam) &&
                 package.view().material(-2, static_cast<float>(config.minibeam_copper_density_g_per_cm3)) < 0)
                 throw std::invalid_argument("Global minibeam Urban requires a G4_Cu (-2) material record");
         }
@@ -1724,14 +1360,14 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                  <<"; materials="<<package.materials.size()
                  <<" species="<<package.species.size()<<"\n";
     }
-    const bool minibeam_air_urban = config.minibeam_air_mcs_model == "urban_v2";
+    // Minibeam beamline air always uses global Urban v2 with exact Cu/air boundaries.
+    const bool minibeam_air_urban = !BroadBeam && config.enable_minibeam;
     const float air_slit_max_step = static_cast<float>(config.minibeam_air_slit_max_step_mm);
     UrbanMcsView air_urban_device{};
     int air_urban_projectile = -1;
     if (minibeam_air_urban) {
-        if (!(!BroadBeam && config.enable_minibeam) || config.minibeam_transport_mode != "copper_em" ||
-            !config.minibeam_copper_exact_material_boundaries)
-            throw std::invalid_argument("Air Urban requires copper_em with exact material boundaries");
+        if (!config.minibeam_copper_exact_material_boundaries)
+            throw std::invalid_argument("Minibeam air Urban requires exact material boundaries");
         const auto& package = inputs.get<UrbanMcsPackage>(input_cache_key(config.minibeam_air_urban_package_file),
             [&] { return UrbanMcsPackage::load(config.minibeam_air_urban_package_file); });
         air_urban_projectile = package.view().projectile(config.primary_atomic_number, config.primary_mass_number);
@@ -1824,26 +1460,14 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         if(!unified_failure_count || !unified_failure_records)throw std::bad_alloc();
         queue.fill(unified_failure_count,0u,1).wait_and_throw();
         unified_sections=upload("sections",sections);
-        if constexpr(CARBON_EM_EXACT_INDEX) {
-            if (resident && resident->contains("energy_index"))
-                unified_energy_index=resident->template get<std::remove_pointer_t<decltype(unified_energy_index)>>("energy_index");
-            else {
-                const auto index=build_unified_em_index(package);
-                unified_energy_index=upload("energy_index",index);
-            }
+        if (resident && resident->contains("energy_index"))
+            unified_energy_index=resident->template get<std::remove_pointer_t<decltype(unified_energy_index)>>("energy_index");
+        else {
+            const auto index=build_unified_em_index(package);
+            unified_energy_index=upload("energy_index",index);
         }
         unified_materials=upload("materials",package.materials);unified_species=upload("species",package.species);
         unified_records=upload("records",package.records);unified_nodes=upload("nodes",package.nodes);unified_segments=upload("segments",package.segments);
-        if constexpr(CARBON_EM_SPLIT_SEARCH_KEYS) {
-            std::vector<float> node_keys(package.nodes.size());
-            for(std::size_t i=0;i<package.nodes.size();++i)node_keys[i]=package.nodes[i].energy;
-            std::vector<float> segment_keys(package.segments.size());
-            for(std::size_t i=0;i<package.segments.size();++i)segment_keys[i]=package.segments[i].lower;
-            unified_node_energy_keys=upload("node_keys",node_keys);
-            unified_segment_lower_keys=upload("segment_keys",segment_keys);
-            std::cout<<"[em-search-keys] node_keys="<<node_keys.size()
-                     <<" segment_keys="<<segment_keys.size()<<"\n";
-        }
         unified_audit=mem_tracker.allocate<std::uint64_t>(kUnifiedEmAuditCounters*kUnifiedEmAuditShards);if(!unified_audit)throw std::bad_alloc();
         queue.fill(unified_audit,std::uint64_t{0},kUnifiedEmAuditCounters*kUnifiedEmAuditShards).wait_and_throw();
         if constexpr(CARBON_EM_EMPTY_BUCKET_AUDIT) {
@@ -1864,13 +1488,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 throw std::bad_alloc();
             queue.fill(unified_search_audit_count,std::uint32_t{0},1).wait_and_throw();
         }
-        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index,delta_mean_device,unified_node_energy_keys,unified_segment_lower_keys
-#if CARBON_EM_EMPTY_BUCKET_AUDIT
-            ,unified_empty_bucket_audit
-#endif
-#if CARBON_EM_INTERVAL_WIDTH_AUDIT
-            ,unified_interval_width_audit
-#endif
+        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index,delta_mean_device
         };
         if(!package.continuous_descriptors.empty()) {
             unified_device.continuous_descriptors=upload("continuous_descriptors",package.continuous_descriptors);
@@ -1900,7 +1518,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             config.ct_schneider_primary_cinel03_file.string() + "|" +
             config.ct_schneider_secondary_rate_file.string() + "|" +
             config.ct_schneider_secondary_cinel03_file.string() + "|" +
-            config.ct_elastic_section_rate_file.string() + "|" +
             (config.unified_water_nuclear_transport ? "water" : "ct") + "|" +
             device_name;
         if (!cache.valid || cache.signature != schneider_signature) {
@@ -1911,15 +1528,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         schneider_host_cache = &cache;
     }
     const auto ct_secondary_exact_faces = config.ct_secondary_exact_faces;
-    const auto ct_secondary_mcs_off = config.ct_secondary_mcs_off_diagnostic;
 
-    // Legacy C12-only diagnostic is separate from the all-projectile bank.
-    const bool use_ct_elastic = config.ct_elastic_diagnostic;
-    const bool ct_elastic_all_targets = config.ct_elastic_all_targets;
-    // Production speed switch: skip reporting-only joint diagnostic atomics.
-    // Slots 1 (energy domain) and 2 (miss/blocked) stay always-on: they feed
-    // fail-closed quality gates. Skipped counters never feed transport.
-    const bool enable_electron_joint_diagnostics = config.electron_joint_diagnostics;
     const bool use_independent_charged=(!BroadBeam || JointResponse==3) && !config.material_electron_charged_index_file.empty();
     const bool use_electron_fp32=use_independent_charged;
     const bool use_material_electron=use_independent_charged;
@@ -1938,8 +1547,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     MaterialPacketFailure* material_failure_device=nullptr;
     const bool defer_material_packets=use_material_electron;
     std::shared_ptr<IndependentElectronFloatDevice> independent_float_bank;
-    electron_fp32::ElectronBirthBankView float_birth{};
-    const ElectronCutBirthComposition* cut_birth26=nullptr;
+        const ElectronCutBirthComposition* cut_birth26=nullptr;
     auto electron_projectile_parameters=electron_birth_projectile_parameters(config.primary_mass_number);
     electron_fp32::ElectronJointPilotView float_joint{};
     electron_fp32::ChargedBankView float_charged{};
@@ -1947,17 +1555,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     float* float_electron_grid_ledger=nullptr;
     float* float_electron_vr_ledger=nullptr; // per-lane signed roulette weight gain
     std::uint64_t* electron_vr_work=nullptr; // killed / survived roulette tasks
-#ifdef CARBON_ELECTRON_SEGMENT_DIAGNOSTICS
-    electron_segment_diagnostics::Sample* float_segment_samples=nullptr;
-    std::uint64_t* float_segment_counts=nullptr;
-#endif
-#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
-    float* float_range_delta=nullptr;
-    std::uint64_t* float_range_counts=nullptr;
-#endif
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-    std::uint64_t* float_step_diagnostics=nullptr;
-#endif
     std::uint64_t* independent_charged_work=nullptr;
     std::uint64_t* independent_photon_work=nullptr;
     std::uint64_t* joint_pilot_work=nullptr;
@@ -1998,28 +1595,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     }
 
     if(use_electron_fp32) {
-#ifdef CARBON_ELECTRON_SEGMENT_DIAGNOSTICS
-        if(!enable_ct_grid||!config.enable_voxel_scoring||config.voxel_dose_mhd_output_file.empty())
-            throw std::invalid_argument("Segment diagnostic requires FP32 CT with MHD dose output");
-        float_segment_samples=mem_tracker.allocate<electron_segment_diagnostics::Sample>(electron_segment_diagnostics::capacity);
-        float_segment_counts=mem_tracker.allocate<std::uint64_t>(2);
-        if(!float_segment_samples||!float_segment_counts)throw std::bad_alloc();
-        queue.fill(float_segment_counts,std::uint64_t{0},2).wait_and_throw();
-#endif
-#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
-        if(!enable_ct_grid||!config.enable_voxel_scoring||config.voxel_dose_mhd_output_file.empty())
-            throw std::invalid_argument("Range diagnostic requires FP32 CT with MHD dose output");
-        float_range_delta=mem_tracker.allocate<float>(number_of_voxels);
-        float_range_counts=mem_tracker.allocate<std::uint64_t>(10);
-        if(!float_range_delta||!float_range_counts)throw std::bad_alloc();
-        queue.fill(float_range_delta,0.f,number_of_voxels);
-        queue.fill(float_range_counts,std::uint64_t{0},10).wait_and_throw();
-#endif
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-        float_step_diagnostics=mem_tracker.allocate<std::uint64_t>(64*1536);
-        if(!float_step_diagnostics)throw std::bad_alloc();
-        queue.fill(float_step_diagnostics,std::uint64_t{0},64*1536).wait_and_throw();
-#endif
         float_electron_grid_ledger=mem_tracker.allocate<float>(2*material_queue_lanes);
         if(!float_electron_grid_ledger)throw std::bad_alloc();
         queue.fill(float_electron_grid_ledger,0.f,2*material_queue_lanes).wait_and_throw();
@@ -2033,12 +1608,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     // A negative density disables a feature: physical densities are positive.
     const bool electron_vr_scope=use_electron_fp32 && config.broadbeam_electron_tracking &&
         config.broadbeam_independent_electrons && config.enable_ct_grid;
-    if((config.broadbeam_electron_low_density_survival!=1 || config.broadbeam_electron_tissue_survival!=1 || config.broadbeam_electron_expected_scoring) && !electron_vr_scope)
+    if((config.broadbeam_electron_low_density_survival!=1 || config.broadbeam_electron_tissue_survival!=1) && !electron_vr_scope)
         throw std::invalid_argument("Low-density electron variance reduction requires the FP32 CT broadbeam shared-electron worker");
-#ifndef CARBON_ELECTRON_VOXEL_CACHE
-    if(config.broadbeam_electron_expected_scoring)
-        throw std::invalid_argument("Expected-value electron scoring requires CARBON_ELECTRON_VOXEL_CACHE");
-#endif
     const float electron_roulette_survival=static_cast<float>(config.broadbeam_electron_low_density_survival);
     const float electron_tissue_survival=static_cast<float>(config.broadbeam_electron_tissue_survival);
     const float electron_tissue_density=electron_vr_scope?static_cast<float>(config.broadbeam_electron_density_threshold):INFINITY;
@@ -2048,17 +1619,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const float electron_roulette_density=electron_vr_scope && electron_roulette_survival<1.f?
         static_cast<float>(config.broadbeam_electron_density_threshold):-1.f;
     const std::uint64_t electron_roulette_bits=electron_fp32::probability_threshold(electron_roulette_survival);
-    const float electron_expected_density=electron_vr_scope && config.broadbeam_electron_expected_scoring?
-        static_cast<float>(config.broadbeam_electron_density_threshold):-1.f;
-    const float electron_expected_min_energy=static_cast<float>(config.broadbeam_electron_expected_min_energy_MeV);
     if(electron_vr_scope)
         std::cout<<"[electron-variance-reduction] roulette_survival="<<electron_roulette_survival
-                 <<" roulette_density_le="<<electron_roulette_density<<" expected_scoring="<<config.broadbeam_electron_expected_scoring
-                 <<" expected_density_le="<<electron_expected_density<<" expected_min_energy_MeV="<<electron_expected_min_energy<<"\n";
+                 <<" roulette_density_le="<<electron_roulette_density<<"\n";
     if (defer_material_packets) {
-        if(!use_material_electron || config.run_mode!=RunMode::research || config.enable_let_scoring ||
-           config.enable_charged_origin_voxel_scoring)
-            throw std::invalid_argument("Queued electrons require research transport without LET/component scoring");
+        if((!use_material_electron) || (config.run_mode!=RunMode::research) || (config.enable_charged_origin_voxel_scoring))
+            throw std::invalid_argument("Queued electrons require research transport without component scoring");
         material_tasks=mem_tracker.allocate<MaterialBirthTask>(material_task_capacity);
         material_task_counts=mem_tracker.allocate<std::uint64_t>(2);
         material_queue_work=mem_tracker.allocate<std::uint64_t>(3);
@@ -2080,7 +1646,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         std::shared_ptr<const CtGrid> grid_storage;
         const auto make_geometry = [&]() {
             if(enable_ct_grid) return std::make_shared<CtGrid>(CtGrid::load(
-                config.ct_grid_file,config.ct_schneider_file,config.ct_dicom_origin_mode));
+                config.ct_grid_file));
             auto water=std::make_shared<CtGrid>();
             water->file_version=CtGrid::version_value;
             water->nx=water->ny=water->nz=1;
@@ -2092,7 +1658,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             return water;
         };
         std::string geometry_key;
-        if(enable_ct_grid) geometry_key=ct_input_key(config.ct_grid_file,config.ct_schneider_file,config.ct_dicom_origin_mode);
+        if(enable_ct_grid) geometry_key=ct_input_key(config.ct_grid_file);
         else {
             char key[160];std::snprintf(key,sizeof key,"Water_75eV:%a:%a:%a",
                 double(urban_water_half_width_mm),config.phantom_length_mm,config.water_density_g_per_cm3);
@@ -2113,7 +1679,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         } else grid_storage=make_geometry();
         const auto& grid=*grid_storage;
         if(enable_ct_grid) {
-            if (grid.file_version < CtGrid::version_v2)
+            if (grid.file_version < CtGrid::version_value)
                 throw std::invalid_argument("Unified EM CT requires a Schneider grid with section IDs");
             for (const auto section : grid.material_id)
                 if (section >= 25)
@@ -2121,27 +1687,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         }
         std::vector<std::uint8_t> electron_region;
         if constexpr(BroadBeam && JointResponse==3) {
-            std::vector<float> uncached_distance;
-            const std::vector<float>* distance=nullptr;
-            if(config.broadbeam_electron_region_diagnostics || config.broadbeam_electron_region_metric=="euclidean") {
-                if(context) {
-                    auto& cached=context->impl_->electron_ct;
-                    if(cached.electron_distance_mm.empty() || cached.electron_distance_threshold!=config.broadbeam_electron_density_threshold) {
-                        cached.electron_distance_mm=broadbeam_electron_box_distance(grid.density_g_per_cm3,{grid.nx,grid.ny,grid.nz},
-                            {grid.spacing_x_mm,grid.spacing_y_mm,grid.spacing_z_mm},config.broadbeam_electron_density_threshold);
-                        cached.electron_distance_threshold=config.broadbeam_electron_density_threshold;
-                    }
-                    distance=&cached.electron_distance_mm;
-                } else {
-                    uncached_distance=broadbeam_electron_box_distance(grid.density_g_per_cm3,{grid.nx,grid.ny,grid.nz},
-                        {grid.spacing_x_mm,grid.spacing_y_mm,grid.spacing_z_mm},config.broadbeam_electron_density_threshold);
-                    distance=&uncached_distance;
-                }
-            }
-            if(config.broadbeam_electron_region_metric=="euclidean") {
-                electron_region.resize(distance->size());
-                for(std::size_t i=0;i<distance->size();++i)electron_region[i]=(*distance)[i]<=config.broadbeam_electron_halo_mm+1e-6;
-            } else if(context) {
+            if(context) {
                 // The cached grid is reset with its geometry key; reuse the
                 // identical box dilation across batches.
                 auto& cached=context->impl_->electron_ct;
@@ -2157,60 +1703,16 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             electron_region=broadbeam_electron_region(grid.density_g_per_cm3,{grid.nx,grid.ny,grid.nz},
                 {grid.spacing_x_mm,grid.spacing_y_mm,grid.spacing_z_mm},
                 config.broadbeam_electron_density_threshold,config.broadbeam_electron_halo_mm);
-            std::vector<std::uint8_t> uncached_body;
-            std::vector<float> uncached_body_distance;
-            const std::vector<std::uint8_t>* body=nullptr;
-            if(config.broadbeam_electron_external_air_local ||
-               (config.broadbeam_electron_region_diagnostics && !config.broadbeam_electron_body_mask_file.empty())) {
-                const auto key=input_cache_key(config.broadbeam_electron_body_mask_file)+geometry_key;
-                auto& mask=context?context->impl_->electron_ct.electron_body_mask:uncached_body;
-                auto& dist=context?context->impl_->electron_ct.electron_body_distance_mm:uncached_body_distance;
-                if(!context || context->impl_->electron_ct.electron_body_key!=key) {
-                    mask=load_broadbeam_body_mask(config.broadbeam_electron_body_mask_file,
-                        {grid.nx,grid.ny,grid.nz},{grid.origin_x_mm,grid.origin_y_mm,grid.origin_z_mm},{grid.spacing_x_mm,grid.spacing_y_mm,grid.spacing_z_mm});
-                    dist.clear();if(context)context->impl_->electron_ct.electron_body_key=key;
-                }
-                body=&mask;
-                if(config.broadbeam_electron_external_air_local && config.broadbeam_electron_external_air_margin_mm>0 && dist.empty()) {
-                    std::vector<float> seed(mask.size());
-                    for(std::size_t i=0;i<mask.size();++i)seed[i]=mask[i]?.01f:1.f;
-                    dist=broadbeam_electron_box_distance(seed,{grid.nx,grid.ny,grid.nz},{grid.spacing_x_mm,grid.spacing_y_mm,grid.spacing_z_mm},.1);
-                }
-                if(config.broadbeam_electron_external_air_local) {
-                std::size_t localized=0;
-                for(std::size_t i=0;i<mask.size();++i)if(!mask[i] && grid.density_g_per_cm3[i]<=config.broadbeam_electron_density_threshold &&
-                   (config.broadbeam_electron_external_air_margin_mm==0 || dist[i]>config.broadbeam_electron_external_air_margin_mm+1e-6)) {
-                    localized+=electron_region[i];electron_region[i]=0;
-                }
-                std::cout<<"[broadbeam-external-air] body_mask=pinned margin_mm="<<config.broadbeam_electron_external_air_margin_mm<<" localized_voxels="<<localized<<'\n';
-                }
-            }
             broadbeam_electron_mask=mem_tracker.allocate<std::uint8_t>(electron_region.size());
             if(!broadbeam_electron_mask)throw std::bad_alloc();
             queue.copy(electron_region.data(),broadbeam_electron_mask,electron_region.size()).wait_and_throw();
             std::cout<<"[broadbeam-electron-region] density_threshold="<<config.broadbeam_electron_density_threshold
-                     <<" metric="<<config.broadbeam_electron_region_metric
-                     <<" halo_mm="<<config.broadbeam_electron_halo_mm<<" selected_voxels="
+                     <<" metric=box halo_mm="<<config.broadbeam_electron_halo_mm<<" selected_voxels="
                      <<std::count(electron_region.begin(),electron_region.end(),std::uint8_t{1})
                      <<" total_voxels="<<electron_region.size()<<" continuation=unrestricted\n";
-            if(config.broadbeam_electron_region_diagnostics) {
-                auto regions=broadbeam_electron_birth_regions(grid.density_g_per_cm3,{grid.nx,grid.ny,grid.nz},
-                    config.broadbeam_electron_density_threshold,*distance);
-                if(body)for(std::size_t i=0;i<regions.size();++i)if(grid.density_g_per_cm3[i]<=config.broadbeam_electron_density_threshold)regions[i]=(*body)[i]?1:0;
-                std::cout<<"[electron-birth-region-definition] low_density="<<(body?"anatomical_BODY":"six_connected_CT_boundary_proxy")<<'\n';
-                broadbeam_birth_regions=mem_tracker.allocate<std::uint8_t>(regions.size());
-                broadbeam_region_work=mem_tracker.allocate<std::uint64_t>(7*12);
-                if(!broadbeam_birth_regions||!broadbeam_region_work)throw std::bad_alloc();
-                queue.copy(regions.data(),broadbeam_birth_regions,regions.size());queue.fill(broadbeam_region_work,std::uint64_t{0},7*12).wait_and_throw();
-                for(unsigned r=0;r<6;++r) {
-                    std::size_t selected=0,total=0;double mass=0;
-                    for(std::size_t i=0;i<regions.size();++i)if(regions[i]==r){++total;if(electron_region[i]){++selected;mass+=grid.density_g_per_cm3[i]*grid.spacing_x_mm*grid.spacing_y_mm*grid.spacing_z_mm/1000.;}}
-                    std::cout<<"[electron-birth-region-geometry] region="<<r<<" voxels="<<total<<" selected="<<selected<<" selected_mass_g="<<mass<<'\n';
-                }
-            }
         }
         if(use_material_electron) {
-            if(grid.file_version<CtGrid::version_v2)
+            if(grid.file_version<CtGrid::version_value)
                 throw std::invalid_argument("Material electron transport requires Schneider section IDs");
             if(enable_ct_grid && (grid.nx!=config.voxel_bins_x || grid.ny!=config.voxel_bins_y || grid.nz!=config.voxel_bins_z ||
                std::abs(grid.spacing_x_mm-config.voxel_size_x_mm)>1e-6 ||
@@ -2218,11 +1720,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                std::abs(grid.spacing_z_mm-config.voxel_size_z_mm)>1e-6 || std::abs(grid.origin_z_mm)>1e-6))
                 throw std::invalid_argument("Material CT packet scorer must align with CT grid, z origin zero");
 
-
                     const auto key=input_cache_key(config.material_electron_birth_file)+
                         input_cache_key(config.material_electron_joint_pilot_file)+
-                        electron_bank_input_key(config.material_electron_charged_index_file,"MAIECB02")+
-                        electron_bank_input_key(config.material_photon_response_index_file,"MAIPHB02")+
+                        electron_bank_input_key(config.material_electron_charged_index_file,"MAIEC026")+
+                        electron_bank_input_key(config.material_photon_response_index_file,"MAIPH026")+
                         ":Z"+std::to_string(config.primary_atomic_number)+":A"+std::to_string(config.primary_mass_number);
                     const bool hit=retain_electron_ct&&context->impl_->electron_ct.fp32&&context->impl_->electron_ct.fp32_key==key;
                     if(hit)independent_float_bank=context->impl_->electron_ct.fp32;
@@ -2233,7 +1734,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         config.material_photon_response_index_file,
                         config.primary_atomic_number,config.primary_mass_number);
                     if(retain_electron_ct){context->impl_->electron_ct.fp32=independent_float_bank;context->impl_->electron_ct.fp32_key=key;}
-                    float_birth=independent_float_bank->birth;float_joint=independent_float_bank->joint;
+                    float_joint=independent_float_bank->joint;
                     cut_birth26=independent_float_bank->cut_birth26;
                     electron_projectile_parameters=independent_float_bank->projectile_parameters;
                     float_charged=independent_float_bank->charged;float_photon=independent_float_bank->photon;
@@ -2261,8 +1762,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     queue.fill(independent_charged_work,std::uint64_t{0},8);queue.fill(independent_photon_work,std::uint64_t{0},8);queue.fill(joint_pilot_work,std::uint64_t{0},9).wait_and_throw();
                     std::cout<<"[electron-arithmetic] precision=4 transport=FP32 geometry=FP32 CDF=uint64 dose=FP32\n";
                     std::cout<<"[independent-fp32-bank] cache="<<(hit?"hit":"miss")<<" bytes="<<independent_float_bank->bytes
-                        <<" mapped_bytes="<<independent_float_bank->mapped_bytes<<" source_bytes="<<independent_float_bank->source_bytes<<" legacy_loaded=0 legacy_fallback=0\n";
-
+                        <<" mapped_bytes="<<independent_float_bank->mapped_bytes<<" source_bytes="<<independent_float_bank->source_bytes<<"\n";
 
             electron_joint_diag_device=mem_tracker.allocate<std::uint64_t>(7);
             material_untracked_device=mem_tracker.allocate<std::uint64_t>(3);
@@ -2283,7 +1783,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         ct_ny = grid.ny;
         ct_nz = grid.nz;
         ct_material_ids_are_schneider_sections =
-            enable_ct_grid && grid.file_version >= CtGrid::version_v2;
+            enable_ct_grid && grid.file_version >= CtGrid::version_value;
 
         const auto voxel_count = static_cast<std::size_t>(ct_nx) * ct_ny * ct_nz;
         if(context) {
@@ -2306,102 +1806,17 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         queue.copy(grid.material_id.data(), ct_material_device, voxel_count).wait_and_throw();
         }
 
-
-
-        use_ct_material_xs = enable_ct_grid && (!config.ct_bone_cross_section_file.empty() ||
-                             !config.ct_schneider_cross_section_file.empty());
-
-        if(enable_ct_grid) use_schneider_primary_xs =
-            ((ct_material_ids_are_schneider_sections && grid.mass_sp_za_rel.size() == 25) ||
-             !config.ct_schneider_file.empty() ||
-             !config.ct_schneider_cross_section_file.empty() ||
-             config.is_schneider_ct_mode()) &&
-            config.nuclear_model != "none";
-
-        if (enable_ct_grid && use_schneider_primary_xs) {
-            if (config.ct_schneider_physics_bundle_file.empty() &&
-                (config.primary_atomic_number != 6 || config.primary_mass_number != 12)) {
-                throw std::runtime_error(
-                    "Schneider primary cross section is validated for C12 (Z=6, A=12) primaries only, got Z=" +
-                    std::to_string(config.primary_atomic_number) + ", A=" + std::to_string(config.primary_mass_number));
-            }
-
-            // Validate all voxel material_id < 25 before kernel launch
-            for (std::size_t i = 0; i < grid.material_id.size(); ++i) {
-                if (grid.material_id[i] >= SchneiderResampledCrossSectionGrid::kExpectedSections) {
-                    throw std::runtime_error(
-                        "Invalid Schneider material_id " +
-                        std::to_string(static_cast<unsigned>(grid.material_id[i])) +
-                        " at voxel " + std::to_string(i) + " (must be < 25)");
-                }
-            }
-
-            // v3 primary rate: the hazard comes from the masked rate-binary
-            // partials (single source with the target sampler), so no CSV XS
-            // table is loaded. The CSV key MUST be empty for v3 (fail-fast on
-            // v1/v2.1 mixing is enforced at startup); v1 keeps this path.
-            const std::filesystem::path v3_primary_rate_probe =
-                config.ct_schneider_primary_rate_file;
-            const bool primary_rate_is_v3 =
-                std::filesystem::exists(v3_primary_rate_probe) &&
-                schneider_rate_binary_version(v3_primary_rate_probe) == 3;
-            if (primary_rate_is_v3) {
-                if (!config.ct_schneider_cross_section_file.empty()) {
-                    throw std::runtime_error(
-                        "v3 primary rate requires empty ct_schneider_cross_section_file "
-                        "(masked-binary hazard; refusing CSV/v3 mixing)");
-                }
-                if (config.is_primary_attenuation_only_mode()) {
-                    throw std::runtime_error(
-                        "primary-attenuation-only mode requires the CSV XS table; v3 has none");
-                }
-                std::cout << "[schneider-primary-xs] mode=primary-c12-masked-binary-v3 (no CSV)\n";
-            } else {
-                const auto schneider_host_grid = prepare_schneider_primary_xs(config);
-                schneider_xs_sections =
-                    static_cast<std::uint32_t>(SchneiderResampledCrossSectionGrid::kExpectedSections);
-                schneider_xs_energies =
-                    static_cast<std::uint32_t>(schneider_host_grid.energy_nodes());
-                schneider_xs_e_min = static_cast<float>(schneider_host_grid.transport_energies_MeVu.front());
-                const float dE = static_cast<float>(
-                    schneider_host_grid.transport_energies_MeVu[1] - schneider_host_grid.transport_energies_MeVu[0]);
-                schneider_xs_inv_dE = 1.0F / dE;
-
-                const std::size_t total_elements =
-                    static_cast<std::size_t>(schneider_xs_sections) * schneider_xs_energies;
-                if (schneider_host_grid.mass_xs_per_mm_at_1g_cm3.size() != total_elements) {
-                    throw std::runtime_error("Schneider cross section host payload size mismatch");
-                }
-                if (schneider_xs_sections != 25) {
-                    throw std::runtime_error("schneider_xs_sections must be exactly 25");
-                }
-                if (schneider_xs_energies != schneider_host_grid.energy_nodes()) {
-                    throw std::runtime_error("schneider_xs_energies must match grid size");
-                }
-
-                schneider_primary_xs_device = mem_tracker.allocate<float>(total_elements);
-                if (schneider_primary_xs_device == nullptr) {
-                    throw std::bad_alloc();
-                }
-                queue.copy(schneider_host_grid.mass_xs_per_mm_at_1g_cm3.data(),
-                           schneider_primary_xs_device, total_elements).wait_and_throw();
-
-                // Log table dimensions, byte count, source file and mode once
-                std::cout << "[schneider-primary-xs] mode=primary-c12-section-resolved\n"
-                          << "  sections=" << schneider_xs_sections << "\n"
-                          << "  energies=" << schneider_xs_energies << "\n"
-                          << "  bytes=" << total_elements * sizeof(float) << "\n"
-                          << "  E_min=" << schneider_xs_e_min << " MeV/u\n"
-                          << "  inv_dE=" << schneider_xs_inv_dE << "\n"
-                          << "  source=" << config.ct_schneider_cross_section_file << "\n"
-                          << "\n";
-            }
-            if (config.is_primary_attenuation_only_mode()) {
-                std::cout << "[ct-validation-mode] primary-attenuation-only\n"
-                          << "\n";
+        if (enable_ct_grid) {
+            use_schneider_primary_xs = config.nuclear_model != "none";
+            for (std::size_t i = 0; i < grid.material_id.size(); ++i)
+                if (grid.material_id[i] >= 25)
+                    throw std::runtime_error("Invalid Schneider CT composition at voxel " + std::to_string(i));
+            if (use_schneider_primary_xs) {
+                if (schneider_rate_binary_version(config.ct_schneider_primary_rate_file) != 3)
+                    throw std::runtime_error("Schneider CT requires masked primary rate v3");
+                std::cout << "[schneider-primary-xs] mode=primary-masked-binary-v3\n";
             }
         }
-
     }
 
     // Spot batching / TPS source
@@ -2448,16 +1863,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         queue.fill(elastic_audit,std::uint32_t{0},12).wait_and_throw();
         all_elastic={e,r,a,m,static_cast<std::uint32_t>(bank.energies.size()),bank.nq};
     }
-#if defined(CARBON_ENABLE_MINIBEAM)
-    const bool minibeam_copper_transport = (!BroadBeam && config.enable_minibeam) &&
-        config.minibeam_transport_mode == "copper_em";
+    const bool minibeam_copper_transport = !BroadBeam && config.enable_minibeam;
     float* minibeam_copper_sp_energies_device = nullptr;
     float* minibeam_copper_sp_values_device = nullptr;
     std::uint32_t minibeam_copper_sp_count = 0;
-    float* minibeam_copper_loss_e_device = nullptr;
-    float* minibeam_copper_loss_r_device = nullptr;
-    float* minibeam_copper_loss_d_device = nullptr;
-    std::uint32_t minibeam_copper_loss_count = 0;
 
     float* air_ion_e_device=nullptr;
     float* air_ion_rate_device=nullptr;
@@ -2567,34 +1976,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                           minibeam_copper_sp_energies_device,
                           minibeam_copper_sp_values_device);
         minibeam_copper_sp_count = static_cast<std::uint32_t>(copper_sp.energies().size());
-        if (!config.minibeam_copper_loss_range_file.empty()) {
-            const auto& loss_table = inputs.get<UrbanLossRangeTable>(input_cache_key(config.minibeam_copper_loss_range_file),
-            [&] { return UrbanLossRangeTable::from_csv(config.minibeam_copper_loss_range_file); });
-            if (config.minibeam_copper_mcs_model == "urban_v2" &&
-                !loss_table.is_active_reference(config.resolved_primary_urban_reference_particle(),
-                     config.resolved_primary_urban_ionisation_process(), "G4_Cu",
-                     config.minibeam_copper_production_cut_mm)) {
-                throw std::runtime_error(
-                    "copper urban_v2 requires a lifecycle-validated active "
-                    "Urban/loss-process table matching the YAML primary, G4_Cu and production cuts "
-                    "couple; the configured table is not a production oracle: " +
-                    config.minibeam_copper_loss_range_file.string());
-            }
-            upload_float_pair(loss_table.energies_total_mev(),
-                              loss_table.ranges_mm(),
-                              minibeam_copper_loss_e_device,
-                              minibeam_copper_loss_r_device);
-            std::vector<float> d(loss_table.dedx_values().begin(),
-                                 loss_table.dedx_values().end());
-            minibeam_copper_loss_d_device = mem_tracker.allocate<float>(d.size());
-            if (!minibeam_copper_loss_d_device) throw std::bad_alloc();
-            queue.copy(d.data(), minibeam_copper_loss_d_device, d.size());
-            minibeam_copper_loss_count =
-                static_cast<std::uint32_t>(loss_table.energies_total_mev().size());
-            std::cout << "[minibeam-copper] loss-range nodes="
-                      << minibeam_copper_loss_count << " max-inverse-residual-MeV="
-                      << loss_table.max_inverse_residual_mev() << '\n';
-        }
         upload_float_pair(air_sp.energies(), air_sp.values(),
                           minibeam_air_sp_energies_device,
                           minibeam_air_sp_values_device);
@@ -2705,10 +2086,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                   << " INCLXX-events/products=" << minibeam_copper_event_count
                   << '/' << minibeam_copper_product_count << '\n';
     }
-#endif
-#if defined(CARBON_ENABLE_MINIBEAM)
     // Water-Urban loss-range table: independent of the Copper transport mode.
-#endif
     RuntimeScope t_sch_ctx("setup_schneider_ctx_host_and_device");
     const SchneiderCtDeviceContext schneider_ct_device_ctx = upload_schneider_ct_device_context(
         queue, mem_tracker, config, schneider_host_cache);
@@ -2717,8 +2095,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         std::cout << "[physics-cache] schneider hits=" << schneider_host_cache->hits
                   << " misses=" << schneider_host_cache->misses << "\n";
     }
-    if (schneider_ct_device_ctx.uses_cinel03() &&
-        !config.is_primary_attenuation_only_mode()) {
+    if (schneider_ct_device_ctx.uses_cinel03()) {
         schneider_diag_device = mem_tracker.allocate<std::uint64_t>(kSchneiderDiagSlots);
         schneider_float_device = mem_tracker.allocate<float>(kSchneiderFloatSlots);
         schneider_miss_device =
@@ -2741,14 +2118,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     }
 
     // Scorers & Result buffers
-    const auto cinel02_max_secondary_inelastic_generations =
-        config.cinel02_max_secondary_inelastic_generations;
+    const auto max_secondary_inelastic_generations =
+        config.max_secondary_inelastic_generations;
     const auto enable_voxel_scoring = config.enable_voxel_scoring;
-    const auto enable_let_scoring = false;
-    const auto voxel_scorer_clamps_transport = config.voxel_scorer_clamps_transport;
     const auto voxel_bins_x = config.voxel_bins_x;
     const auto voxel_bins_y = config.voxel_bins_y;
-    // Resolve the legacy water grid exactly as its allocation/header do.
+    // Resolve the uniform-water grid exactly as its allocation/header do.
     // Raw voxel_bins_z/voxel_size_z_mm can both be zero when the grid is
     // defined by phantom_length_mm and depth_bin_width_mm.
     const auto voxel_bins_z = number_of_bins;
@@ -2776,41 +2151,29 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     }
 
     auto* dose_device = mem_tracker.allocate<DepthAtomicT>(number_of_bins);
-    std::uint64_t* primary_survival_device = nullptr;
-    std::uint64_t* inelastic_reaction_device = nullptr;
-    // Diagnostic-only: fragment-species scoring also needs per-depth
-    // survival/reaction counts. No transport effect.
-    if (config.needs_primary_survival_buffers()) {
-        primary_survival_device =
-            mem_tracker.allocate<std::uint64_t>(number_of_bins);
-        inelastic_reaction_device =
-            mem_tracker.allocate<std::uint64_t>(number_of_bins);
-        if (primary_survival_device == nullptr || inelastic_reaction_device == nullptr) {
-            throw std::bad_alloc();
-        }
-        queue.fill(primary_survival_device, std::uint64_t{0}, number_of_bins);
-        queue.fill(inelastic_reaction_device, std::uint64_t{0}, number_of_bins);
-    }
+
     auto* voxel_dose_device = enable_voxel_scoring
                                   ? mem_tracker.allocate<DoseAtomicT>(number_of_voxels)
                                   : nullptr;
     const auto enable_primary_voxel_fluence =
-        !config.primary_voxel_fluence_mhd_output_file.empty();
+        false;
     auto* primary_voxel_track_length_device =
         enable_primary_voxel_fluence
             ? mem_tracker.allocate<DoseAtomicT>(number_of_voxels)
             : nullptr;
     const auto enable_charged_origin_voxel_scoring =
-        config.enable_charged_origin_voxel_scoring;
+        false;
     const auto enable_minibeam_component_voxel_scoring =
-        (!BroadBeam && config.enable_minibeam) && enable_charged_origin_voxel_scoring;
+        false;
     const auto enable_minibeam_energy_band_roi_scoring =
-        config.enable_minibeam_energy_band_roi_scoring;
+        false;
     const auto enable_minibeam_primary_roi_scoring =
-        config.enable_minibeam_primary_roi_scoring;
-    auto* he4_hazard_audit_device = config.fragment_birth_spectrum_output_file.empty()
-        ? nullptr : mem_tracker.allocate<double>(6);
-    if (!config.fragment_birth_spectrum_output_file.empty()) {
+        false;
+    const auto enable_fragment_birth_spectrum =
+        false;
+    auto* he4_hazard_audit_device = enable_fragment_birth_spectrum
+        ? mem_tracker.allocate<double>(6) : nullptr;
+    if (enable_fragment_birth_spectrum) {
         if (!he4_hazard_audit_device) throw std::bad_alloc();
         queue.memset(he4_hazard_audit_device, 0, 6 * sizeof(double)).wait_and_throw();
     }
@@ -2874,15 +2237,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         enable_charged_origin_voxel_scoring
             ? mem_tracker.allocate<DoseAtomicT>(he_isotope_origin_category_count * number_of_voxels)
             : nullptr;
-    auto* let_moments_device = enable_let_scoring
-                                   ? mem_tracker.allocate<LetAtomicT>(4 * number_of_bins)
-                                   : nullptr;
-    auto* voxel_let_moments_device =
-        enable_let_scoring && enable_voxel_scoring
-            ? mem_tracker.allocate<LetAtomicT>(4 * number_of_voxels)
-            : nullptr;
 
-    const bool is_primary_attenuation_only = config.is_primary_attenuation_only_mode();
     const auto enable_inelastic = config.enable_inelastic;
     if (enable_inelastic && !use_schneider_primary_xs) {
         throw std::runtime_error("Nuclear transport requires the validated Schneider/unified-water CINEL03 path");
@@ -2895,20 +2250,13 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     auto* untracked_nuclear_device = mem_tracker.allocate<float>(number_of_histories);
     auto* other_terminal_energy_device = mem_tracker.allocate<float>(number_of_histories);
     auto* cutoff_stopped_energy_device = mem_tracker.allocate<float>(number_of_histories);
-#if defined(CARBON_ENABLE_MINIBEAM)
     const bool phase_at_copper_exit = config.minibeam_phase_space_at_copper_exit;
-    const std::string copper_capture_path = std::getenv("CARBON_MINIBEAM_COPPER_CAPTURE")
-        ? std::getenv("CARBON_MINIBEAM_COPPER_CAPTURE") : "";
-    const std::string copper_diagnostic_path = !copper_capture_path.empty() ? copper_capture_path+"/input.csv" : std::getenv("CARBON_MINIBEAM_COPPER_DIAGNOSTIC")
-        ? std::getenv("CARBON_MINIBEAM_COPPER_DIAGNOSTIC") : "";
-    const std::string copper_history_mask_path = std::getenv("CARBON_MINIBEAM_DIAGNOSTIC_HISTORY_MASK")
-        ? std::getenv("CARBON_MINIBEAM_DIAGNOSTIC_HISTORY_MASK") : "";
+    const std::string copper_capture_path, copper_diagnostic_path, copper_history_mask_path;
     if ((!copper_diagnostic_path.empty() || !copper_history_mask_path.empty()) &&
         (BroadBeam || config.run_mode != RunMode::research || !config.enable_minibeam ||
          config.enable_ct_grid || config.enable_tps_source || config.enable_tps_coordinate_system ||
          config.primary_atomic_number != 1 || config.primary_mass_number != 1 ||
-         config.multiple_scattering_model != "urban_v2" ||
-         config.minibeam_transport_mode != "copper_em"))
+         config.multiple_scattering_model != "urban_v2"))
         throw std::invalid_argument("Copper history diagnostics require research proton homogeneous-water Urban minibeam without TPS/replay");
     const auto copper_history_mask_host = read_copper_history_mask(
         copper_history_mask_path, number_of_histories, config.random_seed);
@@ -2930,18 +2278,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     auto* copper_capture_entry_device=copper_capture_path.empty() ? nullptr
         : mem_tracker.allocate<PrimaryMediumEntryState>(number_of_histories);
     if(!copper_capture_path.empty() && !copper_capture_entry_device)throw std::bad_alloc();
-    const auto enable_minibeam_phase_space =
-        (!BroadBeam && config.enable_minibeam) &&
-        !config.minibeam_phase_space_output_file.empty();
+    const auto enable_minibeam_phase_space = false;
     auto* minibeam_phase_space_device = enable_minibeam_phase_space
         ? mem_tracker.allocate<MinibeamPhaseSpaceRecord>(number_of_histories)
         : nullptr;
-    const auto minibeam_water_primary_plane_count =
-        config.minibeam_water_primary_plane_depths_mm.size();
-    const auto enable_minibeam_water_primary_planes =
-        (!BroadBeam && config.enable_minibeam) &&
-        !config.minibeam_water_primary_plane_output_file.empty() &&
-        minibeam_water_primary_plane_count != 0;
+    constexpr std::size_t minibeam_water_primary_plane_count = 0;
+    const auto enable_minibeam_water_primary_planes = false;
     auto* minibeam_water_primary_plane_depths_device =
         enable_minibeam_water_primary_planes
             ? mem_tracker.allocate<float>(minibeam_water_primary_plane_count)
@@ -2985,7 +2327,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             ? mem_tracker.allocate<std::uint64_t>(
                   minibeam_fragment_miss_joint_cell_count)
             : nullptr;
-#endif
     auto* schneider_inelastic_device =
         use_schneider_primary_xs ? mem_tracker.allocate<std::uint64_t>(1) : nullptr;
     auto* primary_terminal_counts_device = mem_tracker.allocate<std::uint64_t>(4);
@@ -2993,7 +2334,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     if (deposited_device == nullptr || sampled_incident_device == nullptr || escaped_device == nullptr || steps_device == nullptr ||
         untracked_nuclear_device == nullptr || other_terminal_energy_device == nullptr ||
         cutoff_stopped_energy_device == nullptr || primary_terminal_counts_device == nullptr ||
-#if defined(CARBON_ENABLE_MINIBEAM)
         ((!BroadBeam && config.enable_minibeam) && (beamline_removed_device == nullptr ||
          beamline_primary_survivor_device == nullptr ||
          beamline_air_loss_device == nullptr ||
@@ -3008,7 +2348,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
          (enable_minibeam_water_primary_planes &&
           (minibeam_water_primary_plane_depths_device == nullptr ||
            minibeam_water_primary_plane_records_device == nullptr)))) ||
-#endif
         (use_schneider_primary_xs && schneider_inelastic_device == nullptr)) {
         free_device(deposited_device);
         free_device(sampled_incident_device);
@@ -3019,7 +2358,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         free_device(cutoff_stopped_energy_device);
         free_device(schneider_inelastic_device);
         free_device(primary_terminal_counts_device);
-#if defined(CARBON_ENABLE_MINIBEAM)
         free_device(beamline_removed_device);
         free_device(beamline_primary_survivor_device);
         free_device(beamline_air_loss_device);
@@ -3032,21 +2370,18 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         free_device(minibeam_phase_space_device);
         free_device(minibeam_water_primary_plane_depths_device);
         free_device(minibeam_water_primary_plane_records_device);
-#endif
         throw std::bad_alloc();
     }
 
     queue.fill(untracked_nuclear_device, 0.0F, number_of_histories);
     queue.fill(other_terminal_energy_device, 0.0F, number_of_histories);
     queue.fill(cutoff_stopped_energy_device, 0.0F, number_of_histories);
-#if defined(CARBON_ENABLE_MINIBEAM)
     if (beamline_removed_device != nullptr) {
         queue.fill(beamline_removed_device, 0.0F, number_of_histories);
         queue.fill(beamline_primary_survivor_device, 0.0F, number_of_histories);
         queue.fill(beamline_air_loss_device, 0.0F, number_of_histories);
         queue.fill(minibeam_event_counts_device, std::uint64_t{0},
                    minibeam_event_counter_count);
-
 
         if (minibeam_fragment_miss_joint_counts_device != nullptr) {
             queue.fill(minibeam_fragment_miss_joint_counts_device,
@@ -3085,39 +2420,14 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     sizeof(MinibeamWaterPrimaryPlaneRecord));
         }
     }
-#endif
     if (schneider_inelastic_device != nullptr) {
         queue.fill(schneider_inelastic_device, std::uint64_t{0}, 1);
     }
     queue.fill(primary_terminal_counts_device, std::uint64_t{0}, 4).wait_and_throw();
 
-    const bool record_first_interactions =
-        is_primary_attenuation_only || config.validation_scorers();
-    PrimaryFirstInteractionRecord* first_interactions_device = nullptr;
-    std::uint32_t* first_interactions_count_device = nullptr;
-    if (record_first_interactions) {
-        first_interactions_device = mem_tracker.allocate<PrimaryFirstInteractionRecord>(number_of_histories);
-        first_interactions_count_device = mem_tracker.allocate<std::uint32_t>(1);
-        if (first_interactions_device == nullptr || first_interactions_count_device == nullptr) {
-            free_device(primary_terminal_counts_device);
-            free_device(deposited_device);
-            free_device(sampled_incident_device);
-            free_device(escaped_device);
-            free_device(steps_device);
-            free_device(untracked_nuclear_device);
-            free_device(other_terminal_energy_device);
-            free_device(cutoff_stopped_energy_device);
-            free_device(schneider_inelastic_device);
-            free_device(first_interactions_device);
-            free_device(first_interactions_count_device);
-            throw std::bad_alloc();
-        }
-        queue.fill(first_interactions_count_device, 0U, 1).wait_and_throw();
-    }
-
     const std::size_t max_secondaries = config.secondary_queue_capacity;
     const bool need_secondary_buffers =
-        !is_primary_attenuation_only &&
+
         enable_inelastic;
     auto* secondary_queue_device =
         need_secondary_buffers
@@ -3135,20 +2445,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         need_secondary_buffers
             ? mem_tracker.allocate<float>(1)
             : nullptr;
-    NeutronBirthBuffer neutron_birth_buffer{};
-    if ((!BroadBeam && config.enable_neutron_transport) || !config.neutron_birth_output_file.empty()) {
-        neutron_birth_buffer.records = mem_tracker.allocate<NeutronBirthRecord>(config.neutron_birth_capacity);
-        neutron_birth_buffer.count = mem_tracker.allocate<std::uint64_t>(1);
-        neutron_birth_buffer.capacity = config.neutron_birth_capacity;
-        if (!neutron_birth_buffer.records || !neutron_birth_buffer.count)
-            throw std::runtime_error("Neutron birth buffer allocation failed");
-        queue.fill(neutron_birth_buffer.count, std::uint64_t{0}, 1).wait_and_throw();
-    }
     // CT uses the identical upstream Cu/air transport and entry record, but
     // must retain the generic material-aware downstream kernel. Never apply
     // the uniform-water substitutions to patient transport.
     const bool ct_minibeam_split = !BroadBeam && config.enable_minibeam &&
-        config.enable_ct_grid && config.minibeam_primary_pipeline != "combined";
+        config.enable_ct_grid;
     // The shared beamline and generic material-aware stage 4 retain the
     // projectile ZA and total kinetic energy in their runtime state. C12 may
     // use this handoff with its own pinned packages. The proton-only stage 11
@@ -3159,32 +2460,17 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     if(ct_minibeam_split && (config.run_mode!=RunMode::research ||
         config.enable_tps_source || config.enable_tps_coordinate_system ||
         !ct_minibeam_projectile_supported ||
-        config.multiple_scattering_model!="urban_v2" || config.minibeam_primary_pipeline!="compact" ||
-        config.minibeam_transport_mode!="copper_em" || !config.enable_secondary_transport))
+        config.multiple_scattering_model!="urban_v2" ||
+        !config.enable_secondary_transport))
         throw std::invalid_argument("CT split minibeam requires research proton/C12 Urban copper transport without TPS/replay");
-#if defined(CARBON_ENABLE_MINIBEAM)
-    const bool queue_copper_primary_children = [&] {
-        const char* value=std::getenv("CARBON_MINIBEAM_CU_CHARGED_QUEUE");
-        const char* specialization_override=std::getenv("CARBON_MINIBEAM_PRIMARY_SPECIALIZE");
-        const char* pipeline_override=std::getenv("CARBON_MINIBEAM_PRIMARY_SPLIT");
-        if(!value)return !(specialization_override && std::string_view(specialization_override)=="0") &&
-            !(pipeline_override && std::string_view(pipeline_override)=="0") &&
-            !BroadBeam && config.run_mode==RunMode::research &&
-            config.enable_minibeam && (!config.enable_ct_grid || ct_minibeam_split) && !config.enable_tps_source &&
-            !config.enable_tps_coordinate_system && config.primary_atomic_number==1 &&
-            config.primary_mass_number==1 && config.multiple_scattering_model=="urban_v2" &&
-            config.minibeam_transport_mode=="copper_em" && config.enable_secondary_transport &&
-            (config.minibeam_primary_specialization || ct_minibeam_split) && config.minibeam_primary_pipeline=="compact";
-        if(std::string_view(value)=="0")return false;
-        if(std::string_view(value)!="1")throw std::invalid_argument("CARBON_MINIBEAM_CU_CHARGED_QUEUE must be0 or1");
-        if(BroadBeam || config.run_mode!=RunMode::research || !config.enable_minibeam || (config.enable_ct_grid && !ct_minibeam_split) ||
-            config.enable_tps_source || config.enable_tps_coordinate_system ||
-            config.primary_atomic_number!=1 || config.primary_mass_number!=1 ||
-            config.multiple_scattering_model!="urban_v2" || !config.enable_secondary_transport ||
-            config.minibeam_primary_pipeline=="legacy")
-            throw std::invalid_argument("Cu charged queue requires research proton water/CT split/compact Urban minibeam");
-        return true;
-    }();
+    // Proton Cu/air charged children are queued and transported after the
+    // compact beamline launch instead of inline in the primary kernel.
+    const bool queue_copper_primary_children = !BroadBeam && config.run_mode==RunMode::research &&
+        config.enable_minibeam && (!config.enable_ct_grid || ct_minibeam_split) && !config.enable_tps_source &&
+        !config.enable_tps_coordinate_system && config.primary_atomic_number==1 &&
+        config.primary_mass_number==1 && config.multiple_scattering_model=="urban_v2" &&
+        config.enable_secondary_transport &&
+        (config.minibeam_primary_specialization || ct_minibeam_split);
     const auto copper_primary_child_capacity=std::min<std::size_t>(max_secondaries,
         std::max<std::size_t>(4096,2*number_of_histories));
     auto* copper_primary_child_tasks=queue_copper_primary_children
@@ -3202,9 +2488,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         minibeam_copper_cascade_queue_device
             ? mem_tracker.allocate<std::uint32_t>(1)
             : nullptr;
-    const auto enable_minibeam_fragment_phase_space =
-        (!BroadBeam && config.enable_minibeam) && need_secondary_buffers &&
-        !config.minibeam_fragment_phase_space_output_file.empty();
+    const auto enable_minibeam_fragment_phase_space = false;
     auto* minibeam_fragment_phase_space_device =
         enable_minibeam_fragment_phase_space
             ? mem_tracker.allocate<MinibeamFragmentPhaseSpaceRecord>(
@@ -3214,47 +2498,33 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         enable_minibeam_fragment_phase_space
             ? mem_tracker.allocate<std::uint32_t>(1)
             : nullptr;
-#else
-    constexpr bool queue_copper_primary_children=false;
-#endif
     if (need_secondary_buffers) {
         if (!secondary_queue_device || !secondary_count_device ||
             !secondary_overflow_count_device || !secondary_overflow_energy_device
-#if defined(CARBON_ENABLE_MINIBEAM)
             || (enable_minibeam_fragment_phase_space &&
                 (!minibeam_fragment_phase_space_device ||
                  !minibeam_fragment_phase_space_count_device))
             || ((!BroadBeam && config.enable_minibeam) &&
                 config.minibeam_copper_fragment_cascade_generations > 0 &&
                 !minibeam_copper_cascade_count_device)
-#endif
             )
             throw std::bad_alloc();
         queue.fill(secondary_count_device, 0U, 1);
         queue.fill(secondary_overflow_count_device, 0U, 1);
         queue.fill(secondary_overflow_energy_device, 0.0F, 1);
-#if defined(CARBON_ENABLE_MINIBEAM)
         if (minibeam_copper_cascade_count_device) {
             queue.fill(minibeam_copper_cascade_count_device, 0U, 1);
         }
         if (minibeam_fragment_phase_space_count_device) {
             queue.fill(minibeam_fragment_phase_space_count_device, 0U, 1);
         }
-#endif
         queue.wait_and_throw();
-    }
-
-    std::uint64_t* primary_loss_query_audit = nullptr;
-    if (config.enable_primary_loss_query_audit) {
-        primary_loss_query_audit = mem_tracker.allocate<std::uint64_t>(28);
-        if (!primary_loss_query_audit) throw std::bad_alloc();
-        queue.fill(primary_loss_query_audit, std::uint64_t{0}, 28).wait_and_throw();
     }
 
     float* generic_recoil_reference_sp_device = nullptr;
     if (use_all_elastic) {
         const auto path = use_unified_water ? config.particle_stopping_power_file
-            : std::filesystem::path("data/ion_stopping_power_water_geant4_11_3_2.csv");
+            : std::filesystem::path("data/stopping/water/ions.csv");
         if (use_unified_water)
             (void)IonStoppingPowerTables::from_csv(path, stopping_power);
         const auto reference = load_ion_species_stopping_power_lut(path, table_size, 1.0F);
@@ -3271,43 +2541,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         queue.fill(in_fov_dose_device, DepthAtomicT{0}, number_of_bins).wait_and_throw();
     }
 
-    if (dose_device == nullptr || deposited_device == nullptr ||
-        escaped_device == nullptr || steps_device == nullptr ||
-        (enable_voxel_scoring && (voxel_dose_device == nullptr || in_fov_dose_device == nullptr)) ||
-        (enable_primary_voxel_fluence &&
-         primary_voxel_track_length_device == nullptr) ||
-        (enable_charged_origin_voxel_scoring &&
-         (charged_origin_voxel_dose_device == nullptr ||
-          be_isotope_origin_voxel_dose_device == nullptr ||
-          he_isotope_origin_voxel_dose_device == nullptr)) ||
-        (enable_minibeam_component_voxel_scoring &&
-         minibeam_component_voxel_dose_device == nullptr) ||
-        (enable_minibeam_energy_band_roi_scoring &&
-         (minibeam_energy_band_roi_dose_device == nullptr ||
-          minibeam_fixed_region_by_x_bin_device == nullptr)) ||
-        (enable_minibeam_primary_roi_scoring &&
-         (minibeam_primary_roi_dose_device == nullptr ||
-          minibeam_fixed_region_by_x_bin_device == nullptr ||
-          minibeam_spatial_audit_device == nullptr)) ||
-        (enable_let_scoring && let_moments_device == nullptr)) {
+    if ((dose_device == nullptr) || (deposited_device == nullptr) || (escaped_device == nullptr) || (steps_device == nullptr) || ((enable_voxel_scoring) && ((voxel_dose_device == nullptr) || (in_fov_dose_device == nullptr))) || ((enable_primary_voxel_fluence) && (primary_voxel_track_length_device == nullptr)) || ((enable_charged_origin_voxel_scoring) && ((charged_origin_voxel_dose_device == nullptr) || (be_isotope_origin_voxel_dose_device == nullptr) || (he_isotope_origin_voxel_dose_device == nullptr))) || ((enable_minibeam_component_voxel_scoring) && (minibeam_component_voxel_dose_device == nullptr)) || ((enable_minibeam_energy_band_roi_scoring) && ((minibeam_energy_band_roi_dose_device == nullptr) || (minibeam_fixed_region_by_x_bin_device == nullptr))) || ((enable_minibeam_primary_roi_scoring) && ((minibeam_primary_roi_dose_device == nullptr) || (minibeam_fixed_region_by_x_bin_device == nullptr) || (minibeam_spatial_audit_device == nullptr)))) {
         throw std::bad_alloc();
-    }
-
-    if (!reuse_immutable_buffers) {
-        const auto resampled_xs =
-            resample_cross_section_grid(cross_section, table_energies);
-        queue.copy(resampled_xs.macroscopic_per_mm.data(), cross_section_device,
-                   cross_section_table_size);
-        if (target_h_fraction_device != nullptr) {
-            queue.copy(resampled_xs.target_h_fraction.data(), target_h_fraction_device,
-                       cross_section_table_size);
-        }
-        queue.wait_and_throw();
-    } else if (target_h_fraction_device != nullptr) {
-        const auto resampled_xs =
-            resample_cross_section_grid(cross_section, table_energies);
-        queue.copy(resampled_xs.target_h_fraction.data(), target_h_fraction_device,
-                   cross_section_table_size).wait_and_throw();
     }
 
     queue.memset(dose_device, 0, number_of_bins * sizeof(DepthAtomicT));
@@ -3346,54 +2581,16 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         queue.memset(minibeam_spatial_audit_device, 0,
                      minibeam_spatial_audit_slot_count * sizeof(std::uint64_t));
     }
-    if (enable_let_scoring) {
-        queue.memset(let_moments_device, 0, 4 * number_of_bins * sizeof(LetAtomicT));
-        if (voxel_let_moments_device != nullptr) {
-            queue.memset(voxel_let_moments_device, 0, 4 * number_of_voxels * sizeof(LetAtomicT));
-        }
-    }
 
-    std::size_t local_size = is_cuda_backend ? 128U : (device.is_gpu() ? 256U : 128U);
-    // Diagnostic/tuning override for the primary work-group size (non-CUDA
-    // backends). Must stay a positive multiple of the subgroup size.
-    if (!is_cuda_backend) {
-        if (const char* requested = std::getenv("CARBON_PRIMARY_LOCAL_SIZE")) {
-            const auto parsed = std::strtoul(requested, nullptr, 10);
-            if (parsed > 0) {
-                local_size = static_cast<std::size_t>(parsed);
-                std::cout << "[primary-local-size] override=" << local_size << "\n";
-            }
-        }
-    }
+    std::size_t local_size = 128U;
     std::size_t history_chunk = config.history_chunk_size;
     if (history_chunk == 0) {
-        if (is_cuda_backend) {
-            // The dedicated FE kernel needs more simultaneous primary tracks
-            // than the detailed reference path for <=1M-history launches.
-            // Explicit YAML/environment overrides remain authoritative.
-            history_chunk = number_of_histories > 1000000 ? 34816
-                : (BroadBeam ? 17408 : 4096);
-        } else if (backend == sycl::backend::ext_oneapi_level_zero &&
-                   device.is_gpu()) {
-            // Arc B580 needs substantially more than one device-wide wave of
-            // primary work-groups per launch.  The former 34,816-history CT
-            // chunk produced 187 short kernels for RT07575; 1,114,112 reduces
-            // this to six launches without the slowdown seen for a single
-            // whole-shard kernel.
-            history_chunk = 1114112;
-        } else {
-            history_chunk = device.is_gpu() ? 8192 : number_of_histories;
-        }
+        // Preserve the CUDA launch sizes used by the eight presets.
+        // Explicit history_chunk_size remains authoritative.
+        history_chunk = number_of_histories > 1000000 ? 34816
+            : (BroadBeam ? 17408 : 4096);
         std::cout << "[history-chunk-size] backend default=" << history_chunk
                   << "\n";
-    }
-    if (const char* requested = std::getenv("CARBON_HISTORY_CHUNK_SIZE")) {
-        const auto parsed = std::strtoull(requested, nullptr, 10);
-        if (parsed == 0U)
-            throw std::invalid_argument(
-                "CARBON_HISTORY_CHUNK_SIZE must be a positive integer");
-        history_chunk = static_cast<std::size_t>(parsed);
-        std::cout << "[history-chunk-size] override=" << history_chunk << "\n";
     }
     history_chunk = std::max<std::size_t>(1, history_chunk);
     if (defer_material_packets)history_chunk=std::min<std::size_t>(history_chunk,material_queue_chunk);
@@ -3409,46 +2606,30 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const auto maximum_primary_steps = config.maximum_primary_steps;
     const auto energy_cutoff_MeV = static_cast<float>(config.energy_cutoff_MeV);
 
-    if (is_cuda_backend && !(!BroadBeam && config.enable_minibeam)) {
+    if (!(!BroadBeam && config.enable_minibeam)) {
         cuda_clock_warmup(queue, mem_tracker);
     }
 
     const auto enable_energy_straggling = config.enable_energy_straggling;
     const auto enable_secondary_energy_straggling = config.enable_secondary_energy_straggling;
 
-    const auto multiple_scattering_scale =
-        static_cast<float>(config.multiple_scattering_scale);
     const auto water_density_g_per_cm3 = static_cast<float>(config.water_density_g_per_cm3);
     const auto active_water_radiation_length = use_unified_water
         ? schneider_ct_device_ctx.water_radiation_length_g_cm2 : water_radiation_length_g_per_cm2;
     const auto enable_multiple_scattering = BroadBeam || config.enable_multiple_scattering;
     const auto enable_ct_material_mcs = config.enable_ct_material_mcs;
-    const auto c12_fermi_eyges =
-        (BroadBeam || config.multiple_scattering_model == "fermi_eyges");
-    const auto fermi_eyges_species_scope = BroadBeam ? 3 :
-        config.fermi_eyges_species == "all_charged" ? 3 :
-        (config.fermi_eyges_species == "c12_he4_pdt" ? 2 :
-         (config.fermi_eyges_species == "c12_he4" ? 1 : 0));
-    const auto fermi_eyges_use_species_water_parameters =
-        BroadBeam || config.fermi_eyges_parameter_set == "species_water";
-    const bool primary_fermi_eyges = c12_fermi_eyges &&
-        ion_uses_fermi_eyges(fermi_eyges_species_scope,
-                           config.primary_atomic_number, config.primary_mass_number);
-    const bool fe_gaussian_only=BroadBeam ? Gaussian : config.fermi_eyges_gaussian_only;
-    const bool fe_moments=config.fermi_eyges_sampling=="moments";
-    const bool fe_diagnostics=std::getenv("CARBON_FE_DIAGNOSTICS") &&
-        std::string_view(std::getenv("CARBON_FE_DIAGNOSTICS"))=="1";
-    const bool fe_simple_geometry=!config.enable_hetero_insert && config.slab_layers.empty();
-    auto* fe_counts=mem_tracker.allocate<std::uint64_t>(8);
-    if (!fe_counts) throw std::bad_alloc();
-    if (fe_counts) queue.fill(fe_counts,std::uint64_t{0},8).wait_and_throw();
+    // Fermi-Eyges MCS applies to every charged ion with species-water
+    // parameters; otherwise global Urban v2 handles all charged ions.
+    const bool primary_fermi_eyges =
+        BroadBeam || config.multiple_scattering_model == "fermi_eyges";
+    const bool fe_gaussian_only=config.fermi_eyges_gaussian_only;
+    constexpr bool fe_diagnostics=false;
+    constexpr std::uint64_t* fe_counts=nullptr;
     const auto c12_fermi_eyges_max_segment_mm =
         static_cast<float>(config.fermi_eyges_max_segment_mm);
-    if (c12_fermi_eyges) {
-        std::cout << "[ion-mcs] model=fermi_eyges gaussian_only=" << fe_gaussian_only << " species="
-                  << config.fermi_eyges_species
-                  << " parameters=" << config.fermi_eyges_parameter_set
-                  << " unselected_species=highland max_segment_mm="
+    if (primary_fermi_eyges) {
+        std::cout << "[ion-mcs] model=fermi_eyges gaussian_only=" << fe_gaussian_only
+                  << " species=all_charged parameters=species_water max_segment_mm="
                   << c12_fermi_eyges_max_segment_mm << '\n';
     }
     const auto enable_tps_source = config.uses_fixed_patient_coordinates();
@@ -3459,7 +2640,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const auto flat_source_half_width_y_mm =
         static_cast<float>(config.flat_source_half_width_y_mm);
     const auto enable_emittance_source = config.enable_emittance_source;
-    const bool minibeam_pbs_source = config.spots_geometry_mode == "minibeam_pbs_y";
     const auto emittance_sigma_x_mm = static_cast<float>(config.emittance_sigma_x_mm);
     const auto emittance_sigma_y_mm = static_cast<float>(config.emittance_sigma_y_mm);
     const auto emittance_sigma_x_prime = static_cast<float>(config.emittance_sigma_x_prime);
@@ -3476,7 +2656,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const auto beam_uz_x = static_cast<float>(config.beam_uz_x);
     const auto beam_uz_y = static_cast<float>(config.beam_uz_y);
     const auto beam_uz_z = static_cast<float>(config.beam_uz_z);
-#if defined(CARBON_ENABLE_MINIBEAM)
     const auto enable_minibeam = (!BroadBeam && config.enable_minibeam);
     const auto minibeam_angle_rad = static_cast<float>(
         config.minibeam_collimator_angle_deg * 0.01745329251994329577);
@@ -3511,16 +2690,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         static_cast<float>(config.minibeam_copper_fragment_mcs_scale);
     const auto minibeam_copper_fragment_cascade_generations =
         config.minibeam_copper_fragment_cascade_generations;
-    const auto minibeam_copper_urban_v2_msc =
-        config.minibeam_copper_mcs_model == "urban_v2";
-    const auto minibeam_copper_correlated_scattering =
-        minibeam_copper_urban_v2_msc;
     const auto minibeam_copper_enable_mcs = config.minibeam_copper_enable_mcs;
     const bool copper_proton_native_fluctuation =
-        config.minibeam_copper_proton_straggling_model != "legacy_clipped_gaussian";
+        config.minibeam_copper_proton_straggling_model != "clipped_gaussian";
     const bool copper_primary_native_mean = config.minibeam_copper_primary_native_mean_loss;
-    const bool copper_proton_finite_cut =
-        config.minibeam_copper_proton_straggling_model == "g4_universal_delta";
     const auto minibeam_copper_enable_energy_straggling =
         config.minibeam_copper_enable_energy_straggling;
     const auto minibeam_copper_straggling_scale =
@@ -3533,25 +2706,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         config.minibeam_copper_enable_elastic;
     const auto minibeam_copper_enable_inelastic =
         config.minibeam_copper_enable_nuclear_attenuation;
-    const auto minibeam_water_primary_stopping_power_scale = static_cast<float>(
-        config.minibeam_water_primary_stopping_power_scale);
-    const auto minibeam_copper_survivor_energy_loss_scale = static_cast<float>(
-        config.minibeam_copper_survivor_energy_loss_scale);
-    constexpr std::size_t minibeam_survivor_calibration_capacity = 16;
-    std::array<float, minibeam_survivor_calibration_capacity>
-        minibeam_survivor_calibration_energies{};
-    std::array<float, minibeam_survivor_calibration_capacity>
-        minibeam_survivor_calibration_scales{};
-    const auto minibeam_survivor_calibration_count =
-        config.minibeam_copper_survivor_energy_loss_energies_MeVu.size();
-    for (std::size_t index = 0;
-         index < minibeam_survivor_calibration_count; ++index) {
-        minibeam_survivor_calibration_energies[index] = static_cast<float>(
-            config.minibeam_copper_survivor_energy_loss_energies_MeVu[index]);
-        minibeam_survivor_calibration_scales[index] = static_cast<float>(
-            config.minibeam_copper_survivor_energy_loss_scales[index]);
-    }
-#endif
     const auto emittance_correlation_x = static_cast<float>(config.emittance_correlation_x);
 
     const auto emittance_correlation_y = static_cast<float>(config.emittance_correlation_y);
@@ -3559,164 +2713,67 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     const auto primary_mass_number = config.primary_mass_number;
     const auto primary_atomic_number = config.primary_atomic_number;
     const auto primary_rest_mass_MeV =
-        static_cast<float>(config.resolved_primary_rest_mass_MeV());
-    const auto primary_mcs_mass_override_MeV =
-        static_cast<float>(config.primary_mcs_mass_override_MeV());
+        static_cast<float>(config.primary_ion().rest_mass_MeV);
+    // FE is calibrated per nucleon; copper uses the same FP32 A*amu product
+    // as the production beamline model. Package mass checks use nuclear mass.
+    const float primary_fe_mass_per_u = config.primary_atomic_number == 1
+        ? static_cast<float>(config.primary_ion().rest_mass_MeV)
+        : static_cast<float>(ion_nucleon_rest_mass_MeV);
+    const float primary_copper_scattering_mass_MeV = primary_mass_number * primary_fe_mass_per_u;
     const auto minimum_table_energy = static_cast<float>(stopping_power.energies().front());
     const auto inverse_table_step =
         1.0f / static_cast<float>(stopping_power.energies()[1] - stopping_power.energies()[0]);
 
-#if CARBON_PRIMARY_CONTEXT_POINTER
-    // Move the two large immutable closures out of the primary kernel's argument
-    // list. Intel GPU backends cap kernel arguments at 2048 B; the by-value
-    // captures alone exceed that. The kernel body aliases these pointers with the
-    // original names, so the physics code is unchanged.
-    static_assert(std::is_trivially_copyable_v<UnifiedEmDevice>);
-    static_assert(std::is_trivially_copyable_v<SchneiderCtDeviceContext>);
-#if CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
-    auto* primary_unified_device_ptr = mem_tracker.allocate<UnifiedEmDevice>(1);
-#endif
-    auto* primary_schneider_ct_ptr = mem_tracker.allocate<SchneiderCtDeviceContext>(1);
-#if CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
-    if (primary_unified_device_ptr == nullptr || primary_schneider_ct_ptr == nullptr) {
-#else
-    if (primary_schneider_ct_ptr == nullptr) {
-#endif
-        throw std::bad_alloc();
-    }
-#if CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
-    queue.memcpy(primary_unified_device_ptr, &unified_device, sizeof(UnifiedEmDevice));
-#endif
-    queue.memcpy(primary_schneider_ct_ptr, &schneider_ct_device_ctx,
-                 sizeof(SchneiderCtDeviceContext));
-    queue.wait_and_throw();
-    std::cout << "[primary-context] device context pointer enabled; moved "
-              << (sizeof(SchneiderCtDeviceContext)
-#if CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
-                  + sizeof(UnifiedEmDevice)
-#endif
-                  )
-              << " B of closures out of the kernel argument list\n";
-#endif
 
     std::cout << "[input-cache] hits=" << inputs.hits-input_hits_before
               << " misses=" << inputs.misses-input_misses_before << "\n";
     runtime_setup.finish();
     // Broadbeam CT (shared FP32 electrons): fold the fixed configuration into
     // dedicated primary/secondary kernels. Ineligible runs keep generic stage 6.
-    const auto broadbeam_ct_switch=[](const char* name) {
-        const char* v=std::getenv(name);
-        if(!v)return true;
-        const std::string_view s(v);
-        if(s!="0"&&s!="1")throw std::invalid_argument(std::string(name)+" must be 0 or 1");
-        return s=="1";
-    };
     bool broadbeam_ct_primary_specialize=false,broadbeam_ct_secondary_specialize=false;
     if constexpr(BroadBeam && JointResponse==3) {
-        const bool primary_eligible = enable_ct_grid && !enable_hetero_insert && !use_unified_water &&
+        const bool primary_eligible = enable_ct_grid && !use_unified_water &&
             enable_voxel_scoring && enable_multiple_scattering && enable_inelastic && use_schneider_primary_xs &&
             use_material_electron && use_material_ct && defer_material_packets &&
-            !use_ct_elastic &&
-             slab_layer_count==0 && !enable_charged_origin_voxel_scoring &&
+             !enable_charged_origin_voxel_scoring &&
             !enable_minibeam_component_voxel_scoring && !enable_minibeam_energy_band_roi_scoring &&
-            use_electron_fp32 && use_independent_charged && !enable_primary_voxel_fluence && !voxel_scorer_clamps_transport;
+            use_electron_fp32 && use_independent_charged && !enable_primary_voxel_fluence;
         const bool secondary_eligible = enable_ct_grid && enable_voxel_scoring && ct_secondary_exact_faces &&
             ct_skip_homogeneous_face_clamp && !use_unified_water && !enable_charged_origin_voxel_scoring &&
             !enable_minibeam_component_voxel_scoring && !enable_minibeam_energy_band_roi_scoring;
-        broadbeam_ct_primary_specialize=primary_eligible && broadbeam_ct_switch("CARBON_BROADBEAM_CT_PRIMARY_SPECIALIZE");
-        broadbeam_ct_secondary_specialize=secondary_eligible && broadbeam_ct_switch("CARBON_BROADBEAM_CT_SECONDARY_SPECIALIZE");
-        std::cout<<"[broadbeam-ct-specialize] primary_eligible="<<primary_eligible<<" primary="<<broadbeam_ct_primary_specialize
-                 <<" secondary_eligible="<<secondary_eligible<<" secondary="<<broadbeam_ct_secondary_specialize<<"\n";
+        broadbeam_ct_primary_specialize=primary_eligible;
+        broadbeam_ct_secondary_specialize=secondary_eligible;
+        std::cout<<"[broadbeam-ct-specialize] primary="<<broadbeam_ct_primary_specialize
+                 <<" secondary="<<broadbeam_ct_secondary_specialize<<"\n";
     }
     RuntimeScope runtime_steps("transport_loop_including_scoring_and_queue_transfers");
     double primary_kernel_seconds = 0.0;
-#if CARBON_PRIMARY_PRODUCTION_SPECIALIZE
-    const bool primary_production_path_eligible =
-        enable_ct_grid && enable_voxel_scoring && enable_inelastic &&
-        enable_multiple_scattering && enable_ct_material_mcs &&
-        use_schneider_primary_xs &&
-        !use_unified_water && !voxel_scorer_clamps_transport &&
-        primary_loss_query_audit == nullptr &&
-        !enable_primary_voxel_fluence && !enable_charged_origin_voxel_scoring &&
-        !use_all_elastic;
-    bool use_production_primary_path = primary_production_path_eligible;
-    if(const char* requested=std::getenv("CARBON_PRIMARY_PATH_DIAGNOSTIC")) {
-        const std::string_view mode(requested);
-        if(mode=="generic")use_production_primary_path=false;
-        else if(mode=="specialized") {
-            if(!primary_production_path_eligible)
-                throw std::invalid_argument(
-                    "CARBON_PRIMARY_PATH_DIAGNOSTIC=specialized requested for an ineligible configuration");
-            use_production_primary_path=true;
-        } else throw std::invalid_argument(
-            "CARBON_PRIMARY_PATH_DIAGNOSTIC must be generic or specialized");
-        std::cout<<"[primary-path-diagnostic] same_binary="<<mode<<"\n";
-    }
-#endif
 
     // Opt-in homogeneous-water Urban minibeam specialization. Eligibility
     // proves every compile-time substitution below against runtime settings.
-    bool use_minibeam_primary_path = config.minibeam_primary_specialization;
-    if (const char* requested = std::getenv("CARBON_MINIBEAM_PRIMARY_SPECIALIZE")) {
-        const std::string_view value(requested);
-        if (value != "0" && value != "1")
-            throw std::invalid_argument("CARBON_MINIBEAM_PRIMARY_SPECIALIZE must be 0 or 1");
-        use_minibeam_primary_path = value == "1";
-    }
+    const bool use_minibeam_primary_path = config.minibeam_primary_specialization;
     if (use_minibeam_primary_path && !(
         (!BroadBeam && config.enable_minibeam) && global_urban && use_unified_water &&
-        !enable_ct_grid && !enable_hetero_insert && slab_layer_count == 0))
+        !enable_ct_grid))
         throw std::invalid_argument("Minibeam primary specialization requires uniform-water Urban minibeam");
     std::cout << "[minibeam-primary-specialization] " << use_minibeam_primary_path << "\n";
     std::cout << "[ct-minibeam-split] " << ct_minibeam_split << "\n";
-
-    // Both entry routes share the same compile-time uniform-water physics body.
-    // Stage 5 samples the source and transports water, with copper disabled at
-    // compile time. No state handoff or active-track partition is needed.
-    const bool use_water_primary_path = config.water_primary_specialization;
-    if (use_water_primary_path && !(
-        !(!BroadBeam && config.enable_minibeam) && global_urban && use_unified_water &&
-        !enable_ct_grid && !enable_hetero_insert && slab_layer_count == 0))
-        throw std::invalid_argument("Water primary specialization requires non-minibeam uniform-water Urban");
-    std::cout << "[water-primary-specialization] " << use_water_primary_path << "\n";
     const bool primary_minibeam_enabled = (!BroadBeam && config.enable_minibeam);
-    const bool nonion_primary = [&] {
-        if constexpr(!BroadBeam || JointResponse!=0)return false;
-        const char* env=std::getenv("CARBON_PROTON_NONION_PRIMARY");
-        if(env && std::string_view(env)!="0" && std::string_view(env)!="1")
-            throw std::invalid_argument("CARBON_PROTON_NONION_PRIMARY must be 0 or 1");
-        if(env && std::string_view(env)=="0")return false;
-        // Package models are the authority. Do not infer their behavior from Z/A alone.
-        if(config.primary_atomic_number!=1 || config.primary_mass_number!=1)return false;
-        return nonion_primary_package_safe;
-    }();
+    // Package models are the authority. Do not infer their behavior from Z/A alone.
+    const bool nonion_primary = BroadBeam && JointResponse==0 &&
+        config.primary_atomic_number==1 && config.primary_mass_number==1 && nonion_primary_package_safe;
     std::cout<<"[nonion-primary] enabled="<<nonion_primary<<"\n";
 
-    const int split_minibeam_primary = [&] {
-        const int configured = config.minibeam_primary_pipeline == "compact" ? 2
-            : config.minibeam_primary_pipeline == "split" ? 1 : 0;
-        const char* requested = std::getenv("CARBON_MINIBEAM_PRIMARY_SPLIT");
-        if (!requested) return configured;
-        const std::string_view value(requested);
-        if (value != "0" && value != "1" && value != "2")
-            throw std::invalid_argument("CARBON_MINIBEAM_PRIMARY_SPLIT must be 0, 1 or 2");
-        return value == "2" ? 2 : value == "1" ? 1 : 0;
-    }();
-    if (split_minibeam_primary && !use_minibeam_primary_path && !ct_minibeam_split)
-        throw std::invalid_argument("Split primary requires water specialization or CT compact Urban minibeam");
-    if(ct_minibeam_split && split_minibeam_primary!=2)
-        throw std::invalid_argument("CT minibeam requires compact pipeline (no split environment override)");
-#if defined(CARBON_ENABLE_MINIBEAM)
-    if(queue_copper_primary_children && !split_minibeam_primary)
-        throw std::invalid_argument("Cu charged queue requires a split primary launch");
-#endif
+    // compact: a beamline launch writes one medium-entry record per history and
+    // partitions survivors to the front; the medium launch transports only those.
+    const bool compact_minibeam_primary = !BroadBeam && config.enable_minibeam;
+    if (compact_minibeam_primary && !(global_urban && (enable_ct_grid || use_unified_water)))
+        throw std::invalid_argument("Compact primary requires Urban water or CT minibeam");
     // Exact CT profile: every constant substituted in stage 11 is checked
-    // here. The original material-aware stage 4 remains the control/fallback.
+    // here. The original material-aware stage 4 remains the fallback.
     const bool ct_queued_primary_eligible = ct_minibeam_split &&
-        split_minibeam_primary == 2 &&
         global_urban == true &&
         enable_ct_grid == true &&
-        enable_hetero_insert == false &&
         use_unified_water == false &&
         enable_voxel_scoring == true &&
         enable_multiple_scattering == true &&
@@ -3725,48 +2782,20 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         use_material_electron == true &&
         use_material_ct == true &&
         defer_material_packets == true &&
-
-        use_ct_elastic == false &&
-
-
-
-        slab_layer_count == 0 &&
         primary_atomic_number == 1 &&
         primary_mass_number == 1 &&
         inverse_mass_number == 1.0F;
-    const bool ct_queued_primary_specialize = [&] {
-        const char* value = std::getenv("CARBON_CT_QUEUED_PRIMARY_SPECIALIZE");
-        if (!value) return ct_queued_primary_eligible;
-        if (std::string_view(value) == "0") return false;
-        if (std::string_view(value) != "1")
-            throw std::invalid_argument("CARBON_CT_QUEUED_PRIMARY_SPECIALIZE must be 0 or 1");
-        if (!ct_queued_primary_eligible)
-            throw std::invalid_argument("CT queued primary specialization requires the exact proton Urban CT queue profile");
-        return true;
-    }();
+    const bool ct_queued_primary_specialize = ct_queued_primary_eligible;
     std::cout << "[ct-queued-primary-specialize] enabled=" << ct_queued_primary_specialize << "\n";
-    auto* primary_medium_entry = split_minibeam_primary
+    auto* primary_medium_entry = compact_minibeam_primary
         ? mem_tracker.allocate<PrimaryMediumEntryState>(history_chunk) : nullptr;
-    if (split_minibeam_primary && !primary_medium_entry) throw std::bad_alloc();
-    auto* primary_entry_counts = split_minibeam_primary == 2
+    auto* primary_entry_counts = compact_minibeam_primary
         ? mem_tracker.allocate<std::uint64_t>(2) : nullptr;
-    if (split_minibeam_primary == 2 && !primary_entry_counts) throw std::bad_alloc();
-#if defined(CARBON_ENABLE_MINIBEAM)
-    const unsigned water_energy_buckets = [&] {
-        const char* value=std::getenv("CARBON_MINIBEAM_WATER_ENERGY_BUCKETS");
-        if(!value)return split_minibeam_primary==2 && (use_minibeam_primary_path || ct_minibeam_split) &&
-            config.primary_atomic_number==1 && config.primary_mass_number==1 ? 16U : 0U;
-        if(std::string_view(value)=="0")return 0U;
-        unsigned buckets=0;
-        const std::string_view view(value);
-        auto parsed=std::from_chars(view.data(),view.data()+view.size(),buckets);
-        if (parsed.ec!=std::errc{} || parsed.ptr!=view.data()+view.size() ||
-            (buckets!=4 && buckets!=8 && buckets!=16 && buckets!=32))
-            throw std::invalid_argument("CARBON_MINIBEAM_WATER_ENERGY_BUCKETS must be 0,4,8,16,32");
-        if (split_minibeam_primary!=2 || (!use_minibeam_primary_path && !ct_minibeam_split))
-            throw std::invalid_argument("Entry energy ordering requires compact water/CT minibeam");
-        return buckets;
-    }();
+    if (compact_minibeam_primary && (!primary_medium_entry || !primary_entry_counts)) throw std::bad_alloc();
+    // Proton medium-entry records are ordered by entry energy before transport.
+    const unsigned water_energy_buckets = compact_minibeam_primary &&
+        (use_minibeam_primary_path || ct_minibeam_split) &&
+        config.primary_atomic_number==1 && config.primary_mass_number==1 ? 16U : 0U;
     auto* water_energy_order = water_energy_buckets ? mem_tracker.allocate<std::uint32_t>(history_chunk) : nullptr;
     auto* water_energy_counts = water_energy_buckets ? mem_tracker.allocate<std::uint32_t>(water_energy_buckets+1) : nullptr;
     auto* water_energy_offsets = water_energy_buckets ? mem_tracker.allocate<std::uint32_t>(water_energy_buckets+1) : nullptr;
@@ -3777,30 +2806,21 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     // source groups copper-bound histories (~600 Cu steps) apart from open-slit
     // ones (a few air steps), so fewer warps idle on a single long lane. Only
     // the lane->history map changes; every history keeps its index, RNG
-    // stream and output slots. CARBON_MINIBEAM_BEAMLINE_ORDER=0 disables it.
-    const bool order_beamline_lanes = [&] {
-        const char* value = std::getenv("CARBON_MINIBEAM_BEAMLINE_ORDER");
-        if (value && std::string_view(value) != "0" && std::string_view(value) != "1")
-            throw std::invalid_argument("CARBON_MINIBEAM_BEAMLINE_ORDER must be 0 or 1");
-        return split_minibeam_primary != 0 && enable_minibeam && enable_flat_source &&
-            !enable_emittance_source && primary_spot_count == 0 &&
-            !(value && std::string_view(value) == "0");
-    }();
+    // stream and output slots.
+    const bool order_beamline_lanes = compact_minibeam_primary && enable_minibeam && enable_flat_source &&
+        !enable_emittance_source && primary_spot_count == 0;
     auto* beamline_order = order_beamline_lanes
         ? mem_tracker.allocate<std::uint32_t>(history_chunk) : nullptr;
     auto* beamline_order_counts = order_beamline_lanes
         ? mem_tracker.allocate<std::uint32_t>(2) : nullptr;
     if (order_beamline_lanes && (!beamline_order || !beamline_order_counts)) throw std::bad_alloc();
     std::cout << "[beamline-order] enabled=" << order_beamline_lanes << "\n";
-#else
-    constexpr std::uint32_t* beamline_order = nullptr;
-#endif
-    std::cout << "[primary-split] enabled=" << split_minibeam_primary
+    std::cout << "[primary-compact] enabled=" << compact_minibeam_primary
               << " entry_bytes=" << sizeof(PrimaryMediumEntryState) << "\n";
     std::vector<sycl::event> electron_events;
     std::uint64_t electron_tasks_total=0, electron_queue_peak=0;
     std::vector<sycl::event> primary_events;
-    primary_events.reserve((split_minibeam_primary ? 2 : 1) *
+    primary_events.reserve((compact_minibeam_primary ? 2 : 1) *
         ((number_of_histories + history_chunk - 1) / history_chunk));
     for (std::size_t hist_offset = 0;
          hist_offset < number_of_histories;
@@ -3810,9 +2830,9 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         const auto chunk_global =
             ((chunk_count + local_size - 1) / local_size) * local_size;
         if (defer_material_packets)queue.fill(material_task_counts,std::uint64_t{0},2);
-        const auto launch_primary_chunk = [&](auto production_path_tag, auto uniform_water_path_tag, auto stage_tag) {
+        const auto launch_primary_chunk = [&](auto uniform_water_path_tag, auto stage_tag) {
             constexpr int kKernelStage = decltype(stage_tag)::value;
-            constexpr bool kQueueCopperChildren = kKernelStage == 8 || kKernelStage == 9 || kKernelStage == 10;
+            constexpr bool kQueueCopperChildren = kKernelStage == 9;
             constexpr bool kCtQueuedPrimaryPath = kKernelStage == 11;
             // Stage 12 is broadbeam stage 6 with host-proven CT-shared-electron
             // configuration folded at compile time (no physics difference).
@@ -3821,17 +2841,13 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             constexpr int kFoldZ = kKernelStage == 13 ? 1 : kKernelStage == 14 ? 6 : 0;
             constexpr int kFoldA = kKernelStage == 13 ? 1 : kKernelStage == 14 ? 12 : 0;
             static_assert(!kBroadBeamCtPath || (BroadBeam && JointResponse==3));
-            constexpr int kPrimaryStage = kCtQueuedPrimaryPath ? 4 : kKernelStage == 8 ? 1 : (kKernelStage == 9 || kKernelStage == 10) ? 3 : kBroadBeamCtPath ? 6 : kKernelStage;
+            constexpr int kPrimaryStage = kCtQueuedPrimaryPath ? 4 : kKernelStage == 9 ? 3 : kBroadBeamCtPath ? 6 : kKernelStage;
             constexpr bool kUniformWaterPrimaryPath = decltype(uniform_water_path_tag)::value;
             // Host eligibility requires global Urban for every split beamline.
             // Downstream CT material handling must not select upstream physics.
-            constexpr bool kUrbanBeamlinePath = kUniformWaterPrimaryPath ||
-                kPrimaryStage == 1 || kPrimaryStage == 3;
-            constexpr bool kProductionPrimaryPath =
-                decltype(production_path_tag)::value;
+            constexpr bool kUrbanBeamlinePath = kUniformWaterPrimaryPath || kPrimaryStage == 3;
             const auto ct_runtime_global_urban = global_urban;
             const auto ct_runtime_enable_ct_grid = enable_ct_grid;
-            const auto ct_runtime_enable_hetero_insert = enable_hetero_insert;
             const auto ct_runtime_use_unified_water = use_unified_water;
             const auto ct_runtime_enable_voxel_scoring = enable_voxel_scoring;
             const auto ct_runtime_enable_multiple_scattering = enable_multiple_scattering;
@@ -3840,8 +2856,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             const auto ct_runtime_use_material_electron = use_material_electron;
             const auto ct_runtime_use_material_ct = use_material_ct;
             const auto ct_runtime_defer_material_packets = defer_material_packets;
-            const auto ct_runtime_use_ct_elastic = use_ct_elastic;
-            const auto ct_runtime_slab_layer_count = slab_layer_count;
             const auto ct_runtime_primary_atomic_number = primary_atomic_number;
             const auto ct_runtime_primary_mass_number = primary_mass_number;
             const auto ct_runtime_inverse_mass_number = inverse_mass_number;
@@ -3851,16 +2865,14 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             const auto ct_runtime_use_electron_fp32 = use_electron_fp32;
             const auto ct_runtime_use_independent_charged = use_independent_charged;
             const auto ct_runtime_enable_primary_voxel_fluence = enable_primary_voxel_fluence;
-            const auto ct_runtime_voxel_scorer_clamps_transport = voxel_scorer_clamps_transport;
             return queue.parallel_for<CarbonPrimaryTransportKernel<
-                kProductionPrimaryPath, kUniformWaterPrimaryPath, kKernelStage, BroadBeam, Gaussian, JointResponse>>(
+                kUniformWaterPrimaryPath, kKernelStage, BroadBeam, JointResponse>>(
             sycl::nd_range<1>{sycl::range<1>{chunk_global}, sycl::range<1>{local_size}},
             [=](sycl::nd_item<1> item) {
                 // Constexpr-selected values remove unused physics branches;
                 // the host eligibility test proves their runtime equivalence.
                 const auto global_urban = kCtQueuedPrimaryPath ? true : (BroadBeam ? false : ct_runtime_global_urban);
                 const auto enable_ct_grid = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_ct_grid;
-                const auto enable_hetero_insert = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? false : ct_runtime_enable_hetero_insert;
                 const auto use_unified_water = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? false : ct_runtime_use_unified_water;
                 const auto enable_voxel_scoring = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_voxel_scoring;
                 const auto enable_multiple_scattering = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_multiple_scattering;
@@ -3869,58 +2881,39 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 const auto use_material_electron = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_material_electron;
                 const auto use_material_ct = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_material_ct;
                 const auto defer_material_packets = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_defer_material_packets;
-                const auto use_ct_elastic = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? false : ct_runtime_use_ct_elastic;
-                const auto slab_layer_count = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? 0 : ct_runtime_slab_layer_count;
                 const auto primary_atomic_number = kCtQueuedPrimaryPath ? 1 : (kFoldZ ? kFoldZ : ct_runtime_primary_atomic_number);
                 const auto primary_mass_number = kCtQueuedPrimaryPath ? 1 : (kFoldA ? kFoldA : ct_runtime_primary_mass_number);
                 const auto inverse_mass_number = kCtQueuedPrimaryPath ? 1.0F : (kFoldA ? 1.0F / static_cast<float>(kFoldA) : ct_runtime_inverse_mass_number);
-                const bool enable_minibeam = (kPrimaryStage == 5 || BroadBeam) ? false : primary_minibeam_enabled;
+                const bool enable_minibeam = BroadBeam ? false : primary_minibeam_enabled;
                 const auto enable_charged_origin_voxel_scoring = kBroadBeamCtPath ? false : ct_runtime_enable_charged_origin_voxel_scoring;
                 const auto enable_minibeam_component_voxel_scoring = kBroadBeamCtPath ? false : ct_runtime_enable_minibeam_component_voxel_scoring;
                 const auto enable_minibeam_energy_band_roi_scoring = kBroadBeamCtPath ? false : ct_runtime_enable_minibeam_energy_band_roi_scoring;
                 const auto use_electron_fp32 = kBroadBeamCtPath ? true : ct_runtime_use_electron_fp32;
                 const auto use_independent_charged = kBroadBeamCtPath ? true : ct_runtime_use_independent_charged;
                 const auto enable_primary_voxel_fluence = kBroadBeamCtPath ? false : ct_runtime_enable_primary_voxel_fluence;
-                const auto voxel_scorer_clamps_transport = kBroadBeamCtPath ? false : ct_runtime_voxel_scorer_clamps_transport;
                 const auto lane = item.get_global_linear_id();
                 if (lane >= chunk_count) {
                     return;
                 }
                 auto global_history = hist_offset + lane;
-                if constexpr (kPrimaryStage == 1 || kPrimaryStage == 3) {
+                if constexpr (kPrimaryStage == 3) {
                     if (beamline_order != nullptr) global_history = hist_offset + beamline_order[lane];
                 }
-#if CARBON_PRIMARY_CONTEXT_POINTER
-                // Shadow the host-side closures with device-resident views so the
-                // rest of the kernel body is byte-for-byte identical.
-#if CARBON_PRIMARY_CONTEXT_MOVE_UNIFIED
-                const auto& unified_device = *primary_unified_device_ptr;
-#endif
-                const auto& schneider_ct_device_ctx = *primary_schneider_ct_ptr;
-#endif
 
                 PrimaryMediumEntryState entry{};
 #include "detail/sycl_primary_beamline.inc"
-                if constexpr (kPrimaryStage == 1 || kPrimaryStage == 3) {
-                    std::size_t destination = lane;
-                    if constexpr (kPrimaryStage == 3) {
-                        // Partition all histories, never discard a terminated track.
-                        // The two ends cannot overlap: active + inactive <= chunk_count.
-                        const bool active = entry.energy_MeV > energy_cutoff_MeV;
-                        const auto rank = sycl::atomic_ref<std::uint64_t,
-                            sycl::memory_order::relaxed, sycl::memory_scope::device,
-                            sycl::access::address_space::global_space>(
-                                primary_entry_counts[active ? 0 : 1]).fetch_add(1U);
-                        destination = active ? rank : chunk_count - 1 - rank;
-                    }
-                    primary_medium_entry[destination] = entry;
+                if constexpr (kPrimaryStage == 3) {
+                    // Partition all histories, never discard a terminated track.
+                    // The two ends cannot overlap: active + inactive <= chunk_count.
+                    const bool active = entry.energy_MeV > energy_cutoff_MeV;
+                    const auto rank = sycl::atomic_ref<std::uint64_t,
+                        sycl::memory_order::relaxed, sycl::memory_scope::device,
+                        sycl::access::address_space::global_space>(
+                            primary_entry_counts[active ? 0 : 1]).fetch_add(1U);
+                    primary_medium_entry[active ? rank : chunk_count - 1 - rank] = entry;
                 } else {
-                    if constexpr (kPrimaryStage == 2 || kPrimaryStage == 4) {
-#if defined(CARBON_ENABLE_MINIBEAM)
+                    if constexpr (kPrimaryStage == 4) {
                         entry = primary_medium_entry[water_energy_order ? water_energy_order[lane] : lane];
-#else
-                        entry = primary_medium_entry[lane];
-#endif
                         global_history = entry.global_history;
                     }
                 const auto rng_history = entry.rng_history;
@@ -3971,10 +2964,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 bool water_urban_escaped_geometry = false;
 
                 double pending_primary_depth_MeV = 0.0;
-                double pending_let_numerator = 0.0;
-                double pending_let_denominator = 0.0;
-                double pending_voxel_let_numerator = 0.0;
-                double pending_voxel_let_denominator = 0.0;
                 int pending_primary_bin = 0;
                 double pending_primary_voxel_MeV = 0.0;
                 std::size_t pending_primary_voxel = 0;
@@ -3982,7 +2971,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 auto last_primary_density_g_per_cm3 = 0.0F;
 
                 float nuclear_tau_remaining = 0.0F;
-                HadronicIncreasingCacheCandidate primary_hadronic_cache;
+                HadronicRateCache primary_hadronic_cache;
                 bool nuclear_tau_active = false;
                 std::uint32_t nuclear_tau_rng_step = 0;
                 bool primary_inelastic_occurred = false;
@@ -3997,7 +2986,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 float interaction_density = 0.0F;
 
                 const std::uint32_t max_primary_steps = maximum_primary_steps;
-                int last_survival_bin = -1;
                 while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
                     // The rate/target hazard is evaluated from the energy at
                     // the beginning of this step.  The replay event is
@@ -4008,7 +2996,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     const auto escaped_z =
                         position_z_mm < 0.0F || position_z_mm >= phantom_length_mm;
                     if (escaped_z) break;
-                    if((kUniformWaterPrimaryPath || global_urban) && !(kProductionPrimaryPath || (!kUniformWaterPrimaryPath && enable_ct_grid)) &&
+                    if((kUniformWaterPrimaryPath || global_urban) && !((!kUniformWaterPrimaryPath && enable_ct_grid)) &&
                        urban_global_outside_water({position_x_mm,position_y_mm,position_z_mm},
                            {direction_x,direction_y,direction_z},urban_water_half_width_mm,phantom_length_mm)) {
                         water_urban_escaped_geometry=true;break;
@@ -4024,18 +3012,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                    : static_cast<int>(
                                          sycl::floor(position_z_mm / depth_bin_width_mm));
                     bin = sycl::max(0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
-                    if (primary_survival_device != nullptr && bin != last_survival_bin) {
-                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                         sycl::memory_scope::device,
-                                         sycl::access::address_space::global_space>
-                            survival(primary_survival_device[bin]);
-                        survival.fetch_add(1U);
-                        last_survival_bin = bin;
-                    }
 
                     auto voxel_x = static_cast<int>(voxel_bins_x / 2);
                     auto voxel_y = static_cast<int>(voxel_bins_y / 2);
-                    if ((kProductionPrimaryPath || enable_voxel_scoring)) {
+                    if ((enable_voxel_scoring)) {
                         const auto x_coordinate =
                             (position_x_mm - voxel_min_x_mm) / voxel_size_x_mm;
                         const auto y_coordinate =
@@ -4070,20 +3050,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     const auto fraction =
                         sycl::clamp(floating_index - static_cast<float>(index), 0.0F, 1.0F);
 
-                    const auto in_insert =
-                        (!kUniformWaterPrimaryPath && enable_hetero_insert) &&
-                        inside_hetero_insert(position_x_mm, position_y_mm, position_z_mm,
-                                             insert_x_min, insert_x_max, insert_y_min,
-                                             insert_y_max, insert_z_min, insert_z_max);
-                    auto local_density_g_per_cm3 = slab_density_g_per_cm3(
-                        position_z_mm, slab_z_ends_device, slab_densities_device,
-                        (kUniformWaterPrimaryPath ? std::size_t{0} : slab_layer_count), water_density_g_per_cm3);
-                    if (in_insert) {
-                        local_density_g_per_cm3 = insert_density_g_per_cm3;
-                    }
+                    auto local_density_g_per_cm3 = water_density_g_per_cm3;
                     std::uint8_t ct_material = 2;
                     auto in_ct = false;
-                    if ((kProductionPrimaryPath || (!kUniformWaterPrimaryPath && enable_ct_grid))) {
+                    if (((!kUniformWaterPrimaryPath && enable_ct_grid))) {
                         float ct_rho = water_density_g_per_cm3;
                         in_ct = ct_sample(position_x_mm, position_y_mm, position_z_mm,
                                           ct_origin_x, ct_origin_y, ct_origin_z, ct_spacing_x,
@@ -4096,15 +3066,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     }
 
                     // Mirror secondary CT escape: the EM package has no exterior material.
-                    if((kProductionPrimaryPath || (!kUniformWaterPrimaryPath && enable_ct_grid)) && !in_ct) {
+                    if(((!kUniformWaterPrimaryPath && enable_ct_grid)) && !in_ct) {
                         unified_primary_escaped_ct=true;
                         break;
                     }
 
-                    const auto layer_for_material =
-                        (kUniformWaterPrimaryPath ? std::size_t{0} : slab_layer_count) > 0
-                            ? slab_layer_index(position_z_mm, slab_z_ends_device, (kUniformWaterPrimaryPath ? std::size_t{0} : slab_layer_count))
-                            : 0U;
                     float stopping_power_MeV_per_mm = 0.0F;
                     float step_mm = 0.0F;
                     UnifiedEmStep unified_primary_pre;
@@ -4118,8 +3084,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             }
                     };
                     {
-                        const int section=(kProductionPrimaryPath || (!kUniformWaterPrimaryPath && enable_ct_grid))?(in_ct?int(ct_material):-2):-1;
-                        if(!CARBON_EM_MATERIAL_CACHE || !unified_primary_state.valid || unified_primary_state.section!=section ||
+                        const int section=((!kUniformWaterPrimaryPath && enable_ct_grid))?(in_ct?int(ct_material):-2):-1;
+                        if(!unified_primary_state.valid || unified_primary_state.section!=section ||
                            unified_primary_state.density!=local_density_g_per_cm3)
                             unified_primary_state=unified_device.select(section,local_density_g_per_cm3,unified_primary_species);
                         if(!unified_primary_state.covers(energy_MeV)){
@@ -4142,7 +3108,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             unified_primary_clock.last_section=unified_primary_state.section;
                             unified_primary_clock.last_density=unified_primary_state.density;
                         }
-                        step_mm=sycl::fmin((em_primary_step_scale!=1.f?unified_primary_state.research_step(energy_MeV,CARBON_EM_STEP_CACHE?unified_primary_pre:unified_primary_state.prepare(energy_MeV),em_primary_step_scale):(CARBON_EM_STEP_CACHE?unified_primary_state.step(unified_primary_pre):unified_primary_state.step(energy_MeV))),unified_primary_distance);
+                        step_mm=sycl::fmin(unified_primary_state.step(unified_primary_pre),unified_primary_distance);
                         // Bound combined mean loss, not the old restricted range alone.
                         const float delta_sp=unified_primary_state.mix(unified_primary_pre.lo.delta_stopping,unified_primary_pre.hi.delta_stopping);
                         if(delta_sp>0) step_mm=sycl::fmin(step_mm,maximum_mean_loss_fraction*energy_MeV/sycl::fmax(1e-12f,delta_sp+unified_primary_state.mix(unified_primary_pre.lo.stopping,unified_primary_pre.hi.stopping)));
@@ -4158,25 +3124,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             step_mm = sycl::fmin(step_mm, dz_step);
                         }
                     }
-                    if ((kUniformWaterPrimaryPath ? std::size_t{0} : slab_layer_count) > 0) {
-                        const auto slab_step = distance_to_slab_interface_mm(
-                            position_z_mm, direction_z, slab_z_ends_device, (kUniformWaterPrimaryPath ? std::size_t{0} : slab_layer_count),
-                            phantom_length_mm);
-                        if (slab_step > 0.0F) {
-                            step_mm = sycl::fmin(step_mm, slab_step);
-                        }
-                    }
-                    if ((!kUniformWaterPrimaryPath && enable_hetero_insert)) {
-                        const auto insert_step = distance_to_insert_interface_mm(
-                            position_x_mm, position_y_mm, position_z_mm, direction_x,
-                            direction_y, direction_z, insert_x_min, insert_x_max, insert_y_min,
-                            insert_y_max, insert_z_min, insert_z_max, phantom_length_mm);
-                        if (insert_step > 0.0F) {
-                            step_mm = sycl::fmin(step_mm, insert_step);
-                        }
-                    }
                     CtFaceClampResult ct_clamp_res{step_mm, false, 0};
-                    if (!(kUniformWaterPrimaryPath || global_urban) && (kProductionPrimaryPath || (!kUniformWaterPrimaryPath && enable_ct_grid)) && in_ct) {
+                    if (!(kUniformWaterPrimaryPath || global_urban) && ((!kUniformWaterPrimaryPath && enable_ct_grid)) && in_ct) {
                         ct_clamp_res = clamp_step_to_ct_faces_exact(
                             step_mm, position_x_mm, position_y_mm, position_z_mm,
                             direction_x, direction_y, direction_z, ct_origin_x,
@@ -4184,29 +3133,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             ct_spacing_z, ct_nx, ct_ny, ct_nz);
                         step_mm = ct_clamp_res.step_mm;
                     }
-                    if (!(kUniformWaterPrimaryPath || global_urban) && (kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport) &&
-                        absolute_direction_x >= 1.0e-6F) {
-                        const auto boundary_x_mm =
-                            voxel_min_x_mm +
-                            static_cast<float>(voxel_x + (direction_x > 0.0F ? 1 : 0)) *
-                                voxel_size_x_mm;
-                        const auto dx_step = (boundary_x_mm - position_x_mm) / direction_x;
-                        if (dx_step > 0.0F) {
-                            step_mm = sycl::fmin(step_mm, dx_step);
-                        }
-                    }
-                    if (!(kUniformWaterPrimaryPath || global_urban) && (kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport) &&
-                        absolute_direction_y >= 1.0e-6F) {
-                        const auto boundary_y_mm =
-                            voxel_min_y_mm +
-                            static_cast<float>(voxel_y + (direction_y > 0.0F ? 1 : 0)) *
-                                voxel_size_y_mm;
-                        const auto dy_step = (boundary_y_mm - position_y_mm) / direction_y;
-                        if (dy_step > 0.0F) {
-                            step_mm = sycl::fmin(step_mm, dy_step);
-                        }
-                    }
-
 
                     UrbanGlobalProposal global_urban_proposal{};
                     CorrelatedScatteringStep global_urban_scattering{};
@@ -4240,66 +3166,41 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     bool inelastic_this_step = false;
                     // Elastic candidates are resolved only by the configured CT/water bank.
                     bool ct_elastic_this_step = false;
-                    std::int16_t cinel02_target_z_step = 0;
-                    std::int16_t cinel02_target_a_step = 0;
-                    if ((kProductionPrimaryPath || enable_inelastic) &&
+                    if ((enable_inelastic) &&
                         energy_MeV > energy_cutoff_MeV) {
                         const auto cur_e_u = energy_MeV * inverse_mass_number;
-                        if ((kProductionPrimaryPath || use_schneider_primary_xs)) {
-                            if (in_ct || (!kProductionPrimaryPath && (kUniformWaterPrimaryPath || use_unified_water))) {
-                                const std::uint32_t section_id = (!kProductionPrimaryPath && (kUniformWaterPrimaryPath || use_unified_water)) ? 255U : static_cast<std::uint32_t>(
+                        if ((use_schneider_primary_xs)) {
+                            if (in_ct || ((kUniformWaterPrimaryPath || use_unified_water))) {
+                                const std::uint32_t section_id = ((kUniformWaterPrimaryPath || use_unified_water)) ? 255U : static_cast<std::uint32_t>(
                                     sycl::min(static_cast<std::uint32_t>(ct_material), 24U));
                                 // v3: hazard from the masked rate-binary partials
                                 // (single source with the target sampler); v1
                                 // keeps the CSV XS table EXACTLY.
-                                float mass_rate = 0.0F;
-                                if (schneider_ct_device_ctx.primary_sampler.rate_version == 3) {
-                                    mass_rate = schneider_ct_device_ctx.primary_rates(
-                                        section_id, cur_e_u).total;
-                                } else {
-                                    mass_rate = schneider_primary_mass_xs(
-                                        schneider_primary_xs_device, schneider_xs_sections,
-                                        schneider_xs_energies, schneider_xs_e_min, schneider_xs_inv_dE,
-                                        section_id, cur_e_u);
-                                }
+                                const float mass_rate = schneider_ct_device_ctx.primary_rates(
+                                    section_id, cur_e_u).total;
                                 // Density enters exactly once, in the total
                                 // hazard; target fractions from the sampler CDF
                                 // are density-independent.
-                                // Full-section elastic hazard (diagnostic): same
-                                // optical-depth competition as inelastic; the
-                                // branch below splits them exclusively, so no
-                                // double counting of the total rate.
+                                // All-ion elastic hazard: same optical-depth
+                                // competition as inelastic; the branch below
+                                // splits them exclusively, so no double counting.
                                 float macro_el_ct = 0.0F;
-                                const bool elastic_armed =
-                                    ((!kProductionPrimaryPath && use_all_elastic) && (in_ct || (!kProductionPrimaryPath && (kUniformWaterPrimaryPath || use_unified_water)))) ||
-                                    (use_ct_elastic && in_ct &&
-                                    schneider_ct_device_ctx.elastic_sampler.rate_version == 3);
-                                if ((!kProductionPrimaryPath && use_all_elastic) && elastic_armed) {
-                                    const float rate=all_elastic.rate(primary_elastic_projectile,(!kProductionPrimaryPath && (kUniformWaterPrimaryPath || use_unified_water))?25:section_id,cur_e_u);
+                                const bool elastic_armed = use_all_elastic;
+                                if (elastic_armed) {
+                                    const float rate=all_elastic.rate(primary_elastic_projectile,((kUniformWaterPrimaryPath || use_unified_water))?25:section_id,cur_e_u);
                                     if(rate<0) {
                                         sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
                                     sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[4]).fetch_add(1);
                                         break;
                                     }
                                     macro_el_ct=local_density_g_per_cm3*rate;
-                                } else if (elastic_armed) {
-                                    const auto el_rates =
-                                        schneider_ct_device_ctx.elastic_rates(
-                                            section_id, cur_e_u);
-                                    // Legacy diagnostic H-only target selection;
-                                    // all-target isotropic needs explicit
-                                    // opt-in (unphysical for heavy nuclei).
-                                    macro_el_ct = local_density_g_per_cm3 *
-                                        (ct_elastic_all_targets
-                                             ? el_rates.total
-                                             : el_rates.partials[0]);
                                 }
                                 float macro_inelastic = local_density_g_per_cm3 * mass_rate;
                                 {
                                 // Cache only the process whose post-step acceptance uses
                                 // this rate. Elastic retains its own local hazard and must
                                 // never enter the inelastic acceptance denominator.
-                                macro_inelastic = (kProductionPrimaryPath || enable_inelastic)
+                                macro_inelastic = (enable_inelastic)
                                     ? primary_hadronic_cache.update(cur_e_u, macro_inelastic)
                                     : 0.0F;
                                 }
@@ -4324,7 +3225,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     ct_elastic_this_step = true;
                                     interaction_section = section_id;
                                     interaction_density = local_density_g_per_cm3;
-                                } else if (collision && (kProductionPrimaryPath || enable_inelastic)) {
+                                } else if (collision && (enable_inelastic)) {
                                     schneider_diag_increment_device(
                                         schneider_diag_device,
                                         SchneiderDiagSlot::PrimaryHazards);
@@ -4335,13 +3236,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                             nuc_ref(*schneider_inelastic_device);
                                         nuc_ref.fetch_add(1U);
                                     }
-                                    if (inelastic_reaction_device != nullptr) {
-                                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            reaction(inelastic_reaction_device[bin]);
-                                        reaction.fetch_add(1U);
-                                    }
+
                                     inelastic_this_step = true;
                                     interaction_section = section_id;
                                     interaction_density = local_density_g_per_cm3;
@@ -4367,8 +3262,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     // Diagnostic only: CT face clamping above guarantees the
                     // segment stays in its starting CT voxel. Do not score a
                     // laterally escaped segment into a clamped edge voxel.
-                    if ((!kProductionPrimaryPath && enable_primary_voxel_fluence) &&
-                        (!(kProductionPrimaryPath || (!kUniformWaterPrimaryPath && enable_ct_grid)) || in_ct)) {
+                    if ((enable_primary_voxel_fluence) &&
+                        (!((!kUniformWaterPrimaryPath && enable_ct_grid)) || in_ct)) {
                         sycl::atomic_ref<
                             DoseAtomicT, sycl::memory_order::relaxed,
                             sycl::memory_scope::device,
@@ -4379,30 +3274,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             static_cast<DoseAtomicT>(accepted_loss_path_mm));
                     }
 
-                    float mean_loss_MeV = 0.0F;
-                    {
-                        // The unified loss sampler computes the physical mean below.
-                        // This separate query is needed only by the optional audit.
-                        if ((kProductionPrimaryPath ? nullptr : primary_loss_query_audit))
-                            mean_loss_MeV=unified_primary_state.mean(
-                                energy_MeV, accepted_loss_path_mm);
-                    }
                     float deposited_MeV = 0.0F;
-
-                    if ((kProductionPrimaryPath ? nullptr : primary_loss_query_audit) && mean_loss_MeV > 0 && energy_MeV > 0) {
-                        // Bin 0: f<1e-12; bins 1..12: decades; bin 13: f>=1.
-                        const float f = mean_loss_MeV / energy_MeV;
-                        const int b = sycl::clamp(static_cast<int>(sycl::floor(sycl::log10(f)))+13, 0, 13);
-                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                            sycl::memory_scope::device, sycl::access::address_space::global_space>
-                            count((kProductionPrimaryPath ? nullptr : primary_loss_query_audit)[b]);
-                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                            sycl::memory_scope::device, sycl::access::address_space::global_space>
-                            energy_sum((kProductionPrimaryPath ? nullptr : primary_loss_query_audit)[b+14]);
-                        count.fetch_add(1);
-                        energy_sum.fetch_add(static_cast<std::uint64_t>(mean_loss_MeV*1.0e6F+0.5F));
-                    }
-
                     if (urban_range_limited) deposited_MeV = energy_MeV;
                     float em_continuous_sampled_MeV =
                         urban_range_limited ? energy_MeV : 0.0F;
@@ -4432,13 +3304,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         birth_expected_loss_MeV=draw.mean+draw.delta_mean;
                     }
                     const float em_loss_before_scale_MeV = deposited_MeV;
-#if defined(CARBON_ENABLE_MINIBEAM)
                     if (enable_minibeam) {
                         deposited_MeV = sycl::fmin(
                             energy_MeV,
-                            deposited_MeV * minibeam_water_primary_stopping_power_scale);
+                            deposited_MeV);
                     }
-#endif
                     const float em_scale_factor =
                         em_loss_before_scale_MeV > 0.0F
                             ? deposited_MeV / em_loss_before_scale_MeV : 0.0F;
@@ -4495,7 +3365,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 {electron_fp32::Coordinate(birth_position[0]),electron_fp32::Coordinate(birth_position[1]),electron_fp32::Coordinate(birth_position[2])},
                                 {direction_x,direction_y,direction_z});return {p.valid,p.density,p.section};
                         }();
-                        electron_fp32::IndependentElectronBirthDraw birth;
+                        electron_fp32::ElectronBirthPartition birth;
                         float birth_parent_MeVu=energy_MeVu,birth_cut_MeV=0.f;
                         bool selected_birth=true;
                         if constexpr(BroadBeam && JointResponse==3) {
@@ -4540,10 +3410,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         birth.fraction=delta/total;
                                     }
                                 }
-                            } else {
-                                const auto fresh=electron_fp32::prepare_independent_electron_birth(float_birth,birth_material.section,
-                                    birth_material.density,energy_MeVu,float(density_u));
-                                birth=fresh;
                             }
                         }
                         const auto ti=birth.node;
@@ -4597,7 +3463,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         }
                     }
 
-
                     if (bin != pending_primary_bin) {
                         if (pending_primary_depth_MeV > 0.0) {
                             sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
@@ -4607,17 +3472,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             atomic_dose.fetch_add(static_cast<DepthAtomicT>(pending_primary_depth_MeV));
                             pending_primary_depth_MeV = 0.0;
                         }
-                        if (enable_let_scoring) {
-                            flush_letd_moments_device(
-                                let_moments_device, number_of_bins,
-                                static_cast<std::size_t>(pending_primary_bin), nullptr, 0, 0,
-                                pending_let_numerator, pending_let_denominator, true);
-                            pending_let_numerator = 0.0;
-                            pending_let_denominator = 0.0;
-                        }
+
                         pending_primary_bin = bin;
                     }
-                    if ((kProductionPrimaryPath || enable_voxel_scoring) && voxel_index != pending_primary_voxel) {
+                    if ((enable_voxel_scoring) && voxel_index != pending_primary_voxel) {
                         if (pending_primary_voxel_MeV > 0.0 && pending_primary_voxel >= 0 &&
                             pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                             sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
@@ -4625,7 +3483,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                              sycl::access::address_space::global_space>
                                 atomic_voxel_dose(voxel_dose_device[pending_primary_voxel]);
                             atomic_voxel_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
-                            if ((!kProductionPrimaryPath && enable_charged_origin_voxel_scoring)) {
+                            if ((enable_charged_origin_voxel_scoring)) {
                                 sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
@@ -4634,7 +3492,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 atomic_primary_origin.fetch_add(
                                     static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
                             }
-                            if ((!kProductionPrimaryPath && enable_minibeam_component_voxel_scoring)) {
+                            if ((enable_minibeam_component_voxel_scoring)) {
                                 sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
@@ -4645,14 +3503,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             }
                         }
                         pending_primary_voxel_MeV = 0.0;
-                        if (enable_let_scoring && voxel_let_moments_device != nullptr && pending_primary_voxel >= 0) {
-                            flush_letd_moments_device(
-                                voxel_let_moments_device, number_of_voxels,
-                                pending_primary_voxel, nullptr, 0, 0,
-                                pending_voxel_let_numerator, pending_voxel_let_denominator, true);
-                            pending_voxel_let_numerator = 0.0;
-                            pending_voxel_let_denominator = 0.0;
-                        }
+
                         pending_primary_voxel = voxel_index;
                     }
 
@@ -4661,7 +3512,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     pending_primary_depth_MeV += deposited_MeV - forward_shifted_MeV -
                         transverse_relocated_MeV;
                     pending_primary_depth_MeV += same_voxel_electron_packet_MeV;
-                    if ((kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0) {
+                    if ((enable_voxel_scoring) && voxel_index >= 0) {
                         pending_primary_voxel_MeV += local_voxel_deposit_MeV;
                         pending_primary_voxel_MeV += same_voxel_electron_packet_MeV;
                         if (enable_minibeam_primary_roi_scoring) {
@@ -4699,26 +3550,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     }
                     history_deposited_MeV += deposited_MeV-water_physical_escape_MeV-material_untracked_MeV;
                     grid_split(
-                        (kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0,
+                        (enable_voxel_scoring) && voxel_index >= 0,
                         deposited_MeV - delta_tail_escaped_scorer_MeV-water_physical_escape_MeV-
                             material_untracked_MeV-response_scored_separately_MeV);
                     grid_split(false, delta_tail_escaped_scorer_MeV);
                     last_primary_stopping_power_MeV_per_mm = stopping_power_MeV_per_mm;
                     last_primary_density_g_per_cm3 = local_density_g_per_cm3;
-
-                    if (enable_let_scoring) {
-                        const auto step_numerator =
-                            static_cast<double>(deposited_MeV) *
-                            static_cast<double>(stopping_power_MeV_per_mm) /
-                            static_cast<double>(sycl::fmax(local_density_g_per_cm3, 1.0e-6F));
-                        const auto step_denominator = static_cast<double>(deposited_MeV);
-                        pending_let_numerator += step_numerator;
-                        pending_let_denominator += step_denominator;
-                        if (voxel_let_moments_device != nullptr) {
-                            pending_voxel_let_numerator += step_numerator;
-                            pending_voxel_let_denominator += step_denominator;
-                        }
-                    }
 
                     const float seg_dir_x = direction_x;
                     const float seg_dir_y = direction_y;
@@ -4726,26 +3563,15 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     Direction3F water_scattering_displacement{
                         0.0F, 0.0F, 0.0F};
 
-                    if ((kProductionPrimaryPath || enable_multiple_scattering)) {
+                    if ((enable_multiple_scattering)) {
                         auto radiation_length_g_per_cm2 =
                             static_cast<float>(active_water_radiation_length);
-                        if ((kProductionPrimaryPath || (!kUniformWaterPrimaryPath && enable_ct_grid)) && in_ct && (kProductionPrimaryPath || enable_ct_material_mcs)) {
-                            if (ct_material_ids_are_schneider_sections) {
-                                radiation_length_g_per_cm2 = static_cast<float>(
-                                    select_transport_radiation_length_g_per_cm2(
-                                        ct_material_ids_are_schneider_sections, in_ct,
-                                        ct_material, (kProductionPrimaryPath || enable_ct_material_mcs),
-                                        water_radiation_length_g_per_cm2));
-                            } else {
-                                radiation_length_g_per_cm2 = static_cast<float>(
-                                    ct_material_radiation_length_g_per_cm2(
-                                        ct_material_class(ct_material, false)));
-                            }
-                        } else if (in_insert) {
-                            radiation_length_g_per_cm2 = insert_radiation_length_g_per_cm2;
-                        } else if ((kUniformWaterPrimaryPath ? std::size_t{0} : slab_layer_count) > 0) {
-                            radiation_length_g_per_cm2 =
-                                slab_radiation_lengths_device[layer_for_material];
+                        if (((!kUniformWaterPrimaryPath && enable_ct_grid)) && in_ct && (enable_ct_material_mcs)) {
+                            radiation_length_g_per_cm2 = static_cast<float>(
+                                select_transport_radiation_length_g_per_cm2(
+                                    true, in_ct, ct_material,
+                                    (enable_ct_material_mcs),
+                                    water_radiation_length_g_per_cm2));
                         }
                         // Generic primary FE path. Yields to the minibeam water
                         // branch below when a non-legacy minibeam primary
@@ -4762,7 +3588,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         } else if (primary_fermi_eyges
                         ) {
                             auto observation_path_mm = -1.0F;
-#if defined(CARBON_ENABLE_MINIBEAM)
                             auto observation_plane =
                                 minibeam_water_primary_plane_count;
                             if (minibeam_water_primary_plane_records_device !=
@@ -4794,7 +3619,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     }
                                 }
                             }
-#endif
                             const auto correlated =
                                 ion_fermi_eyges_transport_step(
                                     Direction3F{direction_x, direction_y,
@@ -4806,13 +3630,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     radiation_length_g_per_cm2, spot_seed,
                                     rng_history,
                                     static_cast<std::uint64_t>(steps), 40U,
-                                    observation_path_mm, true, primary_mcs_mass_override_MeV, fe_gaussian_only,
-                                    fe_moments, fe_moments ? fe_geometry_safety(
-                                        {position_x_mm,position_y_mm,position_z_mm},enable_ct_grid,in_ct,
-                                        {ct_origin_x,ct_origin_y,ct_origin_z},{ct_spacing_x,ct_spacing_y,ct_spacing_z},
-                                        ct_nx,ct_ny,ct_nz,phantom_length_mm,fe_simple_geometry) : 0.0F,
+                                    observation_path_mm, primary_fe_mass_per_u, fe_gaussian_only,
                                     fe_counts,fe_diagnostics);
-#if defined(CARBON_ENABLE_MINIBEAM)
                             if (correlated.observation_valid &&
                                 observation_plane <
                                     minibeam_water_primary_plane_count) {
@@ -4869,39 +3688,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     correlated.observation_direction.z;
                                 record.valid = 1U;
                             }
-#endif
                             direction_x = correlated.direction.x;
                             direction_y = correlated.direction.y;
                             direction_z = correlated.direction.z;
                             water_scattering_displacement =
                                 correlated.displacement_mm;
-                        }
-                        else {
-                            auto theta0 = highland_projected_rms_angle_device(
-                                energy_MeV, primary_atomic_number, primary_mass_number,
-                                step_mm, local_density_g_per_cm3,
-                                radiation_length_g_per_cm2, primary_mcs_mass_override_MeV) * multiple_scattering_scale;
-                            float angular_scale = 1.0F;
-                            const auto u0 = rng::uniform01(
-                                spot_seed, rng_history, steps, 3);
-                            const auto u1 = rng::uniform01(
-                                spot_seed, rng_history, steps, 4);
-                            const auto u2 = rng::uniform01(
-                                spot_seed, rng_history, steps, 5);
-                            const auto u3 = rng::uniform01(
-                                spot_seed, rng_history, steps, 6);
-                            // Unified MSC transport: Highland mode returns the
-                            // scattered direction with zero intra-step
-                            // displacement (endpoint scattering). Correlated
-                            // displacement lives in the FE-tail / Urban-v2
-                            // branches above, selected before this fallback.
-                            const auto msc = msc_highland_primary_step(
-                                Direction3F{direction_x, direction_y,
-                                            direction_z},
-                                angular_scale * theta0, u0, u1, u2, u3);
-                            direction_x = msc.direction.x;
-                            direction_y = msc.direction.y;
-                            direction_z = msc.direction.z;
                         }
                     }
 
@@ -4985,8 +3776,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             add_slot(7, mev);
                     }
 
-#if defined(CARBON_ENABLE_MINIBEAM)
-                    if ((!(kProductionPrimaryPath || enable_multiple_scattering) ||
+                    if ((!(enable_multiple_scattering) ||
                          !primary_fermi_eyges) &&
                         minibeam_water_primary_plane_records_device != nullptr &&
                         seg_dir_z > 0.0F) {
@@ -5050,9 +3840,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             record.valid = 1U;
                         }
                     }
-#endif
 
-                    if (!(kUniformWaterPrimaryPath || global_urban) && (kProductionPrimaryPath || (!kUniformWaterPrimaryPath && enable_ct_grid)) && in_ct && ct_clamp_res.hit_face && !inelastic_this_step && !ct_elastic_this_step) {
+                    if (!(kUniformWaterPrimaryPath || global_urban) && ((!kUniformWaterPrimaryPath && enable_ct_grid)) && in_ct && ct_clamp_res.hit_face && !inelastic_this_step && !ct_elastic_this_step) {
                         if ((ct_clamp_res.axis_mask & 1) != 0 && sycl::fabs(seg_dir_x) > 1.0e-6F) {
                             const float fx = (position_x_mm - ct_origin_x) / ct_spacing_x;
                             const int face_x = static_cast<int>(sycl::round(fx));
@@ -5084,73 +3873,43 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 direction_z > 0.0F ? 1.0e30F : -1.0e30F);
                         }
                     }
-                    if (!(kUniformWaterPrimaryPath || global_urban) && (kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport) &&
-                        absolute_direction_x >= 1.0e-6F) {
-                        const auto boundary_x_mm =
-                            voxel_min_x_mm +
-                            static_cast<float>(voxel_x + (direction_x > 0.0F ? 1 : 0)) *
-                                voxel_size_x_mm;
-                        if (sycl::fabs(boundary_x_mm - position_x_mm) <= 1.0e-5F) {
-                            position_x_mm = sycl::nextafter(
-                                boundary_x_mm,
-                                direction_x > 0.0F ? 1.0e30F : -1.0e30F);
-                        }
-                    }
-                    if (!(kUniformWaterPrimaryPath || global_urban) && (kProductionPrimaryPath || enable_voxel_scoring) && (!kProductionPrimaryPath && voxel_scorer_clamps_transport) &&
-                        absolute_direction_y >= 1.0e-6F) {
-                        const auto boundary_y_mm =
-                            voxel_min_y_mm +
-                            static_cast<float>(voxel_y + (direction_y > 0.0F ? 1 : 0)) *
-                                voxel_size_y_mm;
-                        if (sycl::fabs(boundary_y_mm - position_y_mm) <= 1.0e-5F) {
-                            position_y_mm = sycl::nextafter(
-                                boundary_y_mm,
-                                direction_y > 0.0F ? 1.0e30F : -1.0e30F);
-                        }
-                    }
 
                     energy_MeV -= deposited_MeV;
 
                     if(defer_material_packets && (ct_elastic_this_step || inelastic_this_step))flush_electron_group();
 
-                    // Elastic endpoint: full bank uses target-specific TOPAS samples;
-                    // the separate legacy diagnostic retains its explicit isotropic law.
-                    // Supported recoils are queued; below-cutoff energy is scored locally.
-                    if((!kProductionPrimaryPath && use_all_elastic) && ct_elastic_this_step && energy_MeV>energy_cutoff_MeV &&
-                       all_elastic.rate(primary_elastic_projectile,(!kProductionPrimaryPath && (kUniformWaterPrimaryPath || use_unified_water))?25:interaction_section,energy_MeV*inverse_mass_number)==0) {
+                    // Elastic endpoint: the all-ion bank supplies target-specific TOPAS
+                    // samples. Supported recoils are queued; below-cutoff energy is scored locally.
+                    if((use_all_elastic) && ct_elastic_this_step && energy_MeV>energy_cutoff_MeV &&
+                       all_elastic.rate(primary_elastic_projectile,((kUniformWaterPrimaryPath || use_unified_water))?25:interaction_section,energy_MeV*inverse_mass_number)==0) {
                         ct_elastic_this_step=false;
                         sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[10]).fetch_add(1);
                     }
-                    if ((use_ct_elastic || (!kProductionPrimaryPath && use_all_elastic)) && ct_elastic_this_step &&
+                    if (use_all_elastic && ct_elastic_this_step &&
                         energy_MeV > energy_cutoff_MeV) {
                         const float u_tgt = rng::uniform01(
                             spot_seed, rng_history, steps, 12);
-                        const auto draw = (!kProductionPrimaryPath && use_all_elastic) ? all_elastic.draw(primary_elastic_projectile,
-                            (!kProductionPrimaryPath && (kUniformWaterPrimaryPath || use_unified_water))?25:interaction_section,energy_MeV,direction_x,direction_y,direction_z,
+                        const auto draw = all_elastic.draw(primary_elastic_projectile,
+                            ((kUniformWaterPrimaryPath || use_unified_water))?25:interaction_section,energy_MeV,direction_x,direction_y,direction_z,
                             u_tgt,rng::uniform01(spot_seed,rng_history,steps,70),
-                            rng::uniform01(spot_seed,rng_history,steps,71),rng::uniform01(spot_seed,rng_history,steps,11)) : ElasticDraw{};
-                        if((!kProductionPrimaryPath && use_all_elastic) && !draw.valid) {
+                            rng::uniform01(spot_seed,rng_history,steps,71),rng::uniform01(spot_seed,rng_history,steps,11));
+                        if(!draw.valid) {
                             sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
                                     sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[5]).fetch_add(1);
                             break;
                         }
-                        const int target_z=(!kProductionPrimaryPath && use_all_elastic)?draw.target_z:(ct_elastic_all_targets?
-                            sample_schneider_target_device(schneider_ct_device_ctx.elastic_sampler,interaction_section,
-                                energy_MeV*inverse_mass_number,u_tgt):1);
+                        const int target_z=draw.target_z;
                         const int target_idx=carbon::elastic_target_index_from_z(target_z);
-                        const int target_a=(!kProductionPrimaryPath && use_all_elastic)?draw.target_a:static_cast<int>(carbon::kElasticTargetMassU[target_idx<0?0:target_idx]);
+                        const int target_a=draw.target_a;
                         if (target_idx >= 0) {
-                            const auto scat=(!kProductionPrimaryPath && use_all_elastic)?draw.outcome:carbon::sample_c12_target_elastic(
-                                energy_MeV,direction_x,direction_y,direction_z,
-                                rng::uniform01(spot_seed,rng_history,steps,10),rng::uniform01(spot_seed,rng_history,steps,11),
-                                carbon::kElasticTargetMassU[target_idx]);
-                            if((!kProductionPrimaryPath && use_all_elastic))sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[0]).fetch_add(1);
+                            const auto scat=draw.outcome;
+                            sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[0]).fetch_add(1);
                             energy_MeV = scat.projectile_ke_MeV;
                             direction_x = scat.proj_dir_x;
                             direction_y = scat.proj_dir_y;
                             direction_z = scat.proj_dir_z;
                             if ((carbon::get_charged_species_idx(target_z,target_a)>=0 ||
-                                 ((!kProductionPrimaryPath && use_all_elastic)&&recoil_stopping.projectile(target_z,target_a)>=0)) && enable_secondary_transport &&
+                                 recoil_stopping.projectile(target_z,target_a)>=0) && enable_secondary_transport &&
                                 scat.recoil_ke_MeV > energy_cutoff_MeV &&
                                 secondary_queue_device != nullptr) {
                                 // Elastic recoil born accounting: mirrors the
@@ -5169,7 +3928,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     SecondaryParticle proton{};
                                     proton.z = target_z;
                                     proton.a = target_a;
-                                    if(carbon::get_charged_species_idx(target_z,target_a)<0)proton.generation=cinel02_max_secondary_inelastic_generations;
+                                    if(carbon::get_charged_species_idx(target_z,target_a)<0)proton.generation=max_secondary_inelastic_generations;
                                     proton.energy_MeV = scat.recoil_ke_MeV;
                                     proton.pos_x_mm = position_x_mm;
                                     proton.pos_y_mm = position_y_mm;
@@ -5183,13 +3942,13 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         rng_history, rng::branch_tag(
                                             rng::branch_role_primary_charged, steps));
                                     secondary_queue_device[base_idx] = proton;
-                                    if((!kProductionPrimaryPath && use_all_elastic)){sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[1]).fetch_add(scat.recoil_ke_MeV);}
+                                    sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[1]).fetch_add(scat.recoil_ke_MeV);
                                     schneider_diag_increment_device(
                                         schneider_diag_device,
                                         SchneiderDiagSlot::PrimaryChargedQueued);
-                                    if (cinel02_species_energy_device != nullptr) {
-                                        cinel02_record_queued_secondary_birth_device(
-                                            cinel02_species_energy_device, proton.z, proton.a,
+                                    if (ion_species_energy_device != nullptr) {
+                                        ion_record_queued_secondary_birth_device(
+                                            ion_species_energy_device, proton.z, proton.a,
                                             proton.energy_MeV);
                                     }
                                 } else if (secondary_overflow_count_device != nullptr) {
@@ -5198,60 +3957,27 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                                      sycl::access::address_space::global_space>
                                         atomic_ov(*secondary_overflow_count_device);
                                     atomic_ov.fetch_add(1U);
-                                    if((!kProductionPrimaryPath && use_all_elastic)){sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[2]).fetch_add(scat.recoil_ke_MeV);sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[11]).fetch_add(1);}
+                                    sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[2]).fetch_add(scat.recoil_ke_MeV);sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[11]).fetch_add(1);
                                     sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(*secondary_overflow_energy_device).fetch_add(scat.recoil_ke_MeV);
                                 }
-                            } else if((!kProductionPrimaryPath && use_all_elastic) && scat.recoil_ke_MeV>energy_cutoff_MeV) {
+                            } else if(scat.recoil_ke_MeV>energy_cutoff_MeV) {
                                 sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[3]).fetch_add(1);
                                 sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(untracked_nuclear_device[global_history]).fetch_add(scat.recoil_ke_MeV);
                             } else if (scat.recoil_ke_MeV > 0.0F) {
-                                if ((kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0 &&
+                                if ((enable_voxel_scoring) && voxel_index >= 0 &&
                                     voxel_index < number_of_voxels) {
                                     pending_primary_voxel_MeV += scat.recoil_ke_MeV;
                                 }
                                 history_deposited_MeV += scat.recoil_ke_MeV;
-                                if((!kProductionPrimaryPath && use_all_elastic)){sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[0]).fetch_add(scat.recoil_ke_MeV);}
+                                sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[0]).fetch_add(scat.recoil_ke_MeV);
                                 pending_primary_depth_MeV += scat.recoil_ke_MeV;
                                 grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,
-                                    (kProductionPrimaryPath || enable_voxel_scoring)&&voxel_index>=0,scat.recoil_ke_MeV);
+                                    (enable_voxel_scoring)&&voxel_index>=0,scat.recoil_ke_MeV);
                             }
                         }
                     }
 
-
-                    if ((kProductionPrimaryPath || use_schneider_primary_xs) && (in_ct || (!kProductionPrimaryPath && (kUniformWaterPrimaryPath || use_unified_water))) && inelastic_this_step) {
-                        if (is_primary_attenuation_only) {
-                            primary_inelastic_occurred = true;
-                            if (first_interactions_device != nullptr && first_interactions_count_device != nullptr) {
-                                sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    count_ref(*first_interactions_count_device);
-                                const auto slot = count_ref.fetch_add(1U);
-                                if (slot < number_of_histories) {
-                                    first_interactions_device[slot] = PrimaryFirstInteractionRecord{
-                                        position_x_mm,
-                                        position_y_mm,
-                                        position_z_mm,
-                                        energy_MeV * inverse_mass_number,
-                                        interaction_section,
-                                        interaction_density
-                                    };
-                                }
-                            }
-                            if (primary_terminal_counts_device != nullptr) {
-                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    term_ref(primary_terminal_counts_device[0]);
-                                term_ref.fetch_add(1U);
-                            }
-                            if (untracked_nuclear_device != nullptr) {
-                                untracked_nuclear_device[global_history] = energy_MeV;
-                            }
-                            energy_MeV = 0.0F;
-                            break;
-                        }
+                    if ((use_schneider_primary_xs) && (in_ct || ((kUniformWaterPrimaryPath || use_unified_water))) && inelastic_this_step) {
 
                         // Production Schneider CT primary inelastic collision.
                         // Exact (C12, target_Z) channel, bounded energy domain,
@@ -5264,10 +3990,9 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         // slowing emptied every channel before the collision
                         // point) is a primary post-EM null collision: no
                         // package query, track continues, never
-                        // UnsupportedTargets. v1 keeps the legacy call and
-                        // flows to lookup EXACTLY as before.
+                        // UnsupportedTargets.
                         int target_z = 0;
-                        if (schneider_ct_device_ctx.primary_sampler.rate_version == 3) {
+                        {
                             const auto masked = schneider_ct_device_ctx.primary_rates(
                                 interaction_section, cur_primary_e_u);
                             target_z = sample_masked_schneider_target_device(
@@ -5282,15 +4007,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             // existing energy-preserving post-EM null route.
                             if (!accepted) target_z = 0;
                             }
-                        } else {
-                            target_z = sample_schneider_target_device(
-                                schneider_ct_device_ctx.primary_sampler,
-                                interaction_section,
-                                cur_primary_e_u,
-                                u_target);
                         }
-                        if (schneider_ct_device_ctx.primary_sampler.rate_version == 3 &&
-                            target_z <= 0) {
+                        if (target_z <= 0) {
                             // Null collision: retain the surviving track and complete this EM step.
                             inelastic_this_step = false;
                             schneider_diag_increment_device(
@@ -5324,18 +4042,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             // Per-miss macro total recomputed exactly as at
                             // hazard time: v3 uses the masked binary total
                             // (no CSV exists for v3), v1 the CSV XS table.
-                            float primary_miss_macro = 0.0F;
-                            if (schneider_ct_device_ctx.primary_sampler.rate_version == 3) {
-                                primary_miss_macro = interaction_density *
-                                    schneider_ct_device_ctx.primary_rates(
-                                        interaction_section, cur_primary_e_u).total;
-                            } else {
-                                primary_miss_macro = interaction_density *
-                                    schneider_primary_mass_xs(
-                                        schneider_primary_xs_device, schneider_xs_sections,
-                                        schneider_xs_energies, schneider_xs_e_min, schneider_xs_inv_dE,
-                                        interaction_section, cur_primary_e_u);
-                            }
+                            const float primary_miss_macro = interaction_density *
+                                schneider_ct_device_ctx.primary_rates(interaction_section, cur_primary_e_u).total;
                             schneider_log_miss_device(
                                 schneider_miss_device, schneider_miss_count_device,
                                 kSchneiderMissLogCap, true,
@@ -5352,7 +4060,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             break;
                         }
 
-
                         // A hazard proposal (including a post-EM null collision)
                         // is not an inelastic reaction. Mark only an event hit.
                         primary_inelastic_occurred = true;
@@ -5360,13 +4067,13 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         const float local_deposit = sycl::fmax(0.0F, event.process_local_deposit_MeV);
 
                         pending_primary_depth_MeV += local_deposit;
-                        if ((kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0) {
+                        if ((enable_voxel_scoring) && voxel_index >= 0) {
                             pending_primary_voxel_MeV += local_deposit;
                         }
                         history_deposited_MeV += local_deposit;
                         grid_deposit_split_device(
                             grid_deposited_in_device, grid_deposited_out_device,
-                            (kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0, local_deposit);
+                            (enable_voxel_scoring) && voxel_index >= 0, local_deposit);
 
                         float charged_accounted_MeV = 0.0F;
                         float neutral_accounted_MeV = 0.0F;
@@ -5385,11 +4092,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         for (std::uint32_t ip = 0; ip < prod_count; ++ip) {
                             if (prod_offset + ip >= schneider_ct_device_ctx.primary_total_products) break;
                             const auto& product = schneider_ct_device_ctx.primary_products[prod_offset + ip];
-                            record_neutron_birth(neutron_birth_buffer,product,
-                                position_x_mm,position_y_mm,position_z_mm,
-                                {direction_x,direction_y,direction_z},event_cos,event_sin,
-                                global_history,rng_history,steps,ip,0,-1,
-                                primary_atomic_number,primary_mass_number);
 
                             if (product.role == 2) {
                                 const float ke = sycl::fmax(0.0F, product.kinetic_energy_MeV);
@@ -5466,9 +4168,9 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         schneider_diag_increment_device(
                                             schneider_diag_device,
                                             SchneiderDiagSlot::PrimaryChargedQueued);
-                                        if (cinel02_species_energy_device != nullptr) {
-                                            cinel02_record_queued_secondary_birth_device(
-                                                cinel02_species_energy_device, child.z, child.a,
+                                        if (ion_species_energy_device != nullptr) {
+                                            ion_record_queued_secondary_birth_device(
+                                                ion_species_energy_device, child.z, child.a,
                                                 child.energy_MeV);
                                         }
                                     } else {
@@ -5496,10 +4198,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 }
                             } else {
                                 pending_primary_depth_MeV += product.kinetic_energy_MeV;
-                                if ((kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0) {
+                                if ((enable_voxel_scoring) && voxel_index >= 0) {
                                     pending_primary_voxel_MeV += product.kinetic_energy_MeV;
                                 }
-                                if ((!kProductionPrimaryPath &&
+                                if ((
                                      enable_minibeam_component_voxel_scoring) &&
                                     voxel_index >= 0) {
                                     const auto child_category =
@@ -5529,7 +4231,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 grid_deposit_split_device(
                                     grid_deposited_in_device,
                                     grid_deposited_out_device,
-                                    (kProductionPrimaryPath || enable_voxel_scoring) && voxel_index >= 0,
+                                    (enable_voxel_scoring) && voxel_index >= 0,
                                     product.kinetic_energy_MeV);
                                 charged_accounted_MeV += product.kinetic_energy_MeV;
                                 schneider_diag_increment_device(
@@ -5573,11 +4275,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         }  // else of the v3 masked-sampler empty-draw guard
                     }
 
-
-
                     ++steps;
                 }
-
 
                 if(CARBON_EM_LOCAL_AUDIT)flush_unified_em_audit(unified_audit,unified_primary_audit);
 
@@ -5588,7 +4287,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 if (energy_MeV > 0.0F && energy_MeV <= energy_cutoff_MeV && inside_phantom) {
                     const auto cutoff_energy_MeV = energy_MeV;
                     pending_primary_depth_MeV += cutoff_energy_MeV;
-                    if ((kProductionPrimaryPath || enable_voxel_scoring) && pending_primary_voxel >= 0 &&
+                    if ((enable_voxel_scoring) && pending_primary_voxel >= 0 &&
                         pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                         pending_primary_voxel_MeV += cutoff_energy_MeV;
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
@@ -5603,26 +4302,14 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     history_deposited_MeV += cutoff_energy_MeV;
                     grid_deposit_split_device(
                         grid_deposited_in_device, grid_deposited_out_device,
-                        (kProductionPrimaryPath || enable_voxel_scoring) && pending_primary_voxel >= 0 &&
+                        (enable_voxel_scoring) && pending_primary_voxel >= 0 &&
                             pending_primary_voxel <
                                 static_cast<std::size_t>(number_of_voxels),
                         cutoff_energy_MeV);
                     if (cutoff_stopped_energy_device != nullptr) {
                         cutoff_stopped_energy_device[global_history] = cutoff_energy_MeV;
                     }
-                    if (enable_let_scoring) {
-                        const auto cutoff_numerator =
-                            static_cast<double>(cutoff_energy_MeV) *
-                            static_cast<double>(last_primary_stopping_power_MeV_per_mm) /
-                            static_cast<double>(sycl::fmax(last_primary_density_g_per_cm3, 1.0e-6F));
-                        const auto cutoff_denominator = static_cast<double>(cutoff_energy_MeV);
-                        pending_let_numerator += cutoff_numerator;
-                        pending_let_denominator += cutoff_denominator;
-                        if (voxel_let_moments_device != nullptr) {
-                            pending_voxel_let_numerator += cutoff_numerator;
-                            pending_voxel_let_denominator += cutoff_denominator;
-                        }
-                    }
+
                     if (primary_terminal_counts_device != nullptr) {
                         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                          sycl::memory_scope::device,
@@ -5662,13 +4349,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         atomic_dose(dose_device[pending_primary_bin]);
                     atomic_dose.fetch_add(static_cast<DepthAtomicT>(pending_primary_depth_MeV));
                 }
-                if (enable_let_scoring) {
-                    flush_letd_moments_device(
-                        let_moments_device, number_of_bins,
-                        static_cast<std::size_t>(pending_primary_bin), nullptr, 0, 0,
-                        pending_let_numerator, pending_let_denominator, true);
-                }
-                if ((kProductionPrimaryPath || enable_voxel_scoring) && pending_primary_voxel >= 0 &&
+
+                if ((enable_voxel_scoring) && pending_primary_voxel >= 0 &&
                     pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                     if (pending_primary_voxel_MeV > 0.0) {
                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
@@ -5676,7 +4358,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                          sycl::access::address_space::global_space>
                             atomic_voxel_dose(voxel_dose_device[pending_primary_voxel]);
                         atomic_voxel_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
-                        if ((!kProductionPrimaryPath && enable_charged_origin_voxel_scoring)) {
+                        if ((enable_charged_origin_voxel_scoring)) {
                             sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
@@ -5685,7 +4367,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             atomic_primary_origin.fetch_add(
                                 static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
                         }
-                        if ((!kProductionPrimaryPath && enable_minibeam_component_voxel_scoring)) {
+                        if ((enable_minibeam_component_voxel_scoring)) {
                             sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
@@ -5695,12 +4377,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
                         }
                     }
-                    if (enable_let_scoring && voxel_let_moments_device != nullptr) {
-                        flush_letd_moments_device(
-                            voxel_let_moments_device, number_of_voxels,
-                            pending_primary_voxel, nullptr, 0, 0,
-                            pending_voxel_let_numerator, pending_voxel_let_denominator, true);
-                    }
+
                 }
 
                 schneider_diag_add_device(schneider_diag_device,
@@ -5718,40 +4395,38 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 deposited_device[global_history] = history_deposited_MeV;
                 escaped_device[global_history] = energy_MeV;
                 steps_device[global_history] = steps;
-                } // water stage (or original combined path)
+                } // medium stage (or broadbeam transport)
             });
         };
         const auto dispatch_primary_chunk = [&]() {
             if constexpr(BroadBeam) {
                 if constexpr(JointResponse==0)if(nonion_primary)
-                    return launch_primary_chunk(std::false_type{},std::false_type{},std::integral_constant<int,7>{});
+                    return launch_primary_chunk(std::false_type{},std::integral_constant<int,7>{});
                 if constexpr(JointResponse==3)if(broadbeam_ct_primary_specialize) {
                     if(primary_atomic_number==1 && primary_mass_number==1)
-                        return launch_primary_chunk(std::false_type{},std::false_type{},std::integral_constant<int,13>{});
+                        return launch_primary_chunk(std::false_type{},std::integral_constant<int,13>{});
                     if(primary_atomic_number==6 && primary_mass_number==12)
-                        return launch_primary_chunk(std::false_type{},std::false_type{},std::integral_constant<int,14>{});
-                    return launch_primary_chunk(std::false_type{},std::false_type{},std::integral_constant<int,12>{});
+                        return launch_primary_chunk(std::false_type{},std::integral_constant<int,14>{});
+                    throw std::invalid_argument("Unsupported broadbeam source");
                 }
-                return launch_primary_chunk(std::false_type{},std::false_type{},std::integral_constant<int,6>{});
+                return launch_primary_chunk(std::false_type{},std::integral_constant<int,6>{});
             } else {
-            {
-                if (use_water_primary_path)
-                    return launch_primary_chunk(std::false_type{}, std::true_type{}, std::integral_constant<int, 5>{});
-                if (use_minibeam_primary_path || ct_minibeam_split) {
+                // Compact minibeam: beamline launch (3, or 9 with queued Cu
+                // children) followed by the medium launch (4, or CT stage 11).
+                {
                     const auto launch_minibeam_stage = [&](auto stage) {
                         // The Cu/air stages share one compiled kernel for water
                         // and CT. Only downstream transport selects a material
                         // policy; never apply uniform-water substitutions to CT.
                         if constexpr (decltype(stage)::value == 4) {
-                            if (ct_minibeam_split) {
+                            if (!use_minibeam_primary_path) {
                                 if (ct_queued_primary_specialize)
-                                    return launch_primary_chunk(std::false_type{}, std::false_type{}, std::integral_constant<int,11>{});
-                                return launch_primary_chunk(std::false_type{}, std::false_type{}, stage);
+                                    return launch_primary_chunk(std::false_type{}, std::integral_constant<int,11>{});
+                                return launch_primary_chunk(std::false_type{}, stage);
                             }
                         }
-                        return launch_primary_chunk(std::false_type{}, std::true_type{}, stage);
+                        return launch_primary_chunk(std::true_type{}, stage);
                     };
-#if defined(CARBON_ENABLE_MINIBEAM)
                     if (beamline_order != nullptr) {
                         queue.fill(beamline_order_counts, 0U, 2);
                         queue.parallel_for(sycl::range<1>(chunk_count), [=](sycl::id<1> id) {
@@ -5783,13 +4458,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             beamline_order[expensive ? rank : chunk_count - 1 - rank] = lane;
                         });
                     }
-#endif
-                    if (split_minibeam_primary == 2) {
+                    {
                         queue.fill(primary_entry_counts, std::uint64_t{0}, 2);
                         primary_events.push_back(queue_copper_primary_children
                             ? launch_minibeam_stage(std::integral_constant<int,9>{})
                             : launch_minibeam_stage(std::integral_constant<int,3>{}));
-#if defined(CARBON_ENABLE_MINIBEAM)
                         if (water_energy_order) {
                             queue.fill(water_energy_counts,0U,water_energy_buckets+1);
                             auto bucket=[=](float energy) {
@@ -5815,24 +4488,9 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 water_energy_order[water_energy_offsets[b]+rank]=index[0];
                             }));
                         }
-#endif
                         return launch_minibeam_stage(std::integral_constant<int, 4>{});
                     }
-                    if (split_minibeam_primary) {
-                        primary_events.push_back(queue_copper_primary_children
-                            ? launch_primary_chunk(std::false_type{},std::true_type{},std::integral_constant<int,8>{})
-                            : launch_primary_chunk(std::false_type{},std::true_type{},std::integral_constant<int,1>{}));
-                        return launch_primary_chunk(
-                            std::false_type{}, std::true_type{}, std::integral_constant<int, 2>{});
-                    }
-                    return launch_primary_chunk(std::false_type{}, std::true_type{}, std::integral_constant<int, 0>{});
                 }
-            }
-#if CARBON_PRIMARY_PRODUCTION_SPECIALIZE
-            if (use_production_primary_path)
-                return launch_primary_chunk(std::true_type{}, std::false_type{}, std::integral_constant<int, 0>{});
-#endif
-            return launch_primary_chunk(std::false_type{}, std::false_type{}, std::integral_constant<int, 0>{});
             }
         };
         auto kernel_event = dispatch_primary_chunk();
@@ -5853,10 +4511,9 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         namespace f=electron_fp32;
                         const auto t=material_tasks[index[0]];
                         unsigned bucket=32;
-                        if(cut_birth26||t.birth.source<float_birth.count) {
-                            const auto e=cut_birth26?sample_cut_electron_birth_seeded(cut_birth26,t.birth.source,
-                                electron_projectile_parameters,float(t.birth.energy),t.birth.cut,t.birth.cdf_bits).energy:
-                                f::sample_independent_electron_birth(float_birth.nodes[t.birth.source],float(t.birth.energy),f::Draw{t.birth.cdf_bits}).energy;
+                        if(t.birth.source<kElectronMaterialCount) {
+                            const auto e=sample_cut_electron_birth_seeded(cut_birth26,t.birth.source,
+                                electron_projectile_parameters,float(t.birth.energy),t.birth.cut,t.birth.cdf_bits).energy;
                             const unsigned eb=(e>.001f)+(e>.003f)+(e>.01f)+(e>.03f)+(e>.1f)+(e>.3f)+(e>.65f);
                             const unsigned db=(t.density>.01)+(t.density>.1)+(t.density>.5);
                             bucket=db*8+eb;
@@ -5879,15 +4536,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     }));
                 }
 
-
                     auto launch_float_response=[&](auto region_tag) {
                         constexpr bool region_diagnostics=decltype(region_tag)::value;
 #include "detail/sycl_independent_electron_fp32.inc"
                     };
-                    if constexpr(BroadBeam && JointResponse==3) {
-                        if(broadbeam_region_work)launch_float_response(std::true_type{});
-                        else launch_float_response(std::false_type{});
-                    } else launch_float_response(std::false_type{});
+                    launch_float_response(std::false_type{});
 
             }
         }
@@ -5920,22 +4573,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     }
     if(independent_charged_work) {
         std::array<std::uint64_t,8> work{};queue.copy(independent_charged_work,work.data(),8).wait_and_throw();
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-        if(float_step_diagnostics){
-            std::vector<std::uint64_t> shards(64*1536);
-            queue.copy(float_step_diagnostics,shards.data(),shards.size()).wait_and_throw();
-            std::array<std::uint64_t,1536> bins{};std::uint64_t total=0;
-            for(unsigned shard=0;shard<64;++shard)for(unsigned k=0;k<1536;++k)bins[k]+=shards[shard*1536+k];
-            for(unsigned k=0;k<1536;++k)if(bins[k]){
-                total+=bins[k];
-                std::cout<<"[electron-step-diagnostic] energy_bin="<<k/256
-                         <<" limiter_mask="<<(k/8)%32<<" event="<<k%8<<" count="<<bins[k]<<"\n";
-            }
-            std::cout<<"[electron-step-diagnostic-total] calls="<<work[0]<<" counted="<<total<<"\n";
-            if(total!=work[0])throw std::runtime_error("Electron diagnostic histogram does not close");
-            free_device(float_step_diagnostics);
-        }
-#endif
         const char* names[]={"calls","elastic","hard_proposals","hard_collisions","faces","stopped","coverage_missing","invalid"};
         std::cout<<"[independent-charged-work]";for(unsigned k=0;k<8;++k)std::cout<<" "<<names[k]<<"="<<work[k];std::cout<<"\n";
     }
@@ -5947,43 +4584,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         std::cout<<"\n";
     }
     std::array<std::uint64_t,3> electron_work{};
-#ifdef CARBON_ELECTRON_SEGMENT_DIAGNOSTICS
-    if(float_segment_samples){
-        namespace diagnostic=electron_segment_diagnostics;
-        std::array<std::uint64_t,2> counts{};queue.copy(float_segment_counts,counts.data(),2).wait_and_throw();
-        std::array<std::uint64_t,8> work{};queue.copy(independent_charged_work,work.data(),8).wait_and_throw();
-        if(counts[0]!=work[0]||counts[1]>diagnostic::capacity)
-            throw std::runtime_error("Segment diagnostic count closure or sample capacity failed");
-        std::cout<<"[electron-segment-diagnostic] charged_total="<<counts[0]<<" selected="<<counts[1]
-                 <<" denominator="<<diagnostic::selection_mask+1<<" capacity="<<diagnostic::capacity<<"\n";
-        const auto path=config.voxel_dose_mhd_output_file.parent_path()/"electron_segment_samples.bin";
-        if(std::filesystem::exists(path))throw std::runtime_error("Segment diagnostic refuses to overwrite: "+path.string());
-        std::filesystem::create_directories(path.parent_path());
-        std::vector<diagnostic::Sample> samples(counts[1]);queue.copy(float_segment_samples,samples.data(),samples.size()).wait_and_throw();
-        std::ofstream file(path,std::ios::binary);file.write(reinterpret_cast<const char*>(samples.data()),samples.size()*sizeof(diagnostic::Sample));
-        if(!file)throw std::runtime_error("Segment diagnostic write failed");
-        free_device(float_segment_samples);free_device(float_segment_counts);
-    }
-#endif
-#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
-    if(float_range_delta){
-        std::array<std::uint64_t,10> counts{};queue.copy(float_range_counts,counts.data(),counts.size()).wait_and_throw();
-        const char* names[]={"eligible","charged_after_guard","photon_calls_after_guard","joint_calls_after_guard",
-            "different_deposit","escaped_after_guard","same_deposit","invalid_after_guard","charged_total","tasks_total"};
-        std::cout<<"[electron-range-diagnostic] factor=1.5";
-        for(unsigned k=0;k<10;++k)std::cout<<" "<<names[k]<<"="<<counts[k];std::cout<<"\n";
-        const auto directory=config.voxel_dose_mhd_output_file.parent_path();std::filesystem::create_directories(directory);
-        auto write=[&](const char* name,const float* device){
-            const auto path=directory/name;
-            if(std::filesystem::exists(path))throw std::runtime_error("Range diagnostic refuses to overwrite: "+path.string());
-            std::vector<float> values(number_of_voxels);queue.copy(device,values.data(),values.size()).wait_and_throw();
-            std::ofstream file(path,std::ios::binary);file.write(reinterpret_cast<const char*>(values.data()),values.size()*sizeof(float));
-            if(!file)throw std::runtime_error("Range diagnostic write failed");
-        };
-        write("range_guard_delta_MeV.f32",float_range_delta);write("range_guard_density.f32",ct_density_device);
-        free_device(float_range_delta);free_device(float_range_counts);
-    }
-#endif
     if (defer_material_packets) {
         queue.copy(material_queue_work,electron_work.data(),3).wait_and_throw();
         free_device(material_queue_work);
@@ -6007,12 +4607,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         for (std::size_t i=0; i<primary_events.size(); ++i) {
             const auto seconds = event_duration_seconds(primary_events[i]);
             primary_kernel_seconds += seconds;
-            if (split_minibeam_primary) {
+            if (compact_minibeam_primary) {
                 if (i%2 == 0) split_beamline_seconds += seconds;
                 else split_water_seconds += seconds;
             }
         }
-        if (split_minibeam_primary)
+        if (compact_minibeam_primary)
             std::cout << "[primary-split-time] beamline_s=" << split_beamline_seconds
                       << " water_s=" << split_water_seconds << "\n";
         std::cout << "[progress] primary batches completed: "
@@ -6022,7 +4622,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
 
     if (primary_medium_entry) mem_tracker.free(primary_medium_entry);
     if (primary_entry_counts) mem_tracker.free(primary_entry_counts);
-#if defined(CARBON_ENABLE_MINIBEAM)
     double water_order_seconds=0;
     for(const auto& event:water_order_events)water_order_seconds+=event_duration_seconds(event);
     if(water_energy_order)std::cout << "[water-energy-order] seconds=" << water_order_seconds << '\n';
@@ -6032,9 +4631,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     if (beamline_order) mem_tracker.free(beamline_order);
     if (beamline_order_counts) mem_tracker.free(beamline_order_counts);
 
-#endif
-
-#if defined(CARBON_ENABLE_MINIBEAM)
     double copper_primary_child_seconds=0;
     if(copper_primary_child_tasks) {
         std::uint32_t count=0;
@@ -6247,7 +4843,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     auto uniform = [&]() { return (rng::random_u32(
                                         random_seed, cascade.rng_stream, (std::uint64_t(step) << 32) | draw_index++, 124) >> 8) * 0x1p-24f; };
                                     const auto draw = copper_proton_total_fluctuation(
-                                        energy, 938.272013F, mean_loss, path, minibeam_copper_density, uniform, copper_proton_finite_cut);
+                                        energy, 938.272013F, mean_loss, path, minibeam_copper_density, uniform);
                                     sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                         sycl::memory_scope::device, sycl::access::address_space::global_space>(
                                         minibeam_event_counts_device[draw.valid ? copper_proton_fragment_loss_slot : copper_proton_loss_failure_slot]).fetch_add(1U);
@@ -6361,10 +4957,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                             minibeam_copper_product_count) break;
                                         const auto& product =
                                             minibeam_copper_products_device[flat_index];
-                                        record_neutron_birth(neutron_birth_buffer, product,
-                                            x,y,z,direction,event_cos,event_sin,cascade.parent_history,
-                                            cascade.rng_stream,step,product_index,cascade.generation+1U,
-                                            -2,cascade.z,cascade.a,cascade.weight);
                                         replay_product_energy += sycl::fmax(
                                             0.0F, product.kinetic_energy_MeV);
                                         replay_product_rest_mass += sycl::fmax(
@@ -6815,13 +5407,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                   << " initial/final-queued=" << copper_cascade_count << '/'
                   << copper_generation_end << '\n';
     }
-#endif
 
     double secondary_kernel_seconds = 0.0;
     const bool segment_secondaries = config.secondary_step_chunking;
     constexpr unsigned secondary_tail_threshold = 8192U;
-    const bool secondary_tail_diag =
-        std::getenv("CARBON_SECONDARY_TAIL_DIAG") != nullptr;
+    constexpr bool secondary_tail_diag = false;
     // Reorder indices only: RNG streams and parent histories belong to particles.
     const bool group_secondaries = config.secondary_species_grouping &&
         enable_inelastic && enable_secondary_transport;
@@ -6841,7 +5431,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     std::cout << "[secondary-schedule] group=" << group_secondaries
               << "; particle state and RNG identities preserved\n";
     std::vector<SecondaryParticle> birth_secondaries_host;
-#if defined(CARBON_ENABLE_MINIBEAM)
     std::vector<SecondaryParticle> copper_capture_charged_host;
     if(!copper_capture_path.empty() && secondary_count_device && secondary_queue_device) {
         std::uint32_t count=0;
@@ -6852,7 +5441,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         for(const auto& particle:particles)
             if(particle.birth_region==minibeam_birth_region_copper)copper_capture_charged_host.push_back(particle);
     }
-#endif
     if (enable_secondary_transport &&
         secondary_count_device != nullptr && secondary_queue_device != nullptr) {
         uint32_t secondary_count_host = 0;
@@ -6899,12 +5487,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 cursor(secondary_group_cursors[bucket]);
                             secondary_order[cursor.fetch_add(1)] = index;
                         }).wait_and_throw();
-                    if constexpr(CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE) {
-                        queue.copy(secondary_group_cursors + 15,
-                                   &species0_initial_end, 1).wait_and_throw();
-                        queue.copy(secondary_group_cursors + 31,
-                                   &species1_initial_end, 1).wait_and_throw();
-                    }
+
                     secondary_group_seconds += std::chrono::duration<double>(
                         std::chrono::steady_clock::now() - grouping_start).count();
                 }
@@ -6919,7 +5502,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 auto* block_counts = mem_tracker.allocate<unsigned>((state_capacity + 255) / 256);
                 auto* block_offsets = mem_tracker.allocate<unsigned>((state_capacity + 255) / 256);
                 constexpr unsigned kSecondaryActiveCountSlots =
-                    CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE ? 3u : 1u;
+                    0 ? 3u : 1u;
                 auto* active_count = mem_tracker.allocate<unsigned>(
                     segment_secondaries ? kSecondaryActiveCountSlots : 0);
                 if (segment_secondaries) {
@@ -6939,348 +5522,31 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 unsigned species1_active = species1_initial_end - species0_initial_end;
                 unsigned tail_rounds = 0;
                 double compact_seconds = 0, generation_kernel_seconds = 0, generation_tail_seconds = 0;
-#if CARBON_SECONDARY_CONTEXT_POINTER
-                struct SecondaryTransportContext {
-                    NeutronBirthBuffer neutron_birth_buffer;
-                    bool group_secondaries;
-                    bool enable_inelastic;
-                    std::uint32_t * secondary_order;
-                    std::uint32_t generation_begin;
-                    carbon::SecondaryParticle * secondary_queue_device;
-                    std::size_t number_of_voxels;
-                    float energy_cutoff_MeV;
-                    float * cinel02_species_energy_device;
-                    std::uint64_t * cinel02_species_terminal_device;
-                    float inverse_depth_bin_width_mm;
-                    std::size_t number_of_bins;
-                    DepthAtomicT * dose_device;
-                    bool enable_voxel_scoring;
-                    float voxel_min_x_mm;
-                    float inverse_voxel_size_x_mm;
-                    float voxel_min_y_mm;
-                    float inverse_voxel_size_y_mm;
-                    std::size_t voxel_bins_x;
-                    std::size_t voxel_bins_y;
-                    DoseAtomicT * voxel_dose_device;
-                    bool enable_charged_origin_voxel_scoring;
-                    DoseAtomicT * charged_origin_voxel_dose_device;
-                    bool enable_minibeam_component_voxel_scoring;
-                    DoseAtomicT * minibeam_component_voxel_dose_device;
-                    bool enable_minibeam_energy_band_roi_scoring;
-                    DoseAtomicT * minibeam_energy_band_roi_dose_device;
-                    std::uint8_t * minibeam_fixed_region_by_x_bin_device;
-                    DoseAtomicT * be_isotope_origin_voxel_dose_device;
-                    DoseAtomicT * he_isotope_origin_voxel_dose_device;
-                    DepthAtomicT * in_fov_dose_device;
-                    float * deposited_device;
-                    std::uint64_t * schneider_diag_device;
-                    double * grid_deposited_in_device;
-                    double * grid_deposited_out_device;
-                    bool use_all_elastic;
-                    ElasticRecoilStoppingView recoil_stopping;
-                    float* generic_recoil_reference_sp_device;
-                    bool global_urban;
-                    float urban_water_half_width_mm;
-                    UrbanMcsView urban_device;
-                    std::uint64_t* urban_step_counts;
-                    float * untracked_nuclear_device;
-                    std::size_t table_size;
-                    UnifiedEmDevice unified_device;
-                    std::uint64_t * unified_audit;
-                    SchneiderCtDeviceContext schneider_ct_device_ctx;
-                    float * schneider_float_device;
-                    std::uint32_t cinel02_max_secondary_inelastic_generations;
-                    SchneiderUnsupportedTrack * schneider_track_log_device;
-                    std::uint32_t * schneider_track_count_device;
-                    float phantom_length_mm;
-                    float water_density_g_per_cm3;
-                    bool enable_ct_grid;
-                    float ct_origin_x;
-                    float ct_origin_y;
-                    float ct_origin_z;
-                    float ct_spacing_x;
-                    float ct_spacing_y;
-                    float ct_spacing_z;
-                    std::uint32_t ct_nx;
-                    std::uint32_t ct_ny;
-                    std::uint32_t ct_nz;
-                    float * ct_density_device;
-                    std::uint8_t * ct_material_device;
-                    float minimum_table_energy;
-                    float inverse_table_step;
-                    std::uint32_t * elastic_audit;
-                    float maximum_step_mm;
-                    unsigned int * unified_failure_count;
-                    UnifiedEmFailureRecord * unified_failure_records;
-                    float em_secondary_step_scale;
-                    float maximum_mean_loss_fraction;
-                    float depth_bin_width_mm;
-                    bool ct_secondary_exact_faces;
-                    bool ct_skip_homogeneous_face_clamp;
-                    bool use_unified_water;
-                    AllIonElasticView all_elastic;
-                    bool enable_secondary_energy_straggling;
-                    double * he4_hazard_audit_device;
-                    float voxel_max_x_mm;
-                    float voxel_max_y_mm;
-                    unsigned int * secondary_count_device;
-                    std::size_t max_secondaries;
-                    std::uint32_t * secondary_overflow_count_device;
-                    float * secondary_overflow_energy_device;
-                    SchneiderMissRecord * schneider_miss_device;
-                    std::uint32_t * schneider_miss_count_device;
-                    Cinel02EnergyNode * cinel02_energy_nodes_device;
-                    std::uint32_t cinel02_energy_node_count;
-                    std::uint32_t * cinel02_event_offsets_device;
-                    std::uint32_t * cinel02_event_indices_device;
-                    Cinel02DeviceInteraction * cinel02_interactions_device;
-                    std::uint32_t cinel02_interaction_count;
-                    std::uint32_t cinel02_product_count;
-                    Cinel02DeviceProduct * cinel02_products_device;
-                    bool enable_multiple_scattering;
-                    bool ct_secondary_mcs_off;
-                    bool c12_fermi_eyges;
-                    int fermi_eyges_species_scope;
-                    bool fermi_eyges_use_species_water_parameters;
-                    float c12_fermi_eyges_max_segment_mm;
-#if defined(CARBON_ENABLE_MINIBEAM)
-
-
-                    std::uint64_t * minibeam_event_counts_device;
-                    float * minibeam_water_primary_plane_depths_device;
-                    MinibeamWaterPrimaryPlaneRecord *
-                        minibeam_water_primary_plane_records_device;
-                    std::size_t minibeam_water_primary_plane_count;
-#endif
-                    bool ct_material_ids_are_schneider_sections;
-                    bool enable_ct_material_mcs;
-                    double active_water_radiation_length;
-                    float multiple_scattering_scale;
-                    float * elastic_energy;
-                    float voxel_size_x_mm;
-                    float voxel_size_y_mm;
-                    float * escaped_device;
-                    std::uint64_t * sec_step_profile_device;
-#if CARBON_EM_SEARCH_KEY_AUDIT
-                    UnifiedEmSearchAuditRecord * unified_search_audit_records;
-                    std::uint32_t * unified_search_audit_count;
-                    std::uint32_t unified_search_audit_capacity;
-#endif
-                };
-                static_assert(std::is_trivially_copyable_v<SecondaryTransportContext>);
-                const SecondaryTransportContext secondary_transport{
-                    neutron_birth_buffer,
-                    group_secondaries,
-                    enable_inelastic,
-                    secondary_order,
-                    generation_begin,
-                    secondary_queue_device,
-                    number_of_voxels,
-                    energy_cutoff_MeV,
-                    cinel02_species_energy_device,
-                    cinel02_species_terminal_device,
-                    inverse_depth_bin_width_mm,
-                    number_of_bins,
-                    dose_device,
-                    enable_voxel_scoring,
-                    voxel_min_x_mm,
-                    inverse_voxel_size_x_mm,
-                    voxel_min_y_mm,
-                    inverse_voxel_size_y_mm,
-                    voxel_bins_x,
-                    voxel_bins_y,
-                    voxel_dose_device,
-                    enable_charged_origin_voxel_scoring,
-                    charged_origin_voxel_dose_device,
-                    enable_minibeam_component_voxel_scoring,
-                    minibeam_component_voxel_dose_device,
-                    enable_minibeam_energy_band_roi_scoring,
-                    minibeam_energy_band_roi_dose_device,
-                    minibeam_fixed_region_by_x_bin_device,
-                    be_isotope_origin_voxel_dose_device,
-                    he_isotope_origin_voxel_dose_device,
-                    in_fov_dose_device,
-                    deposited_device,
-                    schneider_diag_device,
-                    grid_deposited_in_device,
-                    grid_deposited_out_device,
-                    use_all_elastic,
-                    recoil_stopping,
-                    generic_recoil_reference_sp_device,
-                    global_urban,
-                    urban_water_half_width_mm,urban_device,urban_step_counts,
-                    untracked_nuclear_device,
-                    table_size,
-                    unified_device,
-                    unified_audit,
-                    schneider_ct_device_ctx,
-                    schneider_float_device,
-                    cinel02_max_secondary_inelastic_generations,
-                    schneider_track_log_device,
-                    schneider_track_count_device,
-                    phantom_length_mm,
-                    water_density_g_per_cm3,
-                    enable_ct_grid,
-                    ct_origin_x,
-                    ct_origin_y,
-                    ct_origin_z,
-                    ct_spacing_x,
-                    ct_spacing_y,
-                    ct_spacing_z,
-                    ct_nx,
-                    ct_ny,
-                    ct_nz,
-                    ct_density_device,
-                    ct_material_device,
-                    minimum_table_energy,
-                    inverse_table_step,
-                    elastic_audit,
-                    maximum_step_mm,
-                    unified_failure_count,
-                    unified_failure_records,
-                    em_secondary_step_scale,
-                    maximum_mean_loss_fraction,
-                    depth_bin_width_mm,
-                    ct_secondary_exact_faces,
-                    ct_skip_homogeneous_face_clamp,
-                    use_unified_water,
-                    all_elastic,
-                    enable_secondary_energy_straggling,
-                    he4_hazard_audit_device,
-                    voxel_max_x_mm,
-                    voxel_max_y_mm,
-                    secondary_count_device,
-                    max_secondaries,
-                    secondary_overflow_count_device,
-                    secondary_overflow_energy_device,
-                    schneider_miss_device,
-                    schneider_miss_count_device,
-                    cinel02_energy_nodes_device,
-                    cinel02_energy_node_count,
-                    cinel02_event_offsets_device,
-                    cinel02_event_indices_device,
-                    cinel02_interactions_device,
-                    cinel02_interaction_count,
-                    cinel02_product_count,
-                    cinel02_products_device,
-                    enable_multiple_scattering,
-                    ct_secondary_mcs_off,
-                    c12_fermi_eyges,
-                    fermi_eyges_species_scope,
-                    fermi_eyges_use_species_water_parameters,
-                    c12_fermi_eyges_max_segment_mm,
-#if defined(CARBON_ENABLE_MINIBEAM)
-
-
-                    minibeam_event_counts_device,
-                    minibeam_water_primary_plane_depths_device,
-                    minibeam_water_primary_plane_records_device,
-                    minibeam_water_primary_plane_count,
-#endif
-                    ct_material_ids_are_schneider_sections,
-                    enable_ct_material_mcs,
-                    active_water_radiation_length,
-                    multiple_scattering_scale,
-                    elastic_energy,
-                    voxel_size_x_mm,
-                    voxel_size_y_mm,
-                    escaped_device,
-                    sec_step_profile_device
-#if CARBON_EM_SEARCH_KEY_AUDIT
-                    ,
-                    unified_search_audit_records,
-                    unified_search_audit_count,
-                    kUnifiedSearchAuditCapacity
-#endif
-                };
-                auto* secondary_transport_ctx =
-                    mem_tracker.allocate<SecondaryTransportContext>(1);
-                if (secondary_transport_ctx == nullptr) throw std::bad_alloc();
-                queue.copy(&secondary_transport, secondary_transport_ctx, 1)
-                    .wait_and_throw();
-#endif
-#if CARBON_SECONDARY_PRODUCTION_SPECIALIZE
-                const bool use_production_secondary_path =
-                    enable_ct_grid &&
-                    enable_voxel_scoring && ct_secondary_exact_faces &&
-                    ct_skip_homogeneous_face_clamp && !use_all_elastic &&
-                    !use_unified_water && !enable_charged_origin_voxel_scoring;
-#endif
                 while (resume_active) {
                 const bool finish_tail = !segment_secondaries || resume_active < secondary_tail_threshold;
-#if CARBON_EM_SEARCH_KEY_AUDIT
-                const std::uint64_t search_audit_launch_id =
-                    (static_cast<std::uint64_t>(batch_begin)<<32) | segment_rounds;
-#endif
                 const auto launch_secondary_round = [&](auto production_path_tag,
                                                         auto exact_species_tag,
                                                         unsigned active_begin,
                                                         unsigned active_size) {
                 constexpr bool kProductionSecondaryPath =
                     decltype(production_path_tag)::value;
-                constexpr int kExactSpecies = decltype(exact_species_tag)::value;
-                // -2 is the compile-only Hydrogen-class probe: one kernel serves
-                // proton + deuteron (species index 0 or 1) with runtime z/a.
-                constexpr bool kHydrogenClass =
-                    kProductionSecondaryPath && kExactSpecies == -2;
-                constexpr bool kKnownSpeciesOnly =
-                    kProductionSecondaryPath &&
-                    (CARBON_SECONDARY_KNOWN_SPECIES_PROBE || kExactSpecies >= 0 ||
-                     kHydrogenClass);
-                constexpr bool kExactSpeciesPath = kExactSpecies >= 0;
-                constexpr bool kNonHe4Only =
-                    (CARBON_SECONDARY_NON_HE4_PROBE && kKnownSpeciesOnly) ||
-                    (kExactSpeciesPath && kExactSpecies != 4) || kHydrogenClass;
-                // Proton/deuteron exact slices may run a longer continuation
-                // budget; the fallback slice keeps the production default.
-                constexpr unsigned kSliceSegmentSteps =
-                    (kExactSpecies == 0 || kExactSpecies == 1)
-                        ? carbon::kSecondaryHotSegmentSteps
-                        : kSecondarySegmentSteps;
+                constexpr int kExactSpecies = -1;
+                constexpr unsigned kSliceSegmentSteps = kSecondarySegmentSteps;
                 return queue.submit([&](sycl::handler& cgh) {
                 const auto secondary_kernel =
-#if CARBON_SECONDARY_CONTEXT_POINTER
-                    [secondary_transport_ctx, resume_states, resume_ready, active_order,
-                     keep, segment_secondaries, finish_tail
-#if CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE
-                     , active_begin
-#endif
-#if CARBON_EM_SEARCH_KEY_AUDIT
-                     , search_audit_launch_id
-#endif
-#if CARBON_SECONDARY_EXPLICIT_ND_RANGE
-                     , active_size
-#endif
-                    ]
-#else
                     [=]
-#endif
-#if CARBON_SECONDARY_EXPLICIT_ND_RANGE
-                    (sycl::nd_item<1> item) {
-                        const auto item_id = item.get_global_id();
-                        if (item_id[0] >= active_size) return;
-#else
                     (sycl::id<1> item_id) {
-#endif
-#if CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE
-                        const unsigned active_pos = active_begin + item_id[0];
-#else
                         const unsigned active_pos = item_id[0];
-#endif
                         const unsigned state_idx = segment_secondaries ? active_order[active_pos] : active_pos;
                         const bool resumed = segment_secondaries && resume_ready[state_idx] != 0;
                         if (segment_secondaries) keep[active_pos] = 0;
-                        const auto sec_idx = CARBON_SECONDARY_CONTEXT_FIELD(group_secondaries) ? CARBON_SECONDARY_CONTEXT_FIELD(secondary_order)[state_idx]
-                            : CARBON_SECONDARY_CONTEXT_FIELD(generation_begin) + state_idx;
-                        const auto frag = CARBON_SECONDARY_CONTEXT_FIELD(secondary_queue_device)[sec_idx];
+                        const auto sec_idx = group_secondaries ? secondary_order[state_idx]
+                            : generation_begin + state_idx;
+                        const auto frag = secondary_queue_device[sec_idx];
                         const int transport_z = [&] {
-                            if constexpr(kExactSpeciesPath)
-                                return carbon::kChargedIons[kExactSpecies].z;
                             return static_cast<int>(frag.z);
                         }();
                         const int transport_a = [&] {
-                            if constexpr(kExactSpeciesPath)
-                                return carbon::kChargedIons[kExactSpecies].a;
                             return static_cast<int>(frag.a);
                         }();
                         if (transport_z <= 0 || transport_a <= 0) return;
@@ -7288,122 +5554,122 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             charged_origin_category_from_fragment(
                                 charged_dose_category(transport_z, transport_a));
                         const auto charged_origin_voxel_offset =
-                            charged_origin_category * CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels);
+                            charged_origin_category * number_of_voxels;
                         const auto minibeam_component_voxel_offset =
                             minibeam_component_category(
                                 transport_z, transport_a, frag.birth_region) *
-                            CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels);
+                            number_of_voxels;
                         const auto be_isotope_category =
                             be_isotope_origin_category(transport_z, transport_a);
                         const auto he_isotope_category =
                             he_isotope_origin_category(transport_z, transport_a);
-                        if (frag.energy_MeV <= CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV)) {
+                        if (frag.energy_MeV <= energy_cutoff_MeV) {
                             const auto ledger_species_idx = carbon::get_charged_species_idx(
                                 static_cast<int>(transport_z), static_cast<int>(transport_a));
-                            cinel02_species_energy_add_device(
-                                CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx, 5U,
+                            ion_species_energy_add_device(
+                                ion_species_energy_device, ledger_species_idx, 5U,
                                 frag.energy_MeV);
-                            cinel02_species_terminal_increment_device(
-                                CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_terminal_device), ledger_species_idx,
+                            ion_species_terminal_increment_device(
+                                ion_species_terminal_device, ledger_species_idx,
                                 static_cast<std::uint32_t>(
-                                    Cinel02SpeciesLedgerSchema::initial_below_cutoff));
-                            const auto bin_z = static_cast<int>(frag.pos_z_mm * CARBON_SECONDARY_CONTEXT_FIELD(inverse_depth_bin_width_mm));
-                            if (bin_z >= 0 && bin_z < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins))) {
+                                    IonSpeciesLedgerSchema::initial_below_cutoff));
+                            const auto bin_z = static_cast<int>(frag.pos_z_mm * inverse_depth_bin_width_mm);
+                            if (bin_z >= 0 && bin_z < static_cast<int>(number_of_bins)) {
                                 sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
-                                    atomic_dose(CARBON_SECONDARY_CONTEXT_FIELD(dose_device)[bin_z]);
+                                    atomic_dose(dose_device[bin_z]);
                                 atomic_dose.fetch_add(static_cast<DepthAtomicT>(frag.energy_MeV));
                             }
-                            if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring))) {
-                                const auto bin_x = static_cast<int>((frag.pos_x_mm - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm)) * CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_x_mm));
-                                const auto bin_y = static_cast<int>((frag.pos_y_mm - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm)) * CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_y_mm));
-                                if (bin_x >= 0 && bin_x < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) &&
-                                    bin_y >= 0 && bin_y < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y)) &&
-                                    bin_z >= 0 && bin_z < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins))) {
-                                    const auto cur_voxel = (bin_z * static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y)) + bin_y) * static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) + bin_x;
+                            if ((kProductionSecondaryPath ? true : enable_voxel_scoring)) {
+                                const auto bin_x = static_cast<int>((frag.pos_x_mm - voxel_min_x_mm) * inverse_voxel_size_x_mm);
+                                const auto bin_y = static_cast<int>((frag.pos_y_mm - voxel_min_y_mm) * inverse_voxel_size_y_mm);
+                                if (bin_x >= 0 && bin_x < static_cast<int>(voxel_bins_x) &&
+                                    bin_y >= 0 && bin_y < static_cast<int>(voxel_bins_y) &&
+                                    bin_z >= 0 && bin_z < static_cast<int>(number_of_bins)) {
+                                    const auto cur_voxel = (bin_z * static_cast<int>(voxel_bins_y) + bin_y) * static_cast<int>(voxel_bins_x) + bin_x;
                                     sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                      sycl::memory_scope::device,
                                                      sycl::access::address_space::global_space>
-                                        atomic_vox(CARBON_SECONDARY_CONTEXT_FIELD(voxel_dose_device)[cur_voxel]);
+                                        atomic_vox(voxel_dose_device[cur_voxel]);
                                     atomic_vox.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
-                                    if ((kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring))) {
+                                    if ((kProductionSecondaryPath ? false : enable_charged_origin_voxel_scoring)) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
-                                            atomic_origin(CARBON_SECONDARY_CONTEXT_FIELD(charged_origin_voxel_dose_device)[
+                                            atomic_origin(charged_origin_voxel_dose_device[
                                                 charged_origin_voxel_offset + cur_voxel]);
                                         atomic_origin.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
                                         score_be_isotope_origin_voxel_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(be_isotope_origin_voxel_dose_device),
-                                            be_isotope_category, CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels), cur_voxel,
+                                            be_isotope_origin_voxel_dose_device,
+                                            be_isotope_category, number_of_voxels, cur_voxel,
                                             static_cast<DoseAtomicT>(frag.energy_MeV));
                                         score_he_isotope_origin_voxel_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(he_isotope_origin_voxel_dose_device),
-                                            he_isotope_category, CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels), cur_voxel,
+                                            he_isotope_origin_voxel_dose_device,
+                                            he_isotope_category, number_of_voxels, cur_voxel,
                                             static_cast<DoseAtomicT>(frag.energy_MeV));
                                     }
                                     if ((kProductionSecondaryPath ? false :
-                                         CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_component_voxel_scoring))) {
+                                         enable_minibeam_component_voxel_scoring)) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
-                                            component(CARBON_SECONDARY_CONTEXT_FIELD(minibeam_component_voxel_dose_device)[
+                                            component(minibeam_component_voxel_dose_device[
                                                 minibeam_component_voxel_offset + cur_voxel]);
                                         component.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
                                     }
                                     if ((kProductionSecondaryPath ? false :
-                                         CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring))) {
+                                         enable_minibeam_energy_band_roi_scoring)) {
                                         score_minibeam_energy_band_roi_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                            minibeam_energy_band_roi_dose_device,
                                             transport_z, transport_a, frag.energy_MeV,
-                                            cur_voxel, CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
-                                            CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
-                                            CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
-                                            CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device),
+                                            cur_voxel, number_of_bins,
+                                            voxel_bins_x,
+                                            voxel_bins_y,
+                                            minibeam_fixed_region_by_x_bin_device,
                                             frag.energy_MeV);
                                     }
-                                    if (CARBON_SECONDARY_CONTEXT_FIELD(in_fov_dose_device) != nullptr) {
+                                    if (in_fov_dose_device != nullptr) {
                                         sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
-                                            atomic_in_fov(CARBON_SECONDARY_CONTEXT_FIELD(in_fov_dose_device)[bin_z]);
+                                            atomic_in_fov(in_fov_dose_device[bin_z]);
                                         atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(frag.energy_MeV));
-                                        cinel02_species_energy_add_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx,
+                                        ion_species_energy_add_device(
+                                            ion_species_energy_device, ledger_species_idx,
                                             6U, frag.energy_MeV);
                                     }
                                 }
                             }
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
+                            if (deposited_device != nullptr) {
                                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
-                                    atomic_dep(CARBON_SECONDARY_CONTEXT_FIELD(deposited_device)[frag.parent_history]);
+                                    atomic_dep(deposited_device[frag.parent_history]);
                                 atomic_dep.fetch_add(frag.energy_MeV);
                                 schneider_energy_add_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                    schneider_diag_device,
                                     SchneiderDiagSlot::SecondaryDepositedMicroMeV,
                                     frag.energy_MeV);
                                 {
                                     const auto sqx = static_cast<int>(
-                                        (frag.pos_x_mm - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm)) *
-                                        CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_x_mm));
+                                        (frag.pos_x_mm - voxel_min_x_mm) *
+                                        inverse_voxel_size_x_mm);
                                     const auto sqy = static_cast<int>(
-                                        (frag.pos_y_mm - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm)) *
-                                        CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_y_mm));
+                                        (frag.pos_y_mm - voxel_min_y_mm) *
+                                        inverse_voxel_size_y_mm);
                                     const auto sqz = static_cast<int>(
-                                        frag.pos_z_mm * CARBON_SECONDARY_CONTEXT_FIELD(inverse_depth_bin_width_mm));
+                                        frag.pos_z_mm * inverse_depth_bin_width_mm);
                                     const bool sq_in_grid =
-                                        (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && sqx >= 0 &&
-                                        sqx < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) &&
+                                        (kProductionSecondaryPath ? true : enable_voxel_scoring) && sqx >= 0 &&
+                                        sqx < static_cast<int>(voxel_bins_x) &&
                                         sqy >= 0 &&
-                                        sqy < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y)) &&
+                                        sqy < static_cast<int>(voxel_bins_y) &&
                                         sqz >= 0 &&
-                                        sqz < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins));
+                                        sqz < static_cast<int>(number_of_bins);
                                     grid_deposit_split_device(
-                                        CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),
-                                        CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device), sq_in_grid,
+                                        grid_deposited_in_device,
+                                        grid_deposited_out_device, sq_in_grid,
                                         frag.energy_MeV);
                                 }
                             }
@@ -7413,21 +5679,19 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         const auto frag_a = static_cast<float>(transport_a);
                         const auto frag_inv_a = 1.0F / frag_a;
                         const auto charged_sp_idx = [&] {
-                            if constexpr(kExactSpeciesPath) return kExactSpecies;
-                            if constexpr(kHydrogenClass) return (transport_a==2)?1:0;
                             return carbon::get_charged_species_idx(transport_z, transport_a);
                         }();
                         const auto ledger_species_idx = charged_sp_idx;
-                        const int recoil_sp_idx=((kProductionSecondaryPath && !BroadBeam) ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_all_elastic))?CARBON_SECONDARY_CONTEXT_FIELD(recoil_stopping).projectile(transport_z,transport_a):-1;
+                        const int recoil_sp_idx=((kProductionSecondaryPath && !BroadBeam) ? false : use_all_elastic)?recoil_stopping.projectile(transport_z,transport_a):-1;
                         const bool generic_recoil=
-                            !kKnownSpeciesOnly && charged_sp_idx<0 && recoil_sp_idx>=0;
+                            charged_sp_idx<0 && recoil_sp_idx>=0;
                         if (charged_sp_idx < 0 && !generic_recoil) {
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(untracked_nuclear_device) != nullptr) {
+                            if (untracked_nuclear_device != nullptr) {
                                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
                                     atomic_untracked(
-                                        CARBON_SECONDARY_CONTEXT_FIELD(untracked_nuclear_device)[frag.parent_history]);
+                                        untracked_nuclear_device[frag.parent_history]);
                                 atomic_untracked.fetch_add(sycl::fmax(0.0F, frag.energy_MeV));
                             }
                             return;
@@ -7457,21 +5721,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         const bool unified_secondary = !generic_recoil;
                         const int unified_secondary_species=unified_secondary
                             ? ([&] {
-                                if constexpr(kExactSpeciesPath) return kExactSpecies;
-                                if constexpr(kHydrogenClass) return charged_sp_idx;
-                                return CARBON_SECONDARY_CONTEXT_FIELD(unified_device).species_index(
+                                return unified_device.species_index(
                                     transport_z,transport_a);
                               }())
                             : -1;
                         UnifiedEmClock unified_secondary_clock;
                         std::uint64_t unified_secondary_counter=0;
-#if CARBON_EM_SEARCH_KEY_AUDIT
-                        UnifiedEmSearchAuditState unified_search_audit{
-                            CARBON_SECONDARY_CONTEXT_FIELD(unified_search_audit_records),
-                            CARBON_SECONDARY_CONTEXT_FIELD(unified_search_audit_count),
-                            CARBON_SECONDARY_CONTEXT_FIELD(unified_search_audit_capacity),
-                            search_audit_launch_id,active_pos/32,0,0};
-#endif
                         // Diagnostic species profile: 20 slots x {steps,
                         // short-range steps, deposited uMeV}. Zero production
                         // impact (compiled out when profiling is off).
@@ -7479,20 +5734,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         if constexpr(CARBON_SECONDARY_STEP_PROFILE)
                             for(int sec_pi=0;sec_pi<60;++sec_pi)sec_prof[sec_pi]=0;
                         UnifiedEmState unified_secondary_state;
-#if CARBON_EM_SEARCH_KEY_AUDIT
-                        unified_secondary_state.search_audit=&unified_search_audit;
-#endif
-#if CARBON_EM_LOCAL_AUDIT
-                        std::array<std::uint64_t,8> unified_secondary_audit{};
-#endif
                         auto unified_secondary_uniform=[&](){return (rng::random_u32(2026,frag.rng_stream,unified_secondary_counter++,121)>>8)*0x1p-24f;};
                         auto unified_secondary_count=[&](int index,std::uint64_t count=1){
                             if(count==0)return; // zero-increment diagnostics must not touch globals
-#if CARBON_EM_LOCAL_AUDIT
-                            unified_secondary_audit[index]+=count;
-#else
-                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(CARBON_SECONDARY_CONTEXT_FIELD(unified_audit)[static_cast<std::size_t>(index)*kUnifiedEmAuditShards+active_pos%kUnifiedEmAuditShards]);a.fetch_add(count);
-#endif
+                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[static_cast<std::size_t>(index)*kUnifiedEmAuditShards+active_pos%kUnifiedEmAuditShards]);a.fetch_add(count);
                         };
                         uint32_t sec_steps = 0;
                         const uint32_t kSecondaryMaxSteps = 30000U;
@@ -7503,16 +5748,16 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         UrbanV2TrackState sec_urban_persist{};
                         bool sec_urban_born = true;
                         bool sec_global_urban_boundary=true;
-                        const bool sec_global_urban=!BroadBeam && CARBON_SECONDARY_CONTEXT_FIELD(global_urban);
+                        const bool sec_global_urban=!BroadBeam && global_urban;
                         const int sec_global_urban_ion=sec_global_urban?
-                            CARBON_SECONDARY_CONTEXT_FIELD(urban_device).projectile(transport_z,transport_a):-1;
+                            urban_device.projectile(transport_z,transport_a):-1;
                         std::uint64_t local_sec_rate_queries = 0;
                         std::uint64_t local_sec_steps = 0;
                         const int schneider_reg_idx =
-                            CARBON_SECONDARY_CONTEXT_FIELD(enable_inelastic)
+                            enable_inelastic
                                 ? secondary_projectile_lut_index_device(
-                                      CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_proj_keys,
-                                      CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_num_projectiles,
+                                      schneider_ct_device_ctx.sec_proj_keys,
+                                      schneider_ct_device_ctx.sec_num_projectiles,
                                       transport_z, transport_a)
                                 : -1;
                         if(!resumed){
@@ -7520,10 +5765,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         // started charged transport: count it and itemize its
                         // birth kinetic energy (not a config-switch inference).
                         schneider_diag_increment_device(
-                            CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                            schneider_diag_device,
                             SchneiderDiagSlot::SecondaryTracksStarted);
                         schneider_float_add_device(
-                            CARBON_SECONDARY_CONTEXT_FIELD(schneider_float_device),
+                            schneider_float_device,
                             SchneiderFloatSlot::SecondaryTransportBirthEnergy,
                             sycl::fmax(0.0F, frag.energy_MeV));
                         // Per-track unsupported-projectile accounting (once per
@@ -7535,25 +5780,25 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         // v3: registry lookup over the uploaded bundle-ordered
                         // keys (any (Z,A) in the bundle is supported).
 
-                        if (CARBON_SECONDARY_CONTEXT_FIELD(enable_inelastic) &&
-                            CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() &&
-                            frag.generation < CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations) &&
+                        if (enable_inelastic &&
+                            schneider_ct_device_ctx.uses_cinel03() &&
+                            frag.generation < max_secondary_inelastic_generations &&
                             schneider_reg_idx < 0) {
                             schneider_diag_increment_device(
-                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                schneider_diag_device,
                                 SchneiderDiagSlot::UnsupportedProjectileTracks);
                             if (transport_z == 4 && transport_a == 6) {
                                 schneider_diag_increment_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                    schneider_diag_device,
                                     SchneiderDiagSlot::UnsupportedBe6Tracks);
                             }
                             schneider_energy_add_device(
-                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                schneider_diag_device,
                                 SchneiderDiagSlot::UnsupportedProjectileBirthEnergyMicroMeV,
                                 sycl::fmax(0.0F, frag.energy_MeV));
                             // Per-(Z/A) census record for the coverage audit.
                             schneider_log_unsupported_track_device(
-                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_track_log_device), CARBON_SECONDARY_CONTEXT_FIELD(schneider_track_count_device),
+                                schneider_track_log_device, schneider_track_count_device,
                                 kSchneiderTrackLogCap,
                                 transport_z, transport_a, frag.generation,
                                 sycl::fmax(0.0F, frag.energy_MeV),
@@ -7579,13 +5824,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             unified_secondary_counter=saved.unified_secondary_counter;
                             unified_secondary_clock=saved.urban_ionization_clock;
                             unified_secondary_state=saved.unified_secondary_state;
-                            unified_secondary_state.tables=&CARBON_SECONDARY_CONTEXT_FIELD(unified_device);
-#if CARBON_EM_SEARCH_KEY_AUDIT
-                            unified_secondary_state.search_audit=&unified_search_audit;
-#endif
-#if CARBON_EM_LOCAL_AUDIT
-                            unified_secondary_audit=saved.unified_secondary_audit;
-#endif
+                            unified_secondary_state.tables=&unified_device;
                             sec_steps=saved.sec_steps;
                             if constexpr (!BroadBeam) {
                             sec_urban_persist.tlimit_mm =
@@ -7596,22 +5835,18 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             }
                             local_sec_rate_queries=saved.local_sec_rate_queries;
                             local_sec_steps=saved.local_sec_steps;
-                            if constexpr (!kNonHe4Only)
+
                                 for(int j=0;j<4;++j)he4_audit[j]=saved.he4_audit[j];
                             if constexpr(CARBON_SECONDARY_STEP_PROFILE)for(int j=0;j<60;++j)sec_prof[j]=saved.sec_prof[j];
                         }
                         unsigned segment_steps=0;bool segment_paused=false;
-                        while (sec_e > CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV) && sec_z >= 0.0F && sec_z < CARBON_SECONDARY_CONTEXT_FIELD(phantom_length_mm) &&
+                        while (sec_e > energy_cutoff_MeV && sec_z >= 0.0F && sec_z < phantom_length_mm &&
                                sec_steps < kSecondaryMaxSteps) {
                             if(!finish_tail && segment_steps>=kSliceSegmentSteps){segment_paused=true;break;}
                             ++segment_steps;
-#if CARBON_EM_SEARCH_KEY_AUDIT
-                            unified_search_audit.step=sec_steps;
-                            unified_search_audit.ordinal=0;
-#endif
-                            if(sec_global_urban && !(kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) &&
+                            if(sec_global_urban && !(kProductionSecondaryPath ? true : enable_ct_grid) &&
                                urban_global_outside_water({sec_x,sec_y,sec_z},{sec_dx,sec_dy,sec_dz},
-                                   CARBON_SECONDARY_CONTEXT_FIELD(urban_water_half_width_mm),CARBON_SECONDARY_CONTEXT_FIELD(phantom_length_mm))) {
+                                   urban_water_half_width_mm,phantom_length_mm)) {
                                 // This escape flag also suppresses terminal deposition at an exact water face.
                                 unified_secondary_escaped_ct=true;break;
                             }
@@ -7625,15 +5860,13 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                       -std::numeric_limits<float>::infinity())
                                 : sec_z;
                             const auto bin_z = static_cast<int>(sycl::floor(
-                                directed_sec_z * CARBON_SECONDARY_CONTEXT_FIELD(
-                                                     inverse_depth_bin_width_mm)));
+                                directed_sec_z * inverse_depth_bin_width_mm));
 
-                            if (bin_z < 0 || bin_z >= static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins))) {
+                            if (bin_z < 0 || bin_z >= static_cast<int>(number_of_bins)) {
                                 if(sec_global_urban)unified_secondary_escaped_ct=true;
                                 break;
                             }
 
-#if defined(CARBON_ENABLE_MINIBEAM)
                             // A requested plane may coincide with the current
                             // step start (notably the water-exit endpoint after
                             // an exactly truncated preceding step). Record that
@@ -7641,36 +5874,34 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             // requiring a strict interior crossing or moving
                             // the diagnostic plane upstream by a few microns.
 
-#endif
-
                             const auto secondary_rate_query_energy_MeV =
                                 sycl::fmax(0.0F, sec_e);
                             const auto sec_e_u = sec_e * frag_inv_a;
-                            float sec_local_density_g_per_cm3 = CARBON_SECONDARY_CONTEXT_FIELD(water_density_g_per_cm3);
+                            float sec_local_density_g_per_cm3 = water_density_g_per_cm3;
                             std::uint8_t sec_ct_material = 2U;
                             bool sec_in_ct = false;
-                            if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid))) {
+                            if ((kProductionSecondaryPath ? true : enable_ct_grid)) {
                                 sec_in_ct = ct_sample(
-                                    sec_x, sec_y, sec_z, CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_x), CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_y),
-                                    CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_z), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_x), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_y), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_z),
-                                    CARBON_SECONDARY_CONTEXT_FIELD(ct_nx), CARBON_SECONDARY_CONTEXT_FIELD(ct_ny), CARBON_SECONDARY_CONTEXT_FIELD(ct_nz), CARBON_SECONDARY_CONTEXT_FIELD(ct_density_device),
-                                    CARBON_SECONDARY_CONTEXT_FIELD(ct_material_device), sec_local_density_g_per_cm3,
+                                    sec_x, sec_y, sec_z, ct_origin_x, ct_origin_y,
+                                    ct_origin_z, ct_spacing_x, ct_spacing_y, ct_spacing_z,
+                                    ct_nx, ct_ny, ct_nz, ct_density_device,
+                                    ct_material_device, sec_local_density_g_per_cm3,
                                     sec_ct_material, sec_dx, sec_dy, sec_dz);
                             }
                             // The unified package has no exterior material. Leaving the
                             // CT volume is a charged-particle escape, not a lookup error.
-                            if ((unified_secondary || sec_global_urban) && (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) && !sec_in_ct) {
+                            if ((unified_secondary || sec_global_urban) && (kProductionSecondaryPath ? true : enable_ct_grid) && !sec_in_ct) {
                                 unified_secondary_escaped_ct = true;
                                 break;
                             }
                             auto recoil_linear_sp = [&](float energy_mevu) {
-                                const float value = CARBON_SECONDARY_CONTEXT_FIELD(recoil_stopping).stopping(
+                                const float value = recoil_stopping.stopping(
                                     recoil_sp_idx, sec_in_ct ? sec_ct_material : 25, energy_mevu);
                                 if (!(value > 0.0F)) {
                                     for (const int slot : {2, 6})
                                         sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
                                             sycl::memory_scope::device, sycl::access::address_space::global_space>(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(elastic_audit)[slot]).fetch_add(1);
+                                            elastic_audit[slot]).fetch_add(1);
                                     return -1.0F;
                                 }
                                 return value * sec_local_density_g_per_cm3;
@@ -7681,19 +5912,16 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 if (!(recoil_sp_at_start > 1.0e-6F)) break;
                             }
 
-                            float sec_step_mm = CARBON_SECONDARY_CONTEXT_FIELD(maximum_step_mm);
+                            float sec_step_mm = maximum_step_mm;
                             UnifiedEmStep unified_secondary_pre;
                             float unified_secondary_rate=0,unified_secondary_distance=std::numeric_limits<float>::infinity();
                             if(unified_secondary){
-                                const int section=(kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid))?(sec_in_ct?int(sec_ct_material):-2):-1;
-                                if(!CARBON_EM_MATERIAL_CACHE || !unified_secondary_state.valid || unified_secondary_state.section!=section ||
+                                const int section=(kProductionSecondaryPath ? true : enable_ct_grid)?(sec_in_ct?int(sec_ct_material):-2):-1;
+                                if(!unified_secondary_state.valid || unified_secondary_state.section!=section ||
                                    unified_secondary_state.density!=sec_local_density_g_per_cm3)
-                                    unified_secondary_state=CARBON_SECONDARY_CONTEXT_FIELD(unified_device).select(section,sec_local_density_g_per_cm3,unified_secondary_species);
-#if CARBON_EM_SEARCH_KEY_AUDIT
-                                unified_secondary_state.search_audit=&unified_search_audit;
-#endif
+                                    unified_secondary_state=unified_device.select(section,sec_local_density_g_per_cm3,unified_secondary_species);
                                 if(!unified_secondary_state.covers(sec_e)){
-                                    record_unified_em_failure(CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_count),CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_records),3,section,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,0);
+                                    record_unified_em_failure(unified_failure_count,unified_failure_records,3,section,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,0);
                                     unified_secondary_count(0);break;}
                                 unified_secondary_pre=unified_secondary_state.prepare(sec_e);
                                 if(sec_global_urban) {
@@ -7703,22 +5931,22 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         unified_secondary_clock.clock.arm(-sycl::log(sycl::fmax(unified_secondary_uniform(),0x1p-24f)));
                                     unified_secondary_distance=unified_secondary_clock.clock.distance(unified_secondary_rate);
                                 }
-                                sec_step_mm=sycl::fmin((CARBON_SECONDARY_CONTEXT_FIELD(em_secondary_step_scale)!=1.f?unified_secondary_state.research_step(sec_e,CARBON_EM_STEP_CACHE?unified_secondary_pre:unified_secondary_state.prepare(sec_e),CARBON_SECONDARY_CONTEXT_FIELD(em_secondary_step_scale)):(CARBON_EM_STEP_CACHE?unified_secondary_state.step(unified_secondary_pre):unified_secondary_state.step(sec_e))),unified_secondary_distance);
+                                sec_step_mm=sycl::fmin(unified_secondary_state.step(unified_secondary_pre),unified_secondary_distance);
                                 // Bound combined mean loss, not the old restricted range alone.
                                 const float delta_sp=unified_secondary_state.mix(unified_secondary_pre.lo.delta_stopping,unified_secondary_pre.hi.delta_stopping);
-                                if(delta_sp>0) sec_step_mm=sycl::fmin(sec_step_mm,CARBON_SECONDARY_CONTEXT_FIELD(maximum_mean_loss_fraction)*sec_e/sycl::fmax(1e-12f,delta_sp+unified_secondary_state.mix(unified_secondary_pre.lo.stopping,unified_secondary_pre.hi.stopping)));
+                                if(delta_sp>0) sec_step_mm=sycl::fmin(sec_step_mm,maximum_mean_loss_fraction*sec_e/sycl::fmax(1e-12f,delta_sp+unified_secondary_state.mix(unified_secondary_pre.lo.stopping,unified_secondary_pre.hi.stopping)));
                             }
 
                             bool depth_boundary_limited = false;
                             if (!sec_global_urban && sec_dz > 1.0e-6F) {
-                                const auto bz = static_cast<float>(bin_z + 1) * CARBON_SECONDARY_CONTEXT_FIELD(depth_bin_width_mm);
+                                const auto bz = static_cast<float>(bin_z + 1) * depth_bin_width_mm;
                                 const auto dz_step = (bz - sec_z) / sec_dz;
                                 if (dz_step > 0.0F && dz_step <= sec_step_mm) {
                                     sec_step_mm = dz_step;
                                     depth_boundary_limited = true;
                                 }
                             } else if (!sec_global_urban && sec_dz < -1.0e-6F) {
-                                const auto bz = static_cast<float>(bin_z) * CARBON_SECONDARY_CONTEXT_FIELD(depth_bin_width_mm);
+                                const auto bz = static_cast<float>(bin_z) * depth_bin_width_mm;
                                 const auto dz_step = (bz - sec_z) / sec_dz;
                                 if (dz_step > 0.0F && dz_step <= sec_step_mm) {
                                     sec_step_mm = dz_step;
@@ -7726,25 +5954,25 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 }
                             }
                             CtFaceClampResult sec_face_clamp{sec_step_mm,false,0};
-                            if (!sec_global_urban && (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) && sec_in_ct && (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_exact_faces))) {
+                            if (!sec_global_urban && (kProductionSecondaryPath ? true : enable_ct_grid) && sec_in_ct && (kProductionSecondaryPath ? true : ct_secondary_exact_faces)) {
                                 sec_face_clamp = clamp_step_to_ct_faces_exact(
                                     sec_step_mm, sec_x, sec_y, sec_z, sec_dx, sec_dy,
-                                    sec_dz, CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_x), CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_y), CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_z),
-                                    CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_x), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_y), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_z), CARBON_SECONDARY_CONTEXT_FIELD(ct_nx), CARBON_SECONDARY_CONTEXT_FIELD(ct_ny), CARBON_SECONDARY_CONTEXT_FIELD(ct_nz));
+                                    sec_dz, ct_origin_x, ct_origin_y, ct_origin_z,
+                                    ct_spacing_x, ct_spacing_y, ct_spacing_z, ct_nx, ct_ny, ct_nz);
                                 sec_step_mm = sec_face_clamp.step_mm;
-                            } else if (!sec_global_urban && (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) && sec_in_ct) {
+                            } else if (!sec_global_urban && (kProductionSecondaryPath ? true : enable_ct_grid) && sec_in_ct) {
                                 sec_step_mm = clamp_step_to_ct_faces_near_z_if_needed(
                                     sec_step_mm, sec_x, sec_y, sec_z, sec_dx, sec_dy,
-                                    sec_dz, CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_x), CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_y), CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_z),
-                                    CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_x), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_y), CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_z), CARBON_SECONDARY_CONTEXT_FIELD(ct_nx), CARBON_SECONDARY_CONTEXT_FIELD(ct_ny),
-                                    CARBON_SECONDARY_CONTEXT_FIELD(ct_nz), CARBON_SECONDARY_CONTEXT_FIELD(ct_density_device), CARBON_SECONDARY_CONTEXT_FIELD(ct_material_device),
+                                    sec_dz, ct_origin_x, ct_origin_y, ct_origin_z,
+                                    ct_spacing_x, ct_spacing_y, ct_spacing_z, ct_nx, ct_ny,
+                                    ct_nz, ct_density_device, ct_material_device,
                                     sec_local_density_g_per_cm3, sec_ct_material,
-                                    (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(ct_skip_homogeneous_face_clamp)), nullptr);
+                                    (kProductionSecondaryPath ? true : ct_skip_homogeneous_face_clamp), nullptr);
                             }
                             // Do not enlarge a real face distance to the legacy
                             // minimum step: that would cross the material again.
                             if (!unified_secondary && !depth_boundary_limited &&
-                                (!(kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_exact_faces)) || !sec_face_clamp.hit_face))
+                                (!(kProductionSecondaryPath ? true : ct_secondary_exact_faces) || !sec_face_clamp.hit_face))
                                 sec_step_mm = sycl::fmax(sec_step_mm, 1.0e-5F);
                             // Generic EM-only recoils take CSDA steps without
                             // fluctuations: a 5% relative-loss cap keeps
@@ -7754,26 +5982,26 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             UrbanGlobalProposal sec_urban_proposal{};
                             CorrelatedScatteringStep sec_urban_scattering{};
                             if(sec_global_urban) {
-                                const auto origin=Direction3F{CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_x),CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_y),CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_z)};
-                                const auto spacing=Direction3F{CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_x),CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_y),CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_z)};
+                                const auto origin=Direction3F{ct_origin_x,ct_origin_y,ct_origin_z};
+                                const auto spacing=Direction3F{ct_spacing_x,ct_spacing_y,ct_spacing_z};
                                 const auto cell=sec_in_ct?urban_voxel_cell({sec_x,sec_y,sec_z},{sec_dx,sec_dy,sec_dz},origin,
-                                    {origin.x+CARBON_SECONDARY_CONTEXT_FIELD(ct_nx)*spacing.x,origin.y+CARBON_SECONDARY_CONTEXT_FIELD(ct_ny)*spacing.y,origin.z+CARBON_SECONDARY_CONTEXT_FIELD(ct_nz)*spacing.z},spacing,
-                                    CARBON_SECONDARY_CONTEXT_FIELD(ct_nx),CARBON_SECONDARY_CONTEXT_FIELD(ct_ny),CARBON_SECONDARY_CONTEXT_FIELD(ct_nz)):
+                                    {origin.x+ct_nx*spacing.x,origin.y+ct_ny*spacing.y,origin.z+ct_nz*spacing.z},spacing,
+                                    ct_nx,ct_ny,ct_nz):
                                     urban_global_water_cell({sec_x,sec_y,sec_z},{sec_dx,sec_dy,sec_dz},
-                                        {CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm),CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm),0},
-                                        {CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm)+CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)/CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_x_mm),
-                                         CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm)+CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y)/CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_y_mm),CARBON_SECONDARY_CONTEXT_FIELD(phantom_length_mm)},
-                                        {1/CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_x_mm),1/CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_y_mm),CARBON_SECONDARY_CONTEXT_FIELD(depth_bin_width_mm)},
-                                        CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),CARBON_SECONDARY_CONTEXT_FIELD(urban_water_half_width_mm));
-                                const auto view=CARBON_SECONDARY_CONTEXT_FIELD(urban_device);
+                                        {voxel_min_x_mm,voxel_min_y_mm,0},
+                                        {voxel_min_x_mm+voxel_bins_x/inverse_voxel_size_x_mm,
+                                         voxel_min_y_mm+voxel_bins_y/inverse_voxel_size_y_mm,phantom_length_mm},
+                                        {1/inverse_voxel_size_x_mm,1/inverse_voxel_size_y_mm,depth_bin_width_mm},
+                                        voxel_bins_x,voxel_bins_y,number_of_bins,urban_water_half_width_mm);
+                                const auto view=urban_device;
                                 const int material=view.material(sec_in_ct?int(sec_ct_material):-1,sec_local_density_g_per_cm3);
                                 sec_urban_proposal=urban_global_prepare(view,material,sec_global_urban_ion,sec_e,
-                                    sycl::fmin(sec_step_mm,CARBON_SECONDARY_CONTEXT_FIELD(maximum_step_mm)),
+                                    sycl::fmin(sec_step_mm,maximum_step_mm),
                                     {sec_x,sec_y,sec_z},{sec_dx,sec_dy,sec_dz},cell,
                                     sec_global_urban_boundary,sec_urban_persist,2026,frag.rng_stream,sec_steps,
                                     sec_local_density_g_per_cm3);
                                 if(!sec_urban_proposal.valid) {
-                                    record_unified_em_failure(CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_count),CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_records),100,
+                                    record_unified_em_failure(unified_failure_count,unified_failure_records,100,
                                         sec_in_ct?int(sec_ct_material):-1,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
                                     unified_secondary_count(0);break;
                                 }
@@ -7797,19 +6025,15 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             float schneider_hazard_total_rate = 0.0F;
                             float schneider_hazard_step_mm = 0.0F;
                             std::uint8_t schneider_hazard_section = 255;
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(enable_inelastic) &&
-                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))) &&
-                                frag.generation < CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations)) {
+                            if (enable_inelastic &&
+                                schneider_ct_device_ctx.uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : use_unified_water)) &&
+                                frag.generation < max_secondary_inelastic_generations) {
                                 // Bundle-ordered registry LUT; no hardcoded isotope fallback.
                                 const int proj_idx =
-#if CARBON_SECONDARY_REUSE_PROJECTILE_INDEX
-                                    schneider_reg_idx;
-#else
                                     secondary_projectile_lut_index_device(
-                                              CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_proj_keys,
-                                              CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_num_projectiles,
+                                              schneider_ct_device_ctx.sec_proj_keys,
+                                              schneider_ct_device_ctx.sec_num_projectiles,
                                               transport_z, transport_a);
-#endif
                                 if (proj_idx < 0) {
                                     // Unsupported secondary projectile: explicit
                                     // per-STEP evaluation counter, never a silent
@@ -7819,10 +6043,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     // Coverage gates use the per-TRACK counter
                                     // recorded at track start, not this value.
                                     schneider_diag_increment_device(
-                                        CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                        schneider_diag_device,
                                         SchneiderDiagSlot::UnsupportedProjectileSteps);
-                                } else if (CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_total_rates != nullptr) {
-                                    const std::size_t section_id = (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) ? 255U : static_cast<std::size_t>(
+                                } else if (schneider_ct_device_ctx.sec_partial_rates != nullptr) {
+                                    const std::size_t section_id = (kProductionSecondaryPath ? false : use_unified_water) ? 255U : static_cast<std::size_t>(
                                         sycl::min(static_cast<std::uint32_t>(sec_ct_material), 24U));
                                     ++local_sec_rate_queries;
                                     // v3: single masked computation drives hazard
@@ -7835,7 +6059,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         // collision energy E_c) so the mask and
                                         // the package query share one energy.
                                         // A post-EM empty draw remains a classified null collision.
-                                        const auto sec_masked = CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).secondary_rates(
+                                        const auto sec_masked = schneider_ct_device_ctx.secondary_rates(
                                             proj_idx, section_id, sec_e_u);
                                         const float sec_macro_xs =
                                             sec_local_density_g_per_cm3 * sec_masked.total;
@@ -7851,7 +6075,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                                 sec_step_mm = collision_distance;
                                                 schneider_hazard_total_rate = sec_macro_xs;
                                                 schneider_hazard_step_mm = sec_step_mm;
-                                                schneider_hazard_section = (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) ? 255U : sec_ct_material;
+                                                schneider_hazard_section = (kProductionSecondaryPath ? false : use_unified_water) ? 255U : sec_ct_material;
                                             }
                                         }
                                     }
@@ -7860,13 +6084,13 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
 
                             // Independent exponential elastic clock competes with the already
                             // sampled inelastic distance. Elastic is NOT generation-limited.
-                            if(CARBON_SECONDARY_CONTEXT_FIELD(enable_inelastic) &&
-                               ((kProductionSecondaryPath && !BroadBeam) ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_all_elastic)) && !generic_recoil && (sec_in_ct || (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)))) {
-                                const int p=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).projectile(transport_z,transport_a);
-                                const float rate=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).rate(p,(kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))?25:sec_ct_material,sec_e_u);
+                            if(enable_inelastic &&
+                               ((kProductionSecondaryPath && !BroadBeam) ? false : use_all_elastic) && !generic_recoil && (sec_in_ct || (kProductionSecondaryPath ? false : use_unified_water))) {
+                                const int p=all_elastic.projectile(transport_z,transport_a);
+                                const float rate=all_elastic.rate(p,(kProductionSecondaryPath ? false : use_unified_water)?25:sec_ct_material,sec_e_u);
                                 if(rate<0) {
-                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_audit)[2]).fetch_add(1);
-                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_audit)[7]).fetch_add(1);
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[7]).fetch_add(1);
                                     break;
                                 }
                                 const auto collision = sample_exponential_collision(
@@ -7886,7 +6110,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 sec_urban_scattering=urban_global_finalize(sec_urban_proposal,sec_step_mm,2026,frag.rng_stream,sec_steps);
                                 const int reason=urban_step_field_reason(sec_urban_scattering);
                                 if(reason) {
-                                    record_unified_em_failure(CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_count),CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_records),110+reason,
+                                    record_unified_em_failure(unified_failure_count,unified_failure_records,110+reason,
                                         sec_in_ct?int(sec_ct_material):-1,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
                                     unified_secondary_count(0);break;
                                 }
@@ -7894,22 +6118,22 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 sec_dx=sec_urban_scattering.direction.x;sec_dy=sec_urban_scattering.direction.y;sec_dz=sec_urban_scattering.direction.z;
                                 sec_urban_persist=sec_urban_proposal.state;
                                 sec_global_urban_boundary=sec_urban_scattering.boundary_crossed;
-                                urban_global_count(CARBON_SECONDARY_CONTEXT_FIELD(urban_step_counts),sec_global_urban_ion,true);
+                                urban_global_count(urban_step_counts,sec_global_urban_ion,true);
                             }
-                            if(secondary_inelastic)schneider_diag_increment_device(CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),SchneiderDiagSlot::SecondaryHazards);
+                            if(secondary_inelastic)schneider_diag_increment_device(schneider_diag_device,SchneiderDiagSlot::SecondaryHazards);
 
                             float dE = 0.0F;
                             if (generic_recoil) {
                                 const auto mid_e_u = sycl::fmax(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(recoil_stopping).energies[0],
+                                    recoil_stopping.energies[0],
                                     (sec_e - 0.5F * recoil_sp_at_start * sec_step_mm) * frag_inv_a);
                                 if (!(recoil_linear_sp(mid_e_u) > 0.0F)) break;
-                                const auto f = (mid_e_u - CARBON_SECONDARY_CONTEXT_FIELD(minimum_table_energy)) *
-                                    CARBON_SECONDARY_CONTEXT_FIELD(inverse_table_step);
+                                const auto f = (mid_e_u - minimum_table_energy) *
+                                    inverse_table_step;
                                 const auto i = sycl::clamp(static_cast<int>(sycl::floor(f)), 0,
-                                    static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(table_size)) - 2);
+                                    static_cast<int>(table_size) - 2);
                                 const auto w = sycl::clamp(f - static_cast<float>(i), 0.0F, 1.0F);
-                                const auto* reference = CARBON_SECONDARY_CONTEXT_FIELD(generic_recoil_reference_sp_device);
+                                const auto* reference = generic_recoil_reference_sp_device;
                                 const auto stopping = reference[i] + w * (reference[i + 1] - reference[i]);
                                 dE = sycl::fmin(stopping * sec_step_mm, sec_e);
                             }
@@ -7922,34 +6146,30 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             const auto collision_input_dz = sec_dz;
                             if(sec_global_urban && sec_urban_scattering.range_terminal)dE=sec_e;
                             if(unified_secondary && !(sec_global_urban && sec_urban_scattering.range_terminal)){
-                                auto draw=unified_em_loss(unified_secondary_state,unified_secondary_clock,sec_e,sec_step_mm,unified_secondary_rate,unified_secondary_distance,CARBON_SECONDARY_CONTEXT_FIELD(enable_secondary_energy_straggling),unified_secondary_pre,unified_secondary_uniform);
+                                auto draw=unified_em_loss(unified_secondary_state,unified_secondary_clock,sec_e,sec_step_mm,unified_secondary_rate,unified_secondary_distance,enable_secondary_energy_straggling,unified_secondary_pre,unified_secondary_uniform);
                                 if(!draw.valid){
-                                    record_unified_em_failure(CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_count),CARBON_SECONDARY_CONTEXT_FIELD(unified_failure_records),40+static_cast<int>(draw.failure_stage),unified_secondary_state.section,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
+                                    record_unified_em_failure(unified_failure_count,unified_failure_records,40+static_cast<int>(draw.failure_stage),unified_secondary_state.section,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
                                     unified_secondary_count(0);unified_secondary_count(7);break;}
                                 dE=draw.loss;unified_secondary_count(2);unified_secondary_count(3,draw.proposed);unified_secondary_count(4,draw.accepted);
                                 unified_secondary_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_secondary_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
                             }
                             const auto post_em_e = sycl::fmax(0.0F, sec_e - dE);
-                            if constexpr (!kNonHe4Only) {
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(enable_inelastic) &&
-                                CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device) && transport_z == 2 && transport_a == 4 &&
-                                frag.generation < CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations) &&
-                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)))) {
+                             {
+                            if (enable_inelastic &&
+                                he4_hazard_audit_device && transport_z == 2 && transport_a == 4 &&
+                                frag.generation < max_secondary_inelastic_generations &&
+                                schneider_ct_device_ctx.uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : use_unified_water))) {
                                 const auto p =
-#if CARBON_SECONDARY_REUSE_PROJECTILE_INDEX
-                                    schneider_reg_idx;
-#else
                                     secondary_projectile_lut_index_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_proj_keys,
-                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_num_projectiles, 2, 4);
-#endif
-                                const auto section = (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) ? 255U : sec_ct_material;
+                                    schneider_ct_device_ctx.sec_proj_keys,
+                                    schneider_ct_device_ctx.sec_num_projectiles, 2, 4);
+                                const auto section = (kProductionSecondaryPath ? false : use_unified_water) ? 255U : sec_ct_material;
                                 const double start = schneider_hazard_total_rate;
                                 const double middle = sec_local_density_g_per_cm3 *
-                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).secondary_rates(p, section,
+                                    schneider_ct_device_ctx.secondary_rates(p, section,
                                         (sec_e - 0.5F*dE)*frag_inv_a).total;
                                 const double end = sec_local_density_g_per_cm3 *
-                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).secondary_rates(p, section,
+                                    schneider_ct_device_ctx.secondary_rates(p, section,
                                         post_em_e*frag_inv_a).total;
                                 he4_audit[0] += start*sec_step_mm;
                                 he4_audit[1] += (start+4*middle+end)*sec_step_mm/6;
@@ -7961,11 +6181,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 if (secondary_inelastic) {
                                     sycl::atomic_ref<double, sycl::memory_order::relaxed,
                                         sycl::memory_scope::device, sycl::access::address_space::global_space>
-                                        tally_count(CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device)[3]);
+                                        tally_count(he4_hazard_audit_device[3]);
                                     tally_count.fetch_add(1.0);
                                     sycl::atomic_ref<double, sycl::memory_order::relaxed,
                                         sycl::memory_scope::device, sycl::access::address_space::global_space>
-                                        tally_energy(CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device)[4]);
+                                        tally_energy(he4_hazard_audit_device[4]);
                                     tally_energy.fetch_add(static_cast<double>(post_em_e));
                                 }
                             }
@@ -7981,10 +6201,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                      sec_z+sec_urban_proposal.direction.z*g+sec_urban_scattering.displacement_mm.z});
                                 post_em_x=end.x;post_em_y=end.y;post_em_z=end.z;
                             }
-                            if (!sec_global_urban && (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_exact_faces)) && sec_face_clamp.hit_face && !secondary_inelastic && !secondary_elastic) {
+                            if (!sec_global_urban && (kProductionSecondaryPath ? true : ct_secondary_exact_faces) && sec_face_clamp.hit_face && !secondary_inelastic && !secondary_elastic) {
                                 const auto endpoint=ct_finish_exact_face_step(sec_face_clamp,sec_step_mm,
                                     {sec_x,sec_y,sec_z},{collision_input_dx,collision_input_dy,collision_input_dz},
-                                    {CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_x),CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_y),CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_z)},{CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_x),CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_y),CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_z)});
+                                    {ct_origin_x,ct_origin_y,ct_origin_z},{ct_spacing_x,ct_spacing_y,ct_spacing_z});
                                 post_em_x=endpoint[0];post_em_y=endpoint[1];post_em_z=endpoint[2];
                             }
 
@@ -7999,65 +6219,65 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             const auto collision_bin = sycl::max(
                                 0, sycl::min(
                                        static_cast<int>(post_em_z *
-                                           CARBON_SECONDARY_CONTEXT_FIELD(inverse_depth_bin_width_mm)),
-                                       static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins)) - 1));
+                                           inverse_depth_bin_width_mm),
+                                       static_cast<int>(number_of_bins) - 1));
                             // Exact-face transport keeps continuous loss inside
                             // the SOURCE voxel. Do not mix source x/y with the
                             // endpoint z, or credit this loss at a nuclear vertex.
                             // Commit once here before a replay can update sec_x/y/z
                             // or break; the legacy dE commits below are suppressed.
                             const bool source_voxel_continuous_loss =
-                                (sec_global_urban || ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_exact_faces)) && (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid)) && sec_in_ct)) && (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring));
+                                (sec_global_urban || ((kProductionSecondaryPath ? true : ct_secondary_exact_faces) && (kProductionSecondaryPath ? true : enable_ct_grid) && sec_in_ct)) && (kProductionSecondaryPath ? true : enable_voxel_scoring);
                             int continuous_step_voxel = -1;
                             if (source_voxel_continuous_loss) {
                                 const auto source_dir=sec_urban_proposal.direction;
-                                const int nx=CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x);
-                                const int ny=CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y);
-                                const int nz=CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins);
-                                const float xmin=CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm);
-                                const float ymin=CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm);
-                                const float vx=1/CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_x_mm);
-                                const float vy=1/CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_y_mm);
+                                const int nx=voxel_bins_x;
+                                const int ny=voxel_bins_y;
+                                const int nz=number_of_bins;
+                                const float xmin=voxel_min_x_mm;
+                                const float ymin=voxel_min_y_mm;
+                                const float vx=1/inverse_voxel_size_x_mm;
+                                const float vy=1/inverse_voxel_size_y_mm;
                                 const int sx=sec_global_urban ? urban_voxel_axis(sec_x,source_dir.x,xmin,xmin+nx*vx,vx,nx).index :
                                     static_cast<int>(sycl::floor((sec_x-xmin)/vx));
                                 const int sy=sec_global_urban ? urban_voxel_axis(sec_y,source_dir.y,ymin,ymin+ny*vy,vy,ny).index :
                                     static_cast<int>(sycl::floor((sec_y-ymin)/vy));
                                 const int sz=sec_global_urban ? urban_voxel_axis(sec_z,source_dir.z,0,
-                                    CARBON_SECONDARY_CONTEXT_FIELD(phantom_length_mm),CARBON_SECONDARY_CONTEXT_FIELD(depth_bin_width_mm),nz).index : bin_z;
+                                    phantom_length_mm,depth_bin_width_mm,nz).index : bin_z;
                                 if (sx>=0 && sy>=0 && sz>=0 && sx<nx && sy<ny && sz<nz) {
                                     continuous_step_voxel=(sz*ny+sy)*nx+sx;
                                     sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,
                                         sycl::memory_scope::device,sycl::access::address_space::global_space>
-                                        a(CARBON_SECONDARY_CONTEXT_FIELD(voxel_dose_device)[continuous_step_voxel]);
+                                        a(voxel_dose_device[continuous_step_voxel]);
                                     a.fetch_add(static_cast<DoseAtomicT>(dE));
-                                    if ((kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring))) {
+                                    if ((kProductionSecondaryPath ? false : enable_charged_origin_voxel_scoring)) {
                                         sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,
                                             sycl::memory_scope::device,sycl::access::address_space::global_space>
-                                            origin(CARBON_SECONDARY_CONTEXT_FIELD(charged_origin_voxel_dose_device)[charged_origin_voxel_offset+continuous_step_voxel]);
+                                            origin(charged_origin_voxel_dose_device[charged_origin_voxel_offset+continuous_step_voxel]);
                                         origin.fetch_add(static_cast<DoseAtomicT>(dE));
-                                        score_be_isotope_origin_voxel_device(CARBON_SECONDARY_CONTEXT_FIELD(be_isotope_origin_voxel_dose_device),
-                                            be_isotope_category,CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels),continuous_step_voxel,static_cast<DoseAtomicT>(dE));
-                                        score_he_isotope_origin_voxel_device(CARBON_SECONDARY_CONTEXT_FIELD(he_isotope_origin_voxel_dose_device),
-                                            he_isotope_category,CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels),continuous_step_voxel,static_cast<DoseAtomicT>(dE));
+                                        score_be_isotope_origin_voxel_device(be_isotope_origin_voxel_dose_device,
+                                            be_isotope_category,number_of_voxels,continuous_step_voxel,static_cast<DoseAtomicT>(dE));
+                                        score_he_isotope_origin_voxel_device(he_isotope_origin_voxel_dose_device,
+                                            he_isotope_category,number_of_voxels,continuous_step_voxel,static_cast<DoseAtomicT>(dE));
                                     }
                                     if ((kProductionSecondaryPath ? false :
-                                         CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_component_voxel_scoring))) {
+                                         enable_minibeam_component_voxel_scoring)) {
                                         sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,
                                             sycl::memory_scope::device,sycl::access::address_space::global_space>
-                                            component(CARBON_SECONDARY_CONTEXT_FIELD(minibeam_component_voxel_dose_device)[
+                                            component(minibeam_component_voxel_dose_device[
                                                 minibeam_component_voxel_offset+continuous_step_voxel]);
                                         component.fetch_add(static_cast<DoseAtomicT>(dE));
                                     }
                                     if ((kProductionSecondaryPath ? false :
-                                         CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring))) {
+                                         enable_minibeam_energy_band_roi_scoring)) {
                                         score_minibeam_energy_band_roi_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                            minibeam_energy_band_roi_dose_device,
                                             transport_z, transport_a, sec_e,
                                             continuous_step_voxel,
-                                            CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
-                                            CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
-                                            CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
-                                            CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device), dE);
+                                            number_of_bins,
+                                            voxel_bins_x,
+                                            voxel_bins_y,
+                                            minibeam_fixed_region_by_x_bin_device, dE);
                                     }
                                 }
                             }
@@ -8067,23 +6287,19 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 // collision energy E_c (sec_e just updated),
                                 // so the replay-status record below and the
                                 // package query share one energy with the mask.
-                                if (CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))) &&
-                                    sec_e > CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV) &&
+                                if (schneider_ct_device_ctx.uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : use_unified_water)) &&
+                                    sec_e > energy_cutoff_MeV &&
                                     frag.generation <
-                                        CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations)) {
+                                        max_secondary_inelastic_generations) {
                                     const float sec_e_c = sec_e * frag_inv_a;
                                     const int proj_idx_c =
-#if CARBON_SECONDARY_REUSE_PROJECTILE_INDEX
-                                        schneider_reg_idx;
-#else
                                         secondary_projectile_lut_index_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_proj_keys,
-                                            CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_num_projectiles,
+                                            schneider_ct_device_ctx.sec_proj_keys,
+                                            schneider_ct_device_ctx.sec_num_projectiles,
                                             transport_z, transport_a);
-#endif
-                                    const std::size_t section_c = (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water)) ? 255U : static_cast<std::size_t>(
+                                    const std::size_t section_c = (kProductionSecondaryPath ? false : use_unified_water) ? 255U : static_cast<std::size_t>(
                                         sycl::min(static_cast<std::uint32_t>(sec_ct_material), 24U));
-                                    const auto sec_masked_c = CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).secondary_rates(
+                                    const auto sec_masked_c = schneider_ct_device_ctx.secondary_rates(
                                         proj_idx_c, section_c, sec_e_c);
                                     // Same tag-14 draw as the legacy site (same
                                     // step counter: sec_steps increments after
@@ -8103,10 +6319,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         // transport, loses no energy, deposits
                                         // nothing locally, issues no lookup.
                                         schneider_diag_increment_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                            schneider_diag_device,
                                             SchneiderDiagSlot::SecondaryPostEmNullCollisions);
                                         schneider_float_add_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(schneider_float_device),
+                                            schneider_float_device,
                                             SchneiderFloatSlot::PostEmNullEnergy,
                                             sycl::fmax(0.0F, sec_e));
                                         secondary_inelastic = false;
@@ -8130,11 +6346,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             }
 
                             if (bin_z != pending_sec_bin) {
-                        if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins))) {
+                        if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
                                     sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                      sycl::memory_scope::device,
                                                      sycl::access::address_space::global_space>
-                                        atomic_dose(CARBON_SECONDARY_CONTEXT_FIELD(dose_device)[pending_sec_bin]);
+                                        atomic_dose(dose_device[pending_sec_bin]);
                                     atomic_dose.fetch_add(static_cast<DepthAtomicT>(pending_sec_depth_MeV));
                                     pending_sec_depth_MeV = 0.0F;
                                 }
@@ -8143,72 +6359,72 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             pending_sec_depth_MeV += dE;
                             continuous_species_tally.add_all(dE);
 
-                            if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) || secondary_inelastic) {
+                            if ((kProductionSecondaryPath ? true : enable_voxel_scoring) || secondary_inelastic) {
                                 int cur_voxel = -1;
                                 const auto score_bin_x = static_cast<int>(
-                                    (sec_x - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm)) * CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_x_mm));
+                                    (sec_x - voxel_min_x_mm) * inverse_voxel_size_x_mm);
                                 const auto score_bin_y = static_cast<int>(
-                                    (sec_y - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm)) * CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_y_mm));
-                                if (score_bin_x >= 0 && score_bin_x < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) && score_bin_y >= 0 && score_bin_y < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y))) {
+                                    (sec_y - voxel_min_y_mm) * inverse_voxel_size_y_mm);
+                                if (score_bin_x >= 0 && score_bin_x < static_cast<int>(voxel_bins_x) && score_bin_y >= 0 && score_bin_y < static_cast<int>(voxel_bins_y)) {
                                     // Continuous EM loss belongs to the source
                                     // step voxel.  `collision_bin` is the
                                     // post-EM endpoint/nuclear-vertex bin and
                                     // mixing it with source x/y creates depth
                                     // spikes when a step ends on a z boundary.
-                                    cur_voxel = (bin_z * static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y)) + score_bin_y) * static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) + score_bin_x;
+                                    cur_voxel = (bin_z * static_cast<int>(voxel_bins_y) + score_bin_y) * static_cast<int>(voxel_bins_x) + score_bin_x;
                                 }
                                 if (cur_voxel != pending_sec_voxel || secondary_inelastic) {
-                                    if (pending_sec_voxel_MeV > 0.0F && pending_sec_voxel >= 0 && pending_sec_voxel < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels))) {
+                                    if (pending_sec_voxel_MeV > 0.0F && pending_sec_voxel >= 0 && pending_sec_voxel < static_cast<int>(number_of_voxels)) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
-                                            atomic_vox(CARBON_SECONDARY_CONTEXT_FIELD(voxel_dose_device)[pending_sec_voxel]);
+                                            atomic_vox(voxel_dose_device[pending_sec_voxel]);
                                         atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                    if ((kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring))) {
+                                    if ((kProductionSecondaryPath ? false : enable_charged_origin_voxel_scoring)) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
-                                            atomic_origin(CARBON_SECONDARY_CONTEXT_FIELD(charged_origin_voxel_dose_device)[
+                                            atomic_origin(charged_origin_voxel_dose_device[
                                                 charged_origin_voxel_offset + pending_sec_voxel]);
                                         atomic_origin.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                                         score_be_isotope_origin_voxel_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(be_isotope_origin_voxel_dose_device),
-                                            be_isotope_category, CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels),
+                                            be_isotope_origin_voxel_dose_device,
+                                            be_isotope_category, number_of_voxels,
                                             pending_sec_voxel,
                                             static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                                         score_he_isotope_origin_voxel_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(he_isotope_origin_voxel_dose_device),
-                                            he_isotope_category, CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels),
+                                            he_isotope_origin_voxel_dose_device,
+                                            he_isotope_category, number_of_voxels,
                                             pending_sec_voxel,
                                             static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                                     }
                                     if ((kProductionSecondaryPath ? false :
-                                         CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_component_voxel_scoring))) {
+                                         enable_minibeam_component_voxel_scoring)) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
-                                            component(CARBON_SECONDARY_CONTEXT_FIELD(minibeam_component_voxel_dose_device)[
+                                            component(minibeam_component_voxel_dose_device[
                                                 minibeam_component_voxel_offset + pending_sec_voxel]);
                                         component.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                                     }
                                     }
                                     pending_sec_voxel_MeV = 0.0F;
                                     pending_sec_voxel = cur_voxel;
-                            if (secondary_inelastic && !(sec_e > CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV)) &&
-                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))) &&
-                                frag.generation < CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations)) {
+                            if (secondary_inelastic && !(sec_e > energy_cutoff_MeV) &&
+                                schneider_ct_device_ctx.uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : use_unified_water)) &&
+                                frag.generation < max_secondary_inelastic_generations) {
                                 // Sampled Schneider collision whose post-EM
                                 // energy is already below cutoff: continuous
                                 // stopping owns the energy, no replay attempted.
                                 schneider_diag_increment_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                    schneider_diag_device,
                                     SchneiderDiagSlot::SecondaryStoppedBeforeReplay);
                             }
-                            if (secondary_inelastic && sec_e > CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV)) {
+                            if (secondary_inelastic && sec_e > energy_cutoff_MeV) {
                                 // v3 sampling already happened at the post-EM
                                 // update above; skip the query only when the
                                 // sampler found no in-domain channel.
-                                if (CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).uses_cinel03() && !skip_schneider_lookup) {
+                                if (schneider_ct_device_ctx.uses_cinel03() && !skip_schneider_lookup) {
                                     // Exact (Z/A, target_Z) channel with the
                                     // secondary's own sampled target: never the
                                     // primary target, never water/O fallback.
@@ -8217,46 +6433,46 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     const float sec_u_bracket = rng::uniform01(2026, frag.rng_stream, sec_steps, 15);
                                     const float sec_u_event = rng::uniform01(2026, frag.rng_stream, sec_steps, 16);
                                     const auto sec_lookup = cinel03_lookup_event_device(
-                                        CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_energy_nodes,
-                                        CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_node_count,
-                                        CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_event_offsets,
-                                        CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_event_indices,
-                                        CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_total_events,
+                                        schneider_ct_device_ctx.sec_energy_nodes,
+                                        schneider_ct_device_ctx.sec_node_count,
+                                        schneider_ct_device_ctx.sec_event_offsets,
+                                        schneider_ct_device_ctx.sec_event_indices,
+                                        schneider_ct_device_ctx.sec_total_events,
                                         transport_z, transport_a, secondary_target_z,
                                         sec_e * frag_inv_a,
                                         sec_u_bracket, sec_u_event);
                                     schneider_record_lookup_device(
-                                        CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device), CARBON_SECONDARY_CONTEXT_FIELD(schneider_float_device),
+                                        schneider_diag_device, schneider_float_device,
                                         false, sec_lookup, sec_e);
 
                                     if (sec_lookup.status == Cinel03LookupStatus::Hit) {
                                         const std::uint32_t event_idx = sec_lookup.event_index;
                                         secondary_replay_succeeded = true;
-                                        cinel02_species_energy_add_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx, 8U, sec_e);
+                                        ion_species_energy_add_device(
+                                            ion_species_energy_device, ledger_species_idx, 8U, sec_e);
                                         // Use the collision vertex, not the source
                                         // voxel or legacy pre-x/post-z mixed index.
                                         // These are subsets, never extra energy sinks.
-                                        if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && replay_vertex_in_scoring_box(
+                                        if ((kProductionSecondaryPath ? true : enable_voxel_scoring) && replay_vertex_in_scoring_box(
                                                 {post_em_x,post_em_y,post_em_z},
-                                                {CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm),CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm),0.0F},
-                                                {CARBON_SECONDARY_CONTEXT_FIELD(voxel_max_x_mm),CARBON_SECONDARY_CONTEXT_FIELD(voxel_max_y_mm),
-                                                 static_cast<float>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins))*CARBON_SECONDARY_CONTEXT_FIELD(depth_bin_width_mm)})) {
-                                            cinel02_species_energy_add_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx,
-                                                Cinel02SpeciesLedgerSchema::cinel03_replay_input_fov, sec_e);
-                                            cinel02_species_energy_add_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx,
-                                                Cinel02SpeciesLedgerSchema::cinel03_replay_step_dE_fov, dE);
+                                                {voxel_min_x_mm,voxel_min_y_mm,0.0F},
+                                                {voxel_max_x_mm,voxel_max_y_mm,
+                                                 static_cast<float>(number_of_bins)*depth_bin_width_mm})) {
+                                            ion_species_energy_add_device(
+                                                ion_species_energy_device, ledger_species_idx,
+                                                IonSpeciesLedgerSchema::cinel03_replay_input_fov, sec_e);
+                                            ion_species_energy_add_device(
+                                                ion_species_energy_device, ledger_species_idx,
+                                                IonSpeciesLedgerSchema::cinel03_replay_step_dE_fov, dE);
                                         }
-                                        const auto& event = CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_interactions[event_idx];
+                                        const auto& event = schneider_ct_device_ctx.sec_interactions[event_idx];
                                         const float event_phi = 6.2831853071795864769F * rng::uniform01(
                                             2026, frag.rng_stream, sec_steps, cinel03_event_azimuth_dimension);
                                         const float event_cos = sycl::cos(event_phi);
                                         const float event_sin = sycl::sin(event_phi);
                                         const float local_deposit = sycl::fmax(0.0F, event.process_local_deposit_MeV);
                                         pending_sec_depth_MeV += local_deposit;
-                                        if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && cur_voxel >= 0) {
+                                        if ((kProductionSecondaryPath ? true : enable_voxel_scoring) && cur_voxel >= 0) {
                                             pending_sec_voxel_MeV += local_deposit;
                                         }
                                         // The break below skips the common-path
@@ -8264,39 +6480,39 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         // deposit must be recorded here or the
                                         // ROI diagnostic will not close.
                                         if ((kProductionSecondaryPath ? false :
-                                             CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring)) &&
+                                             enable_minibeam_energy_band_roi_scoring) &&
                                             cur_voxel >= 0) {
                                             score_minibeam_energy_band_roi_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                                minibeam_energy_band_roi_dose_device,
                                                 transport_z, transport_a, sec_e,
                                                 cur_voxel,
-                                                CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device),
+                                                number_of_bins,
+                                                voxel_bins_x,
+                                                voxel_bins_y,
+                                                minibeam_fixed_region_by_x_bin_device,
                                                 local_deposit);
                                         }
-                                        if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
+                                        if (deposited_device != nullptr) {
                                             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                              sycl::memory_scope::device,
                                                              sycl::access::address_space::global_space>
-                                                atomic_dep(CARBON_SECONDARY_CONTEXT_FIELD(deposited_device)[frag.parent_history]);
+                                                atomic_dep(deposited_device[frag.parent_history]);
                                             // Ledger keeps local + step dE here; the
                                             // common path is skipped by the break
                                             // below, so this is the single dE credit.
                                             atomic_dep.fetch_add(local_deposit + dE);
                                             schneider_energy_add_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                                schneider_diag_device,
                                                 SchneiderDiagSlot::SecondaryDepositedMicroMeV,
                                                 local_deposit + dE);
                                             if (source_voxel_continuous_loss) {
-                                                grid_deposit_split_device(CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device),
+                                                grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,
                                                     cur_voxel>=0,local_deposit);
-                                                grid_deposit_split_device(CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device),
+                                                grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,
                                                     continuous_step_voxel>=0,dE);
                                             } else grid_deposit_split_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device),
-                                                (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && cur_voxel>=0,local_deposit+dE);
+                                                grid_deposited_in_device,grid_deposited_out_device,
+                                                (kProductionSecondaryPath ? true : enable_voxel_scoring) && cur_voxel>=0,local_deposit+dE);
                                         }
                                         // The break below skips the common-path
                                         // voxel dE commit: commit it here so the
@@ -8304,7 +6520,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         // depth, voxel and species scorers.
                                         carbon::secondary_step_voxel_commit(
                                             pending_sec_voxel_MeV,
-                                            (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && !source_voxel_continuous_loss, cur_voxel, dE);
+                                            (kProductionSecondaryPath ? true : enable_voxel_scoring) && !source_voxel_continuous_loss, cur_voxel, dE);
 
                                         float sec_charged_accounted_MeV = 0.0F;
                                         float sec_neutral_accounted_MeV = 0.0F;
@@ -8313,19 +6529,14 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         const std::uint32_t prod_offset = event.product_offset;
                                         const std::uint32_t prod_count = event.direct_product_count;
                                         for (std::uint32_t ip = 0; ip < prod_count; ++ip) {
-                                            if (prod_offset + ip >= CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_total_products) break;
-                                            const auto& product = CARBON_SECONDARY_CONTEXT_FIELD(schneider_ct_device_ctx).sec_products[prod_offset + ip];
-                                            record_neutron_birth(CARBON_SECONDARY_CONTEXT_FIELD(neutron_birth_buffer),product,
-                                                post_em_x,post_em_y,post_em_z,
-                                                {collision_input_dx,collision_input_dy,collision_input_dz},event_cos,event_sin,
-                                                frag.parent_history,frag.rng_stream,sec_steps,ip,frag.generation+1U,
-                                                -1,frag.z,frag.a,frag.weight);
+                                            if (prod_offset + ip >= schneider_ct_device_ctx.sec_total_products) break;
+                                            const auto& product = schneider_ct_device_ctx.sec_products[prod_offset + ip];
 
                                             if (product.role == 2) {
                                                 const float ke = sycl::fmax(0.0F, product.kinetic_energy_MeV);
                                                 sec_unsupported_accounted_MeV += ke;
                                                 schneider_float_add_device(
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_float_device),
+                                                    schneider_float_device,
                                                     SchneiderFloatSlot::UnsupportedProductEnergy, ke);
                                                 continue;
                                             }
@@ -8333,7 +6544,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                                 const float ke = sycl::fmax(0.0F, product.kinetic_energy_MeV);
                                                 sec_neutral_accounted_MeV += ke;
                                                 schneider_float_add_device(
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_float_device),
+                                                    schneider_float_device,
                                                     SchneiderFloatSlot::NeutralProductKinetic, ke);
                                                 continue;
                                             }
@@ -8346,22 +6557,22 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                             if (product.z == 4 && product.a == 6) {
                                                 const float ke = sycl::fmax(0.0F, product.kinetic_energy_MeV);
                                                 schneider_diag_increment_device(
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                                    schneider_diag_device,
                                                     SchneiderDiagSlot::SecondaryBe6Kills);
                                                 schneider_diag_increment_device(
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                                    schneider_diag_device,
                                                     SchneiderDiagSlot::Be6TopasCompatKills);
                                                 schneider_float_add_device(
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_float_device),
+                                                    schneider_float_device,
                                                     SchneiderFloatSlot::Be6KillEnergy, ke);
                                                 continue;
                                             }
                                             schneider_diag_increment_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                                schneider_diag_device,
                                                 SchneiderDiagSlot::SecondaryChargedBorn);
 
                                             if (product.kinetic_energy_MeV >
-                                                CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV)) {
+                                                energy_cutoff_MeV) {
                                                 // Nuclear-generation limits never turn a
                                                 // charged product into local dose.  The child
                                                 // is queued for EM transport; its generation
@@ -8375,14 +6586,14 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                                     local_direction.z,
                                                     Direction3F{collision_input_dx, collision_input_dy, collision_input_dz});
 
-                                                if (CARBON_SECONDARY_CONTEXT_FIELD(secondary_queue_device) != nullptr) {
+                                                if (secondary_queue_device != nullptr) {
                                                     auto count_ref = sycl::atomic_ref<
                                                         uint32_t, sycl::memory_order::relaxed,
                                                         sycl::memory_scope::device,
                                                         sycl::access::address_space::global_space>(
-                                                        *CARBON_SECONDARY_CONTEXT_FIELD(secondary_count_device));
+                                                        *secondary_count_device);
                                                     const auto output = count_ref.fetch_add(1U);
-                                                    if (output < CARBON_SECONDARY_CONTEXT_FIELD(max_secondaries)) {
+                                                    if (output < max_secondaries) {
                                                         SecondaryParticle child{};
                                                         child.z = product.z;
                                                         child.a = product.a;
@@ -8399,51 +6610,51 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                                         child.rng_stream = rng::event_product_stream(
                                                             frag.rng_stream, sec_steps,
                                                             rng::branch_role_cascade_charged, ip);
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(secondary_queue_device)[output] = child;
+                                                        secondary_queue_device[output] = child;
                                                         sec_charged_accounted_MeV += product.kinetic_energy_MeV;
                                                         schneider_diag_increment_device(
-                                                            CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                                            schneider_diag_device,
                                                             SchneiderDiagSlot::SecondaryChargedQueued);
-                                                        if (CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device) != nullptr) {
-                                                            cinel02_record_queued_secondary_birth_device(
-                                                                CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), child.z, child.a,
+                                                        if (ion_species_energy_device != nullptr) {
+                                                            ion_record_queued_secondary_birth_device(
+                                                                ion_species_energy_device, child.z, child.a,
                                                                 child.energy_MeV);
                                                             const auto child_species_idx = carbon::get_charged_species_idx(child.z, child.a);
                                                             if (child_species_idx < 18) {
-                                                                cinel02_species_energy_add_device(
-                                                                    CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), child_species_idx, 10U, child.energy_MeV);
+                                                                ion_species_energy_add_device(
+                                                                    ion_species_energy_device, child_species_idx, 10U, child.energy_MeV);
                                                             }
                                                         }
                                                     } else {
                                                         schneider_diag_increment_device(
-                                                            CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                                            schneider_diag_device,
                                                             SchneiderDiagSlot::SecondaryQueueOverflows);
                                                         schneider_diag_increment_device(
-                                                            CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                                            schneider_diag_device,
                                                             SchneiderDiagSlot::QueueOverflows);
-                                                        if (CARBON_SECONDARY_CONTEXT_FIELD(secondary_overflow_count_device) != nullptr) {
+                                                        if (secondary_overflow_count_device != nullptr) {
                                                             sycl::atomic_ref<uint32_t, sycl::memory_order::relaxed,
                                                                              sycl::memory_scope::device,
                                                                              sycl::access::address_space::global_space>
-                                                                atomic_ov(*CARBON_SECONDARY_CONTEXT_FIELD(secondary_overflow_count_device));
+                                                                atomic_ov(*secondary_overflow_count_device);
                                                             atomic_ov.fetch_add(1U);
                                                         }
-                                                        if (CARBON_SECONDARY_CONTEXT_FIELD(secondary_overflow_energy_device) != nullptr) {
+                                                        if (secondary_overflow_energy_device != nullptr) {
                                                             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                                              sycl::memory_scope::device,
                                                                              sycl::access::address_space::global_space>
-                                                                atomic_ove(*CARBON_SECONDARY_CONTEXT_FIELD(secondary_overflow_energy_device));
+                                                                atomic_ove(*secondary_overflow_energy_device);
                                                             atomic_ove.fetch_add(product.kinetic_energy_MeV);
                                                         }
                                                     }
                                                 }
                                             } else {
                                                 pending_sec_depth_MeV += product.kinetic_energy_MeV;
-                                                if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && cur_voxel >= 0) {
+                                                if ((kProductionSecondaryPath ? true : enable_voxel_scoring) && cur_voxel >= 0) {
                                                     pending_sec_voxel_MeV += product.kinetic_energy_MeV;
                                                 }
                                                 if ((kProductionSecondaryPath ? false :
-                                                     CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_component_voxel_scoring)) &&
+                                                     enable_minibeam_component_voxel_scoring) &&
                                                     cur_voxel >= 0) {
                                                     const auto child_category =
                                                         minibeam_component_category(
@@ -8451,12 +6662,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                                             minibeam_birth_region_water);
                                                     const auto child_offset =
                                                         child_category *
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels);
+                                                        number_of_voxels;
                                                     sycl::atomic_ref<DoseAtomicT,
                                                                      sycl::memory_order::relaxed,
                                                                      sycl::memory_scope::device,
                                                                      sycl::access::address_space::global_space>(
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(minibeam_component_voxel_dose_device)[
+                                                        minibeam_component_voxel_dose_device[
                                                             child_offset + cur_voxel])
                                                         .fetch_add(static_cast<DoseAtomicT>(
                                                             product.kinetic_energy_MeV));
@@ -8464,49 +6675,49 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                                                      sycl::memory_order::relaxed,
                                                                      sycl::memory_scope::device,
                                                                      sycl::access::address_space::global_space>(
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(minibeam_component_voxel_dose_device)[
+                                                        minibeam_component_voxel_dose_device[
                                                             minibeam_component_voxel_offset + cur_voxel])
                                                         .fetch_add(static_cast<DoseAtomicT>(
                                                             -product.kinetic_energy_MeV));
                                                 }
                                                 if ((kProductionSecondaryPath ? false :
-                                                     CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring)) &&
+                                                     enable_minibeam_energy_band_roi_scoring) &&
                                                     cur_voxel >= 0) {
                                                     score_minibeam_energy_band_roi_device(
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                                        minibeam_energy_band_roi_dose_device,
                                                         product.z, product.a,
                                                         product.kinetic_energy_MeV, cur_voxel,
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device),
+                                                        number_of_bins,
+                                                        voxel_bins_x,
+                                                        voxel_bins_y,
+                                                        minibeam_fixed_region_by_x_bin_device,
                                                         product.kinetic_energy_MeV);
                                                 }
-                                                if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
+                                                if (deposited_device != nullptr) {
                                                     sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                                      sycl::memory_scope::device,
                                                                      sycl::access::address_space::global_space>
-                                                        atomic_dep(CARBON_SECONDARY_CONTEXT_FIELD(deposited_device)[frag.parent_history]);
+                                                        atomic_dep(deposited_device[frag.parent_history]);
                                                     atomic_dep.fetch_add(product.kinetic_energy_MeV);
                                                     schneider_energy_add_device(
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                                        schneider_diag_device,
                                                         SchneiderDiagSlot::SecondaryDepositedMicroMeV,
                                                         product.kinetic_energy_MeV);
                                                     grid_deposit_split_device(
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),
-                                                        CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device),
-                                                        (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && cur_voxel >= 0,
+                                                        grid_deposited_in_device,
+                                                        grid_deposited_out_device,
+                                                        (kProductionSecondaryPath ? true : enable_voxel_scoring) && cur_voxel >= 0,
                                                         product.kinetic_energy_MeV);
                                                 }
                                                 sec_charged_accounted_MeV += product.kinetic_energy_MeV;
                                                 schneider_diag_increment_device(
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                                    schneider_diag_device,
                                                     SchneiderDiagSlot::SecondaryChargedCutoffKills);
                                             }
                                         }
 
                                         schneider_float_add_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(schneider_float_device), SchneiderFloatSlot::ReactionQResidual,
+                                            schneider_float_device, SchneiderFloatSlot::ReactionQResidual,
                                             sycl::fmax(0.0F, sec_e - local_deposit -
                                                                   sec_charged_accounted_MeV -
                                                                   sec_neutral_accounted_MeV -
@@ -8516,11 +6727,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         // contains neutral + unsupported + Q;
                                         // split slots are informational only.
                                         const float sec_untracked_MeV = sycl::fmax(0.0F, sec_e - local_deposit - sec_charged_accounted_MeV);
-                                        if (sec_untracked_MeV > 0.0F && CARBON_SECONDARY_CONTEXT_FIELD(untracked_nuclear_device) != nullptr) {
+                                        if (sec_untracked_MeV > 0.0F && untracked_nuclear_device != nullptr) {
                                             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                              sycl::memory_scope::device,
                                                              sycl::access::address_space::global_space>
-                                                atomic_untracked(CARBON_SECONDARY_CONTEXT_FIELD(untracked_nuclear_device)[frag.parent_history]);
+                                                atomic_untracked(untracked_nuclear_device[frag.parent_history]);
                                             atomic_untracked.fetch_add(sec_untracked_MeV);
                                         }
                                         sec_e = 0.0F;
@@ -8528,7 +6739,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     } else {
                                         // CINEL03 miss: fail closed + per-miss log.
                                         schneider_log_miss_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(schneider_miss_device), CARBON_SECONDARY_CONTEXT_FIELD(schneider_miss_count_device),
+                                            schneider_miss_device, schneider_miss_count_device,
                                             kSchneiderMissLogCap, false,
                                             transport_z, transport_a, secondary_target_z,
                                             schneider_hazard_section,
@@ -8538,11 +6749,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                             schneider_hazard_total_rate,
                                             schneider_hazard_step_mm, sec_e,
                                             frag.energy_MeV);
-                                        if (CARBON_SECONDARY_CONTEXT_FIELD(untracked_nuclear_device) != nullptr) {
+                                        if (untracked_nuclear_device != nullptr) {
                                             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                              sycl::memory_scope::device,
                                                              sycl::access::address_space::global_space>
-                                                atomic_untracked(CARBON_SECONDARY_CONTEXT_FIELD(untracked_nuclear_device)[frag.parent_history]);
+                                                atomic_untracked(untracked_nuclear_device[frag.parent_history]);
                                             atomic_untracked.fetch_add(sec_e);
                                         }
                                         // cur_voxel is out of scope on the miss
@@ -8552,36 +6763,36 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         int miss_voxel = -1;
                                         {
                                             const auto miss_sbx = static_cast<int>(
-                                                (sec_x - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm)) *
-                                                CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_x_mm));
+                                                (sec_x - voxel_min_x_mm) *
+                                                inverse_voxel_size_x_mm);
                                             const auto miss_sby = static_cast<int>(
-                                                (sec_y - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm)) *
-                                                CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_y_mm));
+                                                (sec_y - voxel_min_y_mm) *
+                                                inverse_voxel_size_y_mm);
                                             if (miss_sbx >= 0 &&
-                                                miss_sbx < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) &&
+                                                miss_sbx < static_cast<int>(voxel_bins_x) &&
                                                 miss_sby >= 0 &&
-                                                miss_sby < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y))) {
+                                                miss_sby < static_cast<int>(voxel_bins_y)) {
                                                 miss_voxel =
                                                     (collision_bin *
-                                                     static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y)) +
+                                                     static_cast<int>(voxel_bins_y) +
                                                      miss_sby) *
-                                                        static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) +
+                                                        static_cast<int>(voxel_bins_x) +
                                                     miss_sbx;
                                             }
                                         }
-                                        if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
+                                        if (deposited_device != nullptr) {
                                             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                              sycl::memory_scope::device,
                                                              sycl::access::address_space::global_space>
-                                                atomic_dep(CARBON_SECONDARY_CONTEXT_FIELD(deposited_device)[frag.parent_history]);
+                                                atomic_dep(deposited_device[frag.parent_history]);
                                             atomic_dep.fetch_add(dE);
                                             schneider_energy_add_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                                schneider_diag_device,
                                                 SchneiderDiagSlot::SecondaryDepositedMicroMeV, dE);
                                             grid_deposit_split_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device),
-                                                (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && (source_voxel_continuous_loss ? continuous_step_voxel>=0 : miss_voxel>=0),
+                                                grid_deposited_in_device,
+                                                grid_deposited_out_device,
+                                                (kProductionSecondaryPath ? true : enable_voxel_scoring) && (source_voxel_continuous_loss ? continuous_step_voxel>=0 : miss_voxel>=0),
                                                 dE);
                                         }
                                         // Same bypass as the replay-hit path:
@@ -8589,268 +6800,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         // voxel dE commit.
                                         carbon::secondary_step_voxel_commit(
                                             pending_sec_voxel_MeV,
-                                            (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && !source_voxel_continuous_loss, miss_voxel, dE);
+                                            (kProductionSecondaryPath ? true : enable_voxel_scoring) && !source_voxel_continuous_loss, miss_voxel, dE);
                                         sec_e = 0.0F;
                                         break;
                                     }
-                                } else {
-                                const auto event_index = cinel02_find_event_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(cinel02_energy_nodes_device), CARBON_SECONDARY_CONTEXT_FIELD(cinel02_energy_node_count),
-                                    CARBON_SECONDARY_CONTEXT_FIELD(cinel02_event_offsets_device), CARBON_SECONDARY_CONTEXT_FIELD(cinel02_event_indices_device),
-                                    CARBON_SECONDARY_CONTEXT_FIELD(cinel02_interactions_device), CARBON_SECONDARY_CONTEXT_FIELD(cinel02_interaction_count),
-                                    transport_z, transport_a, secondary_target_z, secondary_target_a,
-                                    sec_e * frag_inv_a, 0.51F,
-                                    rng::uniform01(2026, frag.rng_stream,
-                                                   sec_steps, 14));
-                                if (event_index !=
-                                    std::numeric_limits<std::uint32_t>::max()) {
-                                    const auto event =
-                                        CARBON_SECONDARY_CONTEXT_FIELD(cinel02_interactions_device)[event_index];
-                                    const auto product_end =
-                                        static_cast<std::uint64_t>(event.product_offset) +
-                                        event.product_count;
-                                    const auto replay_status =
-                                        product_end <= CARBON_SECONDARY_CONTEXT_FIELD(cinel02_product_count) &&
-                                        (event.parent_status == 0 ||
-                                         event.parent_status == 2)
-                                            ? Cinel02ReplayLedgerSchema::replay_valid
-                                            : Cinel02ReplayLedgerSchema::replay_invalid_event;
-                                    if (product_end <= CARBON_SECONDARY_CONTEXT_FIELD(cinel02_product_count) &&
-                                        (event.parent_status == 0 ||
-                                         event.parent_status == 2)) {
-                                        secondary_replay_succeeded = true;
-                                        if (transport_z >= 1 && transport_z <= 6) {
-                                            const auto incident_keV =
-                                                static_cast<std::uint64_t>(sycl::fmax(
-                                                    0.0F, sec_e) * 1000.0F + 0.5F);
-                                        }
-                                        if (transport_z == 4) {
-                                            const auto be_incident_slot =
-                                                cinel02_be_incident_diag_slot_device(
-                                                    secondary_target_z, frag.generation,
-                                                    sec_e * frag_inv_a);
-                                        }
-                                        const auto parent_outcome_slot =
-                                            cinel02_parent_outcome_diag_slot_device(
-                                                transport_z, event.parent_status,
-                                                static_cast<std::uint32_t>(frag.generation));
-                                        if (parent_outcome_slot !=
-                                            std::numeric_limits<std::uint32_t>::max()) {
-                                        }
-                                        const auto local_deposit = sycl::fmax(
-                                            0.0F, event.process_local_deposit_MeV);
-                                        const auto parent_after = event.parent_status == 0
-                                            ? sycl::fmax(0.0F, event.parent_energy_MeV)
-                                            : 0.0F;
-                                        const auto reaction_handoff_delta = sec_e -
-                                            parent_after - local_deposit;
-                                        cinel02_species_energy_add_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02SpeciesLedgerSchema::nuclear_local_deposit_all),
-                                            local_deposit);
-                                        cinel02_species_energy_add_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02SpeciesLedgerSchema::reaction_export_kinetic),
-                                            sycl::fmax(0.0F, reaction_handoff_delta));
-                                        cinel02_species_energy_add_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx,
-                                            static_cast<std::uint32_t>(
-                                                Cinel02SpeciesLedgerSchema::reaction_import_kinetic),
-                                            sycl::fmax(0.0F, -reaction_handoff_delta));
-                                        if (local_deposit > 0.0F) {
-                                            sycl::atomic_ref<
-                                                DepthAtomicT, sycl::memory_order::relaxed,
-                                                sycl::memory_scope::device,
-                                                sycl::access::address_space::global_space>
-                                                atomic_local_depth(CARBON_SECONDARY_CONTEXT_FIELD(dose_device)[collision_bin]);
-                                            atomic_local_depth.fetch_add(
-                                                static_cast<DepthAtomicT>(local_deposit));
-                                        }
-                                        if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && pending_sec_voxel >= 0) {
-                                            pending_sec_voxel_MeV += local_deposit;
-                                            cinel02_species_energy_add_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx,
-                                                4U, local_deposit);
-                                        }
-                                        if ((kProductionSecondaryPath ? false :
-                                             CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring)) &&
-                                            pending_sec_voxel >= 0) {
-                                            score_minibeam_energy_band_roi_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
-                                                transport_z, transport_a, sec_e,
-                                                pending_sec_voxel,
-                                                CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device),
-                                                local_deposit);
-                                        }
-                                        if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
-                                            sycl::atomic_ref<
-                                                float, sycl::memory_order::relaxed,
-                                                sycl::memory_scope::device,
-                                                sycl::access::address_space::global_space>
-                                                atomic_dep(
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(deposited_device)[frag.parent_history]);
-                                            atomic_dep.fetch_add(local_deposit);
-                                            schneider_energy_add_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
-                                                SchneiderDiagSlot::SecondaryDepositedMicroMeV,
-                                                local_deposit);
-                                            grid_deposit_split_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device),
-                                                (kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) &&
-                                                    pending_sec_voxel >= 0,
-                                                local_deposit);
-                                        }
-                                        float untracked_MeV = 0.0F;
-                                        for (std::uint32_t ip = 0;
-                                             ip < event.product_count; ++ip) {
-                                            const auto product = CARBON_SECONDARY_CONTEXT_FIELD(cinel02_products_device)[
-                                                event.product_offset + ip];
-                                            if (product.role == 0 && product.z >= 1 && product.z <= 6) {
-                                            }
-                                            if (product.role == 0 && product.z == 4) {
-                                                const auto birth_slot =
-                                                    cinel02_be_isotope_birth_diag_slot_device(
-                                                        transport_z, secondary_target_z,
-                                                        frag.generation + 1U, product.a);
-                                                if (birth_slot !=
-                                                    std::numeric_limits<std::uint32_t>::max()) {
-                                                }
-                                                const auto be_channel_slot =
-                                                    cinel02_be_channel_diag_slot_device(
-                                                        transport_z, secondary_target_z,
-                                                        frag.generation, sec_e * frag_inv_a);
-                                                if (be_channel_slot !=
-                                                    std::numeric_limits<std::uint32_t>::max()) {
-                                                }
-                                            }
-                                            if (product.role == 0) {
-                                                const auto transition_slot =
-                                                    cinel02_transition_diag_slot_device(
-                                                        transport_z, product.z,
-                                                        static_cast<std::uint32_t>(frag.generation));
-                                                if (transition_slot !=
-                                                    std::numeric_limits<std::uint32_t>::max()) {
-                                                    const auto kinetic_keV =
-                                                        static_cast<std::uint64_t>(sycl::fmax(
-                                                            0.0F, product.kinetic_energy_MeV) *
-                                                            1000.0F + 0.5F);
-                                                }
-                                            }
-
-                                            if (product.role != 0 || product.z <= 0 ||
-                                                product.a <= 0 ||
-                                                CARBON_SECONDARY_CONTEXT_FIELD(secondary_queue_device) == nullptr) {
-                                                untracked_MeV += sycl::fmax(
-                                                    0.0F, product.kinetic_energy_MeV);
-                                                continue;
-                                            }
-                                            const auto child_direction =
-                                                rotate_local_direction(
-                                                    product.local_direction_x,
-                                                    product.local_direction_y,
-                                                    product.local_direction_z,
-                                                    Direction3F{collision_input_dx, collision_input_dy,
-                                                                collision_input_dz});
-                                            auto count_ref = sycl::atomic_ref<
-                                                uint32_t, sycl::memory_order::relaxed,
-                                                sycl::memory_scope::device,
-                                                sycl::access::address_space::global_space>(
-                                                *CARBON_SECONDARY_CONTEXT_FIELD(secondary_count_device));
-                                            const auto output = count_ref.fetch_add(1U);
-                                            if (output < CARBON_SECONDARY_CONTEXT_FIELD(max_secondaries)) {
-                                                SecondaryParticle child{};
-                                                child.z = product.z;
-                                                child.a = product.a;
-                                                child.energy_MeV =
-                                                    product.kinetic_energy_MeV;
-                                                child.pos_x_mm = sec_x;
-                                                child.pos_y_mm = sec_y;
-                                                child.pos_z_mm = sec_z;
-                                                child.dir_x = child_direction.x;
-                                                child.dir_y = child_direction.y;
-                                                child.dir_z = child_direction.z;
-                                                child.weight = product.weight;
-                                                child.parent_history = frag.parent_history;
-                                                const auto event_stream = rng::child_stream(
-                                                    frag.rng_stream,
-                                                    event_index ^
-                                                        (sec_steps * 0x9E3779B9U));
-                                                child.rng_stream = rng::child_stream(
-                                                    event_stream, rng::branch_tag(
-                                                        rng::branch_role_cascade_charged, ip));
-                                                child.generation =
-                                                    static_cast<std::uint16_t>(
-                                                        frag.generation + 1U);
-                                                if (product.z >= 1 && product.z <= 6) {
-                                                }
-                                                CARBON_SECONDARY_CONTEXT_FIELD(secondary_queue_device)[output] = child;
-                                                cinel02_record_queued_secondary_birth_device(
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), product.z, product.a,
-                                                    sycl::fmax(0.0F, product.kinetic_energy_MeV));
-                                            } else if (CARBON_SECONDARY_CONTEXT_FIELD(secondary_overflow_count_device) !=
-                                                       nullptr) {
-                                                sycl::atomic_ref<
-                                                    uint32_t, sycl::memory_order::relaxed,
-                                                    sycl::memory_scope::device,
-                                                    sycl::access::address_space::global_space>
-                                                    atomic_overflow(
-                                                        *CARBON_SECONDARY_CONTEXT_FIELD(secondary_overflow_count_device));
-                                                atomic_overflow.fetch_add(1U);
-                                                const auto overflow_energy = sycl::fmax(
-                                                    0.0F, product.kinetic_energy_MeV);
-                                                untracked_MeV += overflow_energy;
-                                                if (CARBON_SECONDARY_CONTEXT_FIELD(secondary_overflow_energy_device) != nullptr) {
-                                                    sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                                     sycl::memory_scope::device,
-                                                                     sycl::access::address_space::global_space>
-                                                        atomic_overflow_energy(
-                                                            *CARBON_SECONDARY_CONTEXT_FIELD(secondary_overflow_energy_device));
-                                                    atomic_overflow_energy.fetch_add(overflow_energy);
-                                                }
-                                            }
-                                        }
-                                        if (untracked_MeV > 0.0F &&
-                                            CARBON_SECONDARY_CONTEXT_FIELD(untracked_nuclear_device) != nullptr) {
-                                            sycl::atomic_ref<float, sycl::memory_order::relaxed,
-                                                             sycl::memory_scope::device,
-                                                             sycl::access::address_space::global_space>
-                                                atomic_untracked(
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(untracked_nuclear_device)[frag.parent_history]);
-                                            atomic_untracked.fetch_add(untracked_MeV);
-                                        }
-                                        if (event.parent_status == 0) {
-                                            sec_e = sycl::fmax(
-                                                0.0F, event.parent_energy_MeV);
-                                            const auto parent_direction =
-                                                rotate_local_direction(
-                                                    event.parent_local_direction_x,
-                                                    event.parent_local_direction_y,
-                                                    event.parent_local_direction_z,
-                                                    Direction3F{collision_input_dx, collision_input_dy,
-                                                                collision_input_dz});
-                                            sec_dx = parent_direction.x;
-                                            sec_dy = parent_direction.y;
-                                            sec_dz = parent_direction.z;
-                                        } else {
-                                            cinel02_species_terminal_increment_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_terminal_device), ledger_species_idx,
-                                                static_cast<std::uint32_t>(
-                                                    Cinel02SpeciesLedgerSchema::reaction_killed));
-                                            sec_terminal_recorded = true;
-                                            sec_e = 0.0F;
-                                        }
-                                    }
-                                    else {
-                                    }
-                                }
-                                else {
-                                }
                                 }
                             } else if (secondary_inelastic) {
                                 // The post-EM collision energy is already at
@@ -8864,21 +6817,21 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     if (!source_voxel_continuous_loss) {
                                         pending_sec_voxel_MeV += dE;
                                         if ((kProductionSecondaryPath ? false :
-                                             CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring))) {
+                                             enable_minibeam_energy_band_roi_scoring)) {
                                             score_minibeam_energy_band_roi_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                                minibeam_energy_band_roi_dose_device,
                                                 transport_z, transport_a, sec_e, cur_voxel,
-                                                CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device), dE);
+                                                number_of_bins,
+                                                voxel_bins_x,
+                                                voxel_bins_y,
+                                                minibeam_fixed_region_by_x_bin_device, dE);
                                         }
                                     }
-                                    if (CARBON_SECONDARY_CONTEXT_FIELD(in_fov_dose_device) != nullptr && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins))) {
+                                    if (in_fov_dose_device != nullptr && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
                                         sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
-                                            atomic_in_fov(CARBON_SECONDARY_CONTEXT_FIELD(in_fov_dose_device)[pending_sec_bin]);
+                                            atomic_in_fov(in_fov_dose_device[pending_sec_bin]);
                                         atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(dE));
                                         continuous_species_tally.add_fov(dE);
                                     }
@@ -8891,24 +6844,24 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             int com_voxel = -1;
                             {
                                 const auto com_sbx = static_cast<int>(
-                                    (sec_x - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm)) *
-                                    CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_x_mm));
+                                    (sec_x - voxel_min_x_mm) *
+                                    inverse_voxel_size_x_mm);
                                 const auto com_sby = static_cast<int>(
-                                    (sec_y - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm)) *
-                                    CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_y_mm));
+                                    (sec_y - voxel_min_y_mm) *
+                                    inverse_voxel_size_y_mm);
                                 if (com_sbx >= 0 &&
-                                    com_sbx < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) &&
+                                    com_sbx < static_cast<int>(voxel_bins_x) &&
                                     com_sby >= 0 &&
-                                    com_sby < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y))) {
+                                    com_sby < static_cast<int>(voxel_bins_y)) {
                                     com_voxel =
                                         (bin_z *
-                                         static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y)) +
+                                         static_cast<int>(voxel_bins_y) +
                                          com_sby) *
-                                            static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) +
+                                            static_cast<int>(voxel_bins_x) +
                                         com_sbx;
                                 }
                             }
-                            if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
+                            if (deposited_device != nullptr) {
                                 if constexpr (BroadBeam) {
                                     // Same per-step values; integer microMeV truncation is
                                     // applied per step so the diagnostic total is unchanged.
@@ -8923,14 +6876,14 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
-                                    atomic_dep(CARBON_SECONDARY_CONTEXT_FIELD(deposited_device)[frag.parent_history]);
+                                    atomic_dep(deposited_device[frag.parent_history]);
                                 atomic_dep.fetch_add(dE);
                                 schneider_energy_add_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                    schneider_diag_device,
                                     SchneiderDiagSlot::SecondaryDepositedMicroMeV, dE);
                                 grid_deposit_split_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),
-                                    CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device), source_voxel_continuous_loss ? continuous_step_voxel>=0 : com_voxel>=0,
+                                    grid_deposited_in_device,
+                                    grid_deposited_out_device, source_voxel_continuous_loss ? continuous_step_voxel>=0 : com_voxel>=0,
                                     dE);
                                 }
                             }
@@ -8940,10 +6893,10 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 sec_z = post_em_z;
                             }
 
-                            if (!sec_global_urban && cinel02_should_apply_secondary_mcs(
+                            if (!sec_global_urban && ion_should_apply_secondary_mcs(
                                     secondary_inelastic, secondary_replay_succeeded,
-                                    CARBON_SECONDARY_CONTEXT_FIELD(enable_multiple_scattering) && !CARBON_SECONDARY_CONTEXT_FIELD(ct_secondary_mcs_off), sec_e,
-                                    CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV))) {
+                                    enable_multiple_scattering, sec_e,
+                                    energy_cutoff_MeV)) {
                                 [[maybe_unused]] constexpr float two_pi = 6.2831853071795864769F;
                                 [[maybe_unused]] float theta_scat = 0.0F;
                                 [[maybe_unused]] float phi_scat = 0.0F;
@@ -8955,25 +6908,13 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                 const auto sec_radiation_length_g_per_cm2 =
                                     static_cast<float>(
                                         select_transport_radiation_length_g_per_cm2(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(ct_material_ids_are_schneider_sections),
+                                            ct_material_ids_are_schneider_sections,
                                             sec_in_ct,
                                             static_cast<unsigned>(sec_ct_material),
-                                            CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_material_mcs),
-                                            CARBON_SECONDARY_CONTEXT_FIELD(active_water_radiation_length)));
-                                bool secondary_uses_fe = BroadBeam || (
-                                    CARBON_SECONDARY_CONTEXT_FIELD(
-                                        c12_fermi_eyges) &&
-                                    ion_uses_fermi_eyges(
-                                        CARBON_SECONDARY_CONTEXT_FIELD(
-                                            fermi_eyges_species_scope),
-                                        transport_z, transport_a));
-#if defined(CARBON_ENABLE_MINIBEAM)
-                                // Honor the explicit secondary-C12 Urban selector,
-                                // as the primary path does. Generic all-ion FE must
-                                // remain available for the other fragment species.
-
-#endif
-                                if (secondary_uses_fe) {
+                                            enable_ct_material_mcs,
+                                            active_water_radiation_length));
+                                // Outside global Urban, every charged secondary uses FE.
+                                {
                                     const auto route_slot =
                                         transport_z == 6 && transport_a == 12
                                             ? SchneiderDiagSlot::SecondaryFeC12Steps
@@ -8984,11 +6925,9 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                             ? SchneiderDiagSlot::SecondaryFePdtSteps
                                             : SchneiderDiagSlot::SecondaryFeOtherChargedSteps;
                                     schneider_diag_increment_device(
-                                        CARBON_SECONDARY_CONTEXT_FIELD(
-                                            schneider_diag_device),
+                                        schneider_diag_device,
                                         route_slot);
                                     auto observation_path_mm = -1.0F;
-#if defined(CARBON_ENABLE_MINIBEAM)
                                     const auto fe_start_x = post_em_x -
                                         collision_input_dx * sec_step_mm;
                                     const auto fe_start_y = post_em_y -
@@ -8996,10 +6935,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     const auto fe_start_z = post_em_z -
                                         collision_input_dz * sec_step_mm;
                                     auto observation_plane =
-                                        CARBON_SECONDARY_CONTEXT_FIELD(
-                                            minibeam_water_primary_plane_count);
+                                        minibeam_water_primary_plane_count;
 
-#endif
                                     const auto correlated =
                                         ion_fermi_eyges_transport_step(
                                             Direction3F{collision_input_dx,
@@ -9009,33 +6946,19 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                             static_cast<int>(transport_z),
                                             static_cast<int>(transport_a),
                                             dE, sec_step_mm,
-                                            CARBON_SECONDARY_CONTEXT_FIELD(
-                                                c12_fermi_eyges_max_segment_mm),
+                                            c12_fermi_eyges_max_segment_mm,
                                             sec_local_density_g_per_cm3,
                                             sec_radiation_length_g_per_cm2,
                                             2026, frag.rng_stream,
                                             static_cast<std::uint64_t>(sec_steps),
                                             100U, observation_path_mm,
-                                            CARBON_SECONDARY_CONTEXT_FIELD(
-                                                fermi_eyges_use_species_water_parameters), 0.0F, fe_gaussian_only,
-                                            fe_moments, fe_moments ? fe_geometry_safety(
-                                                {post_em_x-collision_input_dx*sec_step_mm,
-                                                 post_em_y-collision_input_dy*sec_step_mm,
-                                                 post_em_z-collision_input_dz*sec_step_mm},
-                                                CARBON_SECONDARY_CONTEXT_FIELD(enable_ct_grid),sec_in_ct,
-                                                {CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_x),CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_y),CARBON_SECONDARY_CONTEXT_FIELD(ct_origin_z)},
-                                                {CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_x),CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_y),CARBON_SECONDARY_CONTEXT_FIELD(ct_spacing_z)},
-                                                CARBON_SECONDARY_CONTEXT_FIELD(ct_nx),CARBON_SECONDARY_CONTEXT_FIELD(ct_ny),CARBON_SECONDARY_CONTEXT_FIELD(ct_nz),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(phantom_length_mm),fe_simple_geometry) : 0.0F,
+                                            static_cast<float>(nucleon_rest_mass_MeV), fe_gaussian_only,
                                             fe_counts,fe_diagnostics);
-#if defined(CARBON_ENABLE_MINIBEAM)
                                     if (correlated.observation_valid &&
                                         observation_plane <
-                                            CARBON_SECONDARY_CONTEXT_FIELD(
-                                                minibeam_water_primary_plane_count)) {
+                                            minibeam_water_primary_plane_count) {
                                         const auto plane_depth =
-                                            CARBON_SECONDARY_CONTEXT_FIELD(
-                                                minibeam_water_primary_plane_depths_device)[
+                                            minibeam_water_primary_plane_depths_device[
                                                 observation_plane];
                                         auto crossing_x = fe_start_x +
                                             collision_input_dx * observation_path_mm +
@@ -9057,11 +6980,9 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                                 correlated.observation_direction.y;
                                         }
                                         auto& record =
-                                            CARBON_SECONDARY_CONTEXT_FIELD(
-                                                minibeam_water_primary_plane_records_device)[
+                                            minibeam_water_primary_plane_records_device[
                                                 frag.parent_history *
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(
-                                                        minibeam_water_primary_plane_count) +
+                                                    minibeam_water_primary_plane_count +
                                                 observation_plane];
                                         const auto step_fraction = sycl::clamp(
                                             observation_path_mm / sec_step_mm,
@@ -9089,7 +7010,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                             correlated.observation_direction.z;
                                         record.valid = 1U;
                                     }
-#endif
                                     sec_x += correlated.displacement_mm.x;
                                     sec_y += correlated.displacement_mm.y;
                                     sec_z += correlated.displacement_mm.z;
@@ -9097,113 +7017,86 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                     sec_dy = correlated.direction.y;
                                     sec_dz = correlated.direction.z;
                                 }
-                                else {
-                                    schneider_diag_increment_device(
-                                        CARBON_SECONDARY_CONTEXT_FIELD(
-                                            schneider_diag_device),
-                                        SchneiderDiagSlot::SecondaryHighlandSteps);
-                                    const auto theta_rms = highland_projected_rms_angle_device(
-                                        sec_e, static_cast<int>(transport_z),
-                                        static_cast<int>(transport_a), sec_step_mm,
-                                        sec_local_density_g_per_cm3,
-                                        sec_radiation_length_g_per_cm2) * CARBON_SECONDARY_CONTEXT_FIELD(multiple_scattering_scale);
-                                    const auto u_msc0 = rng::uniform01(
-                                        2026, frag.rng_stream, sec_steps, 0);
-                                    const auto u_msc1 = rng::uniform01(
-                                        2026, frag.rng_stream, sec_steps, 1);
-                                    // Unified MSC transport (secondary Highland
-                                    // mode): Rayleigh-theta/uniform-phi form,
-                                    // same 2-D Gaussian PDF as the primary
-                                    // Box-Muller form; zero displacement
-                                    // (endpoint scattering).
-                                    const auto msc = msc_highland_secondary_step(
-                                        Direction3F{collision_input_dx, collision_input_dy,
-                                                                    collision_input_dz},
-                                        theta_rms, u_msc0, u_msc1);
-                                    sec_dx = msc.direction.x;
-                                    sec_dy = msc.direction.y;
-                                    sec_dz = msc.direction.z;
-                                }
                             }
                             // A hazard sampled at step start can leave a supported rate
                             // interval after EM loss. Treat the zero-rate endpoint as a
                             // null collision; retain post-EM energy, position and MCS.
-                            if(secondary_elastic && sec_e>CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV) &&
-                               CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).rate(CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).projectile(transport_z,transport_a),(kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))?25:sec_ct_material,sec_e*frag_inv_a)==0) {
+                            if(secondary_elastic && sec_e>energy_cutoff_MeV &&
+                               all_elastic.rate(all_elastic.projectile(transport_z,transport_a),(kProductionSecondaryPath ? false : use_unified_water)?25:sec_ct_material,sec_e*frag_inv_a)==0) {
                                 secondary_elastic=false;
-                                sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_audit)[9]).fetch_add(1);
+                                sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[9]).fetch_add(1);
                             }
-                            if(secondary_elastic && sec_e>CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV)) {
-                                const int p=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).projectile(transport_z,transport_a);
-                                const auto draw=CARBON_SECONDARY_CONTEXT_FIELD(all_elastic).draw(p,(kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(use_unified_water))?25:sec_ct_material,
+                            if(secondary_elastic && sec_e>energy_cutoff_MeV) {
+                                const int p=all_elastic.projectile(transport_z,transport_a);
+                                const auto draw=all_elastic.draw(p,(kProductionSecondaryPath ? false : use_unified_water)?25:sec_ct_material,
                                     sec_e,sec_dx,sec_dy,sec_dz,
                                     rng::uniform01(2026,frag.rng_stream,sec_steps,71),rng::uniform01(2026,frag.rng_stream,sec_steps,72),
                                     rng::uniform01(2026,frag.rng_stream,sec_steps,73),rng::uniform01(2026,frag.rng_stream,sec_steps,74));
                                 if(!draw.valid){
-                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_audit)[2]).fetch_add(1);
-                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_audit)[8]).fetch_add(1);break;
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[8]).fetch_add(1);break;
                                 }
-                                sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_audit)[1]).fetch_add(1);
+                                sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[1]).fetch_add(1);
                                 const auto scat=draw.outcome;sec_e=scat.projectile_ke_MeV;
                                 sec_dx=scat.proj_dir_x;sec_dy=scat.proj_dir_y;sec_dz=scat.proj_dir_z;
                                 const float recoil=scat.recoil_ke_MeV;
                                 const int child_species=carbon::get_charged_species_idx(draw.target_z,draw.target_a);
-                                if(recoil>CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV) && (child_species>=0||CARBON_SECONDARY_CONTEXT_FIELD(recoil_stopping).projectile(draw.target_z,draw.target_a)>=0)) {
-                                    schneider_diag_increment_device(CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),SchneiderDiagSlot::SecondaryChargedBorn);
-                                    const auto output=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(*CARBON_SECONDARY_CONTEXT_FIELD(secondary_count_device)).fetch_add(1);
-                                    if(output<CARBON_SECONDARY_CONTEXT_FIELD(max_secondaries)){
+                                if(recoil>energy_cutoff_MeV && (child_species>=0||recoil_stopping.projectile(draw.target_z,draw.target_a)>=0)) {
+                                    schneider_diag_increment_device(schneider_diag_device,SchneiderDiagSlot::SecondaryChargedBorn);
+                                    const auto output=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(*secondary_count_device).fetch_add(1);
+                                    if(output<max_secondaries){
                                         SecondaryParticle child{};child.z=draw.target_z;child.a=draw.target_a;child.energy_MeV=recoil;
                                         child.pos_x_mm=sec_x;child.pos_y_mm=sec_y;child.pos_z_mm=sec_z;
                                         child.dir_x=scat.recoil_dir_x;child.dir_y=scat.recoil_dir_y;child.dir_z=scat.recoil_dir_z;
-                                        child.weight=1;child.generation=child_species>=0?frag.generation:CARBON_SECONDARY_CONTEXT_FIELD(cinel02_max_secondary_inelastic_generations);child.parent_history=frag.parent_history;
+                                        child.weight=1;child.generation=child_species>=0?frag.generation:max_secondary_inelastic_generations;child.parent_history=frag.parent_history;
                                         child.rng_stream=rng::event_product_stream(frag.rng_stream,sec_steps,rng::branch_role_cascade_charged,0xE1U);
-                                        CARBON_SECONDARY_CONTEXT_FIELD(secondary_queue_device)[output]=child;
-                                        sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_energy)[1]).fetch_add(recoil);
-                                        schneider_diag_increment_device(CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),SchneiderDiagSlot::SecondaryChargedQueued);
-                                        cinel02_record_queued_secondary_birth_device(CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device),child.z,child.a,recoil);
-                                        cinel02_species_energy_add_device(CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device),child_species,10U,recoil);
+                                        secondary_queue_device[output]=child;
+                                        sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[1]).fetch_add(recoil);
+                                        schneider_diag_increment_device(schneider_diag_device,SchneiderDiagSlot::SecondaryChargedQueued);
+                                        ion_record_queued_secondary_birth_device(ion_species_energy_device,child.z,child.a,recoil);
+                                        ion_species_energy_add_device(ion_species_energy_device,child_species,10U,recoil);
                                     }else{
-                                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(*CARBON_SECONDARY_CONTEXT_FIELD(secondary_overflow_count_device)).fetch_add(1);
-                                        sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(*CARBON_SECONDARY_CONTEXT_FIELD(secondary_overflow_energy_device)).fetch_add(recoil);
-                                        sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_energy)[2]).fetch_add(recoil);
-                                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_audit)[11]).fetch_add(1);
+                                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(*secondary_overflow_count_device).fetch_add(1);
+                                        sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(*secondary_overflow_energy_device).fetch_add(recoil);
+                                        sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[2]).fetch_add(recoil);
+                                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[11]).fetch_add(1);
                                     }
-                                    cinel02_species_energy_add_device(CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device),ledger_species_idx,8U,recoil);
-                                }else if(recoil>CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV)){
-                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_audit)[3]).fetch_add(1);
-                                    sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(untracked_nuclear_device)[frag.parent_history]).fetch_add(recoil);
-                                    cinel02_species_energy_add_device(CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device),ledger_species_idx,8U,recoil);
+                                    ion_species_energy_add_device(ion_species_energy_device,ledger_species_idx,8U,recoil);
+                                }else if(recoil>energy_cutoff_MeV){
+                                    sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[3]).fetch_add(1);
+                                    sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(untracked_nuclear_device[frag.parent_history]).fetch_add(recoil);
+                                    ion_species_energy_add_device(ion_species_energy_device,ledger_species_idx,8U,recoil);
                                 }else if(recoil>0){
-                                    sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(elastic_energy)[0]).fetch_add(recoil);
-                                    const int vx=static_cast<int>(sycl::floor((sec_x-CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm))/CARBON_SECONDARY_CONTEXT_FIELD(voxel_size_x_mm)));
-                                    const int vy=static_cast<int>(sycl::floor((sec_y-CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm))/CARBON_SECONDARY_CONTEXT_FIELD(voxel_size_y_mm)));
-                                    const int vz=static_cast<int>(sycl::floor(sec_z*CARBON_SECONDARY_CONTEXT_FIELD(inverse_depth_bin_width_mm)));
-                                    const bool inside=(kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring))&&vx>=0&&vy>=0&&vz>=0&&vx<static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x))&&vy<static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y))&&vz<static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins));
-                                    if(inside){const int v=(vz*CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y)+vy)*CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)+vx;
-                                        sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_dose_device)[v]).fetch_add(static_cast<DoseAtomicT>(recoil));
-                                        if ((kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring))) {
+                                    sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[0]).fetch_add(recoil);
+                                    const int vx=static_cast<int>(sycl::floor((sec_x-voxel_min_x_mm)/voxel_size_x_mm));
+                                    const int vy=static_cast<int>(sycl::floor((sec_y-voxel_min_y_mm)/voxel_size_y_mm));
+                                    const int vz=static_cast<int>(sycl::floor(sec_z*inverse_depth_bin_width_mm));
+                                    const bool inside=(kProductionSecondaryPath ? true : enable_voxel_scoring)&&vx>=0&&vy>=0&&vz>=0&&vx<static_cast<int>(voxel_bins_x)&&vy<static_cast<int>(voxel_bins_y)&&vz<static_cast<int>(number_of_bins);
+                                    if(inside){const int v=(vz*voxel_bins_y+vy)*voxel_bins_x+vx;
+                                        sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(voxel_dose_device[v]).fetch_add(static_cast<DoseAtomicT>(recoil));
+                                        if ((kProductionSecondaryPath ? false : enable_charged_origin_voxel_scoring)) {
                                             const auto recoil_origin_category =
                                                 charged_origin_category_from_fragment(
                                                     charged_dose_category(draw.target_z, draw.target_a));
                                             sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,
                                                              sycl::memory_scope::device,
                                                              sycl::access::address_space::global_space>(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(charged_origin_voxel_dose_device)[
-                                                    recoil_origin_category * CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels) + v])
+                                                charged_origin_voxel_dose_device[
+                                                    recoil_origin_category * number_of_voxels + v])
                                                 .fetch_add(static_cast<DoseAtomicT>(recoil));
                                             score_be_isotope_origin_voxel_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(be_isotope_origin_voxel_dose_device),
+                                                be_isotope_origin_voxel_dose_device,
                                                 be_isotope_origin_category(draw.target_z, draw.target_a),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels), v,
+                                                number_of_voxels, v,
                                                 static_cast<DoseAtomicT>(recoil));
                                             score_he_isotope_origin_voxel_device(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(he_isotope_origin_voxel_dose_device),
+                                                he_isotope_origin_voxel_dose_device,
                                                 he_isotope_origin_category(draw.target_z, draw.target_a),
-                                                CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels), v,
+                                                number_of_voxels, v,
                                                 static_cast<DoseAtomicT>(recoil));
                                         }
                                         if ((kProductionSecondaryPath ? false :
-                                             CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_component_voxel_scoring))) {
+                                             enable_minibeam_component_voxel_scoring)) {
                                             const auto recoil_component_category =
                                                 minibeam_component_category(
                                                     draw.target_z, draw.target_a,
@@ -9211,16 +7104,16 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                             sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,
                                                              sycl::memory_scope::device,
                                                              sycl::access::address_space::global_space>(
-                                                CARBON_SECONDARY_CONTEXT_FIELD(minibeam_component_voxel_dose_device)[
-                                                    recoil_component_category * CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels) + v])
+                                                minibeam_component_voxel_dose_device[
+                                                    recoil_component_category * number_of_voxels + v])
                                                 .fetch_add(static_cast<DoseAtomicT>(recoil));
                                         }
                                     }
-                                    sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(CARBON_SECONDARY_CONTEXT_FIELD(deposited_device)[frag.parent_history]).fetch_add(recoil);
-                                    grid_deposit_split_device(CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device),inside,recoil);
-                                    schneider_energy_add_device(CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),SchneiderDiagSlot::SecondaryDepositedMicroMeV,recoil);
-                                    cinel02_species_energy_add_device(CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device),ledger_species_idx,3U,recoil);
-                                    if(inside)cinel02_species_energy_add_device(CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device),ledger_species_idx,4U,recoil);
+                                    sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(deposited_device[frag.parent_history]).fetch_add(recoil);
+                                    grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,inside,recoil);
+                                    schneider_energy_add_device(schneider_diag_device,SchneiderDiagSlot::SecondaryDepositedMicroMeV,recoil);
+                                    ion_species_energy_add_device(ion_species_energy_device,ledger_species_idx,3U,recoil);
+                                    if(inside)ion_species_energy_add_device(ion_species_energy_device,ledger_species_idx,4U,recoil);
                                 }
                             }
 
@@ -9236,20 +7129,20 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         }
 
                         if constexpr (BroadBeam) {
-                            if (sec_dep_pending_MeV != 0.0F && CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr)
+                            if (sec_dep_pending_MeV != 0.0F && deposited_device != nullptr)
                                 sycl::atomic_ref<float, sycl::memory_order::relaxed, sycl::memory_scope::device,
                                     sycl::access::address_space::global_space>(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(deposited_device)[frag.parent_history]).fetch_add(sec_dep_pending_MeV);
-                            schneider_diag_add_device(CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                    deposited_device[frag.parent_history]).fetch_add(sec_dep_pending_MeV);
+                            schneider_diag_add_device(schneider_diag_device,
                                 SchneiderDiagSlot::SecondaryDepositedMicroMeV, sec_diag_dep_pending_uMeV);
-                            if (sec_grid_in_pending_MeV != 0.0 && CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device) != nullptr)
+                            if (sec_grid_in_pending_MeV != 0.0 && grid_deposited_in_device != nullptr)
                                 sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
                                     sycl::access::address_space::global_space>(
-                                    *CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device)).fetch_add(sec_grid_in_pending_MeV);
-                            if (sec_grid_out_pending_MeV != 0.0 && CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device) != nullptr)
+                                    *grid_deposited_in_device).fetch_add(sec_grid_in_pending_MeV);
+                            if (sec_grid_out_pending_MeV != 0.0 && grid_deposited_out_device != nullptr)
                                 sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
                                     sycl::access::address_space::global_space>(
-                                    *CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device)).fetch_add(sec_grid_out_pending_MeV);
+                                    *grid_deposited_out_device).fetch_add(sec_grid_out_pending_MeV);
                             sec_dep_pending_MeV = 0.0F;sec_diag_dep_pending_uMeV = 0;
                             sec_grid_in_pending_MeV = sec_grid_out_pending_MeV = 0.0;
                         }
@@ -9272,9 +7165,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             saved.unified_secondary_counter=unified_secondary_counter;
                             saved.urban_ionization_clock=unified_secondary_clock;
                             saved.unified_secondary_state=unified_secondary_state;
-#if CARBON_EM_LOCAL_AUDIT
-                            saved.unified_secondary_audit=unified_secondary_audit;
-#endif
                             saved.sec_steps=sec_steps;
                             if constexpr (!BroadBeam) {
                             saved.urban.sec_urban_tlimit_mm =
@@ -9285,23 +7175,20 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             }
                             saved.local_sec_rate_queries=local_sec_rate_queries;
                             saved.local_sec_steps=local_sec_steps;
-                            if constexpr (!kNonHe4Only)
+
                                 for(int j=0;j<4;++j)saved.he4_audit[j]=he4_audit[j];
                             if constexpr(CARBON_SECONDARY_STEP_PROFILE)for(int j=0;j<60;++j)saved.sec_prof[j]=sec_prof[j];
                             resume_states[state_idx]=saved;resume_ready[state_idx]=1;keep[active_pos]=1;
                             return; // Suspend: no terminal scoring or audit flush.
                         }
-#if CARBON_EM_LOCAL_AUDIT
-                        if(unified_secondary)flush_unified_em_audit(CARBON_SECONDARY_CONTEXT_FIELD(unified_audit),unified_secondary_audit);
-#endif
                         if constexpr(CARBON_SECONDARY_STEP_PROFILE) {
                             for(int sec_pi=0;sec_pi<60;++sec_pi) if(sec_prof[sec_pi]) {
-                                sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> pa(CARBON_SECONDARY_CONTEXT_FIELD(sec_step_profile_device)[sec_pi]);pa.fetch_add(sec_prof[sec_pi]);
+                                sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> pa(sec_step_profile_device[sec_pi]);pa.fetch_add(sec_prof[sec_pi]);
                             }
                         }
                         // Small per-step deposits must not contend directly on
-                        if constexpr (!kNonHe4Only) {
-                        if (CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device) && transport_z == 2 && transport_a == 4) {
+                         {
+                        if (he4_hazard_audit_device && transport_z == 2 && transport_a == 4) {
                             // Carried slots 0/1/2 keep their device meaning; the
                             // fourth carried value is the total step length
                             // (original device slot 5). Device slots 3/4 are the
@@ -9311,7 +7198,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                             for (int i=0; i<4; ++i) {
                                 sycl::atomic_ref<double, sycl::memory_order::relaxed,
                                     sycl::memory_scope::device, sycl::access::address_space::global_space>
-                                    tally(CARBON_SECONDARY_CONTEXT_FIELD(he4_hazard_audit_device)[carried_slots[i]]);
+                                    tally(he4_hazard_audit_device[carried_slots[i]]);
                                 tally.fetch_add(he4_audit[i]);
                             }
                         }
@@ -9320,104 +7207,104 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                         // one global species scalar. Preserve original scoring
                         // guards and reduce per track; all replay breaks arrive
                         // here too. This changes diagnostics only, not dose.
-                        cinel02_species_energy_add_device(
-                            CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx, 1U,
+                        ion_species_energy_add_device(
+                            ion_species_energy_device, ledger_species_idx, 1U,
                             continuous_species_tally.all_MeV);
-                        cinel02_species_energy_add_device(
-                            CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx, 2U,
+                        ion_species_energy_add_device(
+                            ion_species_energy_device, ledger_species_idx, 2U,
                             continuous_species_tally.fov_MeV);
-                        schneider_diag_add_device(CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                        schneider_diag_add_device(schneider_diag_device,
                                                   SchneiderDiagSlot::SecondaryRateQueries,
                                                   local_sec_rate_queries);
-                        schneider_diag_add_device(CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                        schneider_diag_add_device(schneider_diag_device,
                                                   SchneiderDiagSlot::SecondarySteps,
                                                   local_sec_steps);
 
                         const bool step_limited =
-                            sec_e > CARBON_SECONDARY_CONTEXT_FIELD(energy_cutoff_MeV) && sec_steps >= kSecondaryMaxSteps;
+                            sec_e > energy_cutoff_MeV && sec_steps >= kSecondaryMaxSteps;
                         if (sec_e > 0.0F) {
                             bool sec_terminal_scored = false;
                             if (step_limited) {
-                                cinel02_species_energy_add_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx,  9U, sec_e);
-                                cinel02_species_terminal_increment_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_terminal_device), ledger_species_idx,
-                                    static_cast<std::uint32_t>(Cinel02SpeciesLedgerSchema::step_limit));
+                                ion_species_energy_add_device(
+                                    ion_species_energy_device, ledger_species_idx,  9U, sec_e);
+                                ion_species_terminal_increment_device(
+                                    ion_species_terminal_device, ledger_species_idx,
+                                    static_cast<std::uint32_t>(IonSpeciesLedgerSchema::step_limit));
                                 sec_terminal_recorded = true;
-                                if (CARBON_SECONDARY_CONTEXT_FIELD(escaped_device) != nullptr) {
+                                if (escaped_device != nullptr) {
                                     sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                      sycl::memory_scope::device,
                                                      sycl::access::address_space::global_space>
-                                        atomic_esc(CARBON_SECONDARY_CONTEXT_FIELD(escaped_device)[frag.parent_history]);
+                                        atomic_esc(escaped_device[frag.parent_history]);
                                     atomic_esc.fetch_add(sec_e);
                                     schneider_energy_add_device(
-                                        CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                        schneider_diag_device,
                                         SchneiderDiagSlot::SecondaryEscapedMicroMeV, sec_e);
                                 }
-                            } else if (!unified_secondary_escaped_ct && sec_z >= 0.0F && sec_z < CARBON_SECONDARY_CONTEXT_FIELD(phantom_length_mm)) {
-                                cinel02_species_energy_add_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx, 5U, sec_e);
-                                cinel02_species_terminal_increment_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_terminal_device), ledger_species_idx,
-                                    static_cast<std::uint32_t>(Cinel02SpeciesLedgerSchema::terminal_deposit));
+                            } else if (!unified_secondary_escaped_ct && sec_z >= 0.0F && sec_z < phantom_length_mm) {
+                                ion_species_energy_add_device(
+                                    ion_species_energy_device, ledger_species_idx, 5U, sec_e);
+                                ion_species_terminal_increment_device(
+                                    ion_species_terminal_device, ledger_species_idx,
+                                    static_cast<std::uint32_t>(IonSpeciesLedgerSchema::terminal_deposit));
                                 sec_terminal_recorded = true;
-                                const auto bin_x = static_cast<int>((sec_x - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_x_mm)) * CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_x_mm));
-                                const auto bin_y = static_cast<int>((sec_y - CARBON_SECONDARY_CONTEXT_FIELD(voxel_min_y_mm)) * CARBON_SECONDARY_CONTEXT_FIELD(inverse_voxel_size_y_mm));
-                                const auto bin_z = static_cast<int>(sec_z * CARBON_SECONDARY_CONTEXT_FIELD(inverse_depth_bin_width_mm));
-                                if (bin_z >= 0 && bin_z < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins))) {
+                                const auto bin_x = static_cast<int>((sec_x - voxel_min_x_mm) * inverse_voxel_size_x_mm);
+                                const auto bin_y = static_cast<int>((sec_y - voxel_min_y_mm) * inverse_voxel_size_y_mm);
+                                const auto bin_z = static_cast<int>(sec_z * inverse_depth_bin_width_mm);
+                                if (bin_z >= 0 && bin_z < static_cast<int>(number_of_bins)) {
                                     if (bin_z != pending_sec_bin) {
                                         if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 &&
-                                            pending_sec_bin < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins))) {
+                                            pending_sec_bin < static_cast<int>(number_of_bins)) {
                                             sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                              sycl::memory_scope::device,
                                                              sycl::access::address_space::global_space>
-                                                atomic_dose(CARBON_SECONDARY_CONTEXT_FIELD(dose_device)[pending_sec_bin]);
+                                                atomic_dose(dose_device[pending_sec_bin]);
                                             atomic_dose.fetch_add(static_cast<DepthAtomicT>(pending_sec_depth_MeV));
                                             pending_sec_depth_MeV = 0.0F;
                                         }
                                         pending_sec_bin = bin_z;
                                     }
                                     pending_sec_depth_MeV += sec_e;
-                                    if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring))) {
+                                    if ((kProductionSecondaryPath ? true : enable_voxel_scoring)) {
                                         int cur_voxel = -1;
-                                        if (bin_x >= 0 && bin_x < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) &&
-                                            bin_y >= 0 && bin_y < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y))) {
-                                            cur_voxel = (bin_z * static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y)) + bin_y) *
-                                                            static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x)) +
+                                        if (bin_x >= 0 && bin_x < static_cast<int>(voxel_bins_x) &&
+                                            bin_y >= 0 && bin_y < static_cast<int>(voxel_bins_y)) {
+                                            cur_voxel = (bin_z * static_cast<int>(voxel_bins_y) + bin_y) *
+                                                            static_cast<int>(voxel_bins_x) +
                                                         bin_x;
                                         }
                                         if (cur_voxel != pending_sec_voxel) {
                                             if (pending_sec_voxel_MeV > 0.0F && pending_sec_voxel >= 0 &&
-                                                pending_sec_voxel < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels))) {
+                                                pending_sec_voxel < static_cast<int>(number_of_voxels)) {
                                                 sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                                  sycl::memory_scope::device,
                                                                  sycl::access::address_space::global_space>
-                                                    atomic_vox(CARBON_SECONDARY_CONTEXT_FIELD(voxel_dose_device)[pending_sec_voxel]);
+                                                    atomic_vox(voxel_dose_device[pending_sec_voxel]);
                                                 atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                    if ((kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring))) {
+                                    if ((kProductionSecondaryPath ? false : enable_charged_origin_voxel_scoring)) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
-                                            atomic_origin(CARBON_SECONDARY_CONTEXT_FIELD(charged_origin_voxel_dose_device)[
+                                            atomic_origin(charged_origin_voxel_dose_device[
                                                 charged_origin_voxel_offset + pending_sec_voxel]);
                                         atomic_origin.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                                         score_be_isotope_origin_voxel_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(be_isotope_origin_voxel_dose_device),
-                                            be_isotope_category, CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels),
+                                            be_isotope_origin_voxel_dose_device,
+                                            be_isotope_category, number_of_voxels,
                                             pending_sec_voxel,
                                             static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                                         score_he_isotope_origin_voxel_device(
-                                            CARBON_SECONDARY_CONTEXT_FIELD(he_isotope_origin_voxel_dose_device),
-                                            he_isotope_category, CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels),
+                                            he_isotope_origin_voxel_dose_device,
+                                            he_isotope_category, number_of_voxels,
                                             pending_sec_voxel,
                                             static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                                     }
                                     if ((kProductionSecondaryPath ? false :
-                                         CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_component_voxel_scoring))) {
+                                         enable_minibeam_component_voxel_scoring)) {
                                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
                                                          sycl::access::address_space::global_space>
-                                            component(CARBON_SECONDARY_CONTEXT_FIELD(minibeam_component_voxel_dose_device)[
+                                            component(minibeam_component_voxel_dose_device[
                                                 minibeam_component_voxel_offset + pending_sec_voxel]);
                                         component.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                                     }
@@ -9428,136 +7315,118 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                                         if (cur_voxel >= 0) {
                                             pending_sec_voxel_MeV += sec_e;
                                             if ((kProductionSecondaryPath ? false :
-                                                 CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_energy_band_roi_scoring))) {
+                                                 enable_minibeam_energy_band_roi_scoring)) {
                                                 score_minibeam_energy_band_roi_device(
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(minibeam_energy_band_roi_dose_device),
+                                                    minibeam_energy_band_roi_dose_device,
                                                     transport_z, transport_a, sec_e, cur_voxel,
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins),
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_x),
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(voxel_bins_y),
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(minibeam_fixed_region_by_x_bin_device), sec_e);
+                                                    number_of_bins,
+                                                    voxel_bins_x,
+                                                    voxel_bins_y,
+                                                    minibeam_fixed_region_by_x_bin_device, sec_e);
                                             }
                                             sec_terminal_scored = true;
-                                            if (CARBON_SECONDARY_CONTEXT_FIELD(in_fov_dose_device) != nullptr) {
+                                            if (in_fov_dose_device != nullptr) {
                                                 sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                                  sycl::memory_scope::device,
                                                                  sycl::access::address_space::global_space>
-                                                    atomic_in_fov(CARBON_SECONDARY_CONTEXT_FIELD(in_fov_dose_device)[bin_z]);
+                                                    atomic_in_fov(in_fov_dose_device[bin_z]);
                                                 atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(sec_e));
-                                                cinel02_species_energy_add_device(
-                                                    CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx,
+                                                ion_species_energy_add_device(
+                                                    ion_species_energy_device, ledger_species_idx,
                                                     6U, sec_e);
                                             }
                                         }
                                     }
                                 }
-                                if (CARBON_SECONDARY_CONTEXT_FIELD(deposited_device) != nullptr) {
+                                if (deposited_device != nullptr) {
                                     sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                      sycl::memory_scope::device,
                                                      sycl::access::address_space::global_space>
-                                        atomic_dep(CARBON_SECONDARY_CONTEXT_FIELD(deposited_device)[frag.parent_history]);
+                                        atomic_dep(deposited_device[frag.parent_history]);
                                     atomic_dep.fetch_add(sec_e);
                                     schneider_energy_add_device(
-                                        CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                        schneider_diag_device,
                                         SchneiderDiagSlot::SecondaryDepositedMicroMeV, sec_e);
                                     grid_deposit_split_device(
-                                        CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_in_device),
-                                        CARBON_SECONDARY_CONTEXT_FIELD(grid_deposited_out_device),
+                                        grid_deposited_in_device,
+                                        grid_deposited_out_device,
                                         sec_terminal_scored, sec_e);
                                 }
                             } else {
-                                cinel02_species_energy_add_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_energy_device), ledger_species_idx, 7U, sec_e);
-                                cinel02_species_terminal_increment_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_terminal_device), ledger_species_idx,
-                                    static_cast<std::uint32_t>(Cinel02SpeciesLedgerSchema::boundary_escape));
+                                ion_species_energy_add_device(
+                                    ion_species_energy_device, ledger_species_idx, 7U, sec_e);
+                                ion_species_terminal_increment_device(
+                                    ion_species_terminal_device, ledger_species_idx,
+                                    static_cast<std::uint32_t>(IonSpeciesLedgerSchema::boundary_escape));
                                 sec_terminal_recorded = true;
-                                if (CARBON_SECONDARY_CONTEXT_FIELD(escaped_device) != nullptr) {
+                                if (escaped_device != nullptr) {
                                 // Escaped phantom boundaries
                                 sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
-                                    atomic_esc(CARBON_SECONDARY_CONTEXT_FIELD(escaped_device)[frag.parent_history]);
+                                    atomic_esc(escaped_device[frag.parent_history]);
                                 atomic_esc.fetch_add(sec_e);
                                 schneider_energy_add_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(schneider_diag_device),
+                                    schneider_diag_device,
                                     SchneiderDiagSlot::SecondaryEscapedMicroMeV, sec_e);
                                 }
                             }
                         }
 
                         if (!sec_terminal_recorded) {
-                            cinel02_species_terminal_increment_device(
-                                CARBON_SECONDARY_CONTEXT_FIELD(cinel02_species_terminal_device), ledger_species_idx,
+                            ion_species_terminal_increment_device(
+                                ion_species_terminal_device, ledger_species_idx,
                                 static_cast<std::uint32_t>(
-                                    Cinel02SpeciesLedgerSchema::continuous_stop));
+                                    IonSpeciesLedgerSchema::continuous_stop));
                         }
 
-                        if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_bins))) {
+                        if (pending_sec_depth_MeV > 0.0F && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
                             sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
-                                atomic_dose(CARBON_SECONDARY_CONTEXT_FIELD(dose_device)[pending_sec_bin]);
+                                atomic_dose(dose_device[pending_sec_bin]);
                             atomic_dose.fetch_add(static_cast<DoseAtomicT>(pending_sec_depth_MeV));
                         }
-                        if ((kProductionSecondaryPath ? true : CARBON_SECONDARY_CONTEXT_FIELD(enable_voxel_scoring)) && pending_sec_voxel_MeV > 0.0F && pending_sec_voxel >= 0 && pending_sec_voxel < static_cast<int>(CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels))) {
+                        if ((kProductionSecondaryPath ? true : enable_voxel_scoring) && pending_sec_voxel_MeV > 0.0F && pending_sec_voxel >= 0 && pending_sec_voxel < static_cast<int>(number_of_voxels)) {
                             sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
-                                atomic_vox(CARBON_SECONDARY_CONTEXT_FIELD(voxel_dose_device)[pending_sec_voxel]);
+                                atomic_vox(voxel_dose_device[pending_sec_voxel]);
                             atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                            if ((kProductionSecondaryPath ? false : CARBON_SECONDARY_CONTEXT_FIELD(enable_charged_origin_voxel_scoring))) {
+                            if ((kProductionSecondaryPath ? false : enable_charged_origin_voxel_scoring)) {
                                 sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
-                                    atomic_origin(CARBON_SECONDARY_CONTEXT_FIELD(charged_origin_voxel_dose_device)[
+                                    atomic_origin(charged_origin_voxel_dose_device[
                                         charged_origin_voxel_offset + pending_sec_voxel]);
                                 atomic_origin.fetch_add(
                                     static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                                 score_be_isotope_origin_voxel_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(be_isotope_origin_voxel_dose_device),
-                                    be_isotope_category, CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels),
+                                    be_isotope_origin_voxel_dose_device,
+                                    be_isotope_category, number_of_voxels,
                                     pending_sec_voxel,
                                     static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                                 score_he_isotope_origin_voxel_device(
-                                    CARBON_SECONDARY_CONTEXT_FIELD(he_isotope_origin_voxel_dose_device),
-                                    he_isotope_category, CARBON_SECONDARY_CONTEXT_FIELD(number_of_voxels),
+                                    he_isotope_origin_voxel_dose_device,
+                                    he_isotope_category, number_of_voxels,
                                     pending_sec_voxel,
                                     static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                             }
                             if ((kProductionSecondaryPath ? false :
-                                 CARBON_SECONDARY_CONTEXT_FIELD(enable_minibeam_component_voxel_scoring))) {
+                                 enable_minibeam_component_voxel_scoring)) {
                                 sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                                  sycl::memory_scope::device,
                                                  sycl::access::address_space::global_space>
-                                    component(CARBON_SECONDARY_CONTEXT_FIELD(minibeam_component_voxel_dose_device)[
+                                    component(minibeam_component_voxel_dose_device[
                                         minibeam_component_voxel_offset + pending_sec_voxel]);
                                 component.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
                             }
                         }
                                         };
-#if CARBON_SECONDARY_CONTEXT_POINTER
-                static_assert(std::is_trivially_copyable_v<decltype(secondary_kernel)>);
-                static_assert(sizeof(secondary_kernel) <= 64,
-                              "secondary kernel closure exceeded its ABI budget");
-#endif
-#if CARBON_SECONDARY_EXPLICIT_ND_RANGE
-                constexpr std::size_t secondary_local_size =
-                    CARBON_SECONDARY_ND_RANGE_SIZE;
-                const auto secondary_global_size =
-                    ((static_cast<std::size_t>(active_size) + secondary_local_size - 1) /
-                     secondary_local_size) * secondary_local_size;
                 cgh.parallel_for<CarbonSecondaryTransportKernel<
                                                                  kProductionSecondaryPath,
-                                                                 kExactSpecies, BroadBeam, Gaussian, JointResponse>>(
-                    sycl::nd_range<1>{secondary_global_size, secondary_local_size},
-                    secondary_kernel);
-#else
-                cgh.parallel_for<CarbonSecondaryTransportKernel<
-                                                                 kProductionSecondaryPath,
-                                                                 kExactSpecies, BroadBeam, Gaussian, JointResponse>>(
+                                                                 kExactSpecies, BroadBeam, JointResponse>>(
                     sycl::range<1>(active_size), secondary_kernel);
-#endif
             });
                 };
                 double round_seconds = 0.0;
@@ -9579,32 +7448,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     } else
                     submit_secondary_slice(std::false_type{},std::integral_constant<int,-1>{},0,resume_active);
                 } else {
-#if CARBON_SECONDARY_PRODUCTION_SPECIALIZE
-                if(use_production_secondary_path) {
-#if CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE
-                    if(group_secondaries) {
-                        submit_secondary_slice(std::true_type{},
-                            std::integral_constant<int,0>{},0,species0_active);
-                        submit_secondary_slice(std::true_type{},
-                            std::integral_constant<int,1>{},species0_active,
-                            species1_active);
-                        const unsigned fallback_begin=species0_active+species1_active;
-                        submit_secondary_slice(std::true_type{},
-                            std::integral_constant<int,-1>{},fallback_begin,
-                            resume_active-fallback_begin);
-                    } else
-#endif
-                    submit_secondary_slice(std::true_type{},
-                        std::integral_constant<int,CARBON_SECONDARY_EXACT_SPECIES_PROBE>{},
-                        0,resume_active);
-                } else {
-                    submit_secondary_slice(std::false_type{},
-                        std::integral_constant<int,-1>{},0,resume_active);
-                }
-#else
                 submit_secondary_slice(std::false_type{},
                     std::integral_constant<int,-1>{},0,resume_active);
-#endif
                 }
                 // The queue is in order, so waiting on the final slice also
                 // completes every earlier slice in this round.
@@ -9636,31 +7481,11 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     if(i<resume_active)ranks[i]=rank;
                     if(it.get_local_linear_id()==0)block_counts[it.get_group_linear_id()]=count;
                 });
-                if constexpr(CARBON_SECONDARY_HOT_SPECIES_SPECIALIZE) {
-                    // The compaction below is order-preserving, so the survivor
-                    // counts before the old slice boundaries are exactly
-                    // block_offsets[i/256]+ranks[i]. Fold them into the prefix
-                    // single_task instead of a second boundary kernel.
-                    queue.single_task([=](){
-                        unsigned sum=0;
-                        for(unsigned i=0;i<resume_groups;++i){block_offsets[i]=sum;sum+=block_counts[i];}
-                        active_count[0]=sum;
-                        const unsigned p_end=species0_active;
-                        const unsigned d_end=species0_active+species1_active;
-                        active_count[1]=(p_end==0u)?0u:((p_end>=resume_active)?sum:(block_offsets[p_end/256]+ranks[p_end]));
-                        active_count[2]=(d_end==0u)?0u:((d_end>=resume_active)?sum:(block_offsets[d_end/256]+ranks[d_end]));
-                    });
-                    queue.parallel_for(sycl::range<1>(resume_active),[=](sycl::id<1> id){const auto i=id[0];if(keep[i])next_order[block_offsets[i/256]+ranks[i]]=active_order[i];});
-                    unsigned counts[3]{};
-                    queue.copy(active_count,counts,3).wait_and_throw();
-                    resume_active=counts[0];
-                    species0_active=counts[1];
-                    species1_active=counts[2]-counts[1];
-                } else {
+
                     queue.single_task([=](){unsigned sum=0;for(unsigned i=0;i<resume_groups;++i){block_offsets[i]=sum;sum+=block_counts[i];}*active_count=sum;});
                     queue.parallel_for(sycl::range<1>(resume_active),[=](sycl::id<1> id){const auto i=id[0];if(keep[i])next_order[block_offsets[i/256]+ranks[i]]=active_order[i];});
                     queue.copy(active_count,&resume_active,1).wait_and_throw();
-                }
+
                 std::swap(active_order,next_order);
                 compact_seconds+=std::chrono::duration<double>(std::chrono::steady_clock::now()-compact_start).count();
                 }
@@ -9669,9 +7494,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                     <<" kernel_s="<<generation_kernel_seconds
                     <<" compaction_s="<<compact_seconds
                     <<" begin="<<batch_begin<<" end="<<generation_end<<"\n";
-#if CARBON_SECONDARY_CONTEXT_POINTER
-                mem_tracker.free(secondary_transport_ctx);
-#endif
                 mem_tracker.free(resume_states);
                 for(auto* ptr:{resume_ready,active_order,next_order,keep,ranks,block_counts,block_offsets,active_count})mem_tracker.free(ptr);
                 const auto batch_end = generation_end;
@@ -9686,7 +7508,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             }
             std::cout << "[secondary-schedule] grouping_seconds="
                       << secondary_group_seconds << "\n";
-            if (!config.fragment_birth_spectrum_output_file.empty()) {
+            if (enable_fragment_birth_spectrum) {
                 birth_secondaries_host.resize(generation_end);
                 queue.copy(secondary_queue_device, birth_secondaries_host.data(),
                            generation_end).wait_and_throw();
@@ -9694,7 +7516,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         }
     }
     if (birth_secondaries_host.empty() &&
-        !config.fragment_birth_spectrum_output_file.empty() &&
+        enable_fragment_birth_spectrum &&
         secondary_count_device != nullptr && secondary_queue_device != nullptr) {
         std::uint32_t birth_count = 0U;
         queue.copy(secondary_count_device, &birth_count, 1).wait_and_throw();
@@ -9828,21 +7650,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                        [](DoseAtomicT val) { return static_cast<double>(val); });
     }
 
-    std::vector<LetAtomicT> let_moments_host;
-    if (enable_let_scoring) {
-        let_moments_host.resize(4 * number_of_bins);
-        queue.copy(let_moments_device, let_moments_host.data(), 4 * number_of_bins)
-            .wait_and_throw();
-    }
-
-    std::vector<LetAtomicT> voxel_let_moments_host;
-    if (enable_let_scoring && voxel_let_moments_device != nullptr) {
-        voxel_let_moments_host.resize(4 * number_of_voxels);
-        queue.copy(voxel_let_moments_device, voxel_let_moments_host.data(), 4 * number_of_voxels)
-            .wait_and_throw();
-    }
-
-    std::vector<std::uint64_t> primary_survival_host;
     std::array<std::uint32_t,12> elastic_counts_host{};
     std::array<float,3> elastic_energy_host{};
     if(use_all_elastic) {
@@ -9853,23 +7660,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         std::cout<<"[elastic-failure-sites] primary_rate="<<counts[4]<<" primary_draw="<<counts[5]<<" recoil_stopping="<<counts[6]<<" secondary_rate="<<counts[7]<<" secondary_draw="<<counts[8]<<" null_post_em="<<counts[9]<<'\n';
         if(counts[2]||counts[3])throw std::runtime_error("All-ion elastic coverage failure: missing bank query or recoil transport; dose rejected");
     }
-    std::vector<std::uint64_t> inelastic_reaction_host;
-    if (primary_survival_device != nullptr) {
-        primary_survival_host.resize(number_of_bins);
-        inelastic_reaction_host.resize(number_of_bins);
-        queue.copy(primary_survival_device, primary_survival_host.data(), number_of_bins);
-        queue.copy(inelastic_reaction_device, inelastic_reaction_host.data(), number_of_bins);
-    }
-    std::uint64_t neutron_birth_count_host = 0;
-    std::vector<NeutronBirthRecord> neutron_birth_host;
-    if (neutron_birth_buffer.records) {
-        queue.copy(neutron_birth_buffer.count, &neutron_birth_count_host, 1).wait_and_throw();
-        const auto kept = std::min(neutron_birth_count_host, neutron_birth_buffer.capacity);
-        neutron_birth_host.resize(kept);
-        if (kept) queue.copy(neutron_birth_buffer.records, neutron_birth_host.data(), kept).wait_and_throw();
-        free_device(neutron_birth_buffer.records);
-        free_device(neutron_birth_buffer.count);
-    }
+
     std::vector<float> deposited_host(number_of_histories);
     std::vector<float> sampled_incident_host(number_of_histories);
     std::vector<float> escaped_host(number_of_histories);
@@ -9890,7 +7681,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     if (cutoff_stopped_energy_device != nullptr) {
         queue.copy(cutoff_stopped_energy_device, cutoff_stopped_host.data(), number_of_histories);
     }
-#if defined(CARBON_ENABLE_MINIBEAM)
     std::vector<float> beamline_removed_host;
     std::vector<float> beamline_primary_survivor_host;
     std::vector<float> beamline_air_loss_host;
@@ -9941,7 +7731,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 throw std::runtime_error("Invalid copper proton fluctuation draw: reject partial dose");
         }
 
-
         if (minibeam_fragment_miss_joint_counts_device != nullptr) {
             minibeam_fragment_miss_joint_counts_host.resize(
                 minibeam_fragment_miss_joint_cell_count);
@@ -9990,7 +7779,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             }
         }
     }
-#endif
         if(uses_urban_package) {
             std::vector<std::uint64_t> counts(2*urban_species_host.size());
             queue.copy(urban_step_counts,counts.data(),counts.size()).wait_and_throw();
@@ -10099,25 +7887,16 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     if (primary_terminal_counts_device != nullptr) {
         queue.copy(primary_terminal_counts_device, terminal_counts_host.data(), 4).wait_and_throw();
     }
-    std::vector<PrimaryFirstInteractionRecord> first_interactions_host;
-    if (first_interactions_device != nullptr && first_interactions_count_device != nullptr) {
-        std::uint32_t first_int_count = 0;
-        queue.copy(first_interactions_count_device, &first_int_count, 1).wait_and_throw();
-        const auto actual_count = std::min(first_int_count, static_cast<std::uint32_t>(number_of_histories));
-        first_interactions_host.resize(actual_count);
-        if (actual_count > 0) {
-            queue.copy(first_interactions_device, first_interactions_host.data(), actual_count).wait_and_throw();
-        }
-    }
+
     // Only shared species and grid ledgers are backed by device buffers.
-    std::array<float, kCinel02SpeciesEnergySlots> cinel02_species_energy_host{};
-    std::array<std::uint64_t, kCinel02SpeciesTerminalSlots> cinel02_species_terminal_host{};
+    std::array<float, kIonSpeciesEnergySlots> ion_species_energy_host{};
+    std::array<std::uint64_t, kIonSpeciesTerminalSlots> ion_species_terminal_host{};
     double grid_deposited_in_host = 0.0;
     double grid_deposited_out_host = 0.0;
-    queue.copy(cinel02_species_energy_device, cinel02_species_energy_host.data(),
-               kCinel02SpeciesEnergySlots);
-    queue.copy(cinel02_species_terminal_device, cinel02_species_terminal_host.data(),
-               kCinel02SpeciesTerminalSlots);
+    queue.copy(ion_species_energy_device, ion_species_energy_host.data(),
+               kIonSpeciesEnergySlots);
+    queue.copy(ion_species_terminal_device, ion_species_terminal_host.data(),
+               kIonSpeciesTerminalSlots);
     if (grid_deposited_in_device != nullptr)
         queue.copy(grid_deposited_in_device, &grid_deposited_in_host, 1);
     if (grid_deposited_out_device != nullptr)
@@ -10192,13 +7971,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
             .wait_and_throw();
     }
 
-    if (primary_loss_query_audit) {
-        std::array<std::uint64_t,28> audit{};
-        queue.copy(primary_loss_query_audit, audit.data(), audit.size()).wait_and_throw();
-        free_device(primary_loss_query_audit);
-        for (int b=0;b<14;++b)
-            std::cout << "PRIMARY_LOSS_QUERY," << b << ',' << audit[b] << ',' << audit[b+14] << '\n';
-    }
     std::array<std::uint64_t,7> electron_joint_diag_host{};
     std::array<std::uint64_t,3> material_untracked_host{};
     if(material_untracked_device)queue.copy(material_untracked_device,material_untracked_host.data(),3).wait_and_throw();
@@ -10221,14 +7993,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     }
     // Free buffers
     free_device(electron_joint_diag_device);
-    free_immutable_device(cross_section_device);
-    free_device(target_h_fraction_device);
     free_device(dose_device);
-    free_device(primary_survival_device);
-    free_device(inelastic_reaction_device);
     free_device(primary_terminal_counts_device);
-    free_device(first_interactions_device);
-    free_device(first_interactions_count_device);
     free_device(in_fov_dose_device);
     free_device(voxel_dose_device);
     free_device(primary_voxel_track_length_device);
@@ -10241,27 +8007,15 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     free_device(be_isotope_origin_voxel_dose_device);
     free_device(he4_hazard_audit_device);
     free_device(he_isotope_origin_voxel_dose_device);
-    free_device(let_moments_device);
-    free_device(voxel_let_moments_device);
     free_device(deposited_device);
     free_device(secondary_queue_device);
     free_device(generic_recoil_reference_sp_device);
     free_device(secondary_count_device);
-    free_device(cinel02_interactions_device);
-    free_device(cinel02_products_device);
-    free_device(cinel02_energy_nodes_device);
-    free_device(cinel02_event_offsets_device);
-    free_device(cinel02_event_indices_device);
-    free_device(cinel02_rate_groups_device);
-    free_device(cinel02_rate_samples_device);
-    free_device(cinel02_ct_rate_groups_device);
-    free_device(cinel02_ct_rate_samples_device);
-    free_device(cinel02_species_energy_device);
-    free_device(cinel02_species_terminal_device);
+    free_device(ion_species_energy_device);
+    free_device(ion_species_terminal_device);
     free_device(untracked_nuclear_device);
     free_device(other_terminal_energy_device);
     free_device(cutoff_stopped_energy_device);
-#if defined(CARBON_ENABLE_MINIBEAM)
     free_device(copper_diagnostic_device);
     free_device(copper_capture_entry_device);
     free_device(copper_history_mask_device);
@@ -10283,9 +8037,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     free_device(minibeam_fragment_miss_joint_remaining_device);
     free_device(minibeam_copper_sp_energies_device);
     free_device(minibeam_copper_sp_values_device);
-    free_device(minibeam_copper_loss_e_device);
-    free_device(minibeam_copper_loss_r_device);
-    free_device(minibeam_copper_loss_d_device);
 
     free_device(air_ion_e_device);
     free_device(air_ion_rate_device);
@@ -10299,16 +8050,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     free_device(minibeam_copper_indices_device);
     free_device(minibeam_copper_interactions_device);
     free_device(minibeam_copper_products_device);
-#endif
     free_device(secondary_overflow_count_device);
     free_device(secondary_overflow_energy_device);
     free_device(escaped_device);
     free_device(sampled_incident_device);
     free_device(steps_device);
     free_device(primary_spots_device);
-    free_device(slab_z_ends_device);
-    free_device(slab_densities_device);
-    free_device(slab_radiation_lengths_device);
     if(!retained_ct_arrays) {
         free_device(ct_density_device);
         free_device(ct_material_device);
@@ -10316,7 +8063,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     free_device(ct_xs_device);
     free_device(broadbeam_electron_mask);
     free_device(broadbeam_birth_regions);free_device(broadbeam_region_work);
-    free_device(schneider_primary_xs_device);
     free_device(schneider_inelastic_device);
     free_device(schneider_diag_device);
     free_device(schneider_float_device);
@@ -10362,23 +8108,14 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
     if (config.enable_tps_source) {
         result.backend += "+tps-source";
     }
-#if defined(CARBON_ENABLE_MINIBEAM)
     if ((!BroadBeam && config.enable_minibeam)) {
-        result.backend += config.minibeam_transport_mode == "copper_em"
-            ? "+minibeam-copper" : "+minibeam-absorber";
+        result.backend += "+minibeam-copper";
     }
-#endif
     if (enable_multiple_scattering) {
         result.backend += "+multiple-scattering";
     }
     if (enable_ct_grid && enable_ct_material_mcs) {
         result.backend += "+ct-material-mcs";
-    }
-    if (enable_layered_phantom) {
-        result.backend += "+layered-slab";
-    }
-    if (enable_hetero_insert) {
-        result.backend += "+hetero-insert";
     }
     if (enable_ct_grid) result.backend += "+ct-grid-unified-em+ct-dda";
     if constexpr (k_dose_atomic_fp32) {
@@ -10387,26 +8124,9 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         result.backend += "+fp64-dose";
     }
     if (enable_voxel_scoring) {
-        result.backend += "+voxel-scoring";
-        if (!voxel_scorer_clamps_transport) {
-            result.backend += "+scorer-decoupled";
-        }
-    }
-    if (enable_let_scoring) {
-        result.backend += "+letd-scoring";
+        result.backend += "+voxel-scoring+scorer-decoupled";
     }
 
-    if (config.enable_fragment_species_scoring && !enable_secondary_transport) {
-        result.secondary_carbon_deposited_energy_MeV.assign(number_of_bins, 0.0);
-        result.secondary_boron_deposited_energy_MeV.assign(number_of_bins, 0.0);
-        result.secondary_beryllium_deposited_energy_MeV.assign(number_of_bins, 0.0);
-        result.secondary_lithium_deposited_energy_MeV.assign(number_of_bins, 0.0);
-        result.secondary_helium_deposited_energy_MeV.assign(number_of_bins, 0.0);
-        result.secondary_proton_deposited_energy_MeV.assign(number_of_bins, 0.0);
-        result.secondary_other_charged_deposited_energy_MeV.assign(number_of_bins, 0.0);
-    }
-    result.primary_survival_counts = std::move(primary_survival_host);
-    result.inelastic_reaction_counts = std::move(inelastic_reaction_host);
     result.primary_deposited_energy_MeV = dose_host;
     result.deposited_energy_MeV = std::move(dose_host);
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
@@ -10427,7 +8147,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         std::move(he_isotope_origin_voxel_dose_host);
     result.helium4_hazard_audit = he4_hazard_audit_host;
     result.in_fov_deposited_energy_MeV = std::move(in_fov_dose_host);
-    if (!config.fragment_birth_spectrum_output_file.empty()) {
+    if (enable_fragment_birth_spectrum) {
         constexpr std::size_t categories = light_isotope_category_count;
         constexpr std::size_t generations = birth_generation_bin_count;
         result.birth_counts_by_generation.assign(categories * generations, 0);
@@ -10496,28 +8216,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                 category, generation, parent_mevu_bin, mevu_bin)];
         }
     }
-    if (enable_let_scoring) {
-        const auto extract_let_moment = [&](const std::size_t moment) {
-            const auto begin = let_moments_host.begin() +
-                               static_cast<std::ptrdiff_t>(moment * number_of_bins);
-            return std::vector<double>(begin, begin + static_cast<std::ptrdiff_t>(number_of_bins));
-        };
-        result.primary_letd_numerator = extract_let_moment(0);
-        result.primary_letd_denominator = extract_let_moment(1);
-        result.all_hadron_letd_numerator = extract_let_moment(2);
-        result.all_hadron_letd_denominator = extract_let_moment(3);
-    }
-    if (enable_let_scoring && voxel_let_moments_device != nullptr) {
-        const auto extract_voxel_let_moment = [&](const std::size_t moment) {
-            const auto begin = voxel_let_moments_host.begin() +
-                               static_cast<std::ptrdiff_t>(moment * number_of_voxels);
-            return std::vector<double>(begin, begin + static_cast<std::ptrdiff_t>(number_of_voxels));
-        };
-        result.primary_voxel_letd_numerator = extract_voxel_let_moment(0);
-        result.primary_voxel_letd_denominator = extract_voxel_let_moment(1);
-        result.all_hadron_voxel_letd_numerator = extract_voxel_let_moment(2);
-        result.all_hadron_voxel_letd_denominator = extract_voxel_let_moment(3);
-    }
 
     result.initial_energy_MeV =
         std::accumulate(sampled_incident_host.begin(), sampled_incident_host.end(), 0.0);
@@ -10525,35 +8223,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         std::accumulate(deposited_host.begin(), deposited_host.end(), 0.0);
     result.escaped_energy_MeV =
         std::accumulate(escaped_host.begin(), escaped_host.end(), 0.0);
-    if (config.enable_primary_loss_query_audit && !enable_inelastic) {
-        // Host-only summary of existing readback: no device, RNG or scoring
-        // changes. With nuclear transport disabled this is primary energy.
-        const double mean = result.escaped_energy_MeV / escaped_host.size();
-        double second = 0.0, third = 0.0;
-        std::size_t positive = 0;
-        for (const float energy : escaped_host) {
-            const double delta = static_cast<double>(energy) - mean;
-            second += delta * delta;
-            third += delta * delta * delta;
-            positive += energy > 0.0F;
-        }
-        second /= escaped_host.size();
-        third /= escaped_host.size();
-        auto sorted = escaped_host;
-        std::sort(sorted.begin(), sorted.end());
-        const auto quantile = [&](double p) {
-            const double index = p * (sorted.size()-1);
-            const auto low = static_cast<std::size_t>(index);
-            const auto high = std::min(low+1,sorted.size()-1);
-            return sorted[low] + (index-low)*(sorted[high]-sorted[low]);
-        };
-        const auto old_precision = std::cout.precision(17);
-        std::cout << "PRIMARY_ESCAPE_ENERGY," << escaped_host.size() << ','
-                  << positive << ',' << mean << ',' << second << ','
-                  << (second > 0 ? third/std::pow(second,1.5) : 0.0) << ','
-                  << quantile(.05) << ',' << quantile(.5) << ',' << quantile(.95) << '\n';
-        std::cout.precision(old_precision);
-    }
+
     result.untracked_nuclear_energy_MeV =
         std::accumulate(untracked_host.begin(), untracked_host.end(), 0.0);
     result.primary_inelastic_terminated_count = terminal_counts_host[0];
@@ -10565,10 +8235,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         std::accumulate(other_terminal_host.begin(), other_terminal_host.end(), 0.0);
     result.primary_cutoff_stopped_energy_MeV =
         std::accumulate(cutoff_stopped_host.begin(), cutoff_stopped_host.end(), 0.0);
-#if defined(CARBON_ENABLE_MINIBEAM)
     if ((!BroadBeam && config.enable_minibeam)) {
-
-
 
         result.beamline_removed_energy_MeV = std::accumulate(
             beamline_removed_host.begin(), beamline_removed_host.end(), 0.0);
@@ -10758,20 +8425,16 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         result.minibeam_fragment_phase_space_records =
             std::move(minibeam_fragment_phase_space_host);
     }
-#endif
-    result.neutron_birth_records = std::move(neutron_birth_host);
-    result.primary_first_interactions = std::move(first_interactions_host);
     result.secondary_queue_overflow = overflow_count_host;
     result.secondary_queue_overflow_energy_MeV = static_cast<double>(overflow_energy_host);
-    // Retired CINEL02 diagnostics retain their zero-initialized result fields.
-    // Current shared species/grid measurements must still be copied.
-    for (std::size_t i = 0; i < kCinel02SpeciesEnergySlots; ++i) {
-        result.cinel02_species_transport_ledger_MeV[i] =
-            static_cast<double>(cinel02_species_energy_host[i]);
+    // Copy the current shared species/grid measurements.
+    for (std::size_t i = 0; i < kIonSpeciesEnergySlots; ++i) {
+        result.ion_species_transport_ledger_MeV[i] =
+            static_cast<double>(ion_species_energy_host[i]);
     }
     result.in_grid_deposited_energy_MeV = grid_deposited_in_host;
     result.outside_grid_deposited_energy_MeV = grid_deposited_out_host;
-    result.cinel02_species_terminal_reason_counts = cinel02_species_terminal_host;
+    result.ion_species_terminal_reason_counts = ion_species_terminal_host;
 
     // Aggregate the flat Schneider device schema into named diagnostics.
     {
@@ -10855,15 +8518,8 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         sch.reaction_q_residual_MeV = fslot(SchneiderFloatSlot::ReactionQResidual);
     }
 
-    // 8-part energy accounting ledger
-    result.energy_ledger.E_continuous_ionizing = result.total_deposited_energy_MeV;
-    result.energy_ledger.E_nuclear_local = 0.0;
+    // Charged birth energy and nuclear-vertex itemization
     result.energy_ledger.E_transported_secondaries = result.queued_secondary_energy_MeV;
-    result.energy_ledger.E_escaped_charged = result.escaped_energy_MeV;
-    result.energy_ledger.E_neutral = result.untransported_neutral_energy_MeV;
-    result.energy_ledger.E_cutoff_kill = result.primary_cutoff_stopped_energy_MeV;
-    result.energy_ledger.E_unsupported = result.untransported_unsupported_charged_energy_MeV;
-    result.energy_ledger.E_queue_overflow = result.secondary_queue_overflow_energy_MeV;
     // Split Schneider nuclear-vertex ledger, accumulated on device from
     // actually executed vertices (informational itemization; the legacy
     // untracked sink behavior above is unchanged this step).
@@ -10885,8 +8541,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         }
     }
 
-    if (neutron_birth_count_host > neutron_birth_buffer.capacity)
-        throw std::runtime_error("Neutron birth audit overflow; reduce histories or increase neutron_birth_capacity");
     if (config.quality_reject_any_queue_overflow && overflow_count_host > 0) {
         throw std::runtime_error("Secondary particle queue overflow detected: discarded " +
                                  std::to_string(overflow_count_host) + " particles (" +
@@ -10897,7 +8551,6 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         schneider_inelastic_host;
     result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});
 
-#if defined(CARBON_ENABLE_MINIBEAM)
     if (!copper_diagnostic_path.empty())
         write_copper_history_diagnostic(copper_diagnostic_path,copper_diagnostic_host,
             beamline_primary_survivor_host,deposited_host,steps_host,copper_history_mask_host);
@@ -10909,19 +8562,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
         write_copper_capture_records(directory/"removed.bin",beamline_removed_host);
         write_copper_capture_records(directory/"air_loss.bin",beamline_air_loss_host);
         write_copper_capture_records(directory/"water_charged.bin",copper_capture_charged_host);
-        std::vector<NeutronBirthRecord> copper_neutrons;
-        for(const auto& birth:result.neutron_birth_records)
-            if(birth.material_section==-2)copper_neutrons.push_back(birth);
-        write_copper_capture_records(directory/"copper_neutrons.bin",copper_neutrons);
         std::cout << "[copper-response-capture] source_histories=" << number_of_histories
                   << " charged_at_water=" << copper_capture_charged_host.size()
-                  << " copper_neutron_births=" << copper_neutrons.size()
                   << " entry_bytes=" << sizeof(PrimaryMediumEntryState)
                   << " charged_bytes=" << sizeof(SecondaryParticle)
-                  << " neutron_bytes=" << sizeof(NeutronBirthRecord) << '\n';
+                  << '\n';
     }
-#endif
-    if((!BroadBeam && config.enable_neutron_transport)) transport_neutrons_experimental(queue,config,result,&inputs);
     result.elapsed_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     result.primary_kernel_seconds = primary_kernel_seconds;
@@ -10931,8 +8577,7 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
 }
 
 [[gnu::noinline]] TransportResult transport_sycl(const TransportConfig& config,
-    const StoppingPowerTable& stopping_power,const CrossSectionTable& cross_section,
-    const std::string& device_name,SyclTransportContext* context) {
+    const StoppingPowerTable& stopping_power,const std::string& device_name,SyclTransportContext* context) {
     if(config.transport_profile=="broadbeam_fast") {
         std::cout<<"[broadbeam-electron-tracking] requested="<<config.broadbeam_electron_tracking
                  <<" effective="<<(config.broadbeam_independent_electrons?"shared_fp32":
@@ -10940,15 +8585,12 @@ template<bool BroadBeam, bool Gaussian, int JointResponse = 0>
                  <<" density_threshold="<<config.broadbeam_electron_density_threshold
                  <<" halo_mm="<<config.broadbeam_electron_halo_mm<<'\n';
         if(config.broadbeam_independent_electrons)
-            return transport_sycl_impl<true,true,3>(config,stopping_power,cross_section,device_name,context);
+            return transport_sycl_impl<true,3>(config,stopping_power,device_name,context);
 
-        return config.fermi_eyges_gaussian_only
-            ? transport_sycl_impl<true,true>(config,stopping_power,cross_section,device_name,context)
-            : transport_sycl_impl<true,false>(config,stopping_power,cross_section,device_name,context);
+        return transport_sycl_impl<true>(config,stopping_power,device_name,context);
     }
-    return transport_sycl_impl<false,false>(config,stopping_power,cross_section,device_name,context);
+    return transport_sycl_impl<false>(config,stopping_power,device_name,context);
 }
 
 }  // namespace carbon
 
-#endif

@@ -6,15 +6,13 @@
 #include "carbon/electron_projectile26_data.hpp"
 #include <sstream>
 #include <iomanip>
-#include "carbon/electron_birth_bank_device.hpp"
-#include "carbon/electron_charged_bank_device.hpp"
 #include "carbon/electron_joint_pilot_device.hpp"
-#include "carbon/photon_response_bank_device.hpp"
+#include "carbon/photon_response_metadata26.hpp"
+#include "carbon/electron_urban_fluctuation.hpp"
+#include <sycl/sycl.hpp>
 #include <cstdlib>
-#ifdef CARBON_ELECTRON_CERTIFIED_RATES
 #include "carbon/electron_rate_bound.hpp"
 #include <iostream>
-#endif
 
 namespace carbon {
 inline ElectronCutBirthState sample_cut_electron_birth_seeded(
@@ -40,12 +38,6 @@ inline electron_fp32::Probability probability(double x){
 inline float value(double x){return float(x);}
 inline electron_fp32::joint_math::V value(electron_joint_research::V v){return {float(v.x),float(v.y),float(v.z)};}
 inline electron_fp32::ElectronUrbanMaterial value(ElectronUrbanMaterial x){return {float(x.mass),float(x.excitation),float(x.e0),float(x.e1),float(x.e2),float(x.f1),float(x.f2)};}
-inline electron_fp32::ElectronBirthChannel value(ElectronBirthChannel x){return {float(x.low),float(x.high),float(x.fraction),x.offset,x.count};}
-inline electron_fp32::ElectronBirthStateSample value(ElectronBirthStateSample x){return {probability(x.cdf),float(x.energy),float(x.cosine)};}
-inline electron_fp32::ChargedParameter value(ChargedParameter x){return {float(x.energy),float(x.elastic_mfp),float(x.dedx),float(x.range),{float(x.diagnostic_raw_rate[0]),float(x.diagnostic_raw_rate[1])}};}
-inline electron_fp32::ChargedRatePiece value(ChargedRatePiece x){return {float(x.low),float(x.high),{float(x.value[0]),float(x.value[1]),float(x.value[2]),float(x.value[3])}};}
-inline electron_fp32::ChargedChannel value(ChargedChannel x){return {x.offset,x.count};}
-inline electron_fp32::ChargedOutcome value(ChargedOutcome x){return {probability(x.cdf),float(x.fraction),float(x.cosine),x.pdg,x.pad};}
 inline electron_fp32::PhotonRateRow value(PhotonRateRow x){return {float(x.energy),{float(x.rate[0]),float(x.rate[1]),float(x.rate[2])}};}
 inline electron_fp32::PhotonChannel value(PhotonChannel x){return {x.offset,x.count};}
 inline electron_fp32::PhotonOutcome value(PhotonOutcome x){return {probability(x.cdf),float(x.fraction),float(x.cosine),x.pdg,x.pad};}
@@ -63,6 +55,21 @@ inline electron_fp32::joint_math::GraphStep value(electron_joint_research::Graph
 } // namespace electron_fp32_convert
 
 class IndependentElectronFloatDevice {
+    static void require_index(const std::filesystem::path& path,std::string_view expected){
+        std::ifstream input(path);std::string magic;unsigned count{};
+        if(!(input>>magic>>count)||magic!=expected||count!=26)
+            throw std::runtime_error("Production electron index requires26 compositions: "+path.string());
+        for(unsigned i=0;i<count;++i){
+            int section;double density;std::string name;
+            if(!(input>>section>>density>>name)||section!=int(i)||!std::isfinite(density)||density<=0)
+                throw std::runtime_error("Invalid electron26 directory row");
+            const std::filesystem::path relative(name);
+            if(relative.is_absolute())throw std::runtime_error("Absolute electron26 payload path");
+            for(const auto& part:relative)if(part=="..")throw std::runtime_error("Electron26 payload path traversal");
+            if(!std::filesystem::is_regular_file(path.parent_path()/relative))throw std::runtime_error("Missing electron26 payload");
+        }
+        std::string extra;if(input>>extra)throw std::runtime_error("Electron26 index trailing fields");
+    }
     sycl::queue queue_;std::vector<void*> allocations_;
     template<class T>T* allocate(std::size_t count,bool mapped=false){
         if(!count)return nullptr;
@@ -94,35 +101,13 @@ class IndependentElectronFloatDevice {
     Compact* outcomes(const std::filesystem::path& path,std::uint64_t count,bool compact,
                       const Channels& channels,bool mapped=false){
         static_assert(sizeof(Compact)==24 && sizeof(Native)==32);
-        const auto bytes=std::filesystem::file_size(path);const auto stride=compact?sizeof(Compact):sizeof(Native);
+        const auto bytes=std::filesystem::file_size(path);const auto stride=sizeof(Compact);
         if(count>bytes/stride)throw std::runtime_error("FP32 outcome count");
         std::ifstream input(path,std::ios::binary);input.seekg(bytes-count*stride);
         std::vector<Compact> values(count);
-        if(compact){
-            if(!input.read(reinterpret_cast<char*>(values.data()),count*sizeof(Compact)))
-                throw std::runtime_error("Truncated compact outcomes");
-        }else{
-            std::vector<Native> chunk(4096);double previous=0;std::uint64_t channel=0,end=0;
-            for(std::uint64_t offset=0;offset<count;){
-                const auto n=std::min<std::uint64_t>(chunk.size(),count-offset);
-                if(!input.read(reinterpret_cast<char*>(chunk.data()),n*sizeof(Native)))
-                    throw std::runtime_error("Truncated native outcomes");
-                for(unsigned j=0;j<n;++j){
-                    const auto i=offset+j;
-                    while(i>=end){if(channel>=channels.size())throw std::runtime_error("Outcome channel coverage");
-                        end=channels[channel].offset+channels[channel].count;++channel;previous=0;}
-                    const auto& x=chunk[j];
-                    if(!std::isfinite(x.cdf)||x.cdf<previous||x.cdf>1||x.cdf<0||
-                       !std::isfinite(x.fraction)||x.fraction<=0||x.fraction>1||
-                       !std::isfinite(x.cosine)||std::abs(x.cosine)>1||
-                       (x.pdg!=0&&x.pdg!=11&&x.pdg!=22))
-                        throw std::runtime_error("Invalid native outcome");
-                    previous=x.cdf;if(i+1==end&&previous!=1)throw std::runtime_error("Native final CDF");
-                    values[i]=electron_fp32_convert::value(x);
-                }
-                offset+=n;
-            }
-        }
+        if(!compact)throw std::runtime_error("Production electron outcomes require direct FP32 records");
+        if(!input.read(reinterpret_cast<char*>(values.data()),count*sizeof(Compact)))
+            throw std::runtime_error("Truncated compact outcomes");
         std::uint64_t offset=0;
         for(const auto& c:channels){
             if(c.offset!=offset||offset>count||c.count>count-offset)throw std::runtime_error("Compact channel bounds");
@@ -171,7 +156,7 @@ class IndependentElectronFloatDevice {
             std::vector<double> rows(31*38);f.read(reinterpret_cast<char*>(rows.data()),rows.size()*sizeof(double));ElectronUrbanMaterial urban;read(urban);
             char extra;if(f.read(&extra,1))throw std::runtime_error("Complete26 angular trailing bytes");
             for(double x:rows)if(!std::isfinite(x))throw std::runtime_error("Complete26 angular finite");
-            electron_fp32::ChargedResponseView v{};v.composition26=device+s;v.rate26=experimental_rate26+s*2;v.moller26=cut_birth26+s;
+            electron_fp32::ChargedResponseView v{};v.composition26=device+s;v.rate26=rates26+s*2;
             v.section=s;v.density=density;v.density_low=source.entries[s].density_low;v.density_high=source.entries[s].density_high;
             v.lowest_energy=.0001f;v.linear_loss_limit=.01f;v.elastic={host_values(rows.data(),rows.size()),float(mass),float(bc),float(xc2)};
             v.urban=electron_fp32_convert::value(urban);charged_nodes.push_back(v);order[s]=s;offsets[s]=s;
@@ -183,14 +168,12 @@ class IndependentElectronFloatDevice {
             source_bytes+=std::filesystem::file_size(directory/file);
         for(unsigned s=0;s<26;++s){std::ostringstream name;name<<"elastic"<<std::setfill('0')<<std::setw(2)<<s<<".bin";
             source_bytes+=std::filesystem::file_size(directory/name.str());}
-        std::cout<<"[electron-complete26] compositions=26 charged_density_nodes=0 photon_density_nodes=0 old82_reads=0 fallback=0 cut=continuous_fit hard_rates=actual_cut_mass_scale penelope=calibration photon_terminals=calibration status=dose_first_candidate\n";
+        std::cout<<"[electron-complete26] compositions=26 charged_density_nodes=0 photon_density_nodes=0 cut=continuous_fit hard_rates=actual_cut_mass_scale penelope=calibration photon_terminals=calibration status=default26\n";
     }
 public:
-    bool complete26{};
     ElectronProjectileBirthParameters projectile_parameters{};
-    const electron_composition26::NativeGridRateView* experimental_rate26{};
+    const electron_composition26::NativeGridRateView* rates26{};
     const ElectronCutBirthComposition* cut_birth26{};
-    electron_fp32::ElectronBirthBankView birth{};
     electron_fp32::ElectronJointPilotView joint{};
     electron_fp32::ChargedBankView charged{};
     electron_fp32::PhotonResponseBankView photon{};
@@ -203,12 +186,16 @@ public:
         const std::filesystem::path& charged_path,
         const std::filesystem::path& photon_path,
         unsigned projectile_z=1,unsigned projectile_a=1):queue_(q){try{
-        {std::ifstream index(charged_path);std::string magic;index>>magic;complete26=magic=="MAIEC026";}
-        if(complete26)source_bytes+=std::filesystem::file_size(charged_path.parent_path()/(projectile_a==1?"proton26.bin":"carbon26.bin"));
-        projectile_parameters=complete26?load_electron_projectile26(charged_path.parent_path()/(projectile_a==1?"proton26.bin":"carbon26.bin"),projectile_a):electron_birth_projectile_parameters(projectile_a);
-        const std::string candidate_rates=complete26?(charged_path.parent_path()/"rates26.bin").string():"";
-        const char* rate_file=complete26?candidate_rates.c_str():std::getenv("CARBON_ELECTRON_RATE26_FILE");
-        if(const char* file=rate_file){
+        require_index(charged_path,"MAIEC026");
+        require_index(photon_path,"MAIPH026");
+        if(projectile_z!=(projectile_a==1?1U:6U)||(projectile_a!=1&&projectile_a!=12))
+            throw std::runtime_error("Electron26 requires proton or C12 projectile");
+        const auto parameter_path=charged_path.parent_path()/(projectile_a==1?"proton26.bin":"carbon26.bin");
+        source_bytes+=std::filesystem::file_size(parameter_path);
+        projectile_parameters=load_electron_projectile26(parameter_path,projectile_a);
+        const auto rate_path=charged_path.parent_path()/"rates26.bin";
+        {
+            const auto file=rate_path;
             std::ifstream input(file,std::ios::binary);char magic[8]{};input.read(magic,8);
             auto read=[&]<class T>(T& x){if(!input.read(reinterpret_cast<char*>(&x),sizeof(x)))throw std::runtime_error("Rate26 truncated");};
             auto array=[&]<class T>(std::vector<T>& x,std::size_t n){x.resize(n);if(n&&!input.read(reinterpret_cast<char*>(x.data()),n*sizeof(T)))throw std::runtime_error("Rate26 array truncated");};
@@ -238,14 +225,15 @@ public:
                 v.bounds=upload(bounds);v.bins=upload(bins);v.intervals=upload(intervals);v.offsets=upload(offsets);v.pole=upload(pole);v.piece_majorants=upload(majorants);v.coefficients=upload(c);views.push_back(v);
             }
             char extra;if(input.read(&extra,1))throw std::runtime_error("Rate26 trailing bytes");
-            experimental_rate26=upload(views);source_bytes+=std::filesystem::file_size(file);
-            std::cout<<"[electron-rate26] compositions=26 density_nodes=0 explicit_cut=interpolated_terminal_cut certificate=coefficient_triangle reserve=0.02 status=experimental_active_rate_unqualified shared_terminals="<<(complete26?"composition26":"83")<<" joint=composition_spatial\n";
+            rates26=upload(views);source_bytes+=std::filesystem::file_size(file);
+            std::cout<<"[electron-rate26] compositions=26 density_nodes=0 explicit_cut=interpolated_terminal_cut certificate=coefficient_triangle reserve=0.02 status=experimental_active_rate_unqualified shared_terminals="<<"composition26"<<" joint=composition_spatial\n";
         }
         // Release each source device bank before loading the next component;
         // do not keep both full representations resident across batches.
         {
             std::ifstream probe(birth_path,std::ios::binary);char magic[8]{};probe.read(magic,8);
-            if(std::string_view(magic,8)=="MAIBCA26") {
+            if(std::string_view(magic,8)!="MAIBCA26")throw std::runtime_error("Electron26 requires MAIBCA26 birth package; old birth banks are retired");
+            {
                 auto read=[&]<class T>(T& x){if(!probe.read(reinterpret_cast<char*>(&x),sizeof(x)))throw std::runtime_error("Cut birth26 truncated");};
                 unsigned version,count;read(version);read(count);
                 if(version!=1||count!=kElectronMaterialCount||(projectile_z!=1&&projectile_z!=6)||
@@ -266,13 +254,6 @@ public:
                 char extra;if(probe.read(&extra,1))throw std::runtime_error("Cut birth26 trailing data");
                 cut_birth26=upload(compositions);source_bytes+=std::filesystem::file_size(birth_path);
                 std::cout<<"[electron-cut-birth26] compositions=26 density_states=0 parent_energy=actual cut=ion_EM angular=G4DeltaAngle status=experimental\n";
-            } else {
-            ElectronBirthBankDevice source(q,birth_path,projectile_z,projectile_a);source_bytes+=source.bytes;
-            std::vector<electron_fp32::ElectronBirthNodeView> nodes;
-            for(const auto& x:source.host_nodes){electron_fp32::ElectronBirthNodeView y{};
-                y.section=x.section;y.density=x.density;y.sample_count=x.sample_count;y.channel_count=x.channel_count;
-                y.channels=convert(x.channels,x.channel_count);y.samples=convert(x.samples,x.sample_count);nodes.push_back(y);birth_materials.emplace_back(y.section,y.density);}
-            birth.nodes=upload(nodes);birth.count=nodes.size();birth.section_offsets=copy(source.view.section_offsets,kElectronMaterialCount+1);
             }
         }
         {
@@ -282,71 +263,23 @@ public:
                 for(auto x:raw)nodes.push_back(joint_node(x));joint.sections=upload(nodes);joint.section_count=nodes.size();
             }else joint=joint_node(source.view);
         }
-        if(complete26){
-            if(!cut_birth26||!experimental_rate26)throw std::runtime_error("Complete26 requires independent birth/rates");
-            load_complete26_charged(charged_path.parent_path());
-        }else {
-            std::ifstream input(charged_path);std::string magic;unsigned count=0;
-            if(!(input>>magic>>count)||magic!="MAIECB02"||!count||count>4096)throw std::runtime_error("Charged index");
-            std::vector<std::array<float,2>> bounds;
-#ifdef CARBON_ELECTRON_CERTIFIED_RATES
-            double certificate_ratio=0;std::uint64_t certificate_pieces=0;
-#endif
-            for(unsigned i=0;i<count;++i){
-                int section;double density;std::string file;
-                if(!(input>>section>>density>>file))throw std::runtime_error("Charged index row");
-                const auto path=charged_path.parent_path()/file;ChargedResponseData x(path,false);source_bytes+=x.bytes;
-                if(section!=x.section||density!=x.density)throw std::runtime_error("Charged identity");
-                for(const auto& old:charged_nodes)if(old.section==section&&old.density==float(density))throw std::runtime_error("Duplicate charged node");
-                electron_fp32::ChargedResponseView y{};
-                if(float(density)<1e-6f||float(density)>1e3f||!std::isfinite(float(density)))throw std::runtime_error("Charged density domain");
-                y.parameters=host_values(x.parameters.data(),x.parameters.size());y.parameter_count=x.parameters.size();
-                std::array<float,2> bound{};
-                for(unsigned process=0;process<2;++process){
-                    double raw=0;for(const auto& r:x.rate[process])for(double v:r.value)raw=std::max(raw,6*std::abs(v));
-                    bound[process]=std::nextafter(float(raw),INFINITY);
-#ifdef CARBON_ELECTRON_CERTIFIED_RATES
-                    certificate_ratio=std::max(certificate_ratio,electron_rate_bound::certify(x.rate[process],float(x.parameters.front().energy),float(x.parameters.back().energy),bound[process]));
-                    certificate_pieces+=x.rate[process].size();
-#endif
-                    y.rate[process]=host_values(x.rate[process].data(),x.rate[process].size());y.rate_count[process]=x.rate[process].size();
-                }
-                y.edges=host_values(x.edges.data(),x.edges.size());y.bins=x.edges.size()-1;
-                y.channels=host_values(x.channels.data(),x.channels.size());
-                y.outcomes=outcomes<ChargedOutcome,electron_fp32::ChargedOutcome>(path,x.outcome_count,x.compact_outcomes,x.channels);y.outcome_count=x.outcome_count;
-                y.elastic={host_values(x.elastic_rows.data(),x.elastic_rows.size()),float(x.mass),float(x.bc),float(x.xc2)};
-                y.urban=electron_fp32_convert::value(x.urban);
-                y.section=section;y.density=density;y.electron_cut=x.electron_cut;y.photon_cut=x.photon_cut;y.lowest_energy=x.lowest;y.linear_loss_limit=x.linear;
-                if(experimental_rate26)y.rate26=experimental_rate26+section*2;
-                if(const char* flag=std::getenv("CARBON_ELECTRON_MOLLER26")){if(std::string_view(flag)!="1")throw std::runtime_error("Experimental Moller flag must be1");
-                    if(!cut_birth26)throw std::runtime_error("Moller26 requires MAIBCA26 shell birth package");y.moller26=cut_birth26+section;}
-                charged_nodes.push_back(y);bounds.push_back(bound);
-            }
-            std::string extra;if(input>>extra)throw std::runtime_error("Charged index trailing fields");
-            std::vector<unsigned> order(count),offsets(kElectronMaterialCount+1);
-            for(unsigned i=0;i<count;++i)order[i]=i;
-            std::sort(order.begin(),order.end(),[&](unsigned a,unsigned b){const auto& x=charged_nodes[a];const auto& y=charged_nodes[b];return x.section<y.section||(x.section==y.section&&x.density<y.density);});
-            unsigned pos=0;for(unsigned sec=0;sec<=kElectronMaterialCount;++sec){while(pos<count&&charged_nodes[order[pos]].section<int(sec))++pos;offsets[sec]=pos;}
-            charged.nodes=upload(charged_nodes);charged.count=count;charged.node_order=upload(order);charged.section_offsets=upload(offsets);charged.majorants=upload(bounds);
-#ifdef CARBON_ELECTRON_CERTIFIED_RATES
-            std::cout<<"[independent-fp32-rate-certificate] nodes="<<count<<" pieces="<<certificate_pieces<<" max_bound_ratio="<<certificate_ratio<<" reserve=0.01 endpoint_check=retained\n";
-#endif
-        }
+        if(!cut_birth26||!rates26)throw std::runtime_error("Complete26 requires independent birth/rates");
+        load_complete26_charged(charged_path.parent_path());
         {
             std::ifstream input(photon_path);std::string magic;unsigned count=0;
-            if(!(input>>magic>>count)||(magic!=(complete26?"MAIPH026":"MAIPHB02"))||(complete26&&count!=26)||!count||count>4096)throw std::runtime_error("Photon index");
+            if(!(input>>magic>>count)||magic!="MAIPH026"||count!=26)throw std::runtime_error("Photon index");
             std::vector<electron_fp32::PhotonResponseView> nodes;
             for(unsigned i=0;i<count;++i){
                 int section;double density;std::string file;if(!(input>>section>>density>>file))throw std::runtime_error("Photon index row");
-                const auto path=photon_path.parent_path()/file;PhotonResponseData x(path,false);source_bytes+=x.bytes;
+                const auto path=photon_path.parent_path()/file;PhotonResponseMetadata26 x(path);source_bytes+=x.bytes;
                 if(section!=x.section||density!=x.density)throw std::runtime_error("Photon identity");
                 electron_fp32::PhotonResponseView y{};
                 y.rates=host_values(x.rates.data(),x.rates.size());y.rate_count=x.rates.size();
                 y.edges=host_values(x.edges.data(),x.edges.size());y.bins=x.edges.size()-1;
                 y.channels=host_values(x.channels.data(),x.channels.size());
-                y.outcomes=outcomes<PhotonOutcome,electron_fp32::PhotonOutcome>(path,x.outcome_count,x.compact_outcomes,x.channels,true);
+                y.outcomes=outcomes<PhotonOutcome,electron_fp32::PhotonOutcome>(path,x.outcome_count,true,x.channels,true);
                 y.outcome_count=x.outcome_count;y.section=section;y.density=density;
-                if(complete26){if(section!=int(i))throw std::runtime_error("Complete26 photon directory");y.density_low=charged_nodes[i].density_low;y.density_high=charged_nodes[i].density_high;}
+                if(section!=int(i))throw std::runtime_error("Complete26 photon directory");y.density_low=charged_nodes[i].density_low;y.density_high=charged_nodes[i].density_high;
                 nodes.push_back(y);
             }
             std::string extra;if(input>>extra)throw std::runtime_error("Photon index trailing fields");

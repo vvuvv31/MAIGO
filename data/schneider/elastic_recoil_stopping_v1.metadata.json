@@ -1,9 +1,0 @@
-{
-  "format": "ELRSP001",
-  "quantity": "total electronic plus nuclear stopping, linear MeV/mm at unit density",
-  "physics_scope": "EM-only transport for elastic recoil isotopes outside the existing 18-projectile registry; no invented elastic/inelastic rates for these extra recoils",
-  "bytes": 528040,
-  "source_snapshots": {
-    "startup/extensions/AllIonElasticDump.cc": "/mnt/sda/wuwei/all_ion_elastic_20260911/frozen/AllIonElasticDump_recoil.cc"
-  }
-}

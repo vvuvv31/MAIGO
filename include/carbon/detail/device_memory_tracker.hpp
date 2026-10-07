@@ -1,7 +1,5 @@
 #pragma once
 
-#ifdef CARBON_HAS_SYCL
-
 #include <algorithm>
 #include <cstddef>
 #include <cstdlib>
@@ -159,4 +157,3 @@ struct DeviceMemoryTracker {
 
 }  // namespace carbon::detail
 
-#endif  // CARBON_HAS_SYCL

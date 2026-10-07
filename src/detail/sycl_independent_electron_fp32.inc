@@ -16,57 +16,17 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
     float grid_inside=0.f,grid_outside=0.f;
     // Two hottest single-address counters (calls, elastic) reduced per worker.
     std::uint32_t lane_charged_calls=0,lane_charged_elastic=0;
-    // Low-density variance reduction: lane-private signed roulette weight and
-    // expected-value partial deposits, merged per scoring voxel before atomics.
-    float vr_gain=0.f,task_inside=0.f,task_outside=0.f,pend_value=0.f;
-    std::uint64_t pend_target=0;int pend_dz=-1;bool killed=false;
-    auto flush_expected=[&](){
-        if(pend_value!=0.f){
-            add(voxel_dose_device+pend_target,pend_value);
-            if(pend_dz>=0){add(dose_device+pend_dz,pend_value);if(in_fov_dose_device)add(in_fov_dose_device+pend_dz,pend_value);}
-            pend_value=0.f;
-        }
-    };
-    auto score_expected=[&](const f::Position& p,float value){
-        const int ix=static_cast<int>(sycl::floor((p[0]-f::Coordinate(voxel_min_x_mm))/f::Coordinate(voxel_size_x_mm)));
-        const int iy=static_cast<int>(sycl::floor((p[1]-f::Coordinate(voxel_min_y_mm))/f::Coordinate(voxel_size_y_mm)));
-        const int iz=static_cast<int>(sycl::floor(p[2]/f::Coordinate(voxel_size_z_mm)));
-        if(!(ix>=0&&iy>=0&&iz>=0&&ix<int(voxel_bins_x)&&iy<int(voxel_bins_y)&&iz<int(voxel_bins_z))){task_outside+=value;return;}
-        task_inside+=value;
-        const auto target=(std::uint64_t(iz)*voxel_bins_y+iy)*voxel_bins_x+ix;
-        int dz=static_cast<int>(sycl::floor(p[2]/f::Coordinate(depth_bin_width_mm)));
-        if(dz<0||dz>=int(number_of_bins))dz=-1;
-        if(pend_value==0.f||target!=pend_target||dz!=pend_dz){flush_expected();pend_target=target;pend_dz=dz;}
-        pend_value+=value;
-    };
+    // Low-density variance reduction: lane-private signed roulette weight.
+    float vr_gain=0.f;bool killed=false;
     MaterialBirthTask task{};f::ElectronEnergyPacket packet{},previous{};
-#ifdef CARBON_ELECTRON_SEGMENT_DIAGNOSTICS
-    namespace segment_diagnostic=electron_segment_diagnostics;
-    const f::ElectronCtGeometry segment_scoring{{unsigned(voxel_bins_x),unsigned(voxel_bins_y),unsigned(voxel_bins_z)},
-        {voxel_min_x_mm,voxel_min_y_mm,0},{voxel_size_x_mm,voxel_size_y_mm,voxel_size_z_mm},nullptr,nullptr};
-    std::uint64_t segment_charged_calls=0;
-#endif
-#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
-    namespace guard=electron_range_guard_research;
-    const f::ElectronCtGeometry scoring{{unsigned(voxel_bins_x),unsigned(voxel_bins_y),unsigned(voxel_bins_z)},
-        {voxel_min_x_mm,voxel_min_y_mm,0},{voxel_size_x_mm,voxel_size_y_mm,voxel_size_z_mm},nullptr,nullptr};
-    std::uint64_t guard_target=UINT64_MAX;
-    unsigned guard_charged=0,guard_photons=0,guard_joint=0,guard_total_charged=0;
-#endif
-#ifdef CARBON_ELECTRON_VOXEL_CACHE
     f::voxel_cache_research::Cache voxel_cache;
-#endif
     std::uint64_t packet_rng=0,previous_rng=0;unsigned packet_steps=0;bool need_task=true;
     unsigned birth_region=6;
     std::uint64_t region_counts[12]{};
     auto uniform=[&](){return f::random_draw(packet_rng);};
     auto joint=[&](){std::uint64_t counts[9]{};auto jt=[&](int k,std::uint64_t n){counts[k]+=n;
         if constexpr(region_diagnostics){if(k==0)region_counts[6]+=n;if(k==2)region_counts[7]+=n;}};
-#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
-        if(guard_target!=UINT64_MAX)++guard_joint;
-#endif
-        packet=f::transport_joint_independent(packet,float_joint,geometry,uniform,jt,
-            score_expected,electron_expected_density,electron_expected_min_energy);
+        packet=f::transport_joint_independent(packet,float_joint,geometry,uniform,jt);
         for(unsigned k=0;k<9;++k)if(counts[k])increment(joint_pilot_work+k,counts[k]);
     };
     for(;;){
@@ -87,30 +47,23 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
                     birth_region=broadbeam_birth_regions[(std::size_t(z)*ct_ny+y)*ct_nx+x];
                 region_counts[0]=1;region_counts[10]=static_cast<std::uint64_t>(float(task.weight)*1e6f+.5f);
             }
-#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
-            guard_target=UINT64_MAX;guard_charged=guard_photons=guard_joint=guard_total_charged=0;
-#endif
-#ifdef CARBON_ELECTRON_VOXEL_CACHE
             voxel_cache.valid=false;
-#endif
             packet.weight_MeV=float(task.weight);packet.material_table_index=task.table;
-            if(cut_birth26||(float_birth.nodes&&task.birth.source<float_birth.count)){
-                const auto node=cut_birth26?f::ElectronBirthNodeView{}:float_birth.nodes[task.birth.source];
-                const auto physical=cut_birth26?sample_cut_electron_birth_seeded(cut_birth26,task.birth.source,
-                    electron_projectile_parameters,float(task.birth.energy),task.birth.cut,task.birth.cdf_bits):ElectronCutBirthState{};
-                const auto sample=cut_birth26?f::ElectronBirthStateSample{{},physical.energy,physical.cosine}:
-                    f::sample_independent_electron_birth(node,float(task.birth.energy),f::Draw{task.birth.cdf_bits});
+            if(task.birth.source<kElectronMaterialCount){
+                const auto physical=sample_cut_electron_birth_seeded(cut_birth26,task.birth.source,
+                    electron_projectile_parameters,float(task.birth.energy),task.birth.cut,task.birth.cdf_bits);
+                const auto sample=f::ElectronBirthStateSample{{},physical.energy,physical.cosine};
                 const auto parent=f::joint_math::unit({task.direction[0],task.direction[1],task.direction[2]});
                 const auto direction=f::independent_electron_direction(parent,sample.cosine,float(uniform()));
                 packet.cursor.position={f::Coordinate(task.position[0]),f::Coordinate(task.position[1]),f::Coordinate(task.position[2])};
                 packet.cursor.direction={direction.x,direction.y,direction.z};packet.cursor.energy_MeV=sample.energy;
-                packet.cursor.section=cut_birth26?int(task.birth.source):node.section;
-                packet.cursor.density_g_cm3=cut_birth26?float(task.density):node.density;
-                packet.cursor.valid=(!cut_birth26||physical.valid)&&sample.energy>0&&std::isfinite(f::joint_math::dot(direction,direction));
+                packet.cursor.section=int(task.birth.source);
+                packet.cursor.density_g_cm3=float(task.density);
+                packet.cursor.valid=physical.valid&&sample.energy>0&&std::isfinite(f::joint_math::dot(direction,direction));
             }
             packet.cursor.physical_density_g_cm3=float(task.density);
             packet.status=packet.cursor.valid?ElectronPacketStatus::active:ElectronPacketStatus::invalid;
-            task_inside=task_outside=0.f;killed=false;
+            killed=false;
             if constexpr(BroadBeam) {
                 const bool tissue_roulette=float(task.density)>electron_tissue_density;
                 if(packet.status==ElectronPacketStatus::active &&
@@ -131,9 +84,6 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
         if(!killed&&packet.status==ElectronPacketStatus::active&&packet_steps<200000u){
             previous=packet;previous_rng=packet_rng;
             if(packet.cursor.pdg==22){
-#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
-                if(guard_target!=UINT64_MAX)++guard_photons;
-#endif
                 const auto r=f::transport_independent_photon(float_photon,geometry,packet.cursor.position,
                     packet.cursor.direction,packet.cursor.energy_MeV,uniform);
                 if constexpr(region_diagnostics){++region_counts[8];region_counts[9]+=r.interactions;}
@@ -152,35 +102,11 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
                     ++packet.electron_children;joint();
                 }else packet.status=ElectronPacketStatus::invalid;
             }else{
-#ifdef CARBON_ELECTRON_SEGMENT_DIAGNOSTICS
-                ++segment_charged_calls;
-                if(segment_diagnostic::selected(task.rng,packet_steps)){
-                    const auto selected=sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                        sycl::access::address_space::global_space>(float_segment_counts[1]).fetch_add(1);
-                    if(selected<segment_diagnostic::capacity){
-                        auto sample=segment_diagnostic::observe(packet,float_charged,geometry,segment_scoring);
-                        sample.history=task.history;sample.birth_rng=task.rng;sample.birth_step=task.step;sample.electron_step=packet_steps;
-                        float_segment_samples[selected]=sample;
-                    }
-                }
-#endif
-#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
-                if(guard_target==UINT64_MAX)guard_target=guard::eligible(packet,float_charged,geometry,scoring);
-                ++guard_total_charged;if(guard_target!=UINT64_MAX)++guard_charged;
-#endif
                 std::uint64_t counts[8]{};auto ct=[&](int k,std::uint64_t n){
                     if constexpr(region_diagnostics){if(k<5)region_counts[1+k]+=n;}
-#ifdef CARBON_ELECTRON_STEP_DIAGNOSTICS
-                    if(k>=8){increment(float_step_diagnostics+(lane[0]%64)*1536+(k-8),n);return;}
-#endif
                     counts[k]+=n;
                 };
-#ifdef CARBON_ELECTRON_VOXEL_CACHE
-                packet=f::voxel_cache_research::transport_packet(packet,float_charged,geometry,voxel_cache,uniform,ct,
-                    score_expected,electron_expected_density,electron_expected_min_energy);
-#else
-                packet=f::transport_independent_charged_packet(packet,float_charged,geometry,uniform,ct);
-#endif
+                packet=f::voxel_cache_research::transport_packet(packet,float_charged,geometry,voxel_cache,uniform,ct);
                 lane_charged_calls+=static_cast<std::uint32_t>(counts[0]);lane_charged_elastic+=static_cast<std::uint32_t>(counts[1]);
                 for(unsigned k=2;k<8;++k)if(counts[k])increment(independent_charged_work+k,counts[k]);
                 if(packet.status==ElectronPacketStatus::active&&packet.cursor.pdg==11&&packet_steps%32==31)joint();
@@ -195,24 +121,10 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
         }
         const std::uint64_t work[3]={packet.advances,packet.source_restarts,packet.boundary_restarts};
         for(unsigned k=0;k<3;++k)increment(material_queue_work+k,work[k]);
-        tally(6,1);flush_expected();
+        tally(6,1);
         // Remaining statistical weight; equals task.weight without variance reduction.
         const float weight=packet.weight_MeV;
-        float inside_total=task_inside,outside_total=task_outside;
-#ifdef CARBON_ELECTRON_RANGE_DIAGNOSTICS
-        increment(float_range_counts+8,guard_total_charged);increment(float_range_counts+9,1);
-        if(guard_target!=UINT64_MAX){
-            increment(float_range_counts,1);increment(float_range_counts+1,guard_charged);
-            increment(float_range_counts+2,guard_photons);increment(float_range_counts+3,guard_joint);
-            if(packet.status==ElectronPacketStatus::deposited){
-                const auto actual=guard::scoring_index(scoring,packet.deposit_position);
-                if(actual==guard_target)increment(float_range_counts+6,1);
-                else{increment(float_range_counts+4,1);add(float_range_delta+guard_target,weight);
-                    if(actual!=UINT64_MAX)add(float_range_delta+actual,-weight);}
-            }else if(packet.status==ElectronPacketStatus::escaped){increment(float_range_counts+5,1);add(float_range_delta+guard_target,weight);}
-            else increment(float_range_counts+7,1);
-        }
-#endif
+        float inside_total=0.f,outside_total=0.f;
         if(killed){}
         else if(packet.status==ElectronPacketStatus::deposited){
             const auto p=packet.deposit_position;
@@ -235,16 +147,12 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
                 diagnostic.rng=previous_rng;diagnostic.before=previous;diagnostic.after=packet;*material_failure_device=diagnostic;
             }
         }
-        // Single ledger update per task: expected-value partial deposits plus
-        // any final point deposit. Identical to the original without VR.
+        // Single ledger update per task for the final point deposit.
         if(inside_total+outside_total!=0.f)add(deposited_device+task.history,inside_total+outside_total);
         grid_inside+=inside_total;grid_outside+=outside_total;
         if(inside_total!=0.f)tally(3,static_cast<std::uint64_t>(inside_total*1e6f));
         if(outside_total!=0.f)tally(4,static_cast<std::uint64_t>(outside_total*1e6f));
     }
-#ifdef CARBON_ELECTRON_SEGMENT_DIAGNOSTICS
-    increment(float_segment_counts,segment_charged_calls);
-#endif
     if(lane_charged_calls)increment(independent_charged_work,lane_charged_calls);
     if(lane_charged_elastic)increment(independent_charged_work+1,lane_charged_elastic);
     float_electron_grid_ledger[2*lane[0]]+=grid_inside;

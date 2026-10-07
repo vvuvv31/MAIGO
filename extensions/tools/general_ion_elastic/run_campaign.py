@@ -27,7 +27,10 @@ def main() -> None:
         with log.open('w', encoding='utf-8') as stream:
             subprocess.run([str(topas), str(case)], cwd=campaign, stdout=stream, stderr=subprocess.STDOUT, check=True)
         sources.append(str(case))
-    sources.extend([str(topas), str(REPO / 'extensions/topas/all_ion_elastic/AllIonElasticDump.cc'), str(REPO / 'extensions/topas/all_ion_elastic/AllIonElasticDump.hh')])
+    staged = topas.parent / 'maigo-extension-source'
+    if not (staged / 'AllIonElasticDump.cc').is_file():
+        raise ValueError('Use a binary built by build_topas_extensions.sh; staged sources are required for provenance')
+    sources.extend([str(topas), str(topas.parent/'maigo-profile.txt'), str(staged/'AllIonElasticDump.cc'), str(staged/'AllIonElasticDump.hh')])
     hu_file = Path(metadata['hu_file'])
     sources.append(str(hu_file))
     for path in sorted(Path(metadata['dicom_dir']).rglob('*')):

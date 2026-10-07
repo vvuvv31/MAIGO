@@ -1,0 +1,117 @@
+{
+  "date": "2026-10-07",
+  "purpose": "Local offline extraction-source release kit, separate from the eight-preset GPU runtime",
+  "sources": 256,
+  "covered_installed_assets": 144,
+  "pinned_stack": {
+    "topas": "4.2.3",
+    "geant4": "11.3.2"
+  },
+  "compiled_native_targets": [
+    "material_metadata",
+    "extract_ct_urban",
+    "extract_copper_urban",
+    "extract_air_urban",
+    "extract_air_ionization",
+    "validate_urban"
+  ],
+  "compiled_topas_profiles": [
+    "electrons",
+    "nuclear-copper"
+  ],
+  "staged_topas_profiles": [
+    "nuclear-copper",
+    "unified-em",
+    "elastic-carbon",
+    "recoil-carbon",
+    "elastic-proton",
+    "electrons"
+  ],
+  "smokes": {
+    "electron_composition": "PASS",
+    "material_json": "PASS; G4_WATER composition/radlen only, I=78 eV",
+    "air_ionization": "PASS; proton,5 nodes",
+    "urban_air": {
+      "result": "FP32_REFERENCE=PASS",
+      "species": [
+        [
+          1,
+          1
+        ],
+        [
+          6,
+          12
+        ]
+      ],
+      "dense_nodes": 32769,
+      "validation_nodes": 4097,
+      "steps": 8192,
+      "failed_queries": 0,
+      "maximum_query_relative_error": 2.56299973e-06,
+      "gate": 0.0005
+    }
+  },
+  "cli_help": {
+    "passed": true,
+    "checked": [
+      "extensions/tools/primary_source/campaign.py",
+      "extensions/tools/primary_source/compile.py",
+      "extensions/tools/primary_source/assemble.py",
+      "extensions/tools/minibeam_copper/compile_copper_physics.py",
+      "extensions/tools/minibeam_copper/compile_copper_fragment_cascades.py",
+      "extensions/tools/unified_em/synthesize_analytic_density.py",
+      "extensions/tools/unified_em/run_extract.py",
+      "extensions/tools/unified_em/verify_delta_moments.py",
+      "extensions/tools/unified_em/compile_unified_em_package.py",
+      "extensions/tools/unified_em/build_continuous_density.py",
+      "extensions/tools/unified_em/run_probes.py",
+      "extensions/tools/unified_em/verify_unified_em_data.py",
+      "extensions/tools/unified_em/run_distributions.py",
+      "extensions/tools/unified_em/probe_analytic_density.py",
+      "extensions/tools/unified_em/audit_schneider_response_scope.py",
+      "extensions/tools/unified_em/build_delta_moments.py",
+      "extensions/tools/tables/prepare.py",
+      "extensions/tools/tables/compile.py",
+      "extensions/tools/general_ion_elastic/verify_all_ion_elastic.py",
+      "extensions/tools/general_ion_elastic/run_campaign.py",
+      "extensions/tools/general_ion_elastic/prepare_campaign.py",
+      "extensions/tools/general_ion_elastic/compile_all_ion_elastic.py",
+      "extensions/tools/electrons/assemble_package26.py",
+      "extensions/tools/electrons/package_release.py",
+      "extensions/tools/electrons/build_electron_cut_birth26.py",
+      "extensions/tools/electrons/build_electron_native_grid_rates26.py",
+      "extensions/tools/electrons/compact_electron_joint.py",
+      "extensions/tools/electrons/compile_electron_response.py",
+      "extensions/tools/electrons/compact_electron_runtime.py",
+      "extensions/tools/electrons/compile_photon_response.py",
+      "extensions/tools/electrons/build_electron_scalar26.py",
+      "extensions/tools/electrons/extract_electron_composition_laws26.py",
+      "extensions/tools/electrons/build_schneider_joint.py",
+      "extensions/tools/electrons/pack_electron_composition_laws26.py",
+      "extensions/tools/schneider/compile_schneider_ion_stopping.py",
+      "extensions/tools/schneider/compile_schneider_stopping.py",
+      "extensions/tools/schneider/validate_v2_raw.py",
+      "extensions/tools/urban/run_campaign.py",
+      "extensions/tools/urban/merge_packages.py",
+      "extensions/tools/urban/pack_reference.py"
+    ]
+  },
+  "installed_assets": {
+    "passed": true,
+    "assets": 144,
+    "presets": 8,
+    "bytes": 6283137304
+  },
+  "installed_em_check": "OK: 26 compositions, continuous density x 18 ions\nStored layout/fields and registry verified; physics fields are checked by the C++ loader, dose by separate reference comparisons.\nOK: 3843866 delta nodes; stored layout/fields and source dimensions checked",
+  "installed_elastic_check": "PASS: 18 elastic projectiles, 26 materials, 13 targets, 137 energy nodes, 512 samples/node; 37 recoil isotopes; layout, finite values and coverage verified",
+  "runtime_changes": false,
+  "installed_data_changes": false,
+  "limitations": [
+    "Full production sampling was not run.",
+    "Frozen nuclear reconstruction requires audited raw records and repair campaigns.",
+    "Electron scalar/conditional reconstruction requires explicit audited offline calibration operators.",
+    "Some companions require matching audit provenance/schema assembly, documented in coverage.json.",
+    "No new TOPAS dose acceptance or performance result is claimed.",
+    "Four TOPAS profiles were staged but not compiled in this verification."
+  ]
+}

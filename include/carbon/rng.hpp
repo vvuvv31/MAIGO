@@ -10,12 +10,7 @@ using PhiloxBlock = std::array<std::uint32_t, 4>;
 // Branch-tag roles for deterministic child RNG streams. Tags must not depend on
 // GPU atomic queue indices — only on parent stream identity and product order.
 inline constexpr std::uint32_t branch_role_primary_charged = 0x10000000U;
-inline constexpr std::uint32_t branch_role_primary_neutral = 0x20000000U;
 inline constexpr std::uint32_t branch_role_cascade_charged = 0x30000000U;
-inline constexpr std::uint32_t branch_role_cascade_neutral = 0x40000000U;
-inline constexpr std::uint32_t branch_role_neutral_charged = 0x50000000U;
-inline constexpr std::uint32_t branch_role_neutral_continuation = 0x60000000U;
-inline constexpr std::uint32_t branch_role_neutral_electron = 0x70000000U;
 
 inline constexpr std::uint32_t branch_tag(const std::uint32_t role,
                                           const std::uint32_t product_index) noexcept {

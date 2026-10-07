@@ -7,7 +7,6 @@
 
 #include <cstdint>
 
-#if defined(CARBON_HAS_SYCL) || defined(SYCL_LANGUAGE_VERSION)
 namespace sycl {
 inline namespace _V1 {
 class queue;
@@ -16,7 +15,6 @@ class queue;
 namespace carbon::detail {
 struct DeviceMemoryTracker;
 }
-#endif
 
 namespace carbon {
 
@@ -37,9 +35,6 @@ struct SchneiderCtDeviceContext {
         for(std::size_t t=0;t<13;++t) { out.partials[t]=static_cast<float>(rates.partials[t]); out.total+=out.partials[t]; }
         return out;
     }
-    [[nodiscard]] SchneiderMaskedRates elastic_rates(std::size_t section,float energy) const noexcept {
-        return schneider_masked_rates_device(elastic_sampler,section,energy);
-    }
     [[nodiscard]] SecondaryMaskedRates secondary_rates(int projectile,std::size_t section,float energy) const noexcept {
         if (!unified_water) return secondary_masked_rates_device(sec_partial_rates,sec_domain_emin,
             sec_domain_emax,sec_domain_has,sec_num_projectiles,projectile,section,energy,
@@ -52,9 +47,6 @@ struct SchneiderCtDeviceContext {
 
     // Primary Target Sampler
     SchneiderTargetSamplerDeviceTable primary_sampler{};
-    // Elastic Target Sampler (SCHNELXS v1, same layout; empty when the
-    // elastic rate file is absent, in which case elastic stays disabled).
-    SchneiderTargetSamplerDeviceTable elastic_sampler{};
 
     // Primary C12 CINEL03 Package
     const Cinel03EnergyNode* primary_energy_nodes{nullptr};
@@ -67,22 +59,20 @@ struct SchneiderCtDeviceContext {
     std::uint32_t primary_total_products{0};
 
     // Secondary Rates
-    const float* sec_total_rates{nullptr};
     const float* sec_partial_rates{nullptr};
     // v3 only: bundle-ordered projectile registry keys [z0,a0,z1,a1,...]
     // and per-(projectile,target) valid-domain arrays ([proj][target]).
-    // The v3 kernel path never uses sec_total_rates (mask applies at query
-    // energy); it sums masked partials on the fly. v1 ignores the v3
-    // pointers and keeps the legacy behavior EXACTLY.
+    // Masked partials are summed at the queried energy; all current rate
+    // payloads provide the bundle-ordered registry and valid domains.
     const std::int32_t* sec_proj_keys{nullptr};
     const float* sec_domain_emin{nullptr};
     const float* sec_domain_emax{nullptr};
     const unsigned char* sec_domain_has{nullptr};
-    std::uint32_t sec_num_projectiles{13};
+    std::uint32_t sec_num_projectiles{0};
     std::uint32_t sec_num_sections{25};
     std::uint32_t sec_num_targets{13};
-    std::uint32_t sec_num_energies{860};
-    float sec_energy_min_MeV_per_u{0.5F};
+    std::uint32_t sec_num_energies{921};
+    float sec_energy_min_MeV_per_u{0.1F};
     float sec_energy_step_MeV_per_u{0.5F};
     float sec_inv_energy_step{2.0F};
 

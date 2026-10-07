@@ -56,7 +56,7 @@ def schneider_identity(path, hu):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--schneider-file", type=Path,
-                   default=Path(__file__).resolve().parents[1]/"data/HUtoMaterialSchneider.txt")
+                   default=Path(__file__).resolve().parents[1]/"data/materials/schneider/hu_to_material.txt")
     p.add_argument("--hu", type=int, nargs="+", required=True)
     p.add_argument("--required-section", type=int, default=0)
     a = p.parse_args()

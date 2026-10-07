@@ -2,7 +2,6 @@
 
 #include "carbon/cross_section.hpp"
 #include "carbon/particle.hpp"
-#include "carbon/neutron_transport.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/transport_config.hpp"
 #include "carbon/transport_profile.hpp"
@@ -18,16 +17,6 @@
 namespace carbon {
 
 class SyclTransportContext;
-
-// A true native CINEL03 neutron birth; no neutron cutoff or transport is applied.
-// Region -2 is copper, -1 water; generation uses the charged-queue convention.
-struct NeutronBirthRecord {
-    std::uint64_t history{}, rng_stream{};
-    std::uint32_t collision{}, product_index{}, generation{};
-    std::int32_t material_section{}, parent_z{}, parent_a{}, role{};
-    float kinetic_energy_MeV{}, x_mm{}, y_mm{}, z_mm{};
-    float direction_x{}, direction_y{}, direction_z{}, weight{};
-};
 
 // Read-only snapshots of queued He births, captured after GPU transport.
 // history is the source-history index, NOT a Geant4 parent track ID.
@@ -50,11 +39,7 @@ struct C12BirthRecord {
 
 // Optional per-primary snapshot at the downstream water entrance.  This is
 // populated only when minibeam_phase_space_output_file is configured.
-// Touch-versioning (frozen semantics):
-//   copper_touched (legacy) = INITIAL-RAY hit flag from the source position
-//     (minibeam_ray_hits_cylindrical_copper).  Kept byte-identical for
-//     backward compatibility; it is NOT an in-transport touch.
-//   initial_ray_hits_copper = explicit copy of the same initial-ray decision.
+//   initial_ray_hits_copper = initial source ray intersects copper.
 //   ever_in_copper = true when any transported segment midpoint was in Copper.
 //   cumulative_cu_true_path_mm = sum of final true-path lengths over segments
 //     whose midpoint was in Copper (urban_v2 uses final t; other models use
@@ -64,7 +49,6 @@ struct C12BirthRecord {
 struct MinibeamPhaseSpaceRecord {
     std::uint64_t history{};
     std::int32_t slit{};
-    std::uint8_t copper_touched{};
     std::uint8_t copper_elastic{};
     std::uint8_t valid{};
     std::uint8_t pad{};
@@ -268,7 +252,7 @@ inline bool replay_vertex_in_scoring_box(
     return true;
 }
 
-struct Cinel02SpeciesLedgerSchema {
+struct IonSpeciesLedgerSchema {
     static constexpr std::size_t species_count = 18;
     static constexpr std::size_t metric_count = 13;
     static constexpr std::size_t terminal_reason_count = 6;
@@ -288,91 +272,17 @@ struct Cinel02SpeciesLedgerSchema {
     };
 };
 
-struct Cinel02ReplayLedgerSchema {
-    static constexpr std::size_t species_count = Cinel02SpeciesLedgerSchema::species_count;
-    static constexpr std::size_t target_count = 2;
-    static constexpr std::size_t generation_count = 3;
-    // Fine replay occupancy bins (10 MeV/u) keep package support and misses
-    // separable inside the broad 50 MeV/u physics ranges.
-    static constexpr std::size_t energy_bin_count = 40;
-    static constexpr float energy_bin_width_MeV_per_u = 10.0F;
-    static constexpr std::size_t status_count = 5;
-    static constexpr std::size_t outcome_count = 2;
-    static constexpr std::size_t status_cell_count =
-        species_count * target_count * generation_count * energy_bin_count;
-    static constexpr std::size_t status_slot_count =
-        status_cell_count * status_count;
-    static constexpr std::size_t parent_outcome_cell_count =
-        species_count * target_count * generation_count * outcome_count;
-    static constexpr std::size_t transition_cell_count =
-        species_count * species_count;
-    enum Status : std::size_t {
-        collision_candidate = 0,
-        replay_valid = 1,
-        replay_lookup_miss = 2,
-        replay_invalid_event = 3,
-        post_em_below_cutoff = 4
-    };
-};
-
 // Secondary-transport exposure ledger used by the reaction-survival audit.
 // The path sums are keyed by the isotope and transport generation of each
 // secondary track, then by its step-start kinetic energy. Coverage is kept
 // separate from generation eligibility so an absent hazard is not silently
 // interpreted as a physical zero-rate segment.
-struct Cinel02ExposureLedgerSchema {
-    static constexpr std::size_t species_count =
-        Cinel02SpeciesLedgerSchema::species_count;
-    static constexpr std::size_t generation_count =
-        Cinel02ReplayLedgerSchema::generation_count;
-    static constexpr std::size_t energy_bin_count =
-        Cinel02ReplayLedgerSchema::energy_bin_count;
-    static constexpr float energy_bin_width_MeV_per_u =
-        Cinel02ReplayLedgerSchema::energy_bin_width_MeV_per_u;
-    static constexpr std::size_t cell_count =
-        species_count * generation_count * energy_bin_count;
-    static constexpr std::size_t sum_metric_count = 18;
-    static constexpr std::size_t count_metric_count = 4;
-    static constexpr std::size_t sum_slot_count = cell_count * sum_metric_count;
-    static constexpr std::size_t count_slot_count = cell_count * count_metric_count;
-
-    enum SumMetric : std::size_t {
-        path_mm_total = 0,
-        path_mm_generation_eligible = 1,
-        path_mm_generation_blocked = 2,
-        path_mm_rate_covered = 3,
-        path_mm_rate_uncovered = 4,
-        path_mm_h_uncovered = 5,
-        path_mm_o_uncovered = 6,
-        hazard_h = 7,
-        hazard_o = 8,
-        hazard_total = 9,
-        // Counterfactual optical depth for generation-blocked steps; diagnostic only.
-        hazard_blocked_h = 10,
-        hazard_blocked_o = 11,
-        hazard_blocked_total = 12,
-        // Continuous-rate quadrature over the actual start/end energy of a
-        // transport step. These are diagnostic-only and never feed the
-        // runtime hazard sampler.
-        path_mm_continuous_rate_covered = 13,
-        path_mm_continuous_rate_uncovered = 14,
-        hazard_continuous = 15,
-        hazard_blocked_continuous = 16,
-        stopping_loss_MeV = 17
-    };
-    enum CountMetric : std::size_t {
-        collision_candidates = 0,
-        replay_valid = 1,
-        parent_killed = 2,
-        parent_continued = 3
-    };
-};
 
 // A secondary inelastic hazard suppresses the normal per-step MCS only when a
 // valid CINEL02 final state was actually replayed. Lookup misses and invalid
 // package records are null collisions: the post-EM state is retained and the
 // same MCS that a non-nuclear step would receive must still be applied.
-constexpr bool cinel02_should_apply_secondary_mcs(
+constexpr bool ion_should_apply_secondary_mcs(
     const bool secondary_inelastic, const bool replay_succeeded,
     const bool enable_multiple_scattering, const float kinetic_energy_MeV,
     const float energy_cutoff_MeV) noexcept {
@@ -391,26 +301,6 @@ inline void secondary_step_voxel_commit(float& pending_voxel_MeV,
     if (enable_voxel_scoring && cur_voxel >= 0) pending_voxel_MeV += amount_MeV;
 }
 
-// Simpson quadrature for the continuous optical-depth audit. The caller
-// supplies rates evaluated at the beginning, midpoint and end energies of the
-// same linearized stopping segment. This helper is deliberately independent
-// of the runtime step-start hazard sampler.
-inline constexpr float cinel02_simpson_hazard(
-    const float lambda_start_per_mm, const float lambda_mid_per_mm,
-    const float lambda_end_per_mm, const float step_mm) noexcept {
-    return step_mm * (lambda_start_per_mm + 4.0F * lambda_mid_per_mm +
-                      lambda_end_per_mm) / 6.0F;
-}
-
-struct PrimaryFirstInteractionRecord {
-    float x_mm{0.0F};
-    float y_mm{0.0F};
-    float depth_mm{0.0F};
-    float energy_MeVu{0.0F};
-    std::uint32_t section_id{0};
-    float density_g_per_cm3{0.0F};
-};
-
 struct BraggPeakMetrics {
     double peak_depth_mm{0.0};
     double peak_dose_MeV{0.0};
@@ -421,14 +311,7 @@ struct BraggPeakMetrics {
 };
 
 struct EnergyAccountingLedger {
-    double E_continuous_ionizing{0.0};
-    double E_nuclear_local{0.0};
     double E_transported_secondaries{0.0};
-    double E_escaped_charged{0.0};
-    double E_neutral{0.0};
-    double E_cutoff_kill{0.0};
-    double E_unsupported{0.0};
-    double E_queue_overflow{0.0};
     // Split nuclear-vertex ledger (populated on the Schneider CT path; the
     // broad `untracked` sink must NOT be used to absorb these terms and then
     // be called physical closure).
@@ -441,14 +324,10 @@ struct EnergyAccountingLedger {
     double E_lookup_failure{0.0};
     double E_out_of_domain{0.0};
 
-    [[nodiscard]] double total_accounted_MeV() const noexcept {
-        return E_continuous_ionizing + E_nuclear_local + E_transported_secondaries +
-               E_escaped_charged + E_neutral + E_cutoff_kill + E_unsupported + E_queue_overflow;
-    }
 };
 
 // Independent Schneider-CT nuclear diagnostics. This is intentionally NOT
-// the CINEL02 water `cinel02_diagnostics` array: every counter below has a
+// every counter below has a
 // unique schema slot (see SchneiderDiagSlot) and the host aggregates the
 // flat device buffer into these named fields. "100% hit rate" is defined
 // strictly as events_replayed / hazards, never over rate queries or steps.
@@ -706,9 +585,9 @@ struct TransportResult {
                       static_cast<std::size_t>(SchneiderFloatSlot::Count),
                   "schneider_float_slot_count must track SchneiderFloatSlot::Count");
     static constexpr std::size_t species_ledger_species_count =
-        Cinel02SpeciesLedgerSchema::species_count;
+        IonSpeciesLedgerSchema::species_count;
     static constexpr std::size_t species_ledger_metric_count =
-        Cinel02SpeciesLedgerSchema::metric_count;
+        IonSpeciesLedgerSchema::metric_count;
     std::vector<double> deposited_energy_MeV;
     std::vector<double> voxel_deposited_energy_MeV;
     // Primary track length accumulated per scorer voxel (mm).
@@ -729,7 +608,6 @@ struct TransportResult {
         minibeam_spatial_audit_counts{};
     std::vector<double> be_isotope_origin_voxel_deposited_energy_MeV;
     std::vector<double> he_isotope_origin_voxel_deposited_energy_MeV;
-    std::vector<double> neutral_origin_voxel_deposited_energy_MeV;
     std::vector<double> primary_deposited_energy_MeV;
     std::vector<double> secondary_carbon_deposited_energy_MeV;
     std::vector<double> secondary_boron_deposited_energy_MeV;
@@ -747,34 +625,16 @@ struct TransportResult {
     std::vector<double> secondary_helium_fluence_mm;
     std::vector<double> secondary_proton_fluence_mm;
     std::vector<double> secondary_other_charged_fluence_mm;
-    std::vector<std::uint64_t> primary_survival_counts;
-    std::vector<std::uint64_t> inelastic_reaction_counts;
     // HadronLET raw dose-weighted moments. Numerator unit:
     // MeV * MeV/mm/(g/cm3); denominator unit: MeV.
-    std::vector<double> primary_letd_numerator;
-    std::vector<double> primary_letd_denominator;
-    std::vector<double> all_hadron_letd_numerator;
-    std::vector<double> all_hadron_letd_denominator;
     // Category-major primary, secondary C, B, Be, Li, He, p, other.
-    std::vector<double> charged_origin_letd_numerator;
-    std::vector<double> charged_origin_letd_denominator;
     // Optional category-major p, d, t, He-3, He-4, N, O, F LET moments.
-    std::vector<double> light_isotope_letd_numerator;
-    std::vector<double> light_isotope_letd_denominator;
     // Optional selected-isotope/element birth spectra. Layout documented
     // in particle.hpp birth_* constants. Counts are event tallies (not /primary).
     // Histograms are species × generation × bin (see birth_hist_index).
     std::vector<std::uint64_t> birth_counts_by_generation;  // cat * gen_bins
     std::vector<HeliumBirthRecord> helium_birth_records; // opt-in birth spectrum only
     std::vector<C12BirthRecord> c12_birth_records; // opt-in birth spectrum only
-    std::vector<NeutronBirthRecord> neutron_birth_records;
-    // Optional proton births within neutron pass. rng_stream identifies root
-    // neutron; product_index is charged ordinal, material uses -1/-2/-3.
-    std::vector<NeutronBirthRecord> neutron_proton_birth_records;
-    NeutronExperimentalDiagnostics neutron_experimental;
-    std::vector<double> neutron_voxel_deposited_energy_MeV;
-    // Diagnostic direct-depositor maps: proton, other charged, neutron local.
-    std::array<std::vector<float>,3> neutron_component_voxel_MeV;
     std::vector<MinibeamPhaseSpaceRecord> minibeam_phase_space_records;
     std::vector<MinibeamWaterPrimaryPlaneRecord>
         minibeam_water_primary_plane_records;
@@ -792,12 +652,6 @@ struct TransportResult {
     // cat*gen*(parent_mevu_bins * product_mevu_bins)
     std::vector<std::uint64_t> birth_parent_product_mevu_hist;
     // Same four moments on the optional voxel grid (z-major, x fastest).
-    std::vector<double> primary_voxel_letd_numerator;
-    std::vector<double> primary_voxel_letd_denominator;
-    std::vector<double> all_hadron_voxel_letd_numerator;
-    std::vector<double> all_hadron_voxel_letd_denominator;
-    std::vector<double> neutron_origin_deposited_energy_MeV;
-    std::vector<double> gamma_origin_deposited_energy_MeV;
     double initial_energy_MeV{0.0};
     double total_deposited_energy_MeV{0.0};
     double escaped_energy_MeV{0.0};
@@ -819,15 +673,8 @@ struct TransportResult {
     double primary_inelastic_removed_kinetic_MeV{0.0};
     double primary_other_terminal_kinetic_MeV{0.0};
     double primary_cutoff_stopped_energy_MeV{0.0};
-    std::vector<PrimaryFirstInteractionRecord> primary_first_interactions{};
-    // Fixed-layout CINEL02 runtime ledger; zero for other nuclear models.
-    static constexpr std::size_t cinel02_diagnostic_slot_count = 1668;
-    std::array<std::uint64_t, cinel02_diagnostic_slot_count> cinel02_diagnostics{};
-    // Aggregate kinetic-energy classification for valid CINEL02 replays.
-    // Layout is emitted with the energy ledger JSON.
-    std::array<double, 8> cinel02_energy_ledger_MeV{};
     std::array<double, species_ledger_species_count * species_ledger_metric_count>
-        cinel02_species_transport_ledger_MeV{};
+        ion_species_transport_ledger_MeV{};
     // Explicit in-grid/outside-grid deposited-energy split (global MeV).
     // Every deposited-ledger credit is mirrored here with that site's paired
     // voxel-scorer guard, so total ≈ in + outside and voxel_sum ≈ in_grid.
@@ -835,68 +682,8 @@ struct TransportResult {
     double outside_grid_deposited_energy_MeV{0.0};
     std::array<std::uint64_t,
                species_ledger_species_count *
-                   Cinel02SpeciesLedgerSchema::terminal_reason_count>
-        cinel02_species_terminal_reason_counts{};
-    // Signed package/runtime incident-energy handoff diagnostics. The sums
-    // are in MeV/u and are keyed by the projectile isotope of each valid
-    // CINEL02 replay. Positive/negative counts classify the signed delta.
-    std::array<double, species_ledger_species_count>
-        cinel02_replay_delta_MeV_per_u{};
-    std::array<double, species_ledger_species_count>
-        cinel02_replay_abs_delta_MeV_per_u{};
-    std::array<std::uint64_t, species_ledger_species_count>
-        cinel02_replay_delta_positive_counts{};
-    std::array<std::uint64_t, species_ledger_species_count>
-        cinel02_replay_delta_negative_counts{};
-    std::array<std::uint64_t, species_ledger_species_count>
-        cinel02_replay_valid_counts{};
-    // Compact isotope × target × generation × 10-MeV/u-bin replay ledger.
-    std::array<std::uint64_t, Cinel02ReplayLedgerSchema::status_slot_count>
-        cinel02_replay_status_counts{};
-    // Per replay-status cell energies.  The replay query energy is the
-    // post-EM collision-point energy; rate query is the pre-EM energy used
-    // for hazard/target selection.  Their difference is the continuous loss
-    // accrued to the collision point (within atomic accumulation precision).
-    std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
-        cinel02_replay_status_rate_query_energy_MeV{};
-    std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
-        cinel02_replay_status_replay_query_energy_MeV{};
-    std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
-        cinel02_replay_status_continuous_loss_to_collision_MeV{};
-    std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
-        cinel02_replay_status_delta_MeV_per_u{};
-    std::array<double, Cinel02ReplayLedgerSchema::status_slot_count>
-        cinel02_replay_status_abs_delta_MeV_per_u{};
-    // Secondary transport exposure: sums are in mm (path) or dimensionless
-    // integrated hazard; count metrics are event tallies. The generation
-    // index is the SecondaryParticle transport generation (0 = direct
-    // product, 1 = first cascade child, 2 = generation 2+).
-    std::array<double, Cinel02ExposureLedgerSchema::sum_slot_count>
-        cinel02_secondary_exposure_sums{};
-    std::array<std::uint64_t, Cinel02ExposureLedgerSchema::count_slot_count>
-        cinel02_secondary_exposure_counts{};
-    // Isotope-resolved parent outcome energy ledger.
-    std::array<std::uint64_t, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
-        cinel02_parent_outcome_counts{};
-    std::array<double, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
-        cinel02_parent_outcome_incident_energy_MeV{};
-    std::array<double, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
-        cinel02_parent_outcome_after_energy_MeV{};
-    std::array<double, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
-        cinel02_parent_outcome_local_deposit_MeV{};
-    std::array<double, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
-        cinel02_parent_outcome_export_MeV{};
-    std::array<double, Cinel02ReplayLedgerSchema::parent_outcome_cell_count>
-        cinel02_parent_outcome_import_MeV{};
-    // Generated and successfully queued isotope-to-isotope transitions.
-    std::array<std::uint64_t, Cinel02ReplayLedgerSchema::transition_cell_count>
-        cinel02_generated_transition_counts{};
-    std::array<double, Cinel02ReplayLedgerSchema::transition_cell_count>
-        cinel02_generated_transition_kinetic_MeV{};
-    std::array<std::uint64_t, Cinel02ReplayLedgerSchema::transition_cell_count>
-        cinel02_queued_transition_counts{};
-    std::array<double, Cinel02ReplayLedgerSchema::transition_cell_count>
-        cinel02_queued_transition_kinetic_MeV{};
+                   IonSpeciesLedgerSchema::terminal_reason_count>
+        ion_species_terminal_reason_counts{};
     std::uint64_t sampled_reaction_packages{0};
     std::uint64_t generated_direct_secondaries{0};
     std::uint64_t queued_secondaries{0};
@@ -904,15 +691,12 @@ struct TransportResult {
     double generated_direct_secondary_energy_MeV{0.0};
     double queued_secondary_energy_MeV{0.0};
     double secondary_queue_overflow_energy_MeV{0.0};
-    double untransported_neutral_energy_MeV{0.0};
-    double untransported_unsupported_charged_energy_MeV{0.0};
     double nuclear_energy_not_in_direct_secondaries_MeV{0.0};
     std::uint64_t primary_elastic_interactions{0};
     std::uint64_t secondary_elastic_interactions{0};
     std::uint64_t elastic_post_em_null_collisions{0};
     double elastic_local_deposited_energy_MeV{0.0};
     double elastic_queued_charged_energy_MeV{0.0};
-    double elastic_queued_neutral_energy_MeV{0.0};
     std::uint64_t elastic_queue_overflow{0};
     double elastic_queue_overflow_energy_MeV{0.0};
     std::uint64_t transported_secondaries{0};
@@ -931,36 +715,18 @@ struct TransportResult {
     std::uint64_t cascade_queue_overflow{0};
     double queued_cascade_energy_MeV{0.0};
     double cascade_nuclear_energy_MeV{0.0};
-    std::uint64_t queued_neutrals{0};
-    std::uint64_t neutral_queue_overflow{0};
-    std::uint64_t transported_neutrals{0};
-    std::uint64_t neutral_interactions{0};
-    std::uint64_t neutral_transport_steps{0};
-    double queued_neutral_energy_MeV{0.0};
-    double neutral_queue_overflow_energy_MeV{0.0};
-    double neutral_deposited_energy_MeV{0.0};
-    double neutral_escaped_energy_MeV{0.0};
-    double residual_neutral_energy_MeV{0.0};
-    double charged_from_neutral_energy_MeV{0.0};
-    double neutral_unsupported_product_energy_MeV{0.0};
-    double neutral_package_closure_residual_MeV{0.0};
     std::uint64_t total_steps{0};
     double elapsed_seconds{0.0};
     double primary_kernel_seconds{0.0};
     double secondary_kernel_seconds{0.0};
-    double neutral_kernel_seconds{0.0};
     double electron_kernel_seconds{0.0};
-    double charged_after_neutral_kernel_seconds{0.0};
     std::string backend;
     MinibeamDiagnostics minibeam;
     // Populated only when built with CARBON_TRANSPORT_PROFILE=1.
     TransportProfile profile;
 
-    // Accounting closure includes explicit TOPAS compatibility sinks.  The
-    // physical closure intentionally excludes those sinks so a reference
-    // model defect cannot be mistaken for deposited or escaped energy.
+    // Closure includes deposited, escaped and explicitly untracked energy.
     [[nodiscard]] double physical_relative_energy_balance_error() const noexcept;
-    [[nodiscard]] double relative_energy_balance_error() const noexcept;
 };
 
 [[nodiscard]] double choose_step_mm(double energy_MeV,
@@ -977,11 +743,6 @@ struct TransportResult {
     double bin_width_z_mm,
     double z_min_mm = 0.0);
 
-TransportResult transport_serial(const TransportConfig& config,
-                                 const StoppingPowerTable& stopping_power,
-                                 const CrossSectionTable& cross_section);
-
-#ifdef CARBON_HAS_SYCL
 class SyclTransportContext {
 public:
     explicit SyclTransportContext(const std::string& device_name);
@@ -996,21 +757,19 @@ private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 
-    template<bool BroadBeam, bool Gaussian, int JointResponse>
+    template<bool BroadBeam, int JointResponse>
     friend TransportResult transport_sycl_impl(
-        const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
+        const TransportConfig&, const StoppingPowerTable&,
         const std::string&, SyclTransportContext*);
     friend TransportResult transport_sycl(
-        const TransportConfig&, const StoppingPowerTable&, const CrossSectionTable&,
+        const TransportConfig&, const StoppingPowerTable&,
         const std::string&, SyclTransportContext*);
 };
 
 [[gnu::noinline]] TransportResult transport_sycl(const TransportConfig& config,
                                const StoppingPowerTable& stopping_power,
-                               const CrossSectionTable& cross_section,
                                const std::string& device_name,
                                SyclTransportContext* context = nullptr);
 std::string describe_sycl_device(const std::string& device_name);
-#endif
 
 }  // namespace carbon

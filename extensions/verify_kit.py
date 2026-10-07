@@ -1,45 +1,56 @@
 #!/usr/bin/env python3
-"""Check package presence and sizes; physics loaders validate schemas and coverage."""
-
-from __future__ import annotations
-
+"""Verify extraction-kit sources, reference coverage and local includes/imports."""
 import argparse
+import ast
+import hashlib
 import json
 from pathlib import Path
+import re
 
-HERE = Path(__file__).resolve().parent
-REPO = HERE.parent
+KIT = Path(__file__).resolve().parent
 
 
-def main() -> int:
+def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--require-packages", action="store_true",
-                        help="Fail instead of reporting missing large binaries")
-    parser.add_argument("--package-root", type=Path, default=REPO,
-                        help="Repository/data root containing the large packages")
+    parser.add_argument('--output', type=Path)
     args = parser.parse_args()
-    manifest = json.loads((HERE / "package_manifest.json").read_text())
-    failures = []
-    missing = []
-    checked_packages = 0
-    for entry in manifest["packages"]:
-        path = args.package_root / entry["path"]
-        if not path.is_file():
-            missing.append(str(path))
-            continue
-        if path.stat().st_size != entry["bytes"]:
-            failures.append(f"package size mismatch: {path}")
-        checked_packages += 1
-    if args.require_packages:
-        failures.extend(f"missing package: {path}" for path in missing)
-    print(json.dumps({
-        "installed_packages_checked": checked_packages,
-        "missing_optional_large_packages": missing,
-        "failures": failures,
-        "ok": not failures,
-    }, indent=2))
-    return 1 if failures else 0
+    provenance = json.loads((KIT/'source_provenance.json').read_text())
+    for record in provenance['files']:
+        path = KIT/record['file']
+        if not path.is_file() or path.is_symlink():
+            raise ValueError(f'Missing/nonlocal extraction source: {path}')
+        if hashlib.sha256(path.read_bytes()).hexdigest() != record['installed_sha256']:
+            raise ValueError(f'Extraction source digest changed: {path}')
+    for path in (KIT/'tools').rglob('*.py'):
+        ast.parse(path.read_text())
+    headers = {p.name for p in (KIT/'topas').rglob('*.hh')}
+    headers.update(p.name for p in (KIT/'topas').rglob('*.hpp'))
+    for path in (KIT/'topas').rglob('*.cc'):
+        for name in re.findall(r'^#include "([^"]+)"', path.read_text(), re.M):
+            if name.startswith(('G4', 'Ts', 'Randomize', 'CLHEP')):
+                continue
+            if name.startswith('carbon/'):
+                if not (KIT.parent/'include'/name).is_file():
+                    raise ValueError(f'Missing runtime math header: {name}')
+            elif name not in headers:
+                raise ValueError(f'Missing exporter header: {path}: {name}')
+    coverage = json.loads((KIT/'coverage.json').read_text())
+    installed = json.loads((KIT.parent/'data/manifest.json').read_text())
+    if set(coverage['assets']) != set(installed['files']):
+        raise ValueError('Extraction coverage differs from installed asset manifest')
+    if len(list((KIT/'reference/electron_compositions').glob('composition*/topas.txt'))) != 26:
+        raise ValueError('Missing electron composition cards')
+    if len(json.loads((KIT/'reference/joint_index.json').read_text())['tables']) != 82:
+        raise ValueError('Missing joint calibration material definitions')
+    if (KIT/'tools/neutron').exists():
+        raise ValueError('Neutron package extraction is outside this runtime')
+    result = dict(passed=True, sources=len(provenance['files']), assets=len(coverage['assets']),
+                  electron_compositions=26, joint_material_definitions=82)
+    text = json.dumps(result, indent=2)+'\n'
+    if args.output:
+        args.output.write_text(text)
+    print(text, end='')
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+if __name__ == '__main__':
+    main()

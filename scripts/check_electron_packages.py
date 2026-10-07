@@ -12,7 +12,7 @@ def require(ok,message):
 def verify(root):
     registry=json.loads((root/'docs/electron_packages_manifest.json').read_text())
     require(registry['schema']==3,'Registry schema')
-    require(json.loads((root/'data/electrons/manifest.json').read_text())==registry,'Installed registry mismatch')
+    require(json.loads((root/'data/em/electrons/manifest.json').read_text())==registry,'Installed registry mismatch')
     packages=registry['packages'];require(set(packages)=={'shared','proton','carbon'},'Three packages required')
     report={}
     for name,entry in packages.items():
@@ -47,7 +47,7 @@ def verify(root):
                         else:h=struct.unpack('<8sIid',f.read(24));require(h==(b'MAIPHF01',1,expected,float(density)),'Photon composition identity')
         report[name]=dict(files=len(spec['files']),bytes=total,compositions=26,density_nodes=0,verified=True)
     require(sum(x['bytes'] for x in report.values())==registry['total_unique_bytes'],'Unique size')
-    expected=dict(material_electron_birth_file='data/electrons/shared/birth26.bin',material_electron_joint_pilot_file='data/electrons/shared/joint.bin',material_electron_charged_index_file='data/electrons/shared/charged.index',material_photon_response_index_file='data/electrons/shared/photon.index')
+    expected=dict(material_electron_birth_file='data/em/electrons/shared/birth26.bin',material_electron_joint_pilot_file='data/em/electrons/shared/joint.bin',material_electron_charged_index_file='data/em/electrons/shared/charged.index',material_photon_response_index_file='data/em/electrons/shared/photon.index')
     for species in ['proton','carbon']:
         for geometry in ['ct','water']:
             for beam in ['broadbeam','minibeam']:

@@ -1,0 +1,3208 @@
+{
+  "schema_version": 2,
+  "projectile": [
+    1,
+    1
+  ],
+  "status": "UNVALIDATED_MATERIAL_RESPONSE_BANK",
+  "tables": [
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 0,
+        "material_name": "ResponseSection0Density0",
+        "runtime_density_g_cm3": 0.01131606474518776,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 0,
+          "material_name": "PatientTissueFromHUNegative975",
+          "nominal_density_g_cm3": 0.0393235,
+          "mean_excitation_energy_eV": 85.6829,
+          "composition_sha256": "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43",
+          "element_weights": [
+            0.0,
+            0.0,
+            0.755,
+            0.232,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.013,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material000/operator.bin",
+      "data_sha256": "b12848a42c1433b416a8509414ac82751879da3bfcb7c35de3f6e768c2a051a9",
+      "metadata_sha256": "75ce8015d316f2aa6a5b673d204341cfce0fa8ecfd4f2d3dec9b7693097c5cf4",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s0_0/state_refs.bin",
+      "state_reference_sha256": "6daa05be72ffde34093941c9a9a383d4c0555b6d31d5900c4a5c8c7cf2e2a787",
+      "state_reference_metadata_sha256": "c5d1cb7c8c0d69a62b188bc38d7d95528e5f75d692b27236b30453453427e2b2"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 0,
+        "material_name": "ResponseSection0Density1",
+        "runtime_density_g_cm3": 0.06621015816926956,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 0,
+          "material_name": "PatientTissueFromHUNegative975",
+          "nominal_density_g_cm3": 0.0393235,
+          "mean_excitation_energy_eV": 85.6829,
+          "composition_sha256": "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43",
+          "element_weights": [
+            0.0,
+            0.0,
+            0.755,
+            0.232,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.013,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material001/operator.bin",
+      "data_sha256": "ec57aefd44f6eba96d2747fd0769628d85624dec933f04aef443b9c9a082d47e",
+      "metadata_sha256": "cfce3a7b1be5cc4709b10ff44eddfb556efad603cf3fb68cedd73e757f440cf7",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s0_1/state_refs.bin",
+      "state_reference_sha256": "8723bd272d98916e6ce8b51745024e6af23ef7b2b4809ef53bc402ce45a62209",
+      "state_reference_metadata_sha256": "e17b76c20e2b53825c1dfa21899a3192e48e9dfd8f27f6a2bf7b97367833a889"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1Density0",
+        "runtime_density_g_cm3": 0.0594610758125782,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material002/operator.bin",
+      "data_sha256": "df0ff421a7f78ef59896c54e508ae237f3fb5fcb04bd2383826e547b15284901",
+      "metadata_sha256": "275d85776c6166763fc32943d0e158e9a360b8e9e0d090e87e714680a98edb6a",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_0/state_refs.bin",
+      "state_reference_sha256": "2157db7c3c7313167a209f4d9e1e580727b3771653735812fec993835e85881f",
+      "state_reference_metadata_sha256": "abd8137bca5495d2b4dad19c07964220c4f0bcd7b81f63b9456a1a216a30832a"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1Density1",
+        "runtime_density_g_cm3": 0.8796349167823792,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material003/operator.bin",
+      "data_sha256": "fbe0a374325d099ce93ccf6897b88e16618f1890a37f702fb98205aa68ed66f6",
+      "metadata_sha256": "88e492a2b20fda9689341200bdf11a6b684182c63d04c5d5c57b149689a28b13",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_1/state_refs.bin",
+      "state_reference_sha256": "88c2aaf5d4d9a46bc40f0318e41160685c6e70fe020b07d4f136dc7f73f9589a",
+      "state_reference_metadata_sha256": "5411b2b3c0bfc4fa6be71da0071ebe75db56861b029e663257b84323d714101c"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 2,
+        "material_name": "ResponseSection2Density0",
+        "runtime_density_g_cm3": 0.8575695753097534,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 2,
+          "material_name": "PatientTissueFromHUNegative102",
+          "nominal_density_g_cm3": 0.874911,
+          "mean_excitation_energy_eV": 62.0008,
+          "composition_sha256": "c979ebe99d85d61ee6e6dd657bcd594ee5aa17a95c86af8d383e23182fc34fa8",
+          "element_weights": [
+            0.116,
+            0.681,
+            0.002,
+            0.198,
+            0.0,
+            0.0,
+            0.001,
+            0.001,
+            0.0,
+            0.0,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material004/operator.bin",
+      "data_sha256": "337f8e67e3acf9a7f94e960a8bb81964049e02c1457d4b4281aae0fdc4d06f9f",
+      "metadata_sha256": "c5dfeb62bcd37c890ad1743a93b7d3f4d80402c4db7fa259718d40500b72304e",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s2_0/state_refs.bin",
+      "state_reference_sha256": "5ef3c59c61f82466ec29656822dbe5c85426869f08ff224a6d2d2a4a4382147f",
+      "state_reference_metadata_sha256": "c813e01905c19c875bdd8e105a4aa42974779240983856e00b90eafb023ed6b9"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 2,
+        "material_name": "ResponseSection2Density1",
+        "runtime_density_g_cm3": 0.8922458291053772,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 2,
+          "material_name": "PatientTissueFromHUNegative102",
+          "nominal_density_g_cm3": 0.874911,
+          "mean_excitation_energy_eV": 62.0008,
+          "composition_sha256": "c979ebe99d85d61ee6e6dd657bcd594ee5aa17a95c86af8d383e23182fc34fa8",
+          "element_weights": [
+            0.116,
+            0.681,
+            0.002,
+            0.198,
+            0.0,
+            0.0,
+            0.001,
+            0.001,
+            0.0,
+            0.0,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material005/operator.bin",
+      "data_sha256": "d45ead0c74aebd924c02ee8f43abadd3bd5fb2198ef1dd651add14e49086405e",
+      "metadata_sha256": "09eed45c6827e1d1488be78da8b792a461bb518e9770bd43986386263341d04b",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s2_1/state_refs.bin",
+      "state_reference_sha256": "8a0b4308c5a0dc1eab307eaa51410a5e99dd73da650a139d94fff25eb97a8bee",
+      "state_reference_metadata_sha256": "90d09c75bdfb646a563b2bd06edf16c832a4c333aefff509398ac9b29a739ad0"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 3,
+        "material_name": "ResponseSection3Density0",
+        "runtime_density_g_cm3": 0.898159384727478,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 3,
+          "material_name": "PatientTissueFromHUNegative68",
+          "nominal_density_g_cm3": 0.912686,
+          "mean_excitation_energy_eV": 63.4369,
+          "composition_sha256": "b754d221929076adf060245ea9df9fc802f8a1cc850f4784ffacdf35fcbc96f9",
+          "element_weights": [
+            0.113,
+            0.567,
+            0.009,
+            0.308,
+            0.0,
+            0.0,
+            0.001,
+            0.001,
+            0.0,
+            0.0,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material006/operator.bin",
+      "data_sha256": "822ec7145baaca61f6c338b8689fae071c72b1e6a04e41de3a716fcda1bf3aac",
+      "metadata_sha256": "a057ae5518d8b1af92d13502aba989eb7c4a1671dc92a99fc9d2fe0cbde63903",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s3_0/state_refs.bin",
+      "state_reference_sha256": "e0dc6322ddf3dfdafaf0a3ebf66fdf2ce18db237cd3700e3554161a460baec1b",
+      "state_reference_metadata_sha256": "d75d5440eb5bfcdc7b8a63b32d87e4b3782aec57e076486c2b31a99d77371c11"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 3,
+        "material_name": "ResponseSection3Density1",
+        "runtime_density_g_cm3": 0.926254391670227,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 3,
+          "material_name": "PatientTissueFromHUNegative68",
+          "nominal_density_g_cm3": 0.912686,
+          "mean_excitation_energy_eV": 63.4369,
+          "composition_sha256": "b754d221929076adf060245ea9df9fc802f8a1cc850f4784ffacdf35fcbc96f9",
+          "element_weights": [
+            0.113,
+            0.567,
+            0.009,
+            0.308,
+            0.0,
+            0.0,
+            0.001,
+            0.001,
+            0.0,
+            0.0,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material007/operator.bin",
+      "data_sha256": "07210295164248d677840c4941ff982c0216d38e71b3ac3f9cd6d9197e7d16ef",
+      "metadata_sha256": "098217cf59295fe76283fea8a4261d4284dce028978e45eff6934ad1b5542ad3",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s3_1/state_refs.bin",
+      "state_reference_sha256": "9f273404da00dd250dd525c59e9a56cd3213ce99950db21f74c22a1403135b80",
+      "state_reference_metadata_sha256": "4525857eb5bcd6448df2be5a9a38c4b352203d6fb481d82db5fc44e4a88d8fd1"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 4,
+        "material_name": "ResponseSection4Density0",
+        "runtime_density_g_cm3": 0.9325624704360962,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 4,
+          "material_name": "PatientTissueFromHUNegative38",
+          "nominal_density_g_cm3": 0.947183,
+          "mean_excitation_energy_eV": 64.9795,
+          "composition_sha256": "180fbed0d50a66b0e680d4fa0a77b34b359418c08d1d86af5395893bb9d5282b",
+          "element_weights": [
+            0.11,
+            0.458,
+            0.015,
+            0.411,
+            0.0,
+            0.001,
+            0.002,
+            0.002,
+            0.0,
+            0.0,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material008/operator.bin",
+      "data_sha256": "61e76cb36d4dfaccaae6d2d4123f15533a48e4df9663d51652d5633e067f4956",
+      "metadata_sha256": "411932e51a7d7bd33356c3017df47bb29b4f9be4f68769818ef98c366677d255",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s4_0/state_refs.bin",
+      "state_reference_sha256": "71eb8f61357de50dfa1e701ddf237723d8f889850b225b0bf17c393d014b6f94",
+      "state_reference_metadata_sha256": "3e1b70be00f684562404471a8c3173afdafebb23f65460e582c908aa942038ce"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 4,
+        "material_name": "ResponseSection4Density1",
+        "runtime_density_g_cm3": 0.9608210921287537,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 4,
+          "material_name": "PatientTissueFromHUNegative38",
+          "nominal_density_g_cm3": 0.947183,
+          "mean_excitation_energy_eV": 64.9795,
+          "composition_sha256": "180fbed0d50a66b0e680d4fa0a77b34b359418c08d1d86af5395893bb9d5282b",
+          "element_weights": [
+            0.11,
+            0.458,
+            0.015,
+            0.411,
+            0.0,
+            0.001,
+            0.002,
+            0.002,
+            0.0,
+            0.0,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material009/operator.bin",
+      "data_sha256": "1008a1c46133348b7ef2b60b980887cf4b8c0af47b20a701edeab9e3bebfc49c",
+      "metadata_sha256": "1ec41ab88677b45bd636ad1015c0a0a808823f161aff41ba92f8ea3d4527a2f0",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s4_1/state_refs.bin",
+      "state_reference_sha256": "bbe6e3998ad9bea39c87439d9e7ae1e425dd1cf8c902a3b8592a4e155b0eaeb3",
+      "state_reference_metadata_sha256": "6e0e68f76a1e4541a8a596a3ab4d87d5969173d2fc58d16225a4e4fe13482f13"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 5,
+        "material_name": "ResponseSection5Density0",
+        "runtime_density_g_cm3": 0.9657217860221863,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 5,
+          "material_name": "PatientTissueFromHUNegative8",
+          "nominal_density_g_cm3": 0.980389,
+          "mean_excitation_energy_eV": 66.1914,
+          "composition_sha256": "1340176e48a2ee30bb74de2bc44277716aa73eb89daa3869c505f36f3c1a9f4c",
+          "element_weights": [
+            0.108,
+            0.356,
+            0.022,
+            0.509,
+            0.0,
+            0.001,
+            0.002,
+            0.002,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material010/operator.bin",
+      "data_sha256": "c8c4d954e67b7b6810dcf351359a4fbeeae54aedc5c35bb31528774a191a3fb4",
+      "metadata_sha256": "01981d8bc6725fc7df91d5911d295527fbdfc184074c2962632eeb81c141db1e",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s5_0/state_refs.bin",
+      "state_reference_sha256": "cdbc072ccf321f7abd2e2f0e1a1c1c09b44b3c0914544435dcd4695c41d86b77",
+      "state_reference_metadata_sha256": "93c56b3a48172a9af9c1eefa82a8172b6f279160da9c236b50df4649bd2b822f"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 5,
+        "material_name": "ResponseSection5Density1",
+        "runtime_density_g_cm3": 0.9941513538360596,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 5,
+          "material_name": "PatientTissueFromHUNegative8",
+          "nominal_density_g_cm3": 0.980389,
+          "mean_excitation_energy_eV": 66.1914,
+          "composition_sha256": "1340176e48a2ee30bb74de2bc44277716aa73eb89daa3869c505f36f3c1a9f4c",
+          "element_weights": [
+            0.108,
+            0.356,
+            0.022,
+            0.509,
+            0.0,
+            0.001,
+            0.002,
+            0.002,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material011/operator.bin",
+      "data_sha256": "8e34e1936fc0e2a10e2fcebaf255c3900269cc7e6a90d3c09e2f80286d9f2dea",
+      "metadata_sha256": "299da217581a9d8d33fee432cf1533caf5bd9a8adc82ff1aa91fe74cb80ea5ce",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s5_1/state_refs.bin",
+      "state_reference_sha256": "bc429cb3dc486dd528618790388d141f319a8898bd1e6562c3e82e559715520d",
+      "state_reference_metadata_sha256": "45ce6600c1b6245a3dfbfe990dec856f17d2019aa6bade2413ff9e49856bc063"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 6,
+        "material_name": "ResponseSection6Density0",
+        "runtime_density_g_cm3": 0.9989110231399536,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 6,
+          "material_name": "PatientTissueFromHU12",
+          "nominal_density_g_cm3": 1.00386,
+          "mean_excitation_energy_eV": 67.2309,
+          "composition_sha256": "4feda65b1b00754db48b3c90ab5a2eddf48163209fcb838ce4fb27645a2ac9d9",
+          "element_weights": [
+            0.106,
+            0.284,
+            0.026,
+            0.578,
+            0.0,
+            0.001,
+            0.002,
+            0.002,
+            0.0,
+            0.0,
+            0.0,
+            0.001,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material012/operator.bin",
+      "data_sha256": "4692394123441f46648269dbe92646d4d2004451923db782f3285d36cb44cc09",
+      "metadata_sha256": "090b102f58cba8285ecf35832ebdf2e0af8cd7c726910ef1a90d541f114d309d",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s6_0/state_refs.bin",
+      "state_reference_sha256": "227e2fa84d001f188ece80bc40e30b3a54cb83fc7e1cd26357dc2a33a94551b3",
+      "state_reference_metadata_sha256": "82206bbad518c768e2b7fe56a91ed555c1280ffc8549d18dcf1e840f28fccd55"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 6,
+        "material_name": "ResponseSection6Density1",
+        "runtime_density_g_cm3": 1.0088231563568115,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 6,
+          "material_name": "PatientTissueFromHU12",
+          "nominal_density_g_cm3": 1.00386,
+          "mean_excitation_energy_eV": 67.2309,
+          "composition_sha256": "4feda65b1b00754db48b3c90ab5a2eddf48163209fcb838ce4fb27645a2ac9d9",
+          "element_weights": [
+            0.106,
+            0.284,
+            0.026,
+            0.578,
+            0.0,
+            0.001,
+            0.002,
+            0.002,
+            0.0,
+            0.0,
+            0.0,
+            0.001,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material013/operator.bin",
+      "data_sha256": "5ef02632756d588dd67a0a5823a84e45357b65fb9ba06c8f46dbca22bb0e0699",
+      "metadata_sha256": "9155f44bdbebb23d536ec323b4c37f11a3ca54feefd56ff4d307d2b4bb35177c",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s6_1/state_refs.bin",
+      "state_reference_sha256": "d09584fe58948e8903ced44c2dbfc92e420d7826a7cd2bd70a95b9abe6ffa57f",
+      "state_reference_metadata_sha256": "79d0124624f8aa7dca918047f8e16261aa9d68b963c8999889e4413972cbd884"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 7,
+        "material_name": "ResponseSection7Density0",
+        "runtime_density_g_cm3": 1.0166202783584595,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 7,
+          "material_name": "PatientTissueFromHU49",
+          "nominal_density_g_cm3": 1.04308,
+          "mean_excitation_energy_eV": 69.3341,
+          "composition_sha256": "3224284d45c417ea1a1153495a5de59800e6f4f31a0b93e1cfaa833533a8ff5a",
+          "element_weights": [
+            0.103,
+            0.134,
+            0.03,
+            0.723,
+            0.0,
+            0.002,
+            0.002,
+            0.002,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material014/operator.bin",
+      "data_sha256": "2f447a6d6d479b686af03e2e4c808185950a274eb426982fc40ed0dbac6ca736",
+      "metadata_sha256": "e8e8dbafffea799df46ffca63f063b43a059dbca834e91dd46ecf6f608873cf1",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s7_0/state_refs.bin",
+      "state_reference_sha256": "a6d3111681e82c5c858d9321e7d3cb4ab58d092b2f76007379d3097cd82ed9da",
+      "state_reference_metadata_sha256": "5a8fb7dfd80bd40adee77a0a79ce297d30676fef7ac38f8d27259dcf8216aefa"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 7,
+        "material_name": "ResponseSection7Density1",
+        "runtime_density_g_cm3": 1.0580652952194214,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 7,
+          "material_name": "PatientTissueFromHU49",
+          "nominal_density_g_cm3": 1.04308,
+          "mean_excitation_energy_eV": 69.3341,
+          "composition_sha256": "3224284d45c417ea1a1153495a5de59800e6f4f31a0b93e1cfaa833533a8ff5a",
+          "element_weights": [
+            0.103,
+            0.134,
+            0.03,
+            0.723,
+            0.0,
+            0.002,
+            0.002,
+            0.002,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material015/operator.bin",
+      "data_sha256": "bf4de05c8f7db93f4cde42b6c6b39e74700681c504dbf1d4419b95dc0ca97d54",
+      "metadata_sha256": "62475246c9cf778c1c10c8b5288388ccad91f049ae6dd3e299ade2d65953b022",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s7_1/state_refs.bin",
+      "state_reference_sha256": "49d1a28d00fd50769df1351633f06a9439ea94143b547243b59e177cfb0c77a0",
+      "state_reference_metadata_sha256": "c12406059dfb25dde11213bcb55d4f4316aefbf356ba7b9f64a59518b3c89fcb"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 8,
+        "material_name": "ResponseSection8Density0",
+        "runtime_density_g_cm3": 1.0687122344970703,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 8,
+          "material_name": "PatientTissueFromHU100",
+          "nominal_density_g_cm3": 1.0788,
+          "mean_excitation_energy_eV": 70.0821,
+          "composition_sha256": "bb0aa41d37f7f932c7e79d1c6aecde17efe27b28e6c28bd959dc2c0d6b9d1ffe",
+          "element_weights": [
+            0.094,
+            0.207,
+            0.062,
+            0.622,
+            0.0,
+            0.0,
+            0.006,
+            0.003,
+            0.0,
+            0.0,
+            0.006,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material016/operator.bin",
+      "data_sha256": "bd35f37e869d98b784804216fff1c59301d1d51679848629d55e53ad4caf5da0",
+      "metadata_sha256": "b12c64ad235be5031af5b58cb541f7583472161c965e3f5eeb9e82a98ee2c06d",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s8_0/state_refs.bin",
+      "state_reference_sha256": "152a906caae47691747cefa238109e8fb3b2a7f39a557f830bb1077dd768dcf1",
+      "state_reference_metadata_sha256": "61ff2a67c178662e3c118bc6f6b283620404388e77dc39dae8c6061c4b127c1a"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 8,
+        "material_name": "ResponseSection8Density1",
+        "runtime_density_g_cm3": 1.0883723497390747,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 8,
+          "material_name": "PatientTissueFromHU100",
+          "nominal_density_g_cm3": 1.0788,
+          "mean_excitation_energy_eV": 70.0821,
+          "composition_sha256": "bb0aa41d37f7f932c7e79d1c6aecde17efe27b28e6c28bd959dc2c0d6b9d1ffe",
+          "element_weights": [
+            0.094,
+            0.207,
+            0.062,
+            0.622,
+            0.0,
+            0.0,
+            0.006,
+            0.003,
+            0.0,
+            0.0,
+            0.006,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material017/operator.bin",
+      "data_sha256": "fe4812363a3208538180ff14ec34c3f25b57a2d1d334d0ebdea06ae62db0361e",
+      "metadata_sha256": "c618fb7ac2a598f08aeb088dff1d07af52432438cd6fd42a9db96d652fff6bae",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s8_1/state_refs.bin",
+      "state_reference_sha256": "2f34c295ba08193987b42b0a56de2b6dc60389d457be5e27398cdcfd8bcf9685",
+      "state_reference_metadata_sha256": "f94ebfe2a9b876f1ffaeb301f47a898374fedbf26aba4fdb90a6fbfcd87e13a6"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 9,
+        "material_name": "ResponseSection9Density0",
+        "runtime_density_g_cm3": 1.0884208679199219,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 9,
+          "material_name": "PatientTissueFromHU160",
+          "nominal_density_g_cm3": 1.10857,
+          "mean_excitation_energy_eV": 70.1198,
+          "composition_sha256": "5cf10aa24ee479b9c76b3ee379e974bafebdf1365b961eb94df0d2c63db02876",
+          "element_weights": [
+            0.095,
+            0.455,
+            0.025,
+            0.355,
+            0.0,
+            0.021,
+            0.001,
+            0.001,
+            0.0,
+            0.045,
+            0.001,
+            0.001,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material018/operator.bin",
+      "data_sha256": "10356f9b8fcdce19ff94789cd5175c22a87c8d53cd6faa4a3ce77ca8b3dae502",
+      "metadata_sha256": "16579ff76b991f5c026b2139024c53e513aed22adb81df3fd2a753d497f4b43b",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s9_0/state_refs.bin",
+      "state_reference_sha256": "09ce9e0257da5a87b66c9829c03de9e89f529c201543717584bbabf16fd660cf",
+      "state_reference_metadata_sha256": "4a360bd5627d8e079bddf4ecd468d87962550839e687579dbed0038dbef5e49c"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 9,
+        "material_name": "ResponseSection9Density1",
+        "runtime_density_g_cm3": 1.1282261610031128,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 9,
+          "material_name": "PatientTissueFromHU160",
+          "nominal_density_g_cm3": 1.10857,
+          "mean_excitation_energy_eV": 70.1198,
+          "composition_sha256": "5cf10aa24ee479b9c76b3ee379e974bafebdf1365b961eb94df0d2c63db02876",
+          "element_weights": [
+            0.095,
+            0.455,
+            0.025,
+            0.355,
+            0.0,
+            0.021,
+            0.001,
+            0.001,
+            0.0,
+            0.045,
+            0.001,
+            0.001,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material019/operator.bin",
+      "data_sha256": "6d30af61bee54822756a2ad2b9b84901a48686301bbcde87e74fabf04bdc15c9",
+      "metadata_sha256": "3b5bf4a704352f521f466f525f6b3b5df0aa7bb9a84e0c2606003d9831fbaed6",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s9_1/state_refs.bin",
+      "state_reference_sha256": "4ec27c131e00a5a4136698c5892037f473e5649113b16d85796b8a65e0df5b0f",
+      "state_reference_metadata_sha256": "3000fd676551ec90c4d5e8d3ad43e19e7bf2f8a7741146fd0ae57ab2bdf13f71"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 10,
+        "material_name": "ResponseSection10Density0",
+        "runtime_density_g_cm3": 1.1406000852584839,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 10,
+          "material_name": "PatientTissueFromHU250",
+          "nominal_density_g_cm3": 1.16606,
+          "mean_excitation_energy_eV": 72.7791,
+          "composition_sha256": "4cfe354b748faaff62581c2e2c77500e68317f8e2df30764eb196d21928bb850",
+          "element_weights": [
+            0.089,
+            0.423,
+            0.027,
+            0.363,
+            0.0,
+            0.03,
+            0.001,
+            0.001,
+            0.0,
+            0.064,
+            0.001,
+            0.001,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material020/operator.bin",
+      "data_sha256": "3b99c9fc196e6c32446fc513e47b2a07db8cf9fef41dab86a0c82de9eaf6ddb1",
+      "metadata_sha256": "e0ca1bf3f93be2fd611e45aa1154a2c2f8b792037d95677e36a9158d5a08451b",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s10_0/state_refs.bin",
+      "state_reference_sha256": "8f2dc01262f8bd603286d3d692ec22382d7a68d211533dc882d98fe8d7c46be7",
+      "state_reference_metadata_sha256": "908158c6328107f15e092d7012a35077d6e2a6bd75af27453495878021b9bc38"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 10,
+        "material_name": "ResponseSection10Density1",
+        "runtime_density_g_cm3": 1.1910110712051392,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 10,
+          "material_name": "PatientTissueFromHU250",
+          "nominal_density_g_cm3": 1.16606,
+          "mean_excitation_energy_eV": 72.7791,
+          "composition_sha256": "4cfe354b748faaff62581c2e2c77500e68317f8e2df30764eb196d21928bb850",
+          "element_weights": [
+            0.089,
+            0.423,
+            0.027,
+            0.363,
+            0.0,
+            0.03,
+            0.001,
+            0.001,
+            0.0,
+            0.064,
+            0.001,
+            0.001,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material021/operator.bin",
+      "data_sha256": "691815aef02bc52c9b31ec1da5c2d24f2213bca944204692185820045a539dcd",
+      "metadata_sha256": "91d40e17a655fbeb5d3eb805a339727e80cb5e70fcd49204cb181e893afbe618",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s10_1/state_refs.bin",
+      "state_reference_sha256": "2f78f35e1a540a1db8cfd28caacdf19ea47463c6372491fc8075fc29a92c6050",
+      "state_reference_metadata_sha256": "4f0bc829cd23f10203b3a2ee4e0df683bd88781b2b4172f3c68b7b9dbd7cd1aa"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 11,
+        "material_name": "ResponseSection11Density0",
+        "runtime_density_g_cm3": 1.205697774887085,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 11,
+          "material_name": "PatientTissueFromHU350",
+          "nominal_density_g_cm3": 1.23146,
+          "mean_excitation_energy_eV": 75.7783,
+          "composition_sha256": "274aa82d5a4eeb248f472707e7edf9e375be74c4a51772f3cd3ebe23adcee114",
+          "element_weights": [
+            0.082,
+            0.391,
+            0.029,
+            0.372,
+            0.0,
+            0.039,
+            0.001,
+            0.001,
+            0.0,
+            0.083,
+            0.001,
+            0.001,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material022/operator.bin",
+      "data_sha256": "baab7e13d101edca9958a101f688fdb56d82405b76becc9e937647717a41479b",
+      "metadata_sha256": "4993e2f18c2335115538eb17aecd9352d728137b6eaaebc606cb201ac4cc00ed",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s11_0/state_refs.bin",
+      "state_reference_sha256": "585d5a93379f12aa0df045f2c2d055caaf5b79d887f6b808b8b166dc17a8ca2d",
+      "state_reference_metadata_sha256": "f12079b62f713019d9dade85c00b32dc7339a0c136ec8ada1df9d0f09eda42ff"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 11,
+        "material_name": "ResponseSection11Density1",
+        "runtime_density_g_cm3": 1.2567044496536255,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 11,
+          "material_name": "PatientTissueFromHU350",
+          "nominal_density_g_cm3": 1.23146,
+          "mean_excitation_energy_eV": 75.7783,
+          "composition_sha256": "274aa82d5a4eeb248f472707e7edf9e375be74c4a51772f3cd3ebe23adcee114",
+          "element_weights": [
+            0.082,
+            0.391,
+            0.029,
+            0.372,
+            0.0,
+            0.039,
+            0.001,
+            0.001,
+            0.0,
+            0.083,
+            0.001,
+            0.001,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material023/operator.bin",
+      "data_sha256": "1f77ce65b574154e693391bcdc5e146e8f000c45d907960010ebdfee4a62871f",
+      "metadata_sha256": "ffea0b1a06c3c8f1032c5469805a62988aa89e629691614960d827b39f05c477",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s11_1/state_refs.bin",
+      "state_reference_sha256": "14c0e70b06f469c40d1b3c535d74116a03046d64e9c86c31a8023927d715f996",
+      "state_reference_metadata_sha256": "4ae8c1ecf06bf33a2711c242f68ff7c61f34ad71ddc1bd2674c0e7fd767dc507"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 12,
+        "material_name": "ResponseSection12Density0",
+        "runtime_density_g_cm3": 1.2705382108688354,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 12,
+          "material_name": "PatientTissueFromHU450",
+          "nominal_density_g_cm3": 1.29658,
+          "mean_excitation_energy_eV": 78.6516,
+          "composition_sha256": "84596ab01c4e118e60b57712082c25d7d667b15b5f9b78535071eb2ee4abce45",
+          "element_weights": [
+            0.076,
+            0.361,
+            0.03,
+            0.38,
+            0.001,
+            0.047,
+            0.002,
+            0.001,
+            0.0,
+            0.101,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material024/operator.bin",
+      "data_sha256": "a57c24d95817a4541aabad8c255d0d24b98fee0365c17c46ae78f83d891e2110",
+      "metadata_sha256": "90f90010c03c0e3c1a76c90acb7ca78bccbd23804cf5d8a8e8e183ab8dc021b3",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s12_0/state_refs.bin",
+      "state_reference_sha256": "c979a5d15b45b9f747b6cdca9fc74249013af49fc1a7bbf2ae4510fb56dc9f14",
+      "state_reference_metadata_sha256": "1531bf679938988a1684a68a1cfae9dc1475c9eda305ef3fe0c08f1d89ed2c2e"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 12,
+        "material_name": "ResponseSection12Density1",
+        "runtime_density_g_cm3": 1.3220936059951782,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 12,
+          "material_name": "PatientTissueFromHU450",
+          "nominal_density_g_cm3": 1.29658,
+          "mean_excitation_energy_eV": 78.6516,
+          "composition_sha256": "84596ab01c4e118e60b57712082c25d7d667b15b5f9b78535071eb2ee4abce45",
+          "element_weights": [
+            0.076,
+            0.361,
+            0.03,
+            0.38,
+            0.001,
+            0.047,
+            0.002,
+            0.001,
+            0.0,
+            0.101,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material025/operator.bin",
+      "data_sha256": "224cacd390d6893f1e5d32b0de3bea145b2e26136c4fb118c7d0fd4918adc0f7",
+      "metadata_sha256": "7a292a4ab81f475bc14dee7265211528ec0061cdc9ce7c8947f8b5b2552f2a52",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s12_1/state_refs.bin",
+      "state_reference_sha256": "ddcd6d881430f3d3223bd696628cb73097e34029c7db4db431ac8f6fd255116a",
+      "state_reference_metadata_sha256": "b14c0a3b4dcf367dea76a16df526a3289cb0a3a49371ebe2d7b9f11ab8cfccba"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 13,
+        "material_name": "ResponseSection13Density0",
+        "runtime_density_g_cm3": 1.334362506866455,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 13,
+          "material_name": "PatientTissueFromHU550",
+          "nominal_density_g_cm3": 1.36063,
+          "mean_excitation_energy_eV": 81.1498,
+          "composition_sha256": "b6c5e7b66fa67d76de71dbc46633b6aabf34656eb40f5f0eb88a69a3b1bacfce",
+          "element_weights": [
+            0.071,
+            0.335,
+            0.032,
+            0.387,
+            0.001,
+            0.054,
+            0.002,
+            0.0,
+            0.0,
+            0.117,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material026/operator.bin",
+      "data_sha256": "cd9308e23dad778ef5b545777c9005593808985d4cc54302ea8aea171be18ba5",
+      "metadata_sha256": "b24c66e7c98fdef30c38471ae8807edbe9b9c68b7d76d2594a06b0f3c137dcbf",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s13_0/state_refs.bin",
+      "state_reference_sha256": "9e119793275a502a3bff7427f28a16239acae9cbb4c24e97a20f0f513873123b",
+      "state_reference_metadata_sha256": "03cf78a5022356dd8acc8ac1211185b7b210b90b033c28a5c2ccc5b398e54b6d"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 13,
+        "material_name": "ResponseSection13Density1",
+        "runtime_density_g_cm3": 1.3863664865493774,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 13,
+          "material_name": "PatientTissueFromHU550",
+          "nominal_density_g_cm3": 1.36063,
+          "mean_excitation_energy_eV": 81.1498,
+          "composition_sha256": "b6c5e7b66fa67d76de71dbc46633b6aabf34656eb40f5f0eb88a69a3b1bacfce",
+          "element_weights": [
+            0.071,
+            0.335,
+            0.032,
+            0.387,
+            0.001,
+            0.054,
+            0.002,
+            0.0,
+            0.0,
+            0.117,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material027/operator.bin",
+      "data_sha256": "1411167dfaf684836e67a3ce152f9fb72ca63fe4ab7a218689b7be0fbd4214ea",
+      "metadata_sha256": "eebc49aa83eb3cff8c734779f105a7c22924f05168ef79a00357432ff2a51b37",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s13_1/state_refs.bin",
+      "state_reference_sha256": "d84b889076ec9e7f59b9f67dd32eb9a82d8003a0f047a315d7e3e0c39d55ac56",
+      "state_reference_metadata_sha256": "0833d3a6bea94ed80f10ce04531ec62c75b289ae6a66c3b6ed229b8dfdb72f4a"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 14,
+        "material_name": "ResponseSection14Density0",
+        "runtime_density_g_cm3": 1.3993558883666992,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 14,
+          "material_name": "PatientTissueFromHU650",
+          "nominal_density_g_cm3": 1.42585,
+          "mean_excitation_energy_eV": 83.742,
+          "composition_sha256": "1986e360a3f3151c014a848d06cbab774e13eb2481b068b2b3dd613404b35838",
+          "element_weights": [
+            0.066,
+            0.31,
+            0.033,
+            0.394,
+            0.001,
+            0.061,
+            0.002,
+            0.0,
+            0.0,
+            0.132,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material028/operator.bin",
+      "data_sha256": "3ce292736cd2b8ee330c72ba872eb9147d1763b3bf1284331772c4fb16447ab1",
+      "metadata_sha256": "044139a15d388aff1fccecb68cb45c6d64f86ef378f9a353a09579a9b1967dc9",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s14_0/state_refs.bin",
+      "state_reference_sha256": "b23d9cf5e260dffa449ed21c216a279a8b1219008b357425a91b3799dc3a5e88",
+      "state_reference_metadata_sha256": "ece8aec4f7ff444709788c3cdebbdcd91b7bdf96a7edc8969dde31ecb4cdb755"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 14,
+        "material_name": "ResponseSection14Density1",
+        "runtime_density_g_cm3": 1.451826572418213,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 14,
+          "material_name": "PatientTissueFromHU650",
+          "nominal_density_g_cm3": 1.42585,
+          "mean_excitation_energy_eV": 83.742,
+          "composition_sha256": "1986e360a3f3151c014a848d06cbab774e13eb2481b068b2b3dd613404b35838",
+          "element_weights": [
+            0.066,
+            0.31,
+            0.033,
+            0.394,
+            0.001,
+            0.061,
+            0.002,
+            0.0,
+            0.0,
+            0.132,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material029/operator.bin",
+      "data_sha256": "5d3a548752ddd5195208b1a84a8a06049306b2b74cce40d6f88cdeca9c23a8c2",
+      "metadata_sha256": "e8179e4c678138f5f5074a9a02df2dbb16105a92352944b3f56df1c926e402c1",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s14_1/state_refs.bin",
+      "state_reference_sha256": "314c40efbcd496d36e1aac2d2c57de1b25204037fbd87294def83e1a6713753f",
+      "state_reference_metadata_sha256": "3ab60a4770b8245c7ee5c7b04fdf9dc586ba314b895995c39fdb479005523621"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 15,
+        "material_name": "ResponseSection15Density0",
+        "runtime_density_g_cm3": 1.4657011032104492,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 15,
+          "material_name": "PatientTissueFromHU750",
+          "nominal_density_g_cm3": 1.4919,
+          "mean_excitation_energy_eV": 86.3012,
+          "composition_sha256": "e5eff8bf427eed45554ff967d3593377a04d854c9813c92c37b83bf8e0cf5161",
+          "element_weights": [
+            0.061,
+            0.287,
+            0.035,
+            0.4,
+            0.001,
+            0.067,
+            0.002,
+            0.0,
+            0.0,
+            0.146,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material030/operator.bin",
+      "data_sha256": "b36b77f7c80d2fbe397134f2481ad9c1ff5b2a88c8e6e36de3914d1b15696faf",
+      "metadata_sha256": "7c51f8ac7868906f2a2149ddf9cec9819eb6f59cddafaf84dac364af3574603b",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s15_0/state_refs.bin",
+      "state_reference_sha256": "0aa121656eaf9b79138b48a7097231d6b6a8438c837f255f3cc9fda6ce0b6338",
+      "state_reference_metadata_sha256": "6f24c4bee352ac697e9f4bdb933ec53dd33f01a540cab36ea06755fccc1866ee"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 15,
+        "material_name": "ResponseSection15Density1",
+        "runtime_density_g_cm3": 1.5175659656524658,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 15,
+          "material_name": "PatientTissueFromHU750",
+          "nominal_density_g_cm3": 1.4919,
+          "mean_excitation_energy_eV": 86.3012,
+          "composition_sha256": "e5eff8bf427eed45554ff967d3593377a04d854c9813c92c37b83bf8e0cf5161",
+          "element_weights": [
+            0.061,
+            0.287,
+            0.035,
+            0.4,
+            0.001,
+            0.067,
+            0.002,
+            0.0,
+            0.0,
+            0.146,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material031/operator.bin",
+      "data_sha256": "25328ce0c25633ea322b587089fa2bcdb99fdaadeefcbf46fa3b04529f4ac945",
+      "metadata_sha256": "1501fcab9dff614df1acbc3c4a1d721b56c02dc096132a1986fb1f8d22ad7273",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s15_1/state_refs.bin",
+      "state_reference_sha256": "a296e01e7131ce42adfec64f0a0467a9668e857db53f4bbe233e0aecd404cdc7",
+      "state_reference_metadata_sha256": "0c286c9b79a1d56abea8795dd69ede95fa9c1bc76fab761d19ef9a0fd5d60088"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 16,
+        "material_name": "ResponseSection16Density0",
+        "runtime_density_g_cm3": 1.5322473049163818,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 16,
+          "material_name": "PatientTissueFromHU850",
+          "nominal_density_g_cm3": 1.55922,
+          "mean_excitation_energy_eV": 89.0001,
+          "composition_sha256": "4c05cb552f9c4a3d0925ead691e00c3856faf61f27c39d841b7756219429fd7c",
+          "element_weights": [
+            0.056,
+            0.265,
+            0.036,
+            0.405,
+            0.002,
+            0.073,
+            0.003,
+            0.0,
+            0.0,
+            0.159,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material032/operator.bin",
+      "data_sha256": "5f42562b895fddbe5711c0b1bdb39eb4aabf8359b02fb1e2a521ff0a076d49ab",
+      "metadata_sha256": "752f0a52492953d6cf6b66ab738e29b649811515bfe6827dbf70620f72245845",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s16_0/state_refs.bin",
+      "state_reference_sha256": "9a7e5cff6c8f02423e1661d5a3635f33178a609880c8db595d002d1ccce78913",
+      "state_reference_metadata_sha256": "35a03650ab14fa5d75741cd0c4d9150798018c59f596f49b28669ff05e127f84"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 16,
+        "material_name": "ResponseSection16Density1",
+        "runtime_density_g_cm3": 1.5818983316421509,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 16,
+          "material_name": "PatientTissueFromHU850",
+          "nominal_density_g_cm3": 1.55922,
+          "mean_excitation_energy_eV": 89.0001,
+          "composition_sha256": "4c05cb552f9c4a3d0925ead691e00c3856faf61f27c39d841b7756219429fd7c",
+          "element_weights": [
+            0.056,
+            0.265,
+            0.036,
+            0.405,
+            0.002,
+            0.073,
+            0.003,
+            0.0,
+            0.0,
+            0.159,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material033/operator.bin",
+      "data_sha256": "bc2f223f1e6dcb4f92f4882f460f16331d7e93a4b04dc8bc07776e8ccbea8c81",
+      "metadata_sha256": "df7937aa5874072232497112a039c2f27f544c88c96df61af9080c20e13c7212",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s16_1/state_refs.bin",
+      "state_reference_sha256": "ffbdec17aa0264aa53b1671aac7f04526ec8011090a8c9872a9113ba6ea1877b",
+      "state_reference_metadata_sha256": "aa4dce70d93296d1990a4c8234efa29e90a1b695fbfad7ee5d013be6c11c7ab7"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 17,
+        "material_name": "ResponseSection17Density0",
+        "runtime_density_g_cm3": 1.5976113080978394,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 17,
+          "material_name": "PatientTissueFromHU950",
+          "nominal_density_g_cm3": 1.62478,
+          "mean_excitation_energy_eV": 91.2244,
+          "composition_sha256": "ebecc0310944118f64263e9a91b183dbfbcf00fe845e583cbcf4901831570d50",
+          "element_weights": [
+            0.052,
+            0.246,
+            0.037,
+            0.411,
+            0.002,
+            0.078,
+            0.003,
+            0.0,
+            0.0,
+            0.17,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material034/operator.bin",
+      "data_sha256": "6b39748688e1549a1e653462ba27448552588337bd3201243d8b6ad18121e8f3",
+      "metadata_sha256": "c616cc090659305ac08a7f9ef6583ad673463d6196bef237e89126e63b6616a8",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s17_0/state_refs.bin",
+      "state_reference_sha256": "9fad91a38f4fc29a1f833bce89d6c85c14459c188bc79388e92eb7820fe75392",
+      "state_reference_metadata_sha256": "d5461e20b7c32c74a008b560d2af2aa312bccc4b9c73fcbc3ed01401d73e6bcf"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 17,
+        "material_name": "ResponseSection17Density1",
+        "runtime_density_g_cm3": 1.6508733034133911,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 17,
+          "material_name": "PatientTissueFromHU950",
+          "nominal_density_g_cm3": 1.62478,
+          "mean_excitation_energy_eV": 91.2244,
+          "composition_sha256": "ebecc0310944118f64263e9a91b183dbfbcf00fe845e583cbcf4901831570d50",
+          "element_weights": [
+            0.052,
+            0.246,
+            0.037,
+            0.411,
+            0.002,
+            0.078,
+            0.003,
+            0.0,
+            0.0,
+            0.17,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material035/operator.bin",
+      "data_sha256": "05a7da98c86c5143d73766e598697e5442864ccf909b95fca07a33c057921ec0",
+      "metadata_sha256": "66e4464a056467a4f2210b7cc22c894f7ec00a3491d091ce3a1915ca6456eeb7",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s17_1/state_refs.bin",
+      "state_reference_sha256": "a2bf87b3e2e830232f5a3e47aed81a687d90e00421245c05d1bb87630e55d908",
+      "state_reference_metadata_sha256": "f14bce0f021ab159729dd81449d28e2aa5927e88c0f99963dd5d464feb27f72f"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 18,
+        "material_name": "ResponseSection18Density0",
+        "runtime_density_g_cm3": 1.6666321754455566,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 18,
+          "material_name": "PatientTissueFromHU1050",
+          "nominal_density_g_cm3": 1.68904,
+          "mean_excitation_energy_eV": 93.2404,
+          "composition_sha256": "27a8942e42e3d45c11b65efee97fd33e1ede99e76a7574618a3a40b79d270a0a",
+          "element_weights": [
+            0.049,
+            0.227,
+            0.038,
+            0.416,
+            0.002,
+            0.083,
+            0.003,
+            0.0,
+            0.0,
+            0.181,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material036/operator.bin",
+      "data_sha256": "3d997510d10c977f42d72a1060a114a12e66aea021b86b2f45748833cf44af34",
+      "metadata_sha256": "5abc8f3555c03f816d68a10b93d2b4bc739ad1ae5ab88c85867bebf1764a12c1",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s18_0/state_refs.bin",
+      "state_reference_sha256": "041485934c05d51eafea0f75e0705f756625d175166aee67182647ae304d4c35",
+      "state_reference_metadata_sha256": "a28d13688d3741e1455bcc6b53ac5537462a4c195bbefe54915fa6510837bfba"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 18,
+        "material_name": "ResponseSection18Density1",
+        "runtime_density_g_cm3": 1.70652437210083,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 18,
+          "material_name": "PatientTissueFromHU1050",
+          "nominal_density_g_cm3": 1.68904,
+          "mean_excitation_energy_eV": 93.2404,
+          "composition_sha256": "27a8942e42e3d45c11b65efee97fd33e1ede99e76a7574618a3a40b79d270a0a",
+          "element_weights": [
+            0.049,
+            0.227,
+            0.038,
+            0.416,
+            0.002,
+            0.083,
+            0.003,
+            0.0,
+            0.0,
+            0.181,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material037/operator.bin",
+      "data_sha256": "a387d2184ed20c9662d83ff0ee0ff98fdf7b2549462e9cdbc596d640f045a82c",
+      "metadata_sha256": "21bbb893fb5f1c3d1abeddb57803daf06f27c3192e744d8dbd4f52b52cdecacf",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s18_1/state_refs.bin",
+      "state_reference_sha256": "233ec102488a628028f46c975372e1e502b591e40ff60c377919a2f90ee01ac7",
+      "state_reference_metadata_sha256": "bdff5cac0947da11f7984b66e3555a25341fc08c60b37eaca06db3c72fb949c0"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 19,
+        "material_name": "ResponseSection19Density0",
+        "runtime_density_g_cm3": 1.743703007698059,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 19,
+          "material_name": "PatientTissueFromHU1150",
+          "nominal_density_g_cm3": 1.75636,
+          "mean_excitation_energy_eV": 95.5754,
+          "composition_sha256": "6b1d932fcff7507eb0c79f9e23f09aefc22c4d1b208fc6bfdfcb9140791024d4",
+          "element_weights": [
+            0.045,
+            0.21,
+            0.039,
+            0.42,
+            0.002,
+            0.088,
+            0.003,
+            0.0,
+            0.0,
+            0.192,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material038/operator.bin",
+      "data_sha256": "53406b286333485230dfd644dd8fba79306ec0a1e3d8de64fdb2c2b87702a3a6",
+      "metadata_sha256": "2365308b4754dd8daa2fadff3c0de4bd767d3eb664cd3ba2f85b0df8a74677b8",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s19_0/state_refs.bin",
+      "state_reference_sha256": "4a0e75ed05c95c59885babd088e00c3ec66e75d82afacfb16da04fc392da5cca",
+      "state_reference_metadata_sha256": "3c223f86eabf2ff1cd6bf09d9ef373f6e3bbb04a52f18061a54e9a1f568e9164"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 19,
+        "material_name": "ResponseSection19Density1",
+        "runtime_density_g_cm3": 1.7469924688339233,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 19,
+          "material_name": "PatientTissueFromHU1150",
+          "nominal_density_g_cm3": 1.75636,
+          "mean_excitation_energy_eV": 95.5754,
+          "composition_sha256": "6b1d932fcff7507eb0c79f9e23f09aefc22c4d1b208fc6bfdfcb9140791024d4",
+          "element_weights": [
+            0.045,
+            0.21,
+            0.039,
+            0.42,
+            0.002,
+            0.088,
+            0.003,
+            0.0,
+            0.0,
+            0.192,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material039/operator.bin",
+      "data_sha256": "cbd577c5fef74d55a7b60e42e6c5a29fd4daf9a421f73b7eb9af399d9ac814aa",
+      "metadata_sha256": "7873df4230e35f08d01528de2a6f0a44063fe747d83ae0ddacab9b9da39a0511",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s19_1/state_refs.bin",
+      "state_reference_sha256": "9e94a2a24e7747d65b2a361a8561a1d4b337781654994e47dcaad3cccba54654",
+      "state_reference_metadata_sha256": "7e86c4e8c39045c0cdb84f18d88014afca2d058b16d96df45c73cad70cf9f3e5"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 0,
+        "material_name": "ResponseSection0DensityMid1",
+        "runtime_density_g_cm3": 0.013502629473805428,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 0,
+          "material_name": "PatientTissueFromHUNegative975",
+          "nominal_density_g_cm3": 0.0393235,
+          "mean_excitation_energy_eV": 85.6829,
+          "composition_sha256": "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43",
+          "element_weights": [
+            0.0,
+            0.0,
+            0.755,
+            0.232,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.013,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material040/operator.bin",
+      "data_sha256": "5821610d107c23fdd3e0011a7ebdb3bd0e622d8638091c159253b63e74d932dd",
+      "metadata_sha256": "59b3e1ed50d3a16ea233c9f00ca8579f98cec903d53fa52936af577462e01dc7",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s0_mid1/state_refs.bin",
+      "state_reference_sha256": "72de8763616a0f36208e2d913169b2325f7405d087d31cc8216025774091dbdd",
+      "state_reference_metadata_sha256": "02bed2886571d88151d5ecc7711b87d5c99e075729a069256f4da59cb1004d6d"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 0,
+        "material_name": "ResponseSection0DensityMid2",
+        "runtime_density_g_cm3": 0.016111696138978004,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 0,
+          "material_name": "PatientTissueFromHUNegative975",
+          "nominal_density_g_cm3": 0.0393235,
+          "mean_excitation_energy_eV": 85.6829,
+          "composition_sha256": "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43",
+          "element_weights": [
+            0.0,
+            0.0,
+            0.755,
+            0.232,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.013,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material041/operator.bin",
+      "data_sha256": "e8170d6a66ffb350bc3f60a0ee62420dbe5422ec63d1351affb63c11ab8c30df",
+      "metadata_sha256": "47d301643b1f739820596aa2489e6e3f05c5f57d48491d8dec53bf1690a9a19c",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s0_mid2/state_refs.bin",
+      "state_reference_sha256": "eac09c906353bc3133502f970e2ae7a10f41f08ff1cb67561e7d1bde1782885c",
+      "state_reference_metadata_sha256": "8103d05378e2968e0e9ba67e38341251bec19f8687123cff1dbe18cd05b46808"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 0,
+        "material_name": "ResponseSection0DensityMid3",
+        "runtime_density_g_cm3": 0.019224904477596283,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 0,
+          "material_name": "PatientTissueFromHUNegative975",
+          "nominal_density_g_cm3": 0.0393235,
+          "mean_excitation_energy_eV": 85.6829,
+          "composition_sha256": "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43",
+          "element_weights": [
+            0.0,
+            0.0,
+            0.755,
+            0.232,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.013,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material042/operator.bin",
+      "data_sha256": "bb9231719f828f24628ec73437176418e579c5c327b0091babbe14a4a0492790",
+      "metadata_sha256": "3dbb9e45258a128a0933b354b41d1e548bb6442ff9652123a6c176f740690cf7",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s0_mid3/state_refs.bin",
+      "state_reference_sha256": "a8ac8c4ab4d5ad59c5f3f088af3379627d9a54ff5d97bb5ecf38bb2076dc49ca",
+      "state_reference_metadata_sha256": "ea12cd6baf6567cb77ccf2488b53e4cdaf15ede35d3765d4186050a9212200dd"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 0,
+        "material_name": "ResponseSection0DensityMid4",
+        "runtime_density_g_cm3": 0.022939667105674744,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 0,
+          "material_name": "PatientTissueFromHUNegative975",
+          "nominal_density_g_cm3": 0.0393235,
+          "mean_excitation_energy_eV": 85.6829,
+          "composition_sha256": "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43",
+          "element_weights": [
+            0.0,
+            0.0,
+            0.755,
+            0.232,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.013,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material043/operator.bin",
+      "data_sha256": "073731565f38f7ccb024ec94a296c712042d9d234fd121a1275a71e70fc0974c",
+      "metadata_sha256": "51105cfd4ad32dc9997b9fee692ffa395c3a92f6085312b5f6d46c06fcfd9794",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s0_mid4/state_refs.bin",
+      "state_reference_sha256": "87bf3379292d8d664b0ca6b9b032c0ab5f513191fd3556163817e626430ba48a",
+      "state_reference_metadata_sha256": "3c287b80228bf045773cedecf316d12611d77f87317a9248d6f8a20f87ea6347"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 0,
+        "material_name": "ResponseSection0DensityMid5",
+        "runtime_density_g_cm3": 0.027372220531105995,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 0,
+          "material_name": "PatientTissueFromHUNegative975",
+          "nominal_density_g_cm3": 0.0393235,
+          "mean_excitation_energy_eV": 85.6829,
+          "composition_sha256": "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43",
+          "element_weights": [
+            0.0,
+            0.0,
+            0.755,
+            0.232,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.013,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material044/operator.bin",
+      "data_sha256": "aa66f72fecd8b32bac4591af4833a5675b5e7d8caea6a250859689491057961d",
+      "metadata_sha256": "de8dcc15d60ed80836fbf030d72cfb2195d2c9835398bb8864203329e4cc8a6f",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s0_mid5/state_refs.bin",
+      "state_reference_sha256": "5e34c8f17252faf4ea21bcb508c27bc9b2af96bf454fd496614f01270576ab30",
+      "state_reference_metadata_sha256": "4bd2e8d914e8b058e0d85a9b1e3442e63e1658955680700c8df4911986d87209"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 0,
+        "material_name": "ResponseSection0DensityMid6",
+        "runtime_density_g_cm3": 0.032661259174346924,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 0,
+          "material_name": "PatientTissueFromHUNegative975",
+          "nominal_density_g_cm3": 0.0393235,
+          "mean_excitation_energy_eV": 85.6829,
+          "composition_sha256": "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43",
+          "element_weights": [
+            0.0,
+            0.0,
+            0.755,
+            0.232,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.013,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material045/operator.bin",
+      "data_sha256": "2af4ba3eb6b0c3982687c6e4d2cd897a47b2b0e482d2783971a5df927905e94b",
+      "metadata_sha256": "454e12cfcbb18da09f29b787cc74afc639b6b1ee2b034dc5d6d8ec7c00b9472f",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s0_mid6/state_refs.bin",
+      "state_reference_sha256": "e4be3ba44a3b0f426d9c6471cb8cd889c7b129401f38f411317442b4a9adb64d",
+      "state_reference_metadata_sha256": "d8a66e07328c078e06cf50749845543bc56f4a1657ab69fa0d02f859c5d76cbf"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 0,
+        "material_name": "ResponseSection0DensityMid7",
+        "runtime_density_g_cm3": 0.03897228464484215,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 0,
+          "material_name": "PatientTissueFromHUNegative975",
+          "nominal_density_g_cm3": 0.0393235,
+          "mean_excitation_energy_eV": 85.6829,
+          "composition_sha256": "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43",
+          "element_weights": [
+            0.0,
+            0.0,
+            0.755,
+            0.232,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.013,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material046/operator.bin",
+      "data_sha256": "fff24a17f70e8884902d1f56ba01e0b702db0586d2076124eff6664287805c05",
+      "metadata_sha256": "9715f63d63b111530e145811b9f6c7771efdd23770882770f9ef2e432a1cca06",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s0_mid7/state_refs.bin",
+      "state_reference_sha256": "962bcf347f6cf38f031c97ac4520b6edac1e61b3cee717e3538595a6ee0f5681",
+      "state_reference_metadata_sha256": "d000eac63577e7df917b98b9a6477df193ad6f0e705933147583b22e104a1b43"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 0,
+        "material_name": "ResponseSection0DensityMid8",
+        "runtime_density_g_cm3": 0.04650276526808739,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 0,
+          "material_name": "PatientTissueFromHUNegative975",
+          "nominal_density_g_cm3": 0.0393235,
+          "mean_excitation_energy_eV": 85.6829,
+          "composition_sha256": "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43",
+          "element_weights": [
+            0.0,
+            0.0,
+            0.755,
+            0.232,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.013,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material047/operator.bin",
+      "data_sha256": "0d8028bb7d25375e0ee7bcde9ac6d70d4fa931754481741939f5aefad68d24d2",
+      "metadata_sha256": "ed36456bc38623c8deb1db39be81be16128b956c4f2379dce80bf5621d673d4b",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s0_mid8/state_refs.bin",
+      "state_reference_sha256": "ab30ea566fc66e6cca693497e2bc65f2576145d8119bf81db89575a0d8394913",
+      "state_reference_metadata_sha256": "7ad7b0eed84befdb240c3d1e0f875f00d4da31149e6026571b1ce8ac3ab75ddd"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 0,
+        "material_name": "ResponseSection0DensityMid9",
+        "runtime_density_g_cm3": 0.05548833683133125,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 0,
+          "material_name": "PatientTissueFromHUNegative975",
+          "nominal_density_g_cm3": 0.0393235,
+          "mean_excitation_energy_eV": 85.6829,
+          "composition_sha256": "9a5e655bc67c888f1ba3ad3532a6114dcb69e1054738c46bb86996e571e32a43",
+          "element_weights": [
+            0.0,
+            0.0,
+            0.755,
+            0.232,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.013,
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material048/operator.bin",
+      "data_sha256": "014b2b5613a88c320e2447c367298e32e21e31cbac4eb2b03f8f6e01d04c17f4",
+      "metadata_sha256": "c1aa9225b3ec2948abe48c50216241c00204e2cb80f29f4e2b805c2453ec4765",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s0_mid9/state_refs.bin",
+      "state_reference_sha256": "2a1ed4a9782d12ddbdb3948225a0551f101e9fcc43e70ced624f389fee9102b6",
+      "state_reference_metadata_sha256": "5cbea06fef2b1536904c966b29d8093db6b36d6f01bdeec122ea0a1733ba3c12"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid1",
+        "runtime_density_g_cm3": 0.07116024196147919,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material049/operator.bin",
+      "data_sha256": "bb2d149d55087bc7aa9d46531422a576b57ee71255880054bd10038e19af25ee",
+      "metadata_sha256": "5b0deff6acc54fc06f6c7973ca6e0eeaf42eb90ec2ebd30df423da3591e18372",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid1/state_refs.bin",
+      "state_reference_sha256": "2c738de1a8c59d8745180e289b56dd99e3d75a5241ff30c572efb0b69afad1c6",
+      "state_reference_metadata_sha256": "9b1324d6951999d6059692f6ec01cd000dfa4a454900375d760879cd6e59f57f"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid2",
+        "runtime_density_g_cm3": 0.0851612538099289,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material050/operator.bin",
+      "data_sha256": "4da671c69aa741b9261fcf90758d12d3f9018b0418f16a7ba65f75e435327277",
+      "metadata_sha256": "1d33ef016771455feefd5007fb29a31ab5be7e32a176c28fd49777e07de3bb50",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid2/state_refs.bin",
+      "state_reference_sha256": "d721f611ce7d30b694ab34c6919c3c1f8dc4ad615180cc202f98fe58fb75d8ee",
+      "state_reference_metadata_sha256": "05b815cff7bb4fa635a8844ee753dd660401cc802a1d40c02821e3f20b2ee94e"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid3",
+        "runtime_density_g_cm3": 0.10191701352596283,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material051/operator.bin",
+      "data_sha256": "f8799248dc891756c9c6946acc6ea7beb77c3b67977c92d98c9b68a849f5cb2b",
+      "metadata_sha256": "b05732de9f8b28ecf8097a9cd067b36fc7e654eb13ad4e13a295de7408874af7",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid3/state_refs.bin",
+      "state_reference_sha256": "b0c23a6b548822dcbf3a9b21f9465abb7a9bc9cbefa2471faf8bb8f36f10c10c",
+      "state_reference_metadata_sha256": "38f9f5f06dd05126c8b00e887e5bb93fdeefcf0145e36a3483b0966cc064f638"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid4",
+        "runtime_density_g_cm3": 0.12196952849626541,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material052/operator.bin",
+      "data_sha256": "b6bae0b9bdb38fc1ce0c4a594ed73d72a8f2df9070b4f25a4d2a764a9e58cbfa",
+      "metadata_sha256": "3145c201a1c0c780997c34ce9f10b60bbfe4fff6f022c3ac3edc4a33eb231706",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid4/state_refs.bin",
+      "state_reference_sha256": "67f15aa0cf534cbcd6291f69a599e13ae676eba5454a2be89dfd98bf246b8c08",
+      "state_reference_metadata_sha256": "301f975eb74de7cfc6aff14eeecee926ab62bdc002ff0711d35ac37aae366af3"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid5",
+        "runtime_density_g_cm3": 0.14596743881702423,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material053/operator.bin",
+      "data_sha256": "f8fdfc15d2ab30b2e11bc6f1d1b4e2a682a622db38241e8c928cbe5b174098d8",
+      "metadata_sha256": "c3e6dc2fa9c1dbfe7944d386d3e87096cfcf9e679b7d6957bc4ca3fab0f3520f",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid5/state_refs.bin",
+      "state_reference_sha256": "81754fcf4eceb733ba25a3a134aa0b7a7818231cf526f97b0a9327b9cc85741e",
+      "state_reference_metadata_sha256": "0effc5c1322c3ee2245354c660164d2c82bed37f7f75dc76147d6a965affe9e6"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid6",
+        "runtime_density_g_cm3": 0.17468702793121338,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material054/operator.bin",
+      "data_sha256": "1542a16673f06e026704b98fd10e2061e6d770e2852ab16e4ceb18a1b35f0bcb",
+      "metadata_sha256": "66ba05b53203a663fb6e58b6ecf8819f0072b780e4bde468dfe8e59104da65f2",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid6/state_refs.bin",
+      "state_reference_sha256": "0f1a886e3891e6c0368d7d256ea5af1b93413625fb8c8f4dee0c651a275fb9af",
+      "state_reference_metadata_sha256": "952d2abd03f6273ee992accc2a35effa03304278845267e27169154d57f63413"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid7",
+        "runtime_density_g_cm3": 0.2090572714805603,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material055/operator.bin",
+      "data_sha256": "9df1618d7ea180bd0f2841a0456df5b2b781839fdb422ef4be40baefa0b1588a",
+      "metadata_sha256": "6a7d8320454ddf6ccdf5fc155d1f3c1e3cb2cfc399c117480e821dc4c12e7396",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid7/state_refs.bin",
+      "state_reference_sha256": "4bc90317a5e38d2697803558bd3ce0987bbf65be5eb9e82fb3964cea28d61c6c",
+      "state_reference_metadata_sha256": "1bca108da03f249879e3546bbfc8baed390790c3aece019a7f5a505c79ccc917"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid8",
+        "runtime_density_g_cm3": 0.25018998980522156,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material056/operator.bin",
+      "data_sha256": "5bb91c9ec4bfe85a641978d53f04dc0005078a96d6ef2da76883f30039d79510",
+      "metadata_sha256": "5c698ebbe5c12e4e2ac0e45ec12c4431f32089e0fb7409ceb6b2e04509ab300d",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid8/state_refs.bin",
+      "state_reference_sha256": "90139b0e5a44b34e51c05df8a2cd3c95a9caf5d05fdcb5ac5e9138fee5935e57",
+      "state_reference_metadata_sha256": "719f5d1bd800f46f717c8af7b0853241f1e9cfc90e2b184c4ebc4ed297baad10"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid9",
+        "runtime_density_g_cm3": 0.2994157075881958,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material057/operator.bin",
+      "data_sha256": "cef85b79bb11f799aaada7b3df90781e1f008a80011d00fd1e2fd12377429022",
+      "metadata_sha256": "43cef317494557581c872f0f7ffb6ab1bc0f4c05119a3f413fd32f64d41e37f8",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid9/state_refs.bin",
+      "state_reference_sha256": "142510be89af97a5f240991cdc8a588f1c0e841b595f43b5a5790f3430c7dd48",
+      "state_reference_metadata_sha256": "1162bed203daa1ca95b7c03a714e1f4572c3e78b80119e5cff92dee9f916b1bc"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid10",
+        "runtime_density_g_cm3": 0.3583267331123352,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material058/operator.bin",
+      "data_sha256": "29de1f01735762f7d5b47b13bc1e22e4416addb4399234c172b6cef8cfe8386d",
+      "metadata_sha256": "1847bc451d227898876602a8a9da32616dd521c758d54b28299887a803f4c12c",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid10/state_refs.bin",
+      "state_reference_sha256": "7699ca5343e8edd54021e6648115c9213bf4492c4c391926a88bbc19bb814ba3",
+      "state_reference_metadata_sha256": "686cb2ea3c19eef08bd2b2b323c27c1b76dff70b0bb7e85a1ceaba3f541698db"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid11",
+        "runtime_density_g_cm3": 0.42882871627807617,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material059/operator.bin",
+      "data_sha256": "e48f6bb2172be7b42dd85c03c88deebb7fda2d2408fcca5697892522e6402619",
+      "metadata_sha256": "7e4c010dd0a4743c97f45e82067e850481d9bc9083e7666a719984084345280b",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid11/state_refs.bin",
+      "state_reference_sha256": "a9eb04c1cbc2d365e19cbf59544de905d9a5c1f9459966c86118fd8f40dda750",
+      "state_reference_metadata_sha256": "f1e945a20582fafd20bde5607194676f9501ccae98ffd73658aee1e445c512f0"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid12",
+        "runtime_density_g_cm3": 0.5132021903991699,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material060/operator.bin",
+      "data_sha256": "4e94a8d59e69e780d46a95bfa90638a9110b3b292a70c221fb56f31ca11838ff",
+      "metadata_sha256": "9afd960a5025992bef078299a0f291938d00126a29f307d897ae04f830f5e2be",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid12/state_refs.bin",
+      "state_reference_sha256": "33b99073e492ce0895f1982f3bca5476815167be1d74437c241006d690905c8f",
+      "state_reference_metadata_sha256": "a0f543f10f4f3af310b0dd6c3d1889c1f86963384854d858846f3bac4b8de72c"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid13",
+        "runtime_density_g_cm3": 0.6141764521598816,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material061/operator.bin",
+      "data_sha256": "0a3ad815e02cb67ba140558816017be514ff95271c7adad528ce6c3801ea7ac8",
+      "metadata_sha256": "bec14bd74634c4e7ee6900df3a789216805d7fb1d67fe34b33be3adaa834fd10",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid13/state_refs.bin",
+      "state_reference_sha256": "3ffa7a1701d00ab13fc3a3e184b40f31cc8f9566b6686affd5f0aa39bdca8504",
+      "state_reference_metadata_sha256": "f2702acb74976fbfaa0cdf6948f89d56790423649b115ec0e2261fcab6895a6c"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 1,
+        "material_name": "ResponseSection1DensityMid14",
+        "runtime_density_g_cm3": 0.735017716884613,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 1,
+          "material_name": "PatientTissueFromHUNegative535",
+          "nominal_density_g_cm3": 0.470041,
+          "mean_excitation_energy_eV": 69.693,
+          "composition_sha256": "d85f60883acd556b0d54a7b05eda07dae753c5d7d3d49c5e777eff2228c01acb",
+          "element_weights": [
+            0.103,
+            0.105,
+            0.031,
+            0.749,
+            0.0,
+            0.002,
+            0.003,
+            0.003,
+            0.0,
+            0.0,
+            0.002,
+            0.002,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material062/operator.bin",
+      "data_sha256": "a2903fbf8f5c14d2c67c8c6173353cde84671d0985deaf15a4892f5567026e3d",
+      "metadata_sha256": "472a16e491e5bac84c842d40565a0ac21d0dafc2a68cbbc037d789c63e933422",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/data/ct_electron/proton/s1_mid14/state_refs.bin",
+      "state_reference_sha256": "e9f69a3446b4870f6c90fc2b922b5e7f097ea7e3c7a8ba1141ea75a555ffb053",
+      "state_reference_metadata_sha256": "173e2f2a78526406031e15f1eb74bb941bc710dc7df9254e1d94ffd2074daae0"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 15,
+        "material_name": "RTResponseSection15Density0",
+        "runtime_density_g_cm3": 1.465166687965393,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 15,
+          "material_name": "PatientTissueFromHU750",
+          "nominal_density_g_cm3": 1.4919,
+          "mean_excitation_energy_eV": 86.3012,
+          "composition_sha256": "e5eff8bf427eed45554ff967d3593377a04d854c9813c92c37b83bf8e0cf5161",
+          "element_weights": [
+            0.061,
+            0.287,
+            0.035,
+            0.4,
+            0.001,
+            0.067,
+            0.002,
+            0.0,
+            0.0,
+            0.146,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material063/operator.bin",
+      "data_sha256": "a5b687757f4def9c6f36d177cfc8c7ecd1e48a7ce9cad3211ccc7603f6f9d60a",
+      "metadata_sha256": "58a187da6a30a08d313a5b57343467415aa37454a70b4caa2efd4d962408a410",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s15_0/state_refs.bin",
+      "state_reference_sha256": "8110d33ff7a880e3f7294385cc83e7ecd51e9030d0a0eee8e58cd62b17067b2a",
+      "state_reference_metadata_sha256": "bd8acfe4d1e9fb909ca917002a3bb358a768f2c2c6d15c379bfd1967d2a44c81"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 15,
+        "material_name": "RTResponseSection15Density1",
+        "runtime_density_g_cm3": 1.5181095600128174,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 15,
+          "material_name": "PatientTissueFromHU750",
+          "nominal_density_g_cm3": 1.4919,
+          "mean_excitation_energy_eV": 86.3012,
+          "composition_sha256": "e5eff8bf427eed45554ff967d3593377a04d854c9813c92c37b83bf8e0cf5161",
+          "element_weights": [
+            0.061,
+            0.287,
+            0.035,
+            0.4,
+            0.001,
+            0.067,
+            0.002,
+            0.0,
+            0.0,
+            0.146,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material064/operator.bin",
+      "data_sha256": "42cadf55ac007d23401a3b820a0ed449535eb0da20dfd21b7d35934cfd87f9f7",
+      "metadata_sha256": "c6934195ea768cdbc343783b86792f3d178412fee1313d19e41ed0ce7cdfecd8",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s15_1/state_refs.bin",
+      "state_reference_sha256": "d465620189f9cbc96e4828581e1ce4f9861315c27a32c76ef58fc87a235f70e5",
+      "state_reference_metadata_sha256": "b1019ea5719cb69fe66f234423ea52b792d7eae35c4cd52cd4c94041027da379"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 16,
+        "material_name": "RTResponseSection16Density0",
+        "runtime_density_g_cm3": 1.5856608152389526,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 16,
+          "material_name": "PatientTissueFromHU850",
+          "nominal_density_g_cm3": 1.55922,
+          "mean_excitation_energy_eV": 89.0001,
+          "composition_sha256": "4c05cb552f9c4a3d0925ead691e00c3856faf61f27c39d841b7756219429fd7c",
+          "element_weights": [
+            0.056,
+            0.265,
+            0.036,
+            0.405,
+            0.002,
+            0.073,
+            0.003,
+            0.0,
+            0.0,
+            0.159,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material065/operator.bin",
+      "data_sha256": "7dfb3f088ea0a01d074dda97e0a608554c8dd8a2080cab877a1c8f06799f0d54",
+      "metadata_sha256": "8b3b40599f4e7db1ad93268fb5bb762f85c015e52a4e6dd53fecd37d43b60973",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s16_0/state_refs.bin",
+      "state_reference_sha256": "ff02e041c731e7ed93d4a3d01db643d87fc2b2836499ff9a5a670064e85be9e8",
+      "state_reference_metadata_sha256": "5ee20fd26275b9989859eba959bf3936877a68da87f97c5bea01e1b204e2e163"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 17,
+        "material_name": "RTResponseSection17Density0",
+        "runtime_density_g_cm3": 1.6514008045196533,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 17,
+          "material_name": "PatientTissueFromHU950",
+          "nominal_density_g_cm3": 1.62478,
+          "mean_excitation_energy_eV": 91.2244,
+          "composition_sha256": "ebecc0310944118f64263e9a91b183dbfbcf00fe845e583cbcf4901831570d50",
+          "element_weights": [
+            0.052,
+            0.246,
+            0.037,
+            0.411,
+            0.002,
+            0.078,
+            0.003,
+            0.0,
+            0.0,
+            0.17,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material066/operator.bin",
+      "data_sha256": "ad819f6515bcb082fd73137222eade8299b6df1f66f6c715412b43d60a3bc74f",
+      "metadata_sha256": "8957827c3b7b586bab257503e7d14d9764d37d293e8168d2878fb4619f94757d",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s17_0/state_refs.bin",
+      "state_reference_sha256": "fc013492ad53a89625605169c66383a2246dd888a25d18534ea6fe6a9d1cb120",
+      "state_reference_metadata_sha256": "8870e4544f425d5fbeac9a34e71cce224eb279d79d2dd4813393499966150785"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 18,
+        "material_name": "RTResponseSection18Density0",
+        "runtime_density_g_cm3": 1.6617108583450317,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 18,
+          "material_name": "PatientTissueFromHU1050",
+          "nominal_density_g_cm3": 1.68904,
+          "mean_excitation_energy_eV": 93.2404,
+          "composition_sha256": "27a8942e42e3d45c11b65efee97fd33e1ede99e76a7574618a3a40b79d270a0a",
+          "element_weights": [
+            0.049,
+            0.227,
+            0.038,
+            0.416,
+            0.002,
+            0.083,
+            0.003,
+            0.0,
+            0.0,
+            0.181,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material067/operator.bin",
+      "data_sha256": "5e9824241755f2c68562d9b08ee0d1705d9a176e5132d9768d73d381da72c261",
+      "metadata_sha256": "a2137ed176d877725955f1927e7c0c27b5041ffbd7bdb82be0e1921b32e0f2b7",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s18_0/state_refs.bin",
+      "state_reference_sha256": "c7297c08618462e364b61701f997d9d8f8ad000d6d092267c0e6909e4fed295c",
+      "state_reference_metadata_sha256": "4702c283b1a5ee1bef1787f097c790eb1d5bac24b25deb7d799afe5b166892c1"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 18,
+        "material_name": "RTResponseSection18Density1",
+        "runtime_density_g_cm3": 1.7158185243606567,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 18,
+          "material_name": "PatientTissueFromHU1050",
+          "nominal_density_g_cm3": 1.68904,
+          "mean_excitation_energy_eV": 93.2404,
+          "composition_sha256": "27a8942e42e3d45c11b65efee97fd33e1ede99e76a7574618a3a40b79d270a0a",
+          "element_weights": [
+            0.049,
+            0.227,
+            0.038,
+            0.416,
+            0.002,
+            0.083,
+            0.003,
+            0.0,
+            0.0,
+            0.181,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material068/operator.bin",
+      "data_sha256": "573f749ea665ac658a90ac2208b51543fdcb0b80aec13b618f7c8addbbe854a0",
+      "metadata_sha256": "84d35de4e32cfb609d4b6a3e6b3674d527d07cdd20939e373fe8155ed1829f08",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s18_1/state_refs.bin",
+      "state_reference_sha256": "6dfb7694365413481cf0819dd89a78bd2fcc27b467641574a680a4f78f2efa16",
+      "state_reference_metadata_sha256": "a36e84564447aca9a5a83427a4a9e2ad3b3f7d9eff07465be183146b75caf6f0"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 19,
+        "material_name": "RTResponseSection19Density0",
+        "runtime_density_g_cm3": 1.7288223505020142,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 19,
+          "material_name": "PatientTissueFromHU1150",
+          "nominal_density_g_cm3": 1.75636,
+          "mean_excitation_energy_eV": 95.5754,
+          "composition_sha256": "6b1d932fcff7507eb0c79f9e23f09aefc22c4d1b208fc6bfdfcb9140791024d4",
+          "element_weights": [
+            0.045,
+            0.21,
+            0.039,
+            0.42,
+            0.002,
+            0.088,
+            0.003,
+            0.0,
+            0.0,
+            0.192,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material069/operator.bin",
+      "data_sha256": "5dd8a7438360eeab8f25b7a5ad91ae3acb133e6c3def1d70c8b96880779d3747",
+      "metadata_sha256": "b8e7434d2b7c636914f5338522971e49f42c47804e0fee290a75f20e973ff700",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s19_0/state_refs.bin",
+      "state_reference_sha256": "98055e76009209f4b7adc11cbea245f7e551afe471ac76809b8c3c9170c4aba4",
+      "state_reference_metadata_sha256": "cc1081fbdd2295ed968a3f1136b6a055ef6408abe64f3323b09c5f1c62ba71a2"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 19,
+        "material_name": "RTResponseSection19Density1",
+        "runtime_density_g_cm3": 1.7833263874053955,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 19,
+          "material_name": "PatientTissueFromHU1150",
+          "nominal_density_g_cm3": 1.75636,
+          "mean_excitation_energy_eV": 95.5754,
+          "composition_sha256": "6b1d932fcff7507eb0c79f9e23f09aefc22c4d1b208fc6bfdfcb9140791024d4",
+          "element_weights": [
+            0.045,
+            0.21,
+            0.039,
+            0.42,
+            0.002,
+            0.088,
+            0.003,
+            0.0,
+            0.0,
+            0.192,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material070/operator.bin",
+      "data_sha256": "d5f801843b40cf3b41eed46c02e9a37f9be8aad0920f4d5bf88a867ab7ab0d86",
+      "metadata_sha256": "262bea3721e34c5b5d79fd1007c8fe546357f3f12e09bb3db0d595bb83c31527",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s19_1/state_refs.bin",
+      "state_reference_sha256": "6d6a2a86bc0d1b84bc5f5c1ea1a37ee519b2ae1408cf75f472a8ba1897e968f0",
+      "state_reference_metadata_sha256": "617c90b484ae1b809c55f402efeb1c1fe37b8e1bec2adc81196c546ee97e5eeb"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 20,
+        "material_name": "RTResponseSection20Density0",
+        "runtime_density_g_cm3": 1.7939221858978271,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 20,
+          "material_name": "PatientTissueFromHU1250",
+          "nominal_density_g_cm3": 1.8216,
+          "mean_excitation_energy_eV": 97.4852,
+          "composition_sha256": "1947d9de30f6e1b8723ddcd38cca594782857cd8e8c08552fc055d795de7a66f",
+          "element_weights": [
+            0.042,
+            0.194,
+            0.04,
+            0.425,
+            0.002,
+            0.092,
+            0.003,
+            0.0,
+            0.0,
+            0.201,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material071/operator.bin",
+      "data_sha256": "f38daf2abc0349a6f0baf9588b7b4a0f4ed0dcca544fe9b0661435e748baa154",
+      "metadata_sha256": "e28bac7efd1b6ff216529728f6dbe5e9d5c2f2bf34f764a0788dec927d93eea5",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s20_0/state_refs.bin",
+      "state_reference_sha256": "5c01aca5705f16d19640942f783bb2767ba6300e091266bda5018c0162eae122",
+      "state_reference_metadata_sha256": "2e280efcebdfe6cb95466276d6c75525f83b2fc8925d003e14535354545ea0aa"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 20,
+        "material_name": "RTResponseSection20Density1",
+        "runtime_density_g_cm3": 1.848732590675354,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 20,
+          "material_name": "PatientTissueFromHU1250",
+          "nominal_density_g_cm3": 1.8216,
+          "mean_excitation_energy_eV": 97.4852,
+          "composition_sha256": "1947d9de30f6e1b8723ddcd38cca594782857cd8e8c08552fc055d795de7a66f",
+          "element_weights": [
+            0.042,
+            0.194,
+            0.04,
+            0.425,
+            0.002,
+            0.092,
+            0.003,
+            0.0,
+            0.0,
+            0.201,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material072/operator.bin",
+      "data_sha256": "bd991c25a647ac7a317cfb223578c92846c4fc0ca40de8891090c004cd18264d",
+      "metadata_sha256": "8c9752e26920c073f9929e2811dae1dd6cbe531b660aaa0f8ee952a5b94fe193",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s20_1/state_refs.bin",
+      "state_reference_sha256": "dffe21515767e790180e4528cd07f7be7dc5559c6f3f962a92e6cc6eb712406b",
+      "state_reference_metadata_sha256": "4f345ce26b06317ab0b0e578f44f998b22212578bacca5a7a64bce15f711e253"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 21,
+        "material_name": "RTResponseSection21Density0",
+        "runtime_density_g_cm3": 1.8597255945205688,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 21,
+          "material_name": "PatientTissueFromHU1350",
+          "nominal_density_g_cm3": 1.88756,
+          "mean_excitation_energy_eV": 99.4297,
+          "composition_sha256": "0b3645352552795265980ed78fa9541d63071c0c886088c0b3ffa4a7e5b79bbd",
+          "element_weights": [
+            0.039,
+            0.179,
+            0.041,
+            0.429,
+            0.002,
+            0.096,
+            0.003,
+            0.0,
+            0.0,
+            0.21,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material073/operator.bin",
+      "data_sha256": "61b1fa12c18fb5dfa2b25c6ba2c494b799a0a28c0bf7e9152a2f338d69c2c943",
+      "metadata_sha256": "da30d464ccdc664fb6c1081307e2919a5c4d51946ace012375c160f4ac0ba5cd",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s21_0/state_refs.bin",
+      "state_reference_sha256": "c6b843d247113d79f1d44a4571c878f3752b2265752c593047ad17fa02117225",
+      "state_reference_metadata_sha256": "ad42167fcd5d0ebeec96c2f25c36c85a86f7e169522bdfe469618e1132e7cac6"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 21,
+        "material_name": "RTResponseSection21Density1",
+        "runtime_density_g_cm3": 1.9148461818695068,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 21,
+          "material_name": "PatientTissueFromHU1350",
+          "nominal_density_g_cm3": 1.88756,
+          "mean_excitation_energy_eV": 99.4297,
+          "composition_sha256": "0b3645352552795265980ed78fa9541d63071c0c886088c0b3ffa4a7e5b79bbd",
+          "element_weights": [
+            0.039,
+            0.179,
+            0.041,
+            0.429,
+            0.002,
+            0.096,
+            0.003,
+            0.0,
+            0.0,
+            0.21,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material074/operator.bin",
+      "data_sha256": "6500aa79c309df259a5166c4f0bbdfbb681f4f029e02a776327e0ff671beb534",
+      "metadata_sha256": "9988420b135da77badd9083687607a34b834b29c78b598bb2a354d2ef402d1b8",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s21_1/state_refs.bin",
+      "state_reference_sha256": "913769f274b3cadfe833c627ee1b6e98dd93bc9c550777f3eb40bec45da94d0d",
+      "state_reference_metadata_sha256": "048edce0cd5704858104b1de57e9d8b3db293f30b8de9804b83daa385a07da76"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 22,
+        "material_name": "RTResponseSection22Density0",
+        "runtime_density_g_cm3": 1.9262399673461914,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 22,
+          "material_name": "PatientTissueFromHU1450",
+          "nominal_density_g_cm3": 1.95424,
+          "mean_excitation_energy_eV": 101.4093,
+          "composition_sha256": "515d7e2f04bce4e6c7e217a7bb2e3d2d991dc94a038709346cf6b21d4f736ffa",
+          "element_weights": [
+            0.036,
+            0.165,
+            0.042,
+            0.432,
+            0.002,
+            0.1,
+            0.003,
+            0.0,
+            0.0,
+            0.219,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material075/operator.bin",
+      "data_sha256": "81b081e2ca3b5ea7f10cdba8f858573d89f9587e329234cf743880f80b77de20",
+      "metadata_sha256": "0ab484ce93b7f84430182d8803102119e9f5d73e9e4b2a3d1798cef3d668283d",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s22_0/state_refs.bin",
+      "state_reference_sha256": "66850c0fac72866655d048ca77498eb7809b7ce05bc78e204a45664ce5c5e1ae",
+      "state_reference_metadata_sha256": "c0c26e19d77cc9d31df21a99fee24d8107f043c8b0c261acbd83c5f5d6179515"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 22,
+        "material_name": "RTResponseSection22Density1",
+        "runtime_density_g_cm3": 1.9816888570785522,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 22,
+          "material_name": "PatientTissueFromHU1450",
+          "nominal_density_g_cm3": 1.95424,
+          "mean_excitation_energy_eV": 101.4093,
+          "composition_sha256": "515d7e2f04bce4e6c7e217a7bb2e3d2d991dc94a038709346cf6b21d4f736ffa",
+          "element_weights": [
+            0.036,
+            0.165,
+            0.042,
+            0.432,
+            0.002,
+            0.1,
+            0.003,
+            0.0,
+            0.0,
+            0.219,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material076/operator.bin",
+      "data_sha256": "b51faa7c59312804e9931cde5083aeedab9dd07af0096f2aea91b7b262f080df",
+      "metadata_sha256": "18b9a92854aa706b666fc01540702312751c913a8b75abaa21672f89d550c1a1",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s22_1/state_refs.bin",
+      "state_reference_sha256": "5f09414e605b5a6bcf3381c216d2562c012bf079c44450a5353ace791bfe0054",
+      "state_reference_metadata_sha256": "f0d0fc0f34f2a8f4f23985afa69e14baa2496925b95cacab4a1c13f52df2a4eb"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 23,
+        "material_name": "RTResponseSection23Density0",
+        "runtime_density_g_cm3": 1.9898678064346313,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 23,
+          "material_name": "PatientTissueFromHU2247",
+          "nominal_density_g_cm3": 2.4196,
+          "mean_excitation_energy_eV": 102.7974,
+          "composition_sha256": "bdef38f6ba2806369cff1d54bcd467fb6f9cd08446852dbd6da04530e6230572",
+          "element_weights": [
+            0.034,
+            0.155,
+            0.042,
+            0.435,
+            0.002,
+            0.103,
+            0.003,
+            0.0,
+            0.0,
+            0.225,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material077/operator.bin",
+      "data_sha256": "df1b42a6304d7a44d7c197ce7f50fb8e51af3ff3c9bef1e7d22e0f0892804214",
+      "metadata_sha256": "dd5184d77b87bf00fce1b41439d9fb98dbdc443ccefae7e9c0ca2882caf11ec5",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s23_0/state_refs.bin",
+      "state_reference_sha256": "11a7dfb722e5285c9856d241642687338105bf43b2c2a8be2b84de2f6e6b8092",
+      "state_reference_metadata_sha256": "c62fa0781852fb7d8851b25ea80a5bfccd26030e80852be077661170fe2f341b"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 23,
+        "material_name": "RTResponseSection23Density1",
+        "runtime_density_g_cm3": 2.247403860092163,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 23,
+          "material_name": "PatientTissueFromHU2247",
+          "nominal_density_g_cm3": 2.4196,
+          "mean_excitation_energy_eV": 102.7974,
+          "composition_sha256": "bdef38f6ba2806369cff1d54bcd467fb6f9cd08446852dbd6da04530e6230572",
+          "element_weights": [
+            0.034,
+            0.155,
+            0.042,
+            0.435,
+            0.002,
+            0.103,
+            0.003,
+            0.0,
+            0.0,
+            0.225,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material078/operator.bin",
+      "data_sha256": "911337d3cff0f370c0dcc5b57a0e5b149e015dd4a39797d96197d089d4fc2244",
+      "metadata_sha256": "4648f9a6244dcdc2a3eccefd3124a8ab4a8dd1e1555be6b558f333d837476a44",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s23_1/state_refs.bin",
+      "state_reference_sha256": "d19630a5c550002b39a779b047b2a5f638ba116e1b60817838683df3645c6498",
+      "state_reference_metadata_sha256": "d1f2c862e580fdabace87d5f0107f3e03e129f8f05c2e6134f92160ecdd9b76d"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 23,
+        "material_name": "RTResponseSection23Density2",
+        "runtime_density_g_cm3": 2.538271427154541,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 23,
+          "material_name": "PatientTissueFromHU2247",
+          "nominal_density_g_cm3": 2.4196,
+          "mean_excitation_energy_eV": 102.7974,
+          "composition_sha256": "bdef38f6ba2806369cff1d54bcd467fb6f9cd08446852dbd6da04530e6230572",
+          "element_weights": [
+            0.034,
+            0.155,
+            0.042,
+            0.435,
+            0.002,
+            0.103,
+            0.003,
+            0.0,
+            0.0,
+            0.225,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material079/operator.bin",
+      "data_sha256": "d29c7d4ffff55a440334127598cecc88ecd1fa3bdd0cf83bc0705403a08f1855",
+      "metadata_sha256": "22926ae19f1fedbf639aa363bd3c8b063655f90f178ca2190777f9def28230df",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s23_2/state_refs.bin",
+      "state_reference_sha256": "f75fa4817e7d28c59f643c529dc2537969780bdde6a5e5c73df73266caf5dde4",
+      "state_reference_metadata_sha256": "96ee1196c502cd9805435e7e989a95e332688e56c2afd1a1b606986f5b737023"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 23,
+        "material_name": "RTResponseSection23Density3",
+        "runtime_density_g_cm3": 2.866783857345581,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 23,
+          "material_name": "PatientTissueFromHU2247",
+          "nominal_density_g_cm3": 2.4196,
+          "mean_excitation_energy_eV": 102.7974,
+          "composition_sha256": "bdef38f6ba2806369cff1d54bcd467fb6f9cd08446852dbd6da04530e6230572",
+          "element_weights": [
+            0.034,
+            0.155,
+            0.042,
+            0.435,
+            0.002,
+            0.103,
+            0.003,
+            0.0,
+            0.0,
+            0.225,
+            0.001,
+            0.0,
+            0.0
+          ]
+        }
+      },
+      "path": "joint_materials/material080/operator.bin",
+      "data_sha256": "8cf6d29c124b028a38e881e1a5788e0aed05b7f866284fdc4254bf75cf4029e2",
+      "metadata_sha256": "cd115ebd72d7418f2480532daba76ca175c750649033071003dd1eaa78606328",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s23_3/state_refs.bin",
+      "state_reference_sha256": "36a16a0e2259fa9f309ac23b7cef1756a1c0fca64ec1df2bdc2d53ce2820469b",
+      "state_reference_metadata_sha256": "503e9169bd43e4930d4a1459f51d3e6c1dac678b09a19173a16a46380e978b09"
+    },
+    {
+      "status": "COMPILED",
+      "material_identity": {
+        "kind": "schneider_section",
+        "section_id": 24,
+        "material_name": "RTResponseSection24Density0",
+        "runtime_density_g_cm3": 4.55248498916626,
+        "section_metadata_path": "/mnt/sdb/wuwei/MAIGO_minibeam/data/schneider/schneider_stopping_v1.metadata.json",
+        "section_metadata_sha256": "b03f847a26b442a3441b8166e0845864a1ffac5839b77a7b8893c2db00e6095f",
+        "composition": {
+          "section_id": 24,
+          "material_name": "PatientTissueFromHU2995",
+          "nominal_density_g_cm3": 4.55248,
+          "mean_excitation_energy_eV": 233,
+          "composition_sha256": "4ed07b9386302fddbdbed3b43bcd979ffd64077ec5c23560d778bd1719d32e58",
+          "element_weights": [
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            1.0
+          ]
+        }
+      },
+      "path": "joint_materials/material081/operator.bin",
+      "data_sha256": "615a5b000195b835c8bd58088c7857d697290044787cbc4fcee8224d213e42ab",
+      "metadata_sha256": "1c3bb5ee21c2aec70f6b2435d4fc8caa185667d5049fc16f46fe7a3fda752dda",
+      "state_reference_file": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/protonCT/RT07575_minibeam_GPU/response_extension/rt_s24_0/state_refs.bin",
+      "state_reference_sha256": "986e0dbde7b2a5f5a33a548cea50fecdc215a56321567c47ac67ebc5c34db9d3",
+      "state_reference_metadata_sha256": "fc6cbc01be01cc464e81190f3227716a2dec6d3285271233d1afd432b5dffa2e"
+    }
+  ]
+}

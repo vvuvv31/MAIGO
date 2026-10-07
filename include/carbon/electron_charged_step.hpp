@@ -38,9 +38,6 @@ struct ChargedStep {
     ChargedStepStatus status{ChargedStepStatus::invalid};std::array<double,3> position{},direction{};
     double energy{},length{},raw_loss{},physical_deposit{};
     bool face{},elastic{},hard_proposal{},hard_collision{},stopped{};unsigned process{};
-    // Expected-value scoring only: deposited fraction of E and its sampled
-    // along-step point. Zero unless the caller requested expected scoring.
-    double ev_fraction{};std::array<double,3> ev_position{};
 };
 // Single-energy-weighted-packet step: W remains unchanged. Sample the branch
 // using soft-loss/E, then all positive hard parent/child/local outcomes.
@@ -53,7 +50,7 @@ struct ChargedStep {
 template<class Uniform,class Model>inline ChargedStep transport_charged_step(const Model& model,
     const ElectronCtGeometry& geometry,std::array<double,3> start,std::array<double,3> direction,
     double energy,const std::array<double,2>& hard_majorant,Uniform& uniform,
-    double maximum_step=.05,double mean_loss_fraction=.005,bool expected=false) {
+    double maximum_step=.05,double mean_loss_fraction=.005) {
     ChargedStep out;out.position=start;out.direction=direction;out.energy=energy;
     if(!std::isfinite(energy)||energy<=0||!std::isfinite(maximum_step)||maximum_step<=0||maximum_step>.25||!std::isfinite(mean_loss_fraction)||mean_loss_fraction<=0||mean_loss_fraction>.01)return out;
     const auto face=next_charged_face(geometry,start,direction);if(!face.valid)return out;
@@ -75,16 +72,10 @@ template<class Uniform,class Model>inline ChargedStep transport_charged_step(con
     if(!loss.valid){out.status=ChargedStepStatus::coverage_missing;return out;}
     out.raw_loss=loss.raw;out.physical_deposit=loss.deposit;out.stopped=loss.stopped;
     const double branch=uniform();if(!std::isfinite(branch)||branch<0||branch>=1)return out;
-    if((!expected&&branch<loss.deposit/energy)||loss.stopped){
+    if(branch<loss.deposit/energy||loss.stopped){
         const double along=uniform();if(!std::isfinite(along)||along<0||along>=1)return out;
         for(unsigned k=0;k<3;++k)out.position[k]=start[k]+along*out.length*direction[k];
         out.status=ChargedStepStatus::deposited;return out;
-    }
-    if(expected){
-        // Expected-value scoring of the packet branch: the unconditioned branch
-        // draw is the uniform along-step point; all later draws are unchanged.
-        out.ev_fraction=loss.deposit/energy;
-        for(unsigned k=0;k<3;++k)out.ev_position[k]=start[k]+branch*out.length*direction[k];
     }
     out.energy=loss.remaining;
     if(out.length!=flight||out.face){out.status=ChargedStepStatus::continued;return out;}

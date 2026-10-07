@@ -259,7 +259,8 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
         header.endian_marker != endian_marker || header.index_record_size != sizeof(Cinel03CellIndex) ||
         header.interaction_record_size != sizeof(Cinel03InteractionRecord) ||
         header.product_record_size != sizeof(Cinel03ProductRecord) ||
-        (header.flags & required_flags) != required_flags ||
+        (header.flags & (required_flags | cinel03_global_energy_index_flag)) !=
+            (required_flags | cinel03_global_energy_index_flag) ||
         (header.flags & ~known_flags) != 0U || header.cell_count == 0 ||
         header.interaction_count == 0 || header.energy_bin_width_MeV_per_u <= 0.0F ||
         !std::isfinite(header.minimum_energy_MeV_per_u) ||
@@ -432,16 +433,12 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
         }
     }
 
-    if ((header.flags & cinel03_global_energy_index_flag) != 0U) {
         if (header.energy_node_count == 0U) {
             throw std::runtime_error("Invalid CINPKG04 global energy-node count: " + path.string());
         }
         read_records(input, table.energy_nodes_, header.energy_node_count, path, "energy node", &running_crc);
         read_records(input, table.event_offsets_, header.energy_node_count + 1U, path, "energy-node offset", &running_crc);
         read_records(input, table.event_indices_, header.interaction_count, path, "energy event index", &running_crc);
-    } else {
-        build_energy_index(table.interactions_, table.energy_nodes_, table.event_offsets_, table.event_indices_);
-    }
 
     validate_energy_index(table.energy_nodes_, table.event_offsets_, table.event_indices_,
                           table.interactions_, path);
@@ -719,112 +716,6 @@ Cinel03LookupResult InelasticPackageV3Table::lookup_event(
     out.selected_energy_MeV_per_u = energy_nodes_[chosen_node].collision_energy_MeV_per_u;
     out.absolute_energy_mismatch_MeV_per_u = std::abs(energy - out.selected_energy_MeV_per_u);
     return out;
-}
-
-namespace {
-const char* cinel03_status_name(const Cinel03LookupStatus status) noexcept {
-    switch (status) {
-    case Cinel03LookupStatus::Hit: return "Hit";
-    case Cinel03LookupStatus::MissingProjectile: return "MissingProjectile";
-    case Cinel03LookupStatus::MissingTarget: return "MissingTarget";
-    case Cinel03LookupStatus::BelowEnergyDomain: return "BelowEnergyDomain";
-    case Cinel03LookupStatus::AboveEnergyDomain: return "AboveEnergyDomain";
-    case Cinel03LookupStatus::EnergyGapTooLarge: return "EnergyGapTooLarge";
-    case Cinel03LookupStatus::EmptyNode: return "EmptyNode";
-    }
-    return "Unknown";
-}
-} // namespace
-
-std::uint64_t InelasticPackageV3Table::find_event(
-    const int projectile_z, const int projectile_a, const int target_element_z,
-    const float energy, const float tolerance, const float u01,
-    const bool audit_mode, std::uint64_t* missing_target_counter) const {
-    constexpr auto invalid = std::numeric_limits<std::uint64_t>::max();
-
-    if (!is_valid_elemental_target(target_element_z)) {
-        if (audit_mode) {
-            if (missing_target_counter != nullptr) (*missing_target_counter)++;
-            return invalid;
-        }
-        throw std::runtime_error("CINEL03: Invalid target element Z=" + std::to_string(target_element_z));
-    }
-
-    if (!std::isfinite(energy) || !std::isfinite(tolerance) || tolerance < 0.0F ||
-        !std::isfinite(u01) || u01 < 0.0F || u01 > 1.0F || energy_nodes_.empty() ||
-        event_offsets_.size() != energy_nodes_.size() + 1U) {
-        if (audit_mode) {
-            if (missing_target_counter != nullptr) (*missing_target_counter)++;
-            return invalid;
-        }
-        throw std::runtime_error("CINEL03: Invalid lookup arguments or empty table");
-    }
-
-    // Strict exact-target + bounded-domain semantics shared with the device.
-    // The legacy tolerance window no longer widens the match; the fixed
-    // channel gap rule governs. The single uniform drives both the bracket
-    // choice and the intra-node pick.
-    const auto result = lookup_event(projectile_z, projectile_a, target_element_z,
-                                     energy, u01, u01);
-    if (result.status == Cinel03LookupStatus::Hit) {
-        return result.event_index;
-    }
-    if (audit_mode) {
-        if (missing_target_counter != nullptr) (*missing_target_counter)++;
-        return invalid;
-    }
-    if (result.status == Cinel03LookupStatus::MissingTarget) {
-        throw std::runtime_error(
-            "CINEL03: Missing target element Z=" + std::to_string(target_element_z) +
-            " for projectile Z=" + std::to_string(projectile_z) +
-            " A=" + std::to_string(projectile_a) +
-            " at E=" + std::to_string(energy) + " MeV/u");
-    }
-    throw std::runtime_error(
-        std::string("CINEL03: ") + cinel03_status_name(result.status) +
-        " for projectile Z=" + std::to_string(projectile_z) +
-        " A=" + std::to_string(projectile_a) +
-        " target Z=" + std::to_string(target_element_z) +
-        " at E=" + std::to_string(energy) + " MeV/u");
-}
-
-const Cinel03CellIndex* InelasticPackageV3Table::find_cell(
-    int projectile_z, int projectile_a, int target_element_z,
-    float energy, float tolerance) const noexcept {
-    if (!std::isfinite(energy) || !std::isfinite(tolerance) || tolerance < 0.0F) {
-        return nullptr;
-    }
-    std::uint64_t dummy_counter = 0;
-    const auto event_index = find_event(projectile_z, projectile_a, target_element_z,
-                                        energy, tolerance, 0.0F, true, &dummy_counter);
-    if (event_index == std::numeric_limits<std::uint64_t>::max()) {
-        return nullptr;
-    }
-    const auto iterator = std::upper_bound(
-        cells_.begin(), cells_.end(), event_index,
-        [](const std::uint64_t index, const Cinel03CellIndex& cell) {
-            return index < cell.interaction_offset;
-        });
-    if (iterator == cells_.begin()) {
-        return nullptr;
-    }
-    const auto cell = iterator - 1;
-    if (event_index >= cell->interaction_offset + cell->interaction_count) {
-        return nullptr;
-    }
-    return &*cell;
-}
-
-const Cinel03InteractionRecord* InelasticPackageV3Table::interaction(
-    const Cinel03CellIndex& cell, const std::uint64_t offset) const noexcept {
-    if (offset >= cell.interaction_count) {
-        return nullptr;
-    }
-    const auto index = cell.interaction_offset + offset;
-    if (index >= interactions_.size()) {
-        return nullptr;
-    }
-    return &interactions_[static_cast<std::size_t>(index)];
 }
 
 Cinel03DeviceTables InelasticPackageV3Table::make_device_tables() const {

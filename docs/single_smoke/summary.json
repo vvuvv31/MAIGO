@@ -1,0 +1,20 @@
+{
+  "passed": true,
+  "reports": [
+    {
+      "case": "proton_water_broadbeam",
+      "histories": 10000,
+      "passed": true
+    },
+    {
+      "case": "proton_ct_broadbeam",
+      "histories": 10000,
+      "passed": true
+    },
+    {
+      "case": "carbon_water_minibeam",
+      "histories": 10000,
+      "passed": true
+    }
+  ]
+}

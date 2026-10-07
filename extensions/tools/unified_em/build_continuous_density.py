@@ -70,7 +70,7 @@ def build(bases,section_file,helper,output):
    deltas.append(np.column_stack([mean_values(dr,bn.astype(float),moment=j) for j in [1,2]]).astype('<f4'))
   print(f'composition {s}: {time.monotonic()-start:.1f}s',flush=True)
  nodes=np.concatenate(nodes);vectors=np.concatenate(vectors);records=np.array(records,dtype=RD)
- em=output/'unified_em_v1.bin';delta=output/'unified_em_delta_moments_v2.bin'
+ em=output/'continuous26.bin';delta=output/'delta_moments.bin'
  # EMCNT001 standard base layout followed by continuous-density extension.
  with em.open('wb') as f:
   f.write(struct.pack('<8s6I',b'EMCNT001',1,26,18,468,len(nodes),len(vectors)))
@@ -90,9 +90,9 @@ def build(bases,section_file,helper,output):
   validation_status='candidate; validate components and transport/dose before installation')
  delta_meta=dict(schema='EMDMOMT2',version=2,bytes=delta.stat().st_size,nodes=len(nodes),records=468,
   units=['MeV/mm','MeV^2/mm'],encoding='Composition reference moments; continuous runtime moments use the native spectrum',generator=__file__)
- em.with_suffix('.json').write_text(json.dumps(em_meta,indent=2)+'\n')
- delta.with_suffix('.json').write_text(json.dumps(delta_meta,indent=2)+'\n')
+ em.with_suffix('.metadata.json').write_text(json.dumps(em_meta,indent=2)+'\n')
+ delta.with_suffix('.metadata.json').write_text(json.dumps(delta_meta,indent=2)+'\n')
  (output/'continuous_density.json').write_text(json.dumps(report,indent=2)+'\n')
  print(json.dumps(report),flush=True)
 if __name__=='__main__':
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--bases',type=Path,default=Path('data/em/ion_em_26_composition_bases.npz'));p.add_argument('--sections',type=Path,default=Path('data/schneider/schneider_stopping_v1.metadata.json'));p.add_argument('--helper',type=Path,default=Path('out/em_analytic_density_20261005/metadata'));p.add_argument('--output',type=Path,required=True);a=p.parse_args();build(a.bases,a.sections,a.helper,a.output)
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--bases',type=Path,default=Path('data/em/ions/composition_bases.npz'));p.add_argument('--sections',type=Path,default=Path('data/stopping/schneider/carbon.metadata.json'));p.add_argument('--helper',type=Path,default=Path('extensions/work/build/native/material_metadata'));p.add_argument('--output',type=Path,required=True);a=p.parse_args();build(a.bases,a.sections,a.helper,a.output)

@@ -3,7 +3,7 @@
 binary version 3 with per-target valid-domain block and masked totals.
 
 Inputs:
-- /mnt/sda/wuwei/secondary-rates-v2-1/raw/c12_dump.json (deterministic XS)
+- MAIGO_RATE_DUMP_ROOT/c12_dump.json (deterministic XS)
 - primary v2.1 channels (authoritative support map: has_support + bounds)
 - campaign_manifest_all.json + raw_validation_all.json (C12 null evidence)
 
@@ -17,8 +17,8 @@ Layout: SCHNRATE version 3: header, 25 sections x 13 targets x 921 partials,
 25x921 totals, 13 domain entries {double emin, double emax, uint8 has + 7 pad}.
 
 Outputs (new names; v1 untouched):
-  data/schneider/c12_schneider_inelastic_mass_xs_v2_1.csv (+ .metadata.json)
-  data/schneider/schneider_inelastic_rates_v2_1.bin (+ .metadata.json)
+  data/nuclear/schneider/carbon/primary_mass_cross_sections.csv (+ .metadata.json)
+  data/nuclear/schneider/carbon/inelastic_rates.bin (+ .metadata.json)
 """
 import datetime
 
@@ -31,12 +31,14 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(os.environ.get("MAIGO_REPO_ROOT", Path(__file__).resolve().parents[3]))
+STAGE = Path(os.environ.get('MAIGO_ASSET_OUTPUT_ROOT', REPO/'extensions/work/packages'))
+
 WORK = Path(os.environ.get("MAIGO_PACKAGE_WORK_ROOT", REPO / "extensions" / "work"))
 V2 = Path(os.environ.get("MAIGO_V2_CAMPAIGN_ROOT", WORK / "schneider-secondary-v2"))
 DUMP = Path(os.environ.get("MAIGO_RATE_DUMP_ROOT", WORK / "secondary-rates-v2-1" / "raw")) / "c12_dump.json"
 EMIN, EMAX, ESTEP, NE = 0.1, 460.1, 0.5, 921
 CANON_Z = [1, 6, 7, 8, 12, 15, 16, 17, 18, 20, 11, 19, 22]
-CHANNELS = "cinel03_c12_targets_v2_1.channels.json"
+CHANNELS = "final_states.channels.json"
 DRY_RUN = "--dry-run" in sys.argv
 
 
@@ -48,7 +50,7 @@ def f32(x):
 
 
 def c12_domains():
-    ch = json.load(open(REPO / ("data/schneider/" + CHANNELS)))
+    ch = json.load(open(STAGE / "data/nuclear/schneider/carbon" / CHANNELS))
     out = {}
     for c in ch["channels"]:
         assert (c["projectile_z"], c["projectile_a"]) == (6, 12)
@@ -77,6 +79,7 @@ def c12_nulls():
 
 
 def main():
+    (STAGE/'data/nuclear/schneider/carbon').mkdir(parents=True, exist_ok=True)
     d = json.load(open(DUMP))
     assert (d['projectile_z'], d['projectile_a']) == (6, 12)
     assert d['process_provenance']['process_name'] == 'ionInelastic'
@@ -141,9 +144,9 @@ def main():
             print(f'accepting {len(probes)} frozen residual C12 NEED points')
         else:
             raise RuntimeError(f'refusing final compile with {len(probes)} unprobed C12 NEED points')
-    csv_path = REPO / 'data/schneider/c12_schneider_inelastic_mass_xs_v2_1.csv'
-    out_bin = REPO / 'data/schneider/schneider_inelastic_rates_v2_1.bin'
-    tmpdir = Path(tempfile.mkdtemp(prefix='priratv3_', dir=REPO / 'data/schneider'))
+    csv_path = STAGE / 'data/nuclear/schneider/carbon/primary_mass_cross_sections.csv'
+    out_bin = STAGE / 'data/nuclear/schneider/carbon/inelastic_rates.bin'
+    tmpdir = Path(tempfile.mkdtemp(prefix='priratv3_', dir=STAGE / 'data/nuclear/schneider/carbon'))
     tmp_csv = tmpdir / csv_path.name
     with open(tmp_csv, 'w') as f:
         f.write('energy_MeV_per_u,' + ','.join((f'section_{s:02d}_mass_xs_per_mm_at_1g_cm3' for s in range(25))) + '\n')
@@ -169,10 +172,10 @@ def main():
             f.write(struct.pack('<dd', flo, fhi))
             f.write(struct.pack('<B', 1))
             f.write(b'\x00' * 7)
-    meta = {'schema_version': 1, 'format': 'SCHNRATE', 'binary_version': 3, 'data_filename': out_bin.name, 'file_size_bytes': tmp.stat().st_size, 'binary_magic': 'SCHNRATE', 'target_order': CANON_Z, 'energy_grid': {'emin': EMIN, 'emax': EMAX, 'step': ESTEP, 'count': NE}, 'channel_domains': [{'target_z': tz, 'energy_min_mevu': doms[tz][0], 'energy_max_mevu': doms[tz][1], 'has_support': True} for tz in CANON_Z], 'companion_csv': {'filename': csv_path.name, 'note': 'masked totals audit artifact; NOT loaded by v3 runtime'}, 'topas_version': '4.2.p3', 'geant4_version': '11.03.p02', 'physics_list': 'FTFP_INCLXX', 'schneider_source_file': 'data/HUtoMaterialSchneider.txt', 'zeroing_policy': 'zero iff XS==0, E <= per-target max-null-beam, or E > target emax; substantial-XS-without-nodes NEVER zeroed; totals = masked-at-node sums', 'zeroed_xs0': zeroed_zero, 'zeroed_below_null': zeroed_below, 'zeroed_above_emax': zeroed_above, 'units': 'mm, MeV, ns, g/cm^3', 'generation_timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'compiler_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO).decode().strip(), 'compiler_command': 'python3 tools/compile_primary_rates_v2_1.py ' + ' '.join(sys.argv[1:])}
+    meta = {'schema_version': 1, 'format': 'SCHNRATE', 'binary_version': 3, 'data_filename': out_bin.name, 'file_size_bytes': tmp.stat().st_size, 'binary_magic': 'SCHNRATE', 'target_order': CANON_Z, 'energy_grid': {'emin': EMIN, 'emax': EMAX, 'step': ESTEP, 'count': NE}, 'channel_domains': [{'target_z': tz, 'energy_min_mevu': doms[tz][0], 'energy_max_mevu': doms[tz][1], 'has_support': True} for tz in CANON_Z], 'companion_csv': {'filename': csv_path.name, 'note': 'masked totals audit artifact; NOT loaded by v3 runtime'}, 'topas_version': '4.2.p3', 'geant4_version': '11.03.p02', 'physics_list': 'FTFP_INCLXX', 'schneider_source_file': 'data/materials/schneider/hu_to_material.txt', 'zeroing_policy': 'zero iff XS==0, E <= per-target max-null-beam, or E > target emax; substantial-XS-without-nodes NEVER zeroed; totals = masked-at-node sums', 'zeroed_xs0': zeroed_zero, 'zeroed_below_null': zeroed_below, 'zeroed_above_emax': zeroed_above, 'units': 'mm, MeV, ns, g/cm^3', 'generation_timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'compiler_commit': os.environ.get('MAIGO_GENERATOR_REVISION', 'release-extraction-kit'), 'compiler_command': 'python3 tools/compile_primary_rates_v2_1.py ' + ' '.join(sys.argv[1:])}
     tmp.replace(out_bin)
     tmp_csv.replace(csv_path)
-    (REPO / ('data/schneider/' + out_bin.stem + '.metadata.json')).write_text(json.dumps(meta, indent=1))
+    out_bin.with_suffix('.metadata.json').write_text(json.dumps(meta, indent=1))
     import shutil
     shutil.rmtree(tmpdir)
     print(f'compiled {out_bin} ({out_bin.stat().st_size / 1000000.0:.1f} MB); csv {csv_path}')

@@ -12,7 +12,7 @@
 #include <string_view>
 
 namespace carbon {
-// Electron indices describe immutable material-node payloads. Include every
+// Production indices describe exactly26 immutable composition payloads. Include every
 // payload's file identity so a repeated batch never reuses a replaced operator.
 inline std::string electron_bank_input_key(const std::filesystem::path& index,
                                            std::string_view expected_magic) {
@@ -20,13 +20,14 @@ inline std::string electron_bank_input_key(const std::filesystem::path& index,
     std::ifstream in(index);
     std::string magic;
     unsigned count{};
-    if(!(in>>magic>>count) || (magic!=expected_magic&&!(expected_magic=="MAIECB02"&&magic=="MAIEC026")&&!(expected_magic=="MAIPHB02"&&magic=="MAIPH026")) || ((magic=="MAIEC026"||magic=="MAIPH026")&&count!=26) || count==0 || count>4096)
+    if(!(in>>magic>>count) || magic!=expected_magic ||
+       (magic!="MAIEC026" && magic!="MAIPH026") || count!=26)
         throw std::runtime_error("Invalid electron bank index: "+index.string());
     for(unsigned i=0;i<count;++i) {
         int section;
         double density;
         std::string name;
-        if(!(in>>section>>density>>name) || section < 0 || section>=int(kElectronMaterialCount) ||
+        if(!(in>>section>>density>>name) || section != int(i) ||
            !std::isfinite(density) || density<=0)
             throw std::runtime_error("Invalid electron bank material row");
         const std::filesystem::path relative(name);
@@ -67,42 +68,8 @@ inline std::string companion_input_key(const std::filesystem::path& manifest,
     return key;
 }
 
-// Match CtGrid::load's packed-file / DICOM-series dispatch. Slice additions,
-// removals, edits, material mapping and origin policy all invalidate reuse.
-inline std::string ct_input_key(const std::filesystem::path& path,
-                                const std::filesystem::path& schneider,
-                                std::string_view origin) {
-    if(!std::filesystem::is_directory(path) && !std::filesystem::is_regular_file(path))
-        throw std::runtime_error("CT grid path does not exist: "+path.string());
-    const auto lower_extension=[](const auto& p) {
-        auto s=p.extension().string();
-        std::transform(s.begin(),s.end(),s.begin(),[](unsigned char c){return std::tolower(c);});
-        return s;
-    };
-    bool packed=false;
-    if(!std::filesystem::is_directory(path)) {
-        const auto ext=lower_extension(path);
-        if(ext!=".dcm" && ext!=".ima" && ext!=".dicom") {
-            std::ifstream in(path,std::ios::binary);std::uint32_t magic=0;
-            in.read(reinterpret_cast<char*>(&magic),sizeof(magic));
-            packed=in && magic==CtGrid::magic_value;
-        }
-    }
-    std::string key;
-    if(packed)key=input_cache_key(path);
-    else {
-        const auto dir=std::filesystem::is_directory(path)?path:path.parent_path();
-        key=std::filesystem::absolute(dir).lexically_normal().string();
-        std::vector<std::filesystem::path> files;
-        for(const auto& entry:std::filesystem::directory_iterator(dir)) {
-            const auto ext=lower_extension(entry.path());
-            if(entry.is_regular_file() && (ext.empty() || ext==".dcm" || ext==".ima" || ext==".dicom"))
-                files.push_back(entry.path());
-        }
-        std::sort(files.begin(),files.end());
-        for(const auto& file:files)key+="|"+input_cache_key(file);
-    }
-    if(!schneider.empty())key+="|"+input_cache_key(schneider);
-    return key+"|origin="+std::string(origin);
+// Packed CCTG v3 only; slice conversion is outside this runtime.
+inline std::string ct_input_key(const std::filesystem::path& path) {
+    return input_cache_key(path);
 }
 }

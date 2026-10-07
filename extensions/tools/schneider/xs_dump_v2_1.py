@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Rate v2.1 XS dump wave: deterministic Geant4 XS over [0.1, 460.1] step 0.5.
 
-921 grid points per projectile (vs v1 860 over [0.5,430]). 13 local sbatch
-jobs (12 CPUs/8G each, deterministic 1-history dumps, minutes each).
-Work dir /mnt/sda/wuwei/secondary-rates-v2-1/ (v1 dir untouched).
+921 grid points per projectile, 15 local sbatch jobs, deterministic
+1-history queries. Work directory is MAIGO_RATE_CAMPAIGN_ROOT.
 """
 import json
 import os
@@ -20,6 +19,8 @@ TOPAS_LD_PATH = os.environ.get("TOPAS_LD_LIBRARY_PATH", "")
 DICOM_DIR = os.environ.get("MAIGO_SCHNEIDER_DICOM_DIR", "REPLACE_WITH_SCHNEIDER_DICOM_DIR")
 
 PROJS = [
+    ("c12", "C12", 6, 12, "GenericIon(6,12)"),
+    ("proton", "proton", 1, 1, "proton"),
     ("b11", "B11", 5, 11, "GenericIon(5,11)"),
     ("b10", "B10", 5, 10, "GenericIon(5,10)"),
     ("be9", "Be9", 4, 9, "GenericIon(4,9)"),
@@ -45,7 +46,7 @@ def main():
     jids = []
     for pid, sym, z, a, part in PROJS:
         param = WORK / f"{pid}_param.txt"
-        param.write_text(f"""includeFile = {REPO}/data/HUtoMaterialSchneider.txt
+        param.write_text(f"""includeFile = {REPO}/data/materials/schneider/hu_to_material.txt
 
 s:Ge/World/Material = "Vacuum"
 d:Ge/World/HLX = 100.0 m
@@ -96,8 +97,8 @@ d:Sc/XsDump/EnergyStepMeVu = {ESTEP} MeV
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=4G
-#SBATCH --output=/mnt/sda/wuwei/job_%j.log
-#SBATCH --error=/mnt/sda/wuwei/job_%j.err
+#SBATCH --output={WORK}/job_%j.log
+#SBATCH --error={WORK}/job_%j.err
 
 export TOPAS_G4_DATA_DIR={TOPAS_G4_DATA}
 export LD_LIBRARY_PATH={TOPAS_LD_PATH}:$LD_LIBRARY_PATH
@@ -112,7 +113,7 @@ export LD_LIBRARY_PATH={TOPAS_LD_PATH}:$LD_LIBRARY_PATH
             jids.append(jid)
             print(f"  {pid}: job {jid}")
     if submit:
-        print(f"submitted {len(jids)} jobs; 13x4=52 CPUs")
+        print(f"submitted {len(jids)} jobs; {len(jids)}x4 CPUs")
     else:
         print("generated (dry run, use --submit)")
 

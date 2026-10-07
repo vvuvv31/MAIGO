@@ -11,7 +11,7 @@ Rules (mirror Step-17 audit, no silent changes):
   rule as the secondary v2 compiler); exact-float32 energy nodes.
 - temp path + re-read + atomic rename.
 Outputs (new names; v1 untouched):
-  data/schneider/cinel03_c12_targets_v2_1.bin (+ .metadata.json, +.channels.json)
+  data/nuclear/schneider/carbon/final_states.bin (+ .metadata.json, +.channels.json)
 """
 import datetime
 
@@ -26,6 +26,8 @@ from collections import defaultdict
 from pathlib import Path
 
 REPO = Path(os.environ.get("MAIGO_REPO_ROOT", Path(__file__).resolve().parents[3]))
+STAGE = Path(os.environ.get('MAIGO_ASSET_OUTPUT_ROOT', REPO/'extensions/work/packages'))
+
 WORK = Path(os.environ.get("MAIGO_PACKAGE_WORK_ROOT", REPO / "extensions" / "work"))
 V2 = Path(os.environ.get("MAIGO_V2_CAMPAIGN_ROOT", WORK / "schneider-secondary-v2"))
 V1_PROD = Path(os.environ.get("MAIGO_PRIMARY_CAMPAIGN_ROOT", WORK / "production"))
@@ -43,6 +45,7 @@ def f32(x):
 
 
 def main():
+    (STAGE/'data/nuclear/schneider/carbon').mkdir(parents=True, exist_ok=True)
     sys.path.insert(0, str(REPO / 'extensions' / 'package_tools'))
     import cinel02
     import cinel03
@@ -128,12 +131,12 @@ def main():
         pkg.event_offsets.append(start)
     pkg.event_offsets.append(len(events))
     pkg.event_indices = list(range(len(events)))
-    tmpdir = Path(tempfile.mkdtemp(prefix='cinel03c12v21_', dir=REPO / 'data/schneider'))
+    tmpdir = Path(tempfile.mkdtemp(prefix='cinel03c12v21_', dir=STAGE / 'data/nuclear/schneider/carbon'))
     tmp_bin = tmpdir / 'cinel03_c12_targets_v2_1.bin'
     pkg.write_binary(tmp_bin)
     reread = cinel03.Cinel03Package.read_binary(tmp_bin)
     assert len(reread.interactions) == len(events), 're-read mismatch'
-    final_bin = REPO / 'data/schneider/cinel03_c12_targets_v2_1.bin'
+    final_bin = STAGE / 'data/nuclear/schneider/carbon/final_states.bin'
     tmp_bin.replace(final_bin)
     import shutil
     shutil.rmtree(tmpdir)
@@ -145,10 +148,10 @@ def main():
     for k in sorted(ch.items()):
         a = sorted(k[1])
         gaps = [a[i + 1] - a[i] for i in range(len(a) - 1)]
-        channels.append({'projectile_z': k[0][0], 'projectile_a': k[0][1], 'target_element_z': k[0][2], 'energy_min_MeV_per_u': a[0], 'energy_max_MeV_per_u': a[-1], 'energy_nodes': len(a), 'maximum_observed_node_gap_MeV_per_u': max(gaps) if gaps else 0.0, 'maximum_allowed_node_gap_MeV_per_u': 5.0, 'interpolation_policy': 'stochastic_bracketing', 'target_alias_allowed': False})
-    (REPO / 'data/schneider/cinel03_c12_targets_v2_1.channels.json').write_text(json.dumps({'channels': channels}, indent=1))
-    meta = {'schema_version': 1, 'format': 'CINPKG04', 'data_filename': 'cinel03_c12_targets_v2_1.bin', 'file_size_bytes': final_bin.stat().st_size, 'topas_version': '4.2.p3', 'geant4_version': 'geant4-11-03-patch-02', 'physics_list': 'FTFP_INCLXX', 'schneider_source_path': 'data/HUtoMaterialSchneider.txt', 'v1_base_interactions': V1_COUNT, 'new_events': n_new, 'total_interactions': len(events), 'campaign_uuid': V2_1_UUID, 'compiler_git_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO).decode().strip(), 'compiler_command': 'python3 tools/compile_primary_package_v2_1.py', 'units': 'mm, MeV, ns', 'generation_timestamp_utc': __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat()}
-    (REPO / 'data/schneider/cinel03_c12_targets_v2_1.metadata.json').write_text(json.dumps(meta, indent=1))
+        channels.append({'projectile_z': k[0][0], 'projectile_a': k[0][1], 'target_element_z': k[0][2], 'has_support': True, 'energy_min_MeV_per_u': a[0], 'energy_max_MeV_per_u': a[-1], 'energy_nodes': len(a), 'maximum_observed_node_gap_MeV_per_u': max(gaps) if gaps else 0.0, 'maximum_allowed_node_gap_MeV_per_u': 5.0, 'interpolation_policy': 'stochastic_bracketing', 'target_alias_allowed': False})
+    (STAGE / 'data/nuclear/schneider/carbon/final_states.channels.json').write_text(json.dumps({'channels': channels}, indent=1))
+    meta = {'schema_version': 1, 'format': 'CINPKG04', 'data_filename': 'final_states.bin', 'file_size_bytes': final_bin.stat().st_size, 'topas_version': '4.2.p3', 'geant4_version': 'geant4-11-03-patch-02', 'physics_list': 'FTFP_INCLXX', 'schneider_source_path': 'data/materials/schneider/hu_to_material.txt', 'v1_base_interactions': V1_COUNT, 'new_events': n_new, 'total_interactions': len(events), 'campaign_uuid': V2_1_UUID, 'compiler_git_commit': os.environ.get('MAIGO_GENERATOR_REVISION', 'release-extraction-kit'), 'compiler_command': 'python3 tools/compile_primary_package_v2_1.py', 'units': 'mm, MeV, ns', 'generation_timestamp_utc': __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat()}
+    (STAGE / 'data/nuclear/schneider/carbon/final_states.metadata.json').write_text(json.dumps(meta, indent=1))
     print(f'compiled {final_bin} ({final_bin.stat().st_size / 1000000.0:.1f} MB)')
 
 

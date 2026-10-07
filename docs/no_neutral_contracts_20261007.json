@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "checks": [
+    {
+      "check": "explicit_carbon_and_proton_support",
+      "passed": true
+    },
+    {
+      "check": "missing_support",
+      "passed": true
+    },
+    {
+      "check": "nonboolean_support",
+      "passed": true
+    },
+    {
+      "check": "false_support",
+      "passed": true
+    }
+  ]
+}

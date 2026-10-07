@@ -1,0 +1,570 @@
+{
+  "schema_version": 2,
+  "topas_version": "4.2.p3",
+  "geant4_version": "geant4-11-03-patch-02 [MT]",
+  "em_physics_module": "g4em-standard_opt4",
+  "projectile": {
+    "name": "GenericIon(6,12)",
+    "z": 6,
+    "a": 12
+  },
+  "schneider_source_path": "data/materials/schneider/hu_to_material.txt",
+  "sections_count": 25,
+  "energies_count": 4302,
+  "energy_grid": {
+    "type": "uniform",
+    "min_MeVu": 0.01,
+    "max_MeVu": 430.11,
+    "step_MeVu": 0.1,
+    "nodes": 4302,
+    "covers_430mevu_domain": true,
+    "has_guard_node": true
+  },
+  "section_manifest": [
+    {
+      "section_id": 0,
+      "material_name": "PatientTissueFromHUNegative975",
+      "nominal_density_g_cm3": 0.0393235,
+      "mean_excitation_energy_eV": 85.6829,
+      "element_weights": [
+        0.0,
+        0.0,
+        0.755,
+        0.232,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.013,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 1,
+      "material_name": "PatientTissueFromHUNegative535",
+      "nominal_density_g_cm3": 0.470041,
+      "mean_excitation_energy_eV": 69.693,
+      "element_weights": [
+        0.103,
+        0.105,
+        0.031,
+        0.749,
+        0.0,
+        0.002,
+        0.003,
+        0.003,
+        0.0,
+        0.0,
+        0.002,
+        0.002,
+        0.0
+      ]
+    },
+    {
+      "section_id": 2,
+      "material_name": "PatientTissueFromHUNegative102",
+      "nominal_density_g_cm3": 0.874911,
+      "mean_excitation_energy_eV": 62.0008,
+      "element_weights": [
+        0.116,
+        0.681,
+        0.002,
+        0.198,
+        0.0,
+        0.0,
+        0.001,
+        0.001,
+        0.0,
+        0.0,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 3,
+      "material_name": "PatientTissueFromHUNegative68",
+      "nominal_density_g_cm3": 0.912686,
+      "mean_excitation_energy_eV": 63.4369,
+      "element_weights": [
+        0.113,
+        0.567,
+        0.009,
+        0.308,
+        0.0,
+        0.0,
+        0.001,
+        0.001,
+        0.0,
+        0.0,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 4,
+      "material_name": "PatientTissueFromHUNegative38",
+      "nominal_density_g_cm3": 0.947183,
+      "mean_excitation_energy_eV": 64.9795,
+      "element_weights": [
+        0.11,
+        0.458,
+        0.015,
+        0.411,
+        0.0,
+        0.001,
+        0.002,
+        0.002,
+        0.0,
+        0.0,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 5,
+      "material_name": "PatientTissueFromHUNegative8",
+      "nominal_density_g_cm3": 0.980389,
+      "mean_excitation_energy_eV": 66.1914,
+      "element_weights": [
+        0.108,
+        0.356,
+        0.022,
+        0.509,
+        0.0,
+        0.001,
+        0.002,
+        0.002,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 6,
+      "material_name": "PatientTissueFromHU12",
+      "nominal_density_g_cm3": 1.00386,
+      "mean_excitation_energy_eV": 67.2309,
+      "element_weights": [
+        0.106,
+        0.284,
+        0.026,
+        0.578,
+        0.0,
+        0.001,
+        0.002,
+        0.002,
+        0.0,
+        0.0,
+        0.0,
+        0.001,
+        0.0
+      ]
+    },
+    {
+      "section_id": 7,
+      "material_name": "PatientTissueFromHU49",
+      "nominal_density_g_cm3": 1.04308,
+      "mean_excitation_energy_eV": 69.3341,
+      "element_weights": [
+        0.103,
+        0.134,
+        0.03,
+        0.723,
+        0.0,
+        0.002,
+        0.002,
+        0.002,
+        0.0,
+        0.0,
+        0.002,
+        0.002,
+        0.0
+      ]
+    },
+    {
+      "section_id": 8,
+      "material_name": "PatientTissueFromHU100",
+      "nominal_density_g_cm3": 1.0788,
+      "mean_excitation_energy_eV": 70.0821,
+      "element_weights": [
+        0.094,
+        0.207,
+        0.062,
+        0.622,
+        0.0,
+        0.0,
+        0.006,
+        0.003,
+        0.0,
+        0.0,
+        0.006,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 9,
+      "material_name": "PatientTissueFromHU160",
+      "nominal_density_g_cm3": 1.10857,
+      "mean_excitation_energy_eV": 70.1198,
+      "element_weights": [
+        0.095,
+        0.455,
+        0.025,
+        0.355,
+        0.0,
+        0.021,
+        0.001,
+        0.001,
+        0.0,
+        0.045,
+        0.001,
+        0.001,
+        0.0
+      ]
+    },
+    {
+      "section_id": 10,
+      "material_name": "PatientTissueFromHU250",
+      "nominal_density_g_cm3": 1.16606,
+      "mean_excitation_energy_eV": 72.7791,
+      "element_weights": [
+        0.089,
+        0.423,
+        0.027,
+        0.363,
+        0.0,
+        0.03,
+        0.001,
+        0.001,
+        0.0,
+        0.064,
+        0.001,
+        0.001,
+        0.0
+      ]
+    },
+    {
+      "section_id": 11,
+      "material_name": "PatientTissueFromHU350",
+      "nominal_density_g_cm3": 1.23146,
+      "mean_excitation_energy_eV": 75.7783,
+      "element_weights": [
+        0.082,
+        0.391,
+        0.029,
+        0.372,
+        0.0,
+        0.039,
+        0.001,
+        0.001,
+        0.0,
+        0.083,
+        0.001,
+        0.001,
+        0.0
+      ]
+    },
+    {
+      "section_id": 12,
+      "material_name": "PatientTissueFromHU450",
+      "nominal_density_g_cm3": 1.29658,
+      "mean_excitation_energy_eV": 78.6516,
+      "element_weights": [
+        0.076,
+        0.361,
+        0.03,
+        0.38,
+        0.001,
+        0.047,
+        0.002,
+        0.001,
+        0.0,
+        0.101,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 13,
+      "material_name": "PatientTissueFromHU550",
+      "nominal_density_g_cm3": 1.36063,
+      "mean_excitation_energy_eV": 81.1498,
+      "element_weights": [
+        0.071,
+        0.335,
+        0.032,
+        0.387,
+        0.001,
+        0.054,
+        0.002,
+        0.0,
+        0.0,
+        0.117,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 14,
+      "material_name": "PatientTissueFromHU650",
+      "nominal_density_g_cm3": 1.42585,
+      "mean_excitation_energy_eV": 83.742,
+      "element_weights": [
+        0.066,
+        0.31,
+        0.033,
+        0.394,
+        0.001,
+        0.061,
+        0.002,
+        0.0,
+        0.0,
+        0.132,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 15,
+      "material_name": "PatientTissueFromHU750",
+      "nominal_density_g_cm3": 1.4919,
+      "mean_excitation_energy_eV": 86.3012,
+      "element_weights": [
+        0.061,
+        0.287,
+        0.035,
+        0.4,
+        0.001,
+        0.067,
+        0.002,
+        0.0,
+        0.0,
+        0.146,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 16,
+      "material_name": "PatientTissueFromHU850",
+      "nominal_density_g_cm3": 1.55922,
+      "mean_excitation_energy_eV": 89.0001,
+      "element_weights": [
+        0.056,
+        0.265,
+        0.036,
+        0.405,
+        0.002,
+        0.073,
+        0.003,
+        0.0,
+        0.0,
+        0.159,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 17,
+      "material_name": "PatientTissueFromHU950",
+      "nominal_density_g_cm3": 1.62478,
+      "mean_excitation_energy_eV": 91.2244,
+      "element_weights": [
+        0.052,
+        0.246,
+        0.037,
+        0.411,
+        0.002,
+        0.078,
+        0.003,
+        0.0,
+        0.0,
+        0.17,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 18,
+      "material_name": "PatientTissueFromHU1050",
+      "nominal_density_g_cm3": 1.68904,
+      "mean_excitation_energy_eV": 93.2404,
+      "element_weights": [
+        0.049,
+        0.227,
+        0.038,
+        0.416,
+        0.002,
+        0.083,
+        0.003,
+        0.0,
+        0.0,
+        0.181,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 19,
+      "material_name": "PatientTissueFromHU1150",
+      "nominal_density_g_cm3": 1.75636,
+      "mean_excitation_energy_eV": 95.5754,
+      "element_weights": [
+        0.045,
+        0.21,
+        0.039,
+        0.42,
+        0.002,
+        0.088,
+        0.003,
+        0.0,
+        0.0,
+        0.192,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 20,
+      "material_name": "PatientTissueFromHU1250",
+      "nominal_density_g_cm3": 1.8216,
+      "mean_excitation_energy_eV": 97.4852,
+      "element_weights": [
+        0.042,
+        0.194,
+        0.04,
+        0.425,
+        0.002,
+        0.092,
+        0.003,
+        0.0,
+        0.0,
+        0.201,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 21,
+      "material_name": "PatientTissueFromHU1350",
+      "nominal_density_g_cm3": 1.88756,
+      "mean_excitation_energy_eV": 99.4297,
+      "element_weights": [
+        0.039,
+        0.179,
+        0.041,
+        0.429,
+        0.002,
+        0.096,
+        0.003,
+        0.0,
+        0.0,
+        0.21,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 22,
+      "material_name": "PatientTissueFromHU1450",
+      "nominal_density_g_cm3": 1.95424,
+      "mean_excitation_energy_eV": 101.4093,
+      "element_weights": [
+        0.036,
+        0.165,
+        0.042,
+        0.432,
+        0.002,
+        0.1,
+        0.003,
+        0.0,
+        0.0,
+        0.219,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 23,
+      "material_name": "PatientTissueFromHU2247",
+      "nominal_density_g_cm3": 2.4196,
+      "mean_excitation_energy_eV": 102.7974,
+      "element_weights": [
+        0.034,
+        0.155,
+        0.042,
+        0.435,
+        0.002,
+        0.103,
+        0.003,
+        0.0,
+        0.0,
+        0.225,
+        0.001,
+        0.0,
+        0.0
+      ]
+    },
+    {
+      "section_id": 24,
+      "material_name": "PatientTissueFromHU2995",
+      "nominal_density_g_cm3": 4.55248,
+      "mean_excitation_energy_eV": 233,
+      "element_weights": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    }
+  ],
+  "dimension_order": {
+    "payload_1": [
+      "section_id (0..24)",
+      "energy_node (0..4301)"
+    ],
+    "payload_2": [
+      "section_id (0..24)",
+      "energy_node (0..4301)"
+    ]
+  },
+  "units": {
+    "mass_stopping_power": "(MeV/mm) / (g/cm3)",
+    "csda_range": "mm",
+    "density": "g/cm3",
+    "energy": "MeV/u"
+  },
+  "data_filename": "carbon.bin",
+  "format": "binary",
+  "binary_magic": "SCHNSTOP",
+  "binary_version": 1
+}

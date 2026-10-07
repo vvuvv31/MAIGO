@@ -1,0 +1,7 @@
+{
+  "control_binary": "/tmp/maigo_cleanup4_before_20261007/carbon_mc",
+  "control_sha256": "baf46731d62a62ec83729c19634dc7920827e83cd0387cc45399aba8d56944d6",
+  "control_presets": "Unmodified frozen presets; neutral tracking already removed in this baseline.",
+  "candidate_sha256": "e516c5cc3c6944e467dcbb583b004b8d272f97f85fed4e952ecfbbe4eb6e203c",
+  "initial_candidate_sha256": "748a072438cebc12fb7dbbf319ebc9c836d36dc134b06ec3aa0571e76a038885"
+}

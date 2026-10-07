@@ -8,7 +8,7 @@ def dump(p, obj):
     p.write_text(json.dumps(obj, indent=2) + '\n')
 
 def template_module():
-    spec = importlib.util.spec_from_file_location('templates', REPO / 'extensions/tools/schneider/generate_v2_manifest.py')
+    spec = importlib.util.spec_from_file_location('templates', REPO / 'extensions/tools/schneider/templates.py')
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -30,7 +30,7 @@ def prepare(args):
             text += '\ni:Ts/NumberOfThreads = 1\ni:Ts/ShowHistoryCountAtInterval = 1000000\n'
             (case / 'run.txt').write_text(text)
             tasks.append(dict(case=str(case.relative_to(root)), target_z=z, energy_MeV=energy, histories=args.histories, input_text=text))
-    dicom = Path('/mnt/sda/wuwei/maigo-ct-schneider/step-03/DICOM_Box/DICOM_Box')
+    dicom = Path(os.environ.get('MAIGO_SCHNEIDER_DICOM_DIR', root/'dicom'))
     dump(root / 'campaign.json', dict(schema=1, uuid=str(uuid.uuid4()), projectile={'z': 1, 'a': 1}, requested_source_energy_MeV=[0.1, 250.0], guard_energy_MeV=max((t['energy_MeV'] for t in tasks)), tasks=tasks, final_state_only_xs_factor=args.final_state_xs_factor, physics_modules=['g4em-standard_opt4', 'g4h-phy_QGSP_BIC_HP', 'g4ion-inclxx', 'CarbonInelasticCapturePhysics', 'g4h-elastic_HP', 'g4stopping'], dicom_files=[str(p) for p in sorted(dicom.rglob('*')) if p.is_file()]))
     print(root / 'campaign.json')
 
@@ -50,7 +50,7 @@ def run(args):
         if (case / 'run.txt').read_text() != t['input_text']:
             raise RuntimeError('Input changed after prepare')
         env = os.environ.copy()
-        env.update(TOPAS_G4_DATA_DIR='/software/geant4-11.3.2/share/Geant4/data', LD_LIBRARY_PATH='/software/topas/lib:/software/geant4-11.3.2/lib:' + env.get('LD_LIBRARY_PATH', ''), CARBON_CINEL02_OUTPUT_DIR=str(case / 'raw'), CARBON_CINEL02_CAMPAIGN_UUID=m['uuid'], CARBON_CINEL02_RUN_TAG=case.name, CARBON_CINEL02_PRIMARY_ONLY='true', CARBON_CINEL02_OVERWRITE_CAMPAIGN='false')
+        env.update(CARBON_CINEL02_OUTPUT_DIR=str(case / 'raw'), CARBON_CINEL02_CAMPAIGN_UUID=m['uuid'], CARBON_CINEL02_RUN_TAG=case.name, CARBON_CINEL02_PRIMARY_ONLY='true', CARBON_CINEL02_OVERWRITE_CAMPAIGN='false')
         env.pop('MAIGO_CINEL_FINAL_STATE_XS_FACTOR', None)
         if m.get('final_state_only_xs_factor', 1) != 1:
             env['MAIGO_CINEL_FINAL_STATE_XS_FACTOR'] = str(m['final_state_only_xs_factor'])

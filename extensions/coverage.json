@@ -1,0 +1,1812 @@
+{
+  "schema": 1,
+  "scope": "All installed assets including companions, generation auxiliaries and external scene inputs. Family recipes do not imply automatic bitwise reproduction.",
+  "assets": {
+    "data/elastic/copper/carbon/primary.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/elastic/copper/proton/primary.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/elastic/schneider/carbon/all_ion.bin": {
+      "family": "elastic",
+      "kind": "frozen_or_proton_row_native_extraction",
+      "tools": [
+        "tools/general_ion_elastic/prepare_campaign.py",
+        "tools/general_ion_elastic/run_campaign.py",
+        "tools/general_ion_elastic/compile_all_ion_elastic.py",
+        "tools/primary_source/assemble.py",
+        "tools/general_ion_elastic/verify_all_ion_elastic.py"
+      ],
+      "note": "Separate frozen carbon/recoil and current proton profiles. Proton assembly preserves 17 pinned reference rows."
+    },
+    "data/elastic/schneider/carbon/all_ion.metadata.json": {
+      "family": "elastic",
+      "kind": "frozen_or_proton_row_native_extraction",
+      "tools": [
+        "tools/general_ion_elastic/prepare_campaign.py",
+        "tools/general_ion_elastic/run_campaign.py",
+        "tools/general_ion_elastic/compile_all_ion_elastic.py",
+        "tools/primary_source/assemble.py",
+        "tools/general_ion_elastic/verify_all_ion_elastic.py"
+      ],
+      "note": "Separate frozen carbon/recoil and current proton profiles. Proton assembly preserves 17 pinned reference rows."
+    },
+    "data/elastic/schneider/carbon/primary_mass_cross_sections.csv": {
+      "family": "elastic_audit",
+      "kind": "native_audit_companion",
+      "tools": [
+        "topas/common/CarbonSchneiderElasticXsDump.cc"
+      ],
+      "note": "Mass cross section audit companion; preserve schema and matching material definition."
+    },
+    "data/elastic/schneider/carbon/recoil_stopping.bin": {
+      "family": "elastic",
+      "kind": "frozen_or_proton_row_native_extraction",
+      "tools": [
+        "tools/general_ion_elastic/prepare_campaign.py",
+        "tools/general_ion_elastic/run_campaign.py",
+        "tools/general_ion_elastic/compile_all_ion_elastic.py",
+        "tools/primary_source/assemble.py",
+        "tools/general_ion_elastic/verify_all_ion_elastic.py"
+      ],
+      "note": "Separate frozen carbon/recoil and current proton profiles. Proton assembly preserves 17 pinned reference rows."
+    },
+    "data/elastic/schneider/carbon/recoil_stopping.metadata.json": {
+      "family": "elastic",
+      "kind": "frozen_or_proton_row_native_extraction",
+      "tools": [
+        "tools/general_ion_elastic/prepare_campaign.py",
+        "tools/general_ion_elastic/run_campaign.py",
+        "tools/general_ion_elastic/compile_all_ion_elastic.py",
+        "tools/primary_source/assemble.py",
+        "tools/general_ion_elastic/verify_all_ion_elastic.py"
+      ],
+      "note": "Separate frozen carbon/recoil and current proton profiles. Proton assembly preserves 17 pinned reference rows."
+    },
+    "data/elastic/schneider/proton/all_ion.bin": {
+      "family": "elastic",
+      "kind": "frozen_or_proton_row_native_extraction",
+      "tools": [
+        "tools/general_ion_elastic/prepare_campaign.py",
+        "tools/general_ion_elastic/run_campaign.py",
+        "tools/general_ion_elastic/compile_all_ion_elastic.py",
+        "tools/primary_source/assemble.py",
+        "tools/general_ion_elastic/verify_all_ion_elastic.py"
+      ],
+      "note": "Separate frozen carbon/recoil and current proton profiles. Proton assembly preserves 17 pinned reference rows."
+    },
+    "data/elastic/schneider/proton/all_ion.metadata.json": {
+      "family": "elastic",
+      "kind": "frozen_or_proton_row_native_extraction",
+      "tools": [
+        "tools/general_ion_elastic/prepare_campaign.py",
+        "tools/general_ion_elastic/run_campaign.py",
+        "tools/general_ion_elastic/compile_all_ion_elastic.py",
+        "tools/primary_source/assemble.py",
+        "tools/general_ion_elastic/verify_all_ion_elastic.py"
+      ],
+      "note": "Separate frozen carbon/recoil and current proton profiles. Proton assembly preserves 17 pinned reference rows."
+    },
+    "data/elastic/schneider/proton/recoil_stopping.bin": {
+      "family": "elastic",
+      "kind": "frozen_or_proton_row_native_extraction",
+      "tools": [
+        "tools/general_ion_elastic/prepare_campaign.py",
+        "tools/general_ion_elastic/run_campaign.py",
+        "tools/general_ion_elastic/compile_all_ion_elastic.py",
+        "tools/primary_source/assemble.py",
+        "tools/general_ion_elastic/verify_all_ion_elastic.py"
+      ],
+      "note": "Separate frozen carbon/recoil and current proton profiles. Proton assembly preserves 17 pinned reference rows."
+    },
+    "data/elastic/schneider/proton/recoil_stopping.metadata.json": {
+      "family": "elastic",
+      "kind": "frozen_or_proton_row_native_extraction",
+      "tools": [
+        "tools/general_ion_elastic/prepare_campaign.py",
+        "tools/general_ion_elastic/run_campaign.py",
+        "tools/general_ion_elastic/compile_all_ion_elastic.py",
+        "tools/primary_source/assemble.py",
+        "tools/general_ion_elastic/verify_all_ion_elastic.py"
+      ],
+      "note": "Separate frozen carbon/recoil and current proton profiles. Proton assembly preserves 17 pinned reference rows."
+    },
+    "data/em/electrons/carbon/manifest.json": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/carbon/parameters.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/manifest.json": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/proton/manifest.json": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/proton/parameters.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/atomic26.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/birth26.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/brems26.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/carbon26.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/charged.index": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic00.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic01.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic02.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic03.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic04.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic05.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic06.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic07.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic08.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic09.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic10.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic11.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic12.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic13.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic14.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic15.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic16.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic17.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic18.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic19.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic20.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic21.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic22.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic23.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic24.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/elastic25.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/joint.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/manifest.json": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/penelope26.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon.index": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon00.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon01.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon02.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon03.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon04.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon05.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon06.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon07.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon08.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon09.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon10.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon11.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon12.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon13.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon14.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon15.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon16.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon17.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon18.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon19.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon20.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon21.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon22.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon23.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon24.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/photon25.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/proton26.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/rates26.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/electrons/shared/scalar26.bin": {
+      "family": "electrons",
+      "kind": "native_extraction_with_offline_calibration",
+      "tools": [
+        "tools/electrons/extract_electron_composition_laws26.py",
+        "tools/electrons/build_electron_scalar26.py",
+        "tools/electrons/build_electron_cut_birth26.py",
+        "tools/electrons/pack_electron_composition_laws26.py",
+        "tools/electrons/build_electron_native_grid_rates26.py",
+        "tools/electrons/build_schneider_joint.py",
+        "tools/electrons/assemble_package26.py",
+        "tools/electrons/package_release.py"
+      ],
+      "note": "Explicit audited charged/photon calibration corpus required."
+    },
+    "data/em/ions/composition_bases.npz": {
+      "family": "em",
+      "kind": "native_extraction_and_continuous_derivation",
+      "tools": [
+        "tools/unified_em/prepare.py",
+        "tools/unified_em/run_extract.py",
+        "tools/unified_em/compile_unified_em_package.py",
+        "tools/unified_em/synthesize_analytic_density.py",
+        "tools/unified_em/build_continuous_density.py"
+      ],
+      "note": "NPZ is a generation auxiliary; runtime uses EMCNT001 and moments."
+    },
+    "data/em/ions/continuous26.bin": {
+      "family": "em",
+      "kind": "native_extraction_and_continuous_derivation",
+      "tools": [
+        "tools/unified_em/prepare.py",
+        "tools/unified_em/run_extract.py",
+        "tools/unified_em/compile_unified_em_package.py",
+        "tools/unified_em/synthesize_analytic_density.py",
+        "tools/unified_em/build_continuous_density.py"
+      ],
+      "note": "NPZ is a generation auxiliary; runtime uses EMCNT001 and moments."
+    },
+    "data/em/ions/continuous26.metadata.json": {
+      "family": "em",
+      "kind": "native_extraction_and_continuous_derivation",
+      "tools": [
+        "tools/unified_em/prepare.py",
+        "tools/unified_em/run_extract.py",
+        "tools/unified_em/compile_unified_em_package.py",
+        "tools/unified_em/synthesize_analytic_density.py",
+        "tools/unified_em/build_continuous_density.py"
+      ],
+      "note": "NPZ is a generation auxiliary; runtime uses EMCNT001 and moments."
+    },
+    "data/em/ions/delta_moments.bin": {
+      "family": "em",
+      "kind": "native_extraction_and_continuous_derivation",
+      "tools": [
+        "tools/unified_em/prepare.py",
+        "tools/unified_em/run_extract.py",
+        "tools/unified_em/compile_unified_em_package.py",
+        "tools/unified_em/synthesize_analytic_density.py",
+        "tools/unified_em/build_continuous_density.py"
+      ],
+      "note": "NPZ is a generation auxiliary; runtime uses EMCNT001 and moments."
+    },
+    "data/em/ions/delta_moments.metadata.json": {
+      "family": "em",
+      "kind": "native_extraction_and_continuous_derivation",
+      "tools": [
+        "tools/unified_em/prepare.py",
+        "tools/unified_em/run_extract.py",
+        "tools/unified_em/compile_unified_em_package.py",
+        "tools/unified_em/synthesize_analytic_density.py",
+        "tools/unified_em/build_continuous_density.py"
+      ],
+      "note": "NPZ is a generation auxiliary; runtime uses EMCNT001 and moments."
+    },
+    "data/ionization/air/proton_rate.csv": {
+      "family": "ionization",
+      "kind": "native_extraction",
+      "tools": [
+        "tools/ionization/extract_air_ionization.cc"
+      ],
+      "note": "air_ionization_rate.csv maps to proton_rate.csv."
+    },
+    "data/materials/schneider/hu_to_material.txt": {
+      "family": "hu",
+      "kind": "static_reference",
+      "tools": [
+        "reference/hu_to_material.txt",
+        "prepare_staging.py"
+      ],
+      "note": "Fixed Schneider composition mapping."
+    },
+    "data/materials/schneider/radiation_lengths.json": {
+      "family": "materials",
+      "kind": "native_metadata_and_provenance",
+      "tools": [
+        "topas/common/MaterialDefinitionDump.cc",
+        "topas/common/CarbonSchneiderMaterialDump.cc",
+        "tools/tables/prepare.py"
+      ],
+      "note": "Match installed schema; derive radlen using native metadata. Rebuild actual campaign provenance."
+    },
+    "data/materials/schneider/radiation_lengths.metadata.json": {
+      "family": "materials",
+      "kind": "native_metadata_and_provenance",
+      "tools": [
+        "topas/common/MaterialDefinitionDump.cc",
+        "topas/common/CarbonSchneiderMaterialDump.cc",
+        "tools/tables/prepare.py"
+      ],
+      "note": "Match installed schema; derive radlen using native metadata. Rebuild actual campaign provenance."
+    },
+    "data/materials/water/material.json": {
+      "family": "materials",
+      "kind": "native_metadata_and_provenance",
+      "tools": [
+        "topas/common/MaterialDefinitionDump.cc",
+        "topas/common/CarbonSchneiderMaterialDump.cc",
+        "tools/tables/prepare.py"
+      ],
+      "note": "Match installed schema; derive radlen using native metadata. Rebuild actual campaign provenance."
+    },
+    "data/materials/water/provenance.json": {
+      "family": "materials",
+      "kind": "native_metadata_and_provenance",
+      "tools": [
+        "topas/common/MaterialDefinitionDump.cc",
+        "topas/common/CarbonSchneiderMaterialDump.cc",
+        "tools/tables/prepare.py"
+      ],
+      "note": "Match installed schema; derive radlen using native metadata. Rebuild actual campaign provenance."
+    },
+    "data/nuclear/copper/carbon/cascade.cinpkg": {
+      "family": "cascade",
+      "kind": "native_copper_cascade",
+      "tools": [
+        "tools/minibeam_copper/extract_copper_physics.txt",
+        "tools/minibeam_copper/extract_copper_fragment_cascade.txt",
+        "tools/minibeam_copper/compile_copper_physics.py",
+        "tools/minibeam_copper/compile_copper_fragment_cascades.py"
+      ],
+      "note": "Per-projectile energy coverage and complete native reaction records required."
+    },
+    "data/nuclear/copper/carbon/primary_rate.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/nuclear/copper/ion_cross_sections.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/nuclear/copper/proton/cascade.cinpkg": {
+      "family": "cascade",
+      "kind": "native_copper_cascade",
+      "tools": [
+        "tools/minibeam_copper/extract_copper_physics.txt",
+        "tools/minibeam_copper/extract_copper_fragment_cascade.txt",
+        "tools/minibeam_copper/compile_copper_physics.py",
+        "tools/minibeam_copper/compile_copper_fragment_cascades.py"
+      ],
+      "note": "Per-projectile energy coverage and complete native reaction records required."
+    },
+    "data/nuclear/copper/proton/cascade.metadata.json": {
+      "family": "cascade",
+      "kind": "native_copper_cascade",
+      "tools": [
+        "tools/minibeam_copper/extract_copper_physics.txt",
+        "tools/minibeam_copper/extract_copper_fragment_cascade.txt",
+        "tools/minibeam_copper/compile_copper_physics.py",
+        "tools/minibeam_copper/compile_copper_fragment_cascades.py"
+      ],
+      "note": "Per-projectile energy coverage and complete native reaction records required."
+    },
+    "data/nuclear/copper/proton/primary_rate.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/nuclear/schneider/carbon/bundle.json": {
+      "family": "bundle",
+      "kind": "assembly_registry",
+      "tools": [
+        "reference/carbon_bundle.json",
+        "prepare_staging.py",
+        "tools/primary_source/compile.py"
+      ],
+      "note": "Current canonical paths; bundle members must be installed together."
+    },
+    "data/nuclear/schneider/carbon/final_states.bin": {
+      "family": "nuclear_c",
+      "kind": "native_extraction_with_audited_raw_prerequisites",
+      "tools": [
+        "topas/common/CarbonInelasticCapturePhysics.cc",
+        "tools/schneider/templates.py",
+        "tools/schneider/validate_v2_raw.py",
+        "tools/schneider/compile_primary_package_v2_1.py",
+        "tools/schneider/compile_v2_package.py",
+        "tools/schneider/compile_primary_rates_v2_1.py",
+        "tools/schneider/compile_rates_v2_1.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Supply frozen production records and audited repair manifest/raw; no silent coverage fallback."
+    },
+    "data/nuclear/schneider/carbon/final_states.channels.json": {
+      "family": "nuclear_c",
+      "kind": "native_extraction_with_audited_raw_prerequisites",
+      "tools": [
+        "topas/common/CarbonInelasticCapturePhysics.cc",
+        "tools/schneider/templates.py",
+        "tools/schneider/validate_v2_raw.py",
+        "tools/schneider/compile_primary_package_v2_1.py",
+        "tools/schneider/compile_v2_package.py",
+        "tools/schneider/compile_primary_rates_v2_1.py",
+        "tools/schneider/compile_rates_v2_1.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Supply frozen production records and audited repair manifest/raw; no silent coverage fallback."
+    },
+    "data/nuclear/schneider/carbon/final_states.metadata.json": {
+      "family": "nuclear_c",
+      "kind": "native_extraction_with_audited_raw_prerequisites",
+      "tools": [
+        "topas/common/CarbonInelasticCapturePhysics.cc",
+        "tools/schneider/templates.py",
+        "tools/schneider/validate_v2_raw.py",
+        "tools/schneider/compile_primary_package_v2_1.py",
+        "tools/schneider/compile_v2_package.py",
+        "tools/schneider/compile_primary_rates_v2_1.py",
+        "tools/schneider/compile_rates_v2_1.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Supply frozen production records and audited repair manifest/raw; no silent coverage fallback."
+    },
+    "data/nuclear/schneider/carbon/inelastic_rates.bin": {
+      "family": "nuclear_c",
+      "kind": "native_extraction_with_audited_raw_prerequisites",
+      "tools": [
+        "topas/common/CarbonInelasticCapturePhysics.cc",
+        "tools/schneider/templates.py",
+        "tools/schneider/validate_v2_raw.py",
+        "tools/schneider/compile_primary_package_v2_1.py",
+        "tools/schneider/compile_v2_package.py",
+        "tools/schneider/compile_primary_rates_v2_1.py",
+        "tools/schneider/compile_rates_v2_1.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Supply frozen production records and audited repair manifest/raw; no silent coverage fallback."
+    },
+    "data/nuclear/schneider/carbon/inelastic_rates.metadata.json": {
+      "family": "nuclear_c",
+      "kind": "native_extraction_with_audited_raw_prerequisites",
+      "tools": [
+        "topas/common/CarbonInelasticCapturePhysics.cc",
+        "tools/schneider/templates.py",
+        "tools/schneider/validate_v2_raw.py",
+        "tools/schneider/compile_primary_package_v2_1.py",
+        "tools/schneider/compile_v2_package.py",
+        "tools/schneider/compile_primary_rates_v2_1.py",
+        "tools/schneider/compile_rates_v2_1.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Supply frozen production records and audited repair manifest/raw; no silent coverage fallback."
+    },
+    "data/nuclear/schneider/carbon/primary_mass_cross_sections.csv": {
+      "family": "nuclear_c",
+      "kind": "native_extraction_with_audited_raw_prerequisites",
+      "tools": [
+        "topas/common/CarbonInelasticCapturePhysics.cc",
+        "tools/schneider/templates.py",
+        "tools/schneider/validate_v2_raw.py",
+        "tools/schneider/compile_primary_package_v2_1.py",
+        "tools/schneider/compile_v2_package.py",
+        "tools/schneider/compile_primary_rates_v2_1.py",
+        "tools/schneider/compile_rates_v2_1.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Supply frozen production records and audited repair manifest/raw; no silent coverage fallback."
+    },
+    "data/nuclear/schneider/proton/bundle.json": {
+      "family": "bundle",
+      "kind": "assembly_registry",
+      "tools": [
+        "reference/carbon_bundle.json",
+        "prepare_staging.py",
+        "tools/primary_source/compile.py"
+      ],
+      "note": "Current canonical paths; bundle members must be installed together."
+    },
+    "data/nuclear/schneider/proton/final_states.bin": {
+      "family": "nuclear_p",
+      "kind": "native_proton_campaign",
+      "tools": [
+        "tools/primary_source/campaign.py",
+        "tools/primary_source/compile.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Iterate final-state coverage before compiling supported rates."
+    },
+    "data/nuclear/schneider/proton/final_states.channels.json": {
+      "family": "nuclear_p",
+      "kind": "native_proton_campaign",
+      "tools": [
+        "tools/primary_source/campaign.py",
+        "tools/primary_source/compile.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Iterate final-state coverage before compiling supported rates."
+    },
+    "data/nuclear/schneider/proton/final_states.metadata.json": {
+      "family": "nuclear_p",
+      "kind": "native_proton_campaign",
+      "tools": [
+        "tools/primary_source/campaign.py",
+        "tools/primary_source/compile.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Iterate final-state coverage before compiling supported rates."
+    },
+    "data/nuclear/schneider/proton/inelastic_rates.bin": {
+      "family": "nuclear_p",
+      "kind": "native_proton_campaign",
+      "tools": [
+        "tools/primary_source/campaign.py",
+        "tools/primary_source/compile.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Iterate final-state coverage before compiling supported rates."
+    },
+    "data/nuclear/schneider/proton/inelastic_rates.metadata.json": {
+      "family": "nuclear_p",
+      "kind": "native_proton_campaign",
+      "tools": [
+        "tools/primary_source/campaign.py",
+        "tools/primary_source/compile.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Iterate final-state coverage before compiling supported rates."
+    },
+    "data/nuclear/schneider/secondary/final_states.bin": {
+      "family": "nuclear_c",
+      "kind": "native_extraction_with_audited_raw_prerequisites",
+      "tools": [
+        "topas/common/CarbonInelasticCapturePhysics.cc",
+        "tools/schneider/templates.py",
+        "tools/schneider/validate_v2_raw.py",
+        "tools/schneider/compile_primary_package_v2_1.py",
+        "tools/schneider/compile_v2_package.py",
+        "tools/schneider/compile_primary_rates_v2_1.py",
+        "tools/schneider/compile_rates_v2_1.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Supply frozen production records and audited repair manifest/raw; no silent coverage fallback."
+    },
+    "data/nuclear/schneider/secondary/final_states.channels.json": {
+      "family": "nuclear_c",
+      "kind": "native_extraction_with_audited_raw_prerequisites",
+      "tools": [
+        "topas/common/CarbonInelasticCapturePhysics.cc",
+        "tools/schneider/templates.py",
+        "tools/schneider/validate_v2_raw.py",
+        "tools/schneider/compile_primary_package_v2_1.py",
+        "tools/schneider/compile_v2_package.py",
+        "tools/schneider/compile_primary_rates_v2_1.py",
+        "tools/schneider/compile_rates_v2_1.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Supply frozen production records and audited repair manifest/raw; no silent coverage fallback."
+    },
+    "data/nuclear/schneider/secondary/final_states.metadata.json": {
+      "family": "nuclear_c",
+      "kind": "native_extraction_with_audited_raw_prerequisites",
+      "tools": [
+        "topas/common/CarbonInelasticCapturePhysics.cc",
+        "tools/schneider/templates.py",
+        "tools/schneider/validate_v2_raw.py",
+        "tools/schneider/compile_primary_package_v2_1.py",
+        "tools/schneider/compile_v2_package.py",
+        "tools/schneider/compile_primary_rates_v2_1.py",
+        "tools/schneider/compile_rates_v2_1.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Supply frozen production records and audited repair manifest/raw; no silent coverage fallback."
+    },
+    "data/nuclear/schneider/secondary/inelastic_rates.bin": {
+      "family": "nuclear_c",
+      "kind": "native_extraction_with_audited_raw_prerequisites",
+      "tools": [
+        "topas/common/CarbonInelasticCapturePhysics.cc",
+        "tools/schneider/templates.py",
+        "tools/schneider/validate_v2_raw.py",
+        "tools/schneider/compile_primary_package_v2_1.py",
+        "tools/schneider/compile_v2_package.py",
+        "tools/schneider/compile_primary_rates_v2_1.py",
+        "tools/schneider/compile_rates_v2_1.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Supply frozen production records and audited repair manifest/raw; no silent coverage fallback."
+    },
+    "data/nuclear/schneider/secondary/inelastic_rates.metadata.json": {
+      "family": "nuclear_c",
+      "kind": "native_extraction_with_audited_raw_prerequisites",
+      "tools": [
+        "topas/common/CarbonInelasticCapturePhysics.cc",
+        "tools/schneider/templates.py",
+        "tools/schneider/validate_v2_raw.py",
+        "tools/schneider/compile_primary_package_v2_1.py",
+        "tools/schneider/compile_v2_package.py",
+        "tools/schneider/compile_primary_rates_v2_1.py",
+        "tools/schneider/compile_rates_v2_1.py",
+        "tools/schneider/xs_dump_v2_1.py"
+      ],
+      "note": "Supply frozen production records and audited repair manifest/raw; no silent coverage fallback."
+    },
+    "data/scattering/urban/air.bin": {
+      "family": "urban",
+      "kind": "native_extraction_and_fp32_validation",
+      "tools": [
+        "tools/urban/run_campaign.py",
+        "tools/urban/pack_reference.py",
+        "tools/urban/validate_urban.cpp",
+        "tools/urban/merge_packages.py"
+      ],
+      "note": "Validate held-out FP32 queries before merging."
+    },
+    "data/scattering/urban/ct_copper.bin": {
+      "family": "urban",
+      "kind": "native_extraction_and_fp32_validation",
+      "tools": [
+        "tools/urban/run_campaign.py",
+        "tools/urban/pack_reference.py",
+        "tools/urban/validate_urban.cpp",
+        "tools/urban/merge_packages.py"
+      ],
+      "note": "Validate held-out FP32 queries before merging."
+    },
+    "data/scattering/urban/proton_water_copper.metadata.json": {
+      "family": "urban",
+      "kind": "native_extraction_and_fp32_validation",
+      "tools": [
+        "tools/urban/run_campaign.py",
+        "tools/urban/pack_reference.py",
+        "tools/urban/validate_urban.cpp",
+        "tools/urban/merge_packages.py"
+      ],
+      "note": "Validate held-out FP32 queries before merging."
+    },
+    "data/stopping/air/carbon.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/stopping/air/carbon.metadata.json": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/stopping/air/proton.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/stopping/copper/carbon.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/stopping/copper/ions_carbon.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/stopping/copper/ions_proton.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/stopping/copper/proton.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/stopping/schneider/carbon.bin": {
+      "family": "stopping",
+      "kind": "native_primary_stopping",
+      "tools": [
+        "topas/common/CarbonSchneiderStoppingPowerDump.cc",
+        "tools/schneider/compile_schneider_stopping.py"
+      ],
+      "note": "Strict 25-section primary table and metadata."
+    },
+    "data/stopping/schneider/carbon.metadata.json": {
+      "family": "stopping",
+      "kind": "native_primary_stopping",
+      "tools": [
+        "topas/common/CarbonSchneiderStoppingPowerDump.cc",
+        "tools/schneider/compile_schneider_stopping.py"
+      ],
+      "note": "Strict 25-section primary table and metadata."
+    },
+    "data/stopping/schneider/carbon_section0_delta_tail.csv": {
+      "family": "delta_audit",
+      "kind": "external_calibration_audit",
+      "tools": [],
+      "note": "Section0 delta-tail calibration companion requires original audit protocol; not automatically regenerated by this kit."
+    },
+    "data/stopping/schneider/carbon_section0_delta_tail.metadata.json": {
+      "family": "delta_audit",
+      "kind": "external_calibration_audit",
+      "tools": [],
+      "note": "Section0 delta-tail calibration companion requires original audit protocol; not automatically regenerated by this kit."
+    },
+    "data/stopping/schneider/proton.bin": {
+      "family": "stopping",
+      "kind": "native_primary_stopping",
+      "tools": [
+        "topas/common/CarbonSchneiderStoppingPowerDump.cc",
+        "tools/schneider/compile_schneider_stopping.py"
+      ],
+      "note": "Strict 25-section primary table and metadata."
+    },
+    "data/stopping/schneider/proton.metadata.json": {
+      "family": "stopping",
+      "kind": "native_primary_stopping",
+      "tools": [
+        "topas/common/CarbonSchneiderStoppingPowerDump.cc",
+        "tools/schneider/compile_schneider_stopping.py"
+      ],
+      "note": "Strict 25-section primary table and metadata."
+    },
+    "data/stopping/water/carbon.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/stopping/water/carbon.metadata.json": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/stopping/water/ions.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/stopping/water/proton.csv": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "data/stopping/water/proton.metadata.json": {
+      "family": "tables",
+      "kind": "native_material_tables_with_explicit_calibration",
+      "tools": [
+        "tools/tables/prepare.py",
+        "tools/tables/compile.py"
+      ],
+      "note": "Explicit calibrated delta-fraction reference required; compare shared source-context candidates before selecting canonical files."
+    },
+    "inputs/lung_minibeam/ct.bin": {
+      "family": "scene",
+      "kind": "external_scene_input",
+      "tools": [],
+      "note": "Fixed CT/plan/beam definitions; not physics extension outputs."
+    },
+    "inputs/rt07575_head/carbon/beam_model.csv": {
+      "family": "scene",
+      "kind": "external_scene_input",
+      "tools": [],
+      "note": "Fixed CT/plan/beam definitions; not physics extension outputs."
+    },
+    "inputs/rt07575_head/carbon/ct.bin": {
+      "family": "scene",
+      "kind": "external_scene_input",
+      "tools": [],
+      "note": "Fixed CT/plan/beam definitions; not physics extension outputs."
+    },
+    "inputs/rt07575_head/carbon/spots.csv": {
+      "family": "scene",
+      "kind": "external_scene_input",
+      "tools": [],
+      "note": "Fixed CT/plan/beam definitions; not physics extension outputs."
+    },
+    "inputs/rt07575_head/proton/beam_model.csv": {
+      "family": "scene",
+      "kind": "external_scene_input",
+      "tools": [],
+      "note": "Fixed CT/plan/beam definitions; not physics extension outputs."
+    },
+    "inputs/rt07575_head/proton/ct.bin": {
+      "family": "scene",
+      "kind": "external_scene_input",
+      "tools": [],
+      "note": "Fixed CT/plan/beam definitions; not physics extension outputs."
+    },
+    "inputs/rt07575_head/proton/spots.csv": {
+      "family": "scene",
+      "kind": "external_scene_input",
+      "tools": [],
+      "note": "Fixed CT/plan/beam definitions; not physics extension outputs."
+    },
+    "inputs/water_minibeam/carbon/spots.csv": {
+      "family": "scene",
+      "kind": "external_scene_input",
+      "tools": [],
+      "note": "Fixed CT/plan/beam definitions; not physics extension outputs."
+    }
+  }
+}

@@ -1,0 +1,255 @@
+{
+  "passed": true,
+  "cases": [
+    {
+      "key": "tps_isocenter_mm",
+      "passed": true
+    },
+    {
+      "key": "tps_isocenter_x_mm",
+      "passed": true
+    },
+    {
+      "key": "tps_isocenter_y_mm",
+      "passed": true
+    },
+    {
+      "key": "primary_particle",
+      "passed": true
+    },
+    {
+      "key": "initial_energy_MeV",
+      "passed": true
+    },
+    {
+      "key": "primary_rest_mass_MeV",
+      "passed": true
+    },
+    {
+      "key": "beam_energy_spread_percent",
+      "passed": true
+    },
+    {
+      "key": "primary_urban_reference_particle",
+      "passed": true
+    },
+    {
+      "key": "primary_urban_ionisation_process",
+      "passed": true
+    },
+    {
+      "key": "minibeam_copper_loss_range_file",
+      "passed": true
+    },
+    {
+      "key": "scorer_mode",
+      "passed": true
+    },
+    {
+      "key": "enable_fragment_species_scoring",
+      "passed": true
+    },
+    {
+      "key": "cinel02_max_secondary_inelastic_generations",
+      "passed": true
+    },
+    {
+      "key": "ct_dicom_origin_mode",
+      "passed": true
+    },
+    {
+      "key": "scorerLET",
+      "passed": true
+    },
+    {
+      "key": "enable_let_scoring",
+      "passed": true
+    },
+    {
+      "key": "output_file",
+      "passed": true
+    },
+    {
+      "key": "dose_output_file",
+      "passed": true
+    },
+    {
+      "key": "topas_spots_file",
+      "passed": true
+    },
+    {
+      "key": "topas_spots_files",
+      "passed": true
+    },
+    {
+      "key": "spot_weights_file",
+      "passed": true
+    },
+    {
+      "key": "spots_geometry_mode",
+      "passed": true
+    },
+    {
+      "key": "ion_physics_file",
+      "passed": true
+    },
+    {
+      "key": "ct_validation_mode",
+      "passed": true
+    },
+    {
+      "key": "tps_source",
+      "passed": true
+    },
+    {
+      "key": "ct_schneider_cross_section_file",
+      "passed": true
+    },
+    {
+      "key": "minibeam_collimator_width_mm",
+      "passed": true
+    },
+    {
+      "key": "minibeam_collimator_length_mm",
+      "passed": true
+    },
+    {
+      "key": "primary_inelastic_package_v2_file",
+      "passed": true
+    },
+    {
+      "key": "material_electron_rate26_file",
+      "passed": true
+    },
+    {
+      "key": "broadbeam_electron_region_diagnostics",
+      "passed": true
+    },
+    {
+      "key": "enable_layered_phantom",
+      "passed": true
+    },
+    {
+      "key": "enable_neutron_transport",
+      "passed": true
+    },
+    {
+      "key": "neutron_birth_output_file",
+      "passed": true
+    },
+    {
+      "key": "neutron_birth_capacity",
+      "passed": true
+    },
+    {
+      "key": "neutron_package_file",
+      "passed": true
+    },
+    {
+      "key": "neutron_world_half_width_mm",
+      "passed": true
+    },
+    {
+      "key": "neutron_max_collisions",
+      "passed": true
+    },
+    {
+      "key": "neutron_recoil_stopping_manifest",
+      "passed": true
+    },
+    {
+      "key": "neutron_elastic_two_body",
+      "passed": true
+    },
+    {
+      "key": "neutron_water_recoil_urban",
+      "passed": true
+    },
+    {
+      "key": "neutron_exact_plane_boundaries",
+      "passed": true
+    },
+    {
+      "key": "neutron_proton_birth_output_file",
+      "passed": true
+    },
+    {
+      "key": "neutron_proton_birth_capacity",
+      "passed": true
+    },
+    {
+      "key": "neutral_origin_voxel_output_file",
+      "passed": true
+    },
+    {
+      "key": "phantom_length_mm",
+      "passed": true
+    },
+    {
+      "key": "depth_bin_width_mm",
+      "passed": true
+    },
+    {
+      "missing": [
+        "primary_atomic_number"
+      ],
+      "passed": true
+    },
+    {
+      "missing": [
+        "primary_mass_number"
+      ],
+      "passed": true
+    },
+    {
+      "missing": [
+        "primary_atomic_number",
+        "primary_mass_number"
+      ],
+      "passed": true
+    },
+    {
+      "missing": "voxel_bins_z",
+      "passed": true
+    },
+    {
+      "missing": "voxel_size_z_mm",
+      "passed": true
+    },
+    {
+      "key": "voxel_bins_z",
+      "value": 0,
+      "passed": true
+    },
+    {
+      "key": "voxel_size_z_mm",
+      "value": 0,
+      "passed": true
+    },
+    {
+      "key": "minibeam_primary_pipeline",
+      "value": "combined",
+      "passed": true
+    },
+    {
+      "flag": "--plan-manifest",
+      "passed": true
+    },
+    {
+      "flag": "--sequential-spots",
+      "passed": true
+    },
+    {
+      "flag": "--scorer-let",
+      "passed": true
+    },
+    {
+      "flag": "--dose-output",
+      "passed": true
+    },
+    {
+      "flag": "--straggling-scale",
+      "passed": true
+    }
+  ]
+}

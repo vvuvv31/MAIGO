@@ -290,7 +290,7 @@ struct Cinel03LookupResult {
 
 // Fixed pre-declared maximum bracketing-node gap. Chosen once from the
 // audited C12 campaign (observed per-channel max gap ~2.8 MeV/u, see
-// data/schneider/cinel03_c12_targets.channels.json); it is NOT relaxed
+// data/nuclear/schneider/carbon/final_states.channels.json); it is NOT relaxed
 // after seeing production results. Secondary channels are sparser, so
 // out-of-gap secondary queries are honestly reported as EnergyGapTooLarge
 // instead of being silently clamped.
@@ -453,25 +453,6 @@ inline Cinel03LookupResult cinel03_lookup_event_device(
     return out;
 }
 
-// Legacy index-only wrapper. Exact-target + bounded-domain semantics, no
-// fallback. The single uniform drives both the bracket choice and the
-// intra-node pick. Prefer cinel03_lookup_event_device for production, which
-// reports the failure reason instead of collapsing it to 0xFFFFFFFF.
-inline std::uint32_t cinel03_find_event_device(
-    const Cinel03EnergyNode* energy_nodes,
-    std::uint32_t node_count,
-    const std::uint32_t* event_offsets,
-    const std::uint32_t* event_indices,
-    std::uint32_t total_events,
-    int proj_z, int proj_a, int target_z,
-    float energy, float /*tolerance_ignored_use_fixed_gap*/, float u01) noexcept
-{
-    const auto result = cinel03_lookup_event_device(
-        energy_nodes, node_count, event_offsets, event_indices, total_events,
-        proj_z, proj_a, target_z, energy, u01, u01);
-    return result.status == Cinel03LookupStatus::Hit ? result.event_index : 0xFFFFFFFFU;
-}
-
 class InelasticPackageV3Table {
 public:
     static constexpr std::uint64_t invalid = std::numeric_limits<std::uint64_t>::max();
@@ -505,21 +486,6 @@ public:
         float collision_energy_MeV_per_u,
         float u_bracket, float u_event,
         float max_allowed_gap_MeV_per_u = kCinel03MaxAllowedNodeGapMeVperU) const noexcept;
-
-    // Primary event lookup by elemental target Z (legacy index API).
-    // Exact-target + bounded-domain semantics; tolerance is accepted for
-    // backward compatibility but the fixed channel gap rule governs.
-    [[nodiscard]] std::uint64_t find_event(
-        int projectile_z, int projectile_a, int target_element_z,
-        float collision_energy_MeV_per_u, float maximum_energy_mismatch_MeV_per_u,
-        float u01, bool audit_mode = false, std::uint64_t* missing_target_counter = nullptr) const;
-
-    [[nodiscard]] const Cinel03CellIndex* find_cell(
-        int projectile_z, int projectile_a, int target_element_z,
-        float collision_energy_MeV_per_u, float maximum_energy_mismatch_MeV_per_u) const noexcept;
-
-    [[nodiscard]] const Cinel03InteractionRecord* interaction(
-        const Cinel03CellIndex& cell, std::uint64_t offset) const noexcept;
 
     [[nodiscard]] Cinel03DeviceTables make_device_tables() const;
 

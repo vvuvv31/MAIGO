@@ -82,8 +82,6 @@ struct SyclTransportContext::Impl {
         release(electron_ct.density);
         release(electron_ct.material);
         electron_ct=CachedElectronCt{};
-        release(cross_section_device);
-        initialized = false;
     }
 
     // Persistent, validated, immutable host parse cache shared across shards in
@@ -99,14 +97,9 @@ struct SyclTransportContext::Impl {
     };
     struct CachedElectronCt {
         std::string geometry_key,fp32_key;
-        double electron_distance_threshold{-1};
-        std::vector<float> electron_distance_mm;
-        // Box-metric selected region before any BODY edit; reset with the grid.
+        // Box-metric selected region; reset with the grid.
         std::string electron_region_key;
         std::vector<std::uint8_t> electron_region_box;
-        std::string electron_body_key;
-        std::vector<std::uint8_t> electron_body_mask;
-        std::vector<float> electron_body_distance_mm;
         std::shared_ptr<IndependentElectronFloatDevice> fp32;
         std::shared_ptr<const CtGrid> grid;
         float* density{};
@@ -129,53 +122,6 @@ struct SyclTransportContext::Impl {
         physics_cache_misses = 0;
     }
 
-    // `signature` identifies the physics inputs (paths/hashes). When non-empty
-    // and unchanged the cached device tables are reused even if the caller
-    // passes a freshly loaded host table object; when it changes the tables are
-    // rebuilt. An empty signature keeps the historical address-based check.
-    void ensure_initialized(const StoppingPowerTable& stopping_power,
-                            const CrossSectionTable& cross_section,
-                            const std::string& signature = std::string{}) {
-        if (initialized) {
-            if (!signature.empty()) {
-                if (physics_signature == signature) return;
-            } else if (stopping_power_host == &stopping_power &&
-                       cross_section_host == &cross_section) {
-                return;
-            }
-            clear();
-        }
-
-        physics_signature = signature;
-        stopping_power_host = &stopping_power;
-        cross_section_host = &cross_section;
-
-        try {
-            cross_section_device = sycl::malloc_device<float>(
-                stopping_power.energies().size(), queue);
-
-            const auto allocation_failed = cross_section_device == nullptr;
-            if (allocation_failed) {
-                throw std::bad_alloc();
-            }
-
-            const auto resampled_xs =
-                resample_cross_section_grid(cross_section, stopping_power.energies());
-            queue.copy(resampled_xs.macroscopic_per_mm.data(), cross_section_device,
-                       resampled_xs.macroscopic_per_mm.size());
-            queue.wait_and_throw();
-            initialized = true;
-        } catch (...) {
-            clear();
-            throw;
-        }
-    }
-
     std::string device_name;
     sycl::queue queue;
-    bool initialized{false};
-    std::string physics_signature;
-    const StoppingPowerTable* stopping_power_host{nullptr};
-    const CrossSectionTable* cross_section_host{nullptr};
-    float* cross_section_device{nullptr};
 };

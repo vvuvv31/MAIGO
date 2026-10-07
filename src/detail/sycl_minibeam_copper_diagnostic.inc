@@ -1,5 +1,4 @@
 // Included inside carbon's anonymous namespace. Diagnostic only: no RNG draws.
-#if defined(CARBON_ENABLE_MINIBEAM)
 struct CopperPrimaryChildTask {
     std::uint64_t global_history{},rng_history{},spot_seed{},beamline_step{};
     std::uint32_t flat_product_index{},product_index{};
@@ -57,7 +56,7 @@ inline void write_copper_history_diagnostic(
            "entry_dx,entry_dy,entry_dz,wall_distance_mm,copper_proposals,copper_elastic,"
            "copper_inelastic,loop_iterations,outcome,terminal_x_mm,terminal_y_mm,"
            "terminal_z_mm,terminal_energy_MeV,water_primary_energy_MeV,"
-           "water_primary_steps,pre_neutron_history_deposited_MeV\n";
+           "water_primary_steps,history_deposited_MeV\n";
     for (std::size_t h=0;h<records.size();++h) {
         const auto& r=records[h];
         out << h << ',' << (mask.empty() || mask[h] ? 1 : 0) << ',' << r.cohort << ','
@@ -83,4 +82,3 @@ void write_copper_capture_records(const std::filesystem::path& path,
     out.write(reinterpret_cast<const char*>(records.data()),records.size()*sizeof(Record));
     if(!out)throw std::runtime_error("Copper response capture write failed: "+path.string());
 }
-#endif

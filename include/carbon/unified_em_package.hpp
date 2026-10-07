@@ -7,7 +7,7 @@
 #include <vector>
 
 namespace carbon {
-// EMJOINT1: one container, water + Schneider density nodes, all 18 charged ions.
+// EMCNT001: 26 compositions and continuous density; all 18 charged ions.
 struct UnifiedEmMaterial { std::int32_t section; float density; };
 struct UnifiedEmSpecies { std::uint32_t z,a; };
 struct UnifiedEmRecord {

@@ -1,5 +1,4 @@
 #include "carbon/unified_em_package.hpp"
-#include "carbon/em_density_factorization.hpp"
 #include <bit>
 #include <cmath>
 #include <cstring>
@@ -13,57 +12,17 @@ namespace {
 UnifiedEmPackage parse_unified_em(const std::filesystem::path& path) {
     std::ifstream in(path,std::ios::binary);
     char magic[8]{};std::uint32_t h[6]{};in.read(magic,8);in.read(reinterpret_cast<char*>(h),sizeof h);
-    const bool continuous=std::memcmp(magic,"EMCNT001",8)==0;
-    const bool factorized=std::memcmp(magic,"EMFAC001",8)==0;
-    if(!in || (!factorized && !continuous && std::memcmp(magic,"EMJOINT1",8)) || h[0]!=1 || h[1]<26 || h[1]>256 || h[2]!=18 || h[3]!=h[1]*h[2])
+    if(!in || std::memcmp(magic,"EMCNT001",8)!=0 || h[0]!=1 || h[1]!=26 || h[2]!=18 || h[3]!=h[1]*h[2])
         throw std::runtime_error("Invalid unified EM header/registry");
     const std::uint64_t expected=32ULL+8ULL*h[1]+8ULL*h[2]+104ULL*h[3]+52ULL*h[4]+24ULL*h[5];
-    if((!factorized && !continuous && std::filesystem::file_size(path)!=expected) || expected>4ULL*1024*1024*1024 ||
+    if(expected>4ULL*1024*1024*1024 ||
        std::filesystem::file_size(path)>4ULL*1024*1024*1024)
         throw std::runtime_error("Unified EM size mismatch");
     UnifiedEmPackage p;
     auto read=[&](auto& v,std::uint32_t count){v.resize(count);in.read(reinterpret_cast<char*>(v.data()),count*sizeof(v[0]));if(!in)throw std::runtime_error("Truncated unified EM payload");};
     read(p.materials,h[1]);read(p.species,h[2]);read(p.records,h[3]);
-    if(!factorized) {
-        read(p.nodes,h[4]);read(p.segments,h[5]);
-    } else {
-        namespace f=em_density_factorization;
-        read(p.segments,h[5]);p.nodes.resize(h[4]);
-        struct Block {unsigned base{};float ratio{};std::array<f::Field,10> fields;std::array<std::vector<f::Run>,2> switches;};
-        std::vector<Block> blocks(h[3]);std::uint64_t expected_offset=0;
-        for(unsigned i=0;i<h[3];++i) {
-            const auto& r=p.records[i];auto& b=blocks[i];f::read(in,&b.base);f::read(in,&b.ratio);
-            if(r.node_count<2 || r.node_offset!=expected_offset || expected_offset+r.node_count>h[4] ||
-               b.base>=h[3] || b.base%18!=i%18 || p.materials[b.base/18].section!=p.materials[i/18].section ||
-               r.node_count!=p.records[b.base].node_count || !(b.ratio>0 && std::isfinite(b.ratio)))
-                throw std::runtime_error("Invalid factorized EM base directory");
-            const float expected_ratio=p.materials[i/18].density/p.materials[b.base/18].density;
-            if(b.ratio!=expected_ratio)throw std::runtime_error("Factorized EM density ratio mismatch");
-            expected_offset+=r.node_count;
-            if(b.base==i)f::read(in,p.nodes.data()+r.node_offset,r.node_count);
-            else {
-                for(auto& field:b.fields)field=f::Field::load(in,r.node_count);
-                b.switches[0]=f::read_runs(in,r.node_count,3);b.switches[1]=f::read_runs(in,r.node_count,1);
-            }
-        }
-        if(expected_offset!=h[4])throw std::runtime_error("Factorized EM node coverage mismatch");
-        f::require_end(in);
-        constexpr int exponents[10]={1,1,1,-1,1,0,1,1,1,0};
-        for(unsigned i=0;i<h[3];++i) {
-            const auto& r=p.records[i];const auto& b=blocks[i];if(b.base==i)continue;
-            if(blocks[b.base].base!=b.base)throw std::runtime_error("Factorized EM chained base unsupported");
-            const auto& br=p.records[b.base];auto* dst=p.nodes.data()+r.node_offset;const auto* base=p.nodes.data()+br.node_offset;
-            for(unsigned j=0;j<r.node_count;++j)dst[j].energy=base[j].energy;
-            for(unsigned column=0;column<10;++column) {
-                const float scale=exponents[column]==1?b.ratio:exponents[column]==-1?1.f/b.ratio:1.f;
-                b.fields[column].expand(reinterpret_cast<float*>(dst)+column+1,13,
-                    reinterpret_cast<const float*>(base)+column+1,13,r.node_count,scale,column!=6);
-            }
-            f::expand_runs(&dst->model,13,r.node_count,b.switches[0]);
-            f::expand_runs(&dst->fluctuation,13,r.node_count,b.switches[1]);
-        }
-    }
-    if(continuous) {
+    read(p.nodes,h[4]);read(p.segments,h[5]);
+    {
         if(h[1]!=26)throw std::runtime_error("Continuous EM must have exactly26 compositions");
         unsigned ext[4]{};in.read(reinterpret_cast<char*>(ext),sizeof ext);
         if(!in || ext[0]<2 || ext[0]>64 || ext[1]<2 || ext[1]>4096 || ext[2]!=468 || ext[3]>1000000)
@@ -157,7 +116,7 @@ UnifiedEmPackage parse_unified_em(const std::filesystem::path& path) {
 } // namespace
 
 UnifiedEmPackage UnifiedEmPackage::load(const std::filesystem::path& path) {
-    if(std::endian::native!=std::endian::little)throw std::runtime_error("EMJOINT1 requires little endian");
+    if(std::endian::native!=std::endian::little)throw std::runtime_error("EMCNT001 requires little endian");
     auto package=parse_unified_em(path);
     package.shared_prepare_grid=unified_em_has_shared_prepare_grid(package);
     return package;

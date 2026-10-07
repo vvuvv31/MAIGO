@@ -10,7 +10,7 @@ namespace carbon {
 
 constexpr std::size_t kSchneiderNumSections = 25;
 constexpr std::size_t kSchneiderNumTargets = 13;
-constexpr std::size_t kSchneiderNumEnergies = 860;
+constexpr std::size_t kSchneiderNumEnergies = 921;
 
 constexpr std::array<int32_t, 13> kSchneiderCanonicalZ = {
     1, 6, 7, 8, 12, 15, 16, 17, 18, 20, 11, 19, 22
@@ -19,12 +19,12 @@ constexpr std::array<int32_t, 13> kSchneiderCanonicalZ = {
 #pragma pack(push, 1)
 struct SchneiderRateHeader {
     char magic[8];             // "SCHNRATE"
-    uint32_t version;          // 1
+    uint32_t version;          // 3
     uint32_t num_sections;     // 25
     uint32_t num_targets;      // 13
-    uint32_t num_energies;     // 860
-    double energy_min_mevu;    // 0.5
-    double energy_max_mevu;    // 430.0
+    uint32_t num_energies;     // 921
+    double energy_min_mevu;    // 0.1
+    double energy_max_mevu;    // 460.1
     double energy_step_mevu;   // 0.5
     int32_t target_z[13];      // {1, 6, 7, 8, 12, 15, 16, 17, 18, 20, 11, 19, 22}
 };
@@ -50,13 +50,10 @@ class SchneiderRateTable {
 public:
     SchneiderRateTable() = default;
 
-    // expected_magic/version default to the SCHNRATE v3 inelastic family;
-    // the SCHNELXS v1 elastic family shares the identical layout.
+    // Current SCHNRATE v3 inelastic rates and their required companion metadata.
     static SchneiderRateTable from_binary(
         const std::filesystem::path& binary_path,
-        const std::filesystem::path& metadata_path = {},
-        const std::string& expected_magic = "SCHNRATE",
-        std::uint32_t expected_version = 3);
+        const std::filesystem::path& metadata_path = {});
 
     [[nodiscard]] double energy_min_mevu() const noexcept { return energy_min_mevu_; }
     [[nodiscard]] int projectile_z() const noexcept { return projectile_z_; }
@@ -80,7 +77,7 @@ public:
 
     [[nodiscard]] const std::vector<double>& mass_partial_rates() const noexcept { return mass_partial_rates_; }
     [[nodiscard]] const std::vector<double>& mass_total_rates() const noexcept { return mass_total_rates_; }
-    // v3 only: per-target valid domain, 13 entries. Empty for v1 binaries.
+    // Per-target valid domain, 13 entries (required by v3).
     [[nodiscard]] bool has_channel_domains() const noexcept { return !channel_domains_.empty(); }
     [[nodiscard]] const std::vector<SchneiderRateDomainEntry>& channel_domains() const noexcept {
         return channel_domains_;
@@ -107,17 +104,17 @@ public:
     }
 
 private:
-    // Original SCHNRATE sidecars omitted projectile identity and describe C12.
-    int projectile_z_{6};
-    int projectile_a_{12};
-    std::uint32_t binary_version_{1};
+    // Projectile identity is required in the companion metadata.
+    int projectile_z_{0};
+    int projectile_a_{0};
+    std::uint32_t binary_version_{3};
     std::size_t num_energies_{kSchneiderNumEnergies};
-    double energy_min_mevu_{0.5};
-    double energy_max_mevu_{430.0};
+    double energy_min_mevu_{0.1};
+    double energy_max_mevu_{460.1};
     double energy_step_mevu_{0.5};
-    // Flattened array: [section][target][energy] = section * (13 * 860) + target * 860 + energy
+    // Flattened array: [section][target][energy] = section * (13 * num_energies) + target * num_energies + energy
     std::vector<double> mass_partial_rates_;
-    // Flattened array: [section][energy] = section * 860 + energy
+    // Flattened array: [section][energy] = section * num_energies + energy
     std::vector<double> mass_total_rates_;
     std::vector<SchneiderRateDomainEntry> channel_domains_;
 };

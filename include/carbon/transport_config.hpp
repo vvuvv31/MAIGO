@@ -1,6 +1,5 @@
 #pragma once
 
-#include "carbon/slab_phantom.hpp"
 #include "carbon/particle.hpp"
 #include "carbon/delta_moments_data.hpp"
 
@@ -103,13 +102,13 @@ struct PrimarySpotBatchEntry {
 
 struct TransportConfig {
     // Flat configuration schema used by the current strict key/value parser.
-    // Files that predate this field are interpreted as schema v1.
+    // Fixed provenance schema; not a configurable YAML interface.
     std::uint32_t config_schema_version{1};
     // Stable, comment-free, key-sorted representation of the parsed input and
-    // imported ion-physics manifest. This is intended for run provenance and
+    // effective profile settings. This is intended for run provenance and
     // hashing; CLI overrides are not represented here.
     std::string canonical_config_text{};
-    // Legacy configurations default to research so existing approximation
+    // The current experimental physics presets use research mode.
     // behavior remains visible but non-production. Production enables strict
     // post-transport quality gates.
     RunMode run_mode{RunMode::research};
@@ -124,9 +123,8 @@ struct TransportConfig {
     bool quality_reject_grid_closure{true};
     // Optional single-file manifest owning the primary-ion identity and all
     // ion-dependent water physics data. Run controls remain in the main YAML.
-    std::filesystem::path ion_physics_file{};
     std::size_t number_of_histories{10'000};
-    // Fallback for single-beam runs. topas_spots_file(s) and tps_spots_file
+    // Single-beam energy; tps_spots_file
     // supply per-spot energy and therefore do not require this value in YAML.
     double initial_energy_MeVu{200.0};
     // Relative RMS beam energy spread (TOPAS BeamEnergySpread percent / 100).
@@ -136,27 +134,14 @@ struct TransportConfig {
     // GPU transport selects and checks package records using this Z/A.
     int primary_atomic_number{6};
     int primary_mass_number{12};
-    // Zero selects the particle default (legacy C12 preserved); other ions require a mass.
-    double primary_rest_mass_MeV{0.0};
-    // Empty: conventional reference metadata for the selected primary.
-    // Override only to match the identity emitted by a new reference exporter.
-    std::string primary_urban_reference_particle{};
-    std::string primary_urban_ionisation_process{};
-    double minibeam_copper_production_cut_mm{0.05};
-    double minibeam_water_production_cut_mm{0.05};
-    // Legacy water-phantom names for the transport/scorer z extent. In a CT
-    // run load_config() derives both from voxel_bins_z/voxel_size_z_mm, which
-    // in turn default to the native patient CT header.
-    double phantom_length_mm{400.0};
-    double depth_bin_width_mm{0.5};
+    // Derived transport/scorer dimensions; never parsed as independent YAML keys.
+    // Water uses the explicit voxel grid; CT uses the native patient header.
+    double phantom_length_mm{0.0};
+    double depth_bin_width_mm{0.0};
     // The sole water/Schneider CT energy-loss model.
-    std::string em_model{"g4_material_joint_v1"};
     std::filesystem::path em_package_file{};
-    // Empty selects unified_em_delta_moments_v2.bin next to em_package_file.
+    // Empty selects delta_moments.bin next to em_package_file.
     std::filesystem::path em_delta_moments_file{};
-    // Research-only step extension, applied away from stopping/cut-onset regions.
-    double em_primary_step_scale{1.0};
-    double em_secondary_step_scale{1.0};
     double broadbeam_maximum_mean_loss_fraction{0.01};
     double maximum_step_mm{0.5};
     double maximum_relative_energy_loss{0.005};
@@ -165,95 +150,42 @@ struct TransportConfig {
     // Charged secondaries below this total kinetic energy are stopped and their
     // remaining energy is deposited locally. 0 uses energy_cutoff_MeV.
     double secondary_local_deposit_cutoff_MeV{0.0};
-    // Ablation: when >0, charged reaction/cascade products with Z >= this value
-    // deposit kinetic energy as local nuclear heat at the interaction point
-    // instead of being queued for charged secondary transport. 0 disables
-    // (default: transport all supported charged secondaries). Z_min=3 deposits
-    // Li and heavier as local heat while transporting H/He fragments.
-    int secondary_heavy_local_deposit_z_min{0};
-    // Optional condensed-history step for charged secondaries in a uniform
-    // phantom. 0 preserves the legacy behavior where every physics step stops
-    // at a depth-score boundary. A positive value lets MCS/straggling advance
-    // over several depth bins while continuous dose is split back into the
-    // original bins by track length.
-    double secondary_condensed_step_mm{0.0};
     // Uniform-water density and CT-outside fallback; CT voxels use their own
     // material density from CCTG.
     double water_density_g_per_cm3{1.0};
-    // When true, axial slabs override uniform water.
-    // Density-only mode: SP/XS water tables × local density (water-equivalent).
-    // Material mode: per-layer SP/XS CSV (absolute MeV/mm and macro 1/mm); density
-    // used for MCS/straggling only. Empty layers => uniform.
-    bool enable_layered_phantom{false};
-    std::vector<SlabLayer> slab_layers{};
-    // Optional absolute material tables, one path per slab layer (same length).
-    std::vector<std::filesystem::path> slab_stopping_power_files{};
-    std::vector<std::filesystem::path> slab_cross_section_files{};
-    // Optional mass radiation length per layer (g/cm2). Empty preserves the
-    // historical all-water MCS model.
-    std::vector<double> slab_radiation_lengths_g_per_cm2{};
-    // Lateral/3D insert (7b): AABB of alternate material inside water background.
-    bool enable_hetero_insert{false};
-    HeteroInsert hetero_insert{};
-    std::filesystem::path insert_stopping_power_file{};
-    std::filesystem::path insert_cross_section_file{};
-    // Water default preserves existing insert configurations.
-    double insert_radiation_length_g_per_cm2{36.08};
-    // 7c: CT voxel grid (exclusive with layered/hetero insert).
+    // Patient CT voxel grid.
     bool enable_ct_grid{false};
     std::filesystem::path ct_grid_file{};
-    // Optional TOPAS Schneider HU table. Used when ct_grid_file is a DICOM
-    // folder. Empty searches data/HUtoMaterialSchneider.txt.
+    // Schneider composition table used to construct native-water nuclear rates.
     std::filesystem::path ct_schneider_file{};
-    // DICOM origin: "centered" matches the historical CCTG converter
-    // (volume centred, first-slice centre at z=0). "dicom" keeps native
-    // LPS voxel low edges from ImagePositionPatient.
-    std::string ct_dicom_origin_mode{"centered"};
     // When true (default), skip CT voxel-face step clamps in homogeneous regions.
     // Set false for isolated performance A/B against full face clamping.
     bool ct_skip_homogeneous_face_clamp{true};
     // Independent nuclear cross sections for four-class CT diagnostics.
     // Schneider full physics uses the section-resolved nuclear bundle.
-    std::filesystem::path ct_air_cross_section_file{};
-    std::filesystem::path ct_lung_cross_section_file{};
-    std::filesystem::path ct_water_cross_section_file{};
-    std::filesystem::path ct_bone_cross_section_file{};
     // Top-level physics routing mode: Water vs SchneiderCt
     MaterialPhysicsMode material_physics_mode{MaterialPhysicsMode::Water};
 
     // Canonical key names for water and Schneider CT physics
-    std::filesystem::path water_cinel_package_file{};
     // Derived routing: native water material, shared CINEL03 framework. No legacy fallback.
     bool unified_water_nuclear_transport{true};
     std::filesystem::path unified_water_material_file{};
-    std::filesystem::path water_reaction_rate_file{};
     std::filesystem::path ct_schneider_primary_cinel03_file{};
     std::filesystem::path ct_schneider_secondary_cinel03_file{};
     std::filesystem::path ct_schneider_primary_rate_file{};
     std::filesystem::path ct_schneider_secondary_rate_file{};
-    // C12 elastic rates on the Schneider grid (SCHNELXS v1, same layout as
-    // SCHNRATE v3). Empty = elastic disabled (current production behavior).
-    std::filesystem::path ct_elastic_section_rate_file{};
-    // Diagnostic master switch for section elastic (default off;
-    // smoke-gated until halo/profile validation promotes it).
-    bool ct_elastic_diagnostic{false};
-    // Legacy C12 isotropic-CM diagnostic, not a TOPAS angular distribution.
-    // Use the separate all-ion bank for physical target-specific sampling.
-    bool ct_elastic_all_targets{false};
     // Independent all-projectile TOPAS elastic bank; never uses the C12 isotropic fallback.
     std::filesystem::path all_ion_elastic_file{};
     std::filesystem::path elastic_recoil_stopping_file{};
-    // v2.1 physics bundle manifest (REQUIRED whenever any Schneider rate
-    // file is binary version 3; REFUSED with v1 files: no mixing).
+    // Current physics bundle manifest, required for native water/Schneider
+    // nuclear transport with strict v3 rates.
     std::filesystem::path ct_schneider_physics_bundle_file{};
     // Out-of-scope projectile nuclear policy (Schneider CT only). The ONLY
     // allowed value is "em_only": registry-unknown projectiles keep charged
     // EM transport with secondary nuclear reactions disabled; no other value
     // and no default fallback exist (empty refuses startup).
     std::string secondary_out_of_scope_nuclear_policy{};
-    std::filesystem::path ct_schneider_radiation_length_file{"data/schneider/schneider_radiation_lengths.json"};
-    // Electron queue diagnostics; coverage and completion are always audited.
-    bool electron_joint_diagnostics{true};
+    std::filesystem::path ct_schneider_radiation_length_file{"data/materials/schneider/radiation_lengths.json"};
     // Nonempty selects the exact proton packed+prevalidated runtime artifact.
     // Experimental material joint electron operator.
     std::filesystem::path material_electron_joint_pilot_file{};
@@ -273,73 +205,36 @@ struct TransportConfig {
     bool broadbeam_independent_electrons{false};
     double broadbeam_electron_density_threshold{0.1};
     double broadbeam_electron_halo_mm{5.0};
-    std::string broadbeam_electron_region_metric{"box"};
-    bool broadbeam_electron_region_diagnostics{false};
-    bool broadbeam_electron_external_air_local{false};
-    double broadbeam_electron_external_air_margin_mm{0.0};
-    std::filesystem::path broadbeam_electron_body_mask_file{};
+    static constexpr bool broadbeam_electron_region_diagnostics=false;
     // Unbiased variance reduction for low-density (density<=threshold) CT
     // broadbeam electrons. Survival<1 plays deterministic per-task Russian
     // roulette on low-density births (weight/=survival, signed ledger keeps
-    // energy accounting exact). Expected scoring replaces the single-point
-    // energy-packet deposit by its conditional expectation along each step
-    // while the electron is in such a voxel. Physics and RNG laws unchanged.
+    // energy accounting exact). Physics and RNG laws unchanged.
     double broadbeam_electron_low_density_survival{1.0};
     // Selected halo births above the threshold: independent W/p roulette.
     // Changes variance, not the surviving electron/photon transport law.
     double broadbeam_electron_tissue_survival{1.0};
     // Bucket queued indices by sampled birth energy and physical density.
     bool broadbeam_electron_birth_order{false};
-    bool broadbeam_electron_expected_scoring{false};
-    double broadbeam_electron_expected_min_energy_MeV{0.0};
 
-
-    // Optional energy-dependent mass XS for every Schneider section. When set
-    // on a CCTG v2/v3 grid, this supersedes the legacy four-class XS tables.
-    std::filesystem::path ct_schneider_cross_section_file{};
-    std::filesystem::path ct_cinel02_rate_file{};
-    // Optional CT validation mode. Supported: "none", "primary-attenuation-only".
-    // "primary-attenuation-only" enforces C12 primary nuclear attenuation validation,
-    // terminating primaries on first inelastic collision and disabling all secondary creation/transport.
-    std::string ct_validation_mode{};
-    // When true, fragment-species EnergyDeposit for Z in
-    // [restrict_fragment_species_z_min, restrict_fragment_species_z_max]
-    // uses (1 − δ) × unrestricted dE so the ion column matches TOPAS
-    // G4Step::GetTotalEnergyDeposit (δ rays leave the ion scorer).
-    // Transport and the aggregate energy ledger stay unrestricted.
-    // 0,0 leaves every fragment species unrestricted (production default).
-    bool restrict_fragment_species_energy_deposit{false};
-    int restrict_fragment_species_z_min{0};
-    int restrict_fragment_species_z_max{0};
-    // Blend light-ion (Z<=2) reaction/cascade birth directions toward the
-    // projectile axis: dir = normalize((1-f)*package_dir + f*projectile_dir).
-    // 0 keeps the correlated INCL++ angular package; values in (0,1] narrow
-    // the light-fragment cone (diagnostic residual-closure lever for multi-spot
-    // mottling / distal secondary fill). Does not change product KE.
-    double reaction_light_ion_forward_mix{0.0};
     double scorer_area_mm2{90'000.0};
     // Output-only absolute dose calibration. This scales Gy scorers while
     // preserving raw deposited-energy tallies and transport energy balance.
     // Keep at 1.0 unless an independent open-field calibration is available.
     double dose_output_scale{1.0};
     bool enable_voxel_scoring{false};
-    bool enable_charged_origin_voxel_scoring{false};
+    static constexpr bool enable_charged_origin_voxel_scoring=false;
     // Lightweight minibeam diagnostic. Scores p/d/t/He-4 deposited energy by
     // step-start MeV/u, canonical fixed peak/shoulder/valley ROI and depth.
     // It is independent of the production dose and defaults off.
-    bool enable_minibeam_energy_band_roi_scoring{false};
+    static constexpr bool enable_minibeam_energy_band_roi_scoring=false;
     // Independent primary-C12 ROI diagnostic: local ion deposit, condensed
     // electron landing/cross-ROI/escape, and track-length fluence. Off by
     // default and must not change production dose.
-    bool enable_minibeam_primary_roi_scoring{false};
-    // Historical mode stops every physics step at lateral scorer faces.
-    // Disable to keep scoring resolution from changing MCS/transport; energy
-    // is then assigned to the voxel containing the step start.
-    // Primary water Urban also uses physical voxel safety/boundary state when enabled.
-    bool voxel_scorer_clamps_transport{false};
+    static constexpr bool enable_minibeam_primary_roi_scoring=false;
     // Dense scorer geometry in patient coordinates. X-Y is the axial plane;
     // Z is the inferior-superior slice direction. For CT runs these values are
-    // read from the CCTG header unless explicitly supplied for compatibility.
+    // read from the CCTG v3 header; explicit values are consistency assertions.
     std::size_t voxel_bins_x{60};
     std::size_t voxel_bins_y{60};
     std::size_t voxel_bins_z{0};
@@ -351,7 +246,7 @@ struct TransportConfig {
     double voxel_size_z_mm{0.0};
     bool enable_energy_straggling{true};
     // Smoke-only read-only primary query histogram; no RNG or physics changes.
-    bool enable_primary_loss_query_audit{false};
+    static constexpr bool enable_primary_loss_query_audit=false;
     // Toggle native Unified EM fluctuations for charged secondaries.
     bool enable_secondary_energy_straggling{true};
     // GPU generation-wise species ordering. Production YAML opts in explicitly.
@@ -359,66 +254,36 @@ struct TransportConfig {
     // Compile-time geometry/model branch selection for uniform-water Urban
     // minibeam. Runtime eligibility is checked before the first kernel launch.
     bool minibeam_primary_specialization{false};
-    // Uniform-water Urban without a collimator; shares the specialized water body.
-    // Explicit opt-in; false retains the generic primary kernel.
-    bool water_primary_specialization{false};
-    // combined: one kernel; split: beamline then water; compact: also group
-    // surviving primary tracks at that boundary. CT supports compact with the
-    // material-aware patient kernel (water specialization remains false).
-    // No physics/step changes.
-    std::string minibeam_primary_pipeline{"combined"};
+    // Minibeams always launch the beamline, then group medium-entry records
+    // for the water or material-aware CT launch. Preserve source/RNG identity.
+    // The preset key accepts only compact; no single-kernel minibeam path.
+    std::string minibeam_primary_pipeline{"compact"};
     // Pause after the compile-time secondary iteration limit (default 16) and compact survivors.
     // Production presets opt in; false retains full-track scheduling without state buffers.
     bool secondary_step_chunking{false};
     bool enable_inelastic{false};
     // geant4: load the configured macroscopic table as-is.
     std::string nuclear_model{"geant4"};
-    // TOPAS-derived correlated multi-generation final states and independent
-    // target-conditioned interaction rates (CINPKG03 / CINEL02_RATE_V1).
-    std::filesystem::path primary_inelastic_package_v2_file{};
-    std::filesystem::path primary_inelastic_rate_v2_file{};
-    // Number of secondary generations allowed to undergo CINEL02 inelastic
+    // Number of secondary generations allowed to undergo current CINEL03 inelastic
     // replay. Zero restricts inelastic reactions to the primary projectile.
     // Validated production configurations are limited to at most two.
-    std::uint32_t cinel02_max_secondary_inelastic_generations{0};
-    // Reject a run when a sampled collision has no valid replay event or the
-    // hazard/outcome counters do not close.
-    bool cinel02_strict_match{false};
-    bool enable_nuclear_elastic{false};
-    std::filesystem::path primary_inelastic_cross_section_file{
-        "data/c12_inelastic_cross_sections_water_geant4_11_3_2.csv"};
+    std::uint32_t max_secondary_inelastic_generations{0};
     bool enable_secondary_transport{true};
     bool enable_multiple_scattering{false};
-    // Multiple-scattering transport used by both broad-beam and minibeam
-    // paths. `highland` preserves the historical end-of-step angular kick;
-    // `fermi_eyges` (YAML alias `fe`) adds correlated lateral displacement
-    // and a path-length Poisson tail for the selected ion groups.
+    // Ion MCS for water/CT: `fermi_eyges` (broadbeam; all charged ions with
+    // species-water parameters) or global `urban_v2` (minibeam).
     // Explicit dispatch/physics preset. YAML loading defaults non-minibeam
     // configurations to enabled FE for all charged species; explicit choices win.
     std::string transport_profile{"reference"};
     bool fermi_eyges_gaussian_only{false};
-    std::string fermi_eyges_sampling{"segmented"};
-    std::string multiple_scattering_model{"highland"};
+    std::string multiple_scattering_model{"urban_v2"};
     // Global Urban v2: exact material/cut couples, every transported charged ion.
     std::filesystem::path urban_mcs_package_file{};
     // Research-only same-composition density scaling; not a CT dose validation.
     bool urban_ct_density_scaling{false};
     // Physical water box outside the scored ROI (required in global water mode).
     double urban_water_half_width_mm{0.0};
-    // Opt-in, water-only minibeam proton/helium Urban transport. "inherit"
-    // preserves the existing MCS selection, including the dedicated C12 path.
-    // Staged selector: c12, c12_he4, c12_he4_pdt, or all_charged.
-    // Non-C12 parameters currently reuse the generic charge/momentum scaling
-    // and remain explicitly provisional until species-isolated validation.
-    std::string fermi_eyges_species{"c12"};
-    // species_water selects independent p/d/t/He-4 water fits; shared_c12 is
-    // the pre-calibration all-ion candidate used for controlled A/B checks.
-    std::string fermi_eyges_parameter_set{"species_water"};
     double fermi_eyges_max_segment_mm{0.1};
-    // Multiplies Highland projected RMS angle for charged MCS (primary +
-    // secondary). 1.0 is the historical default. Values >1 increase lateral
-    // fill; keep ≤~1.5 without new validation. Not a per-patient fit.
-    double multiple_scattering_scale{1.0};
     // Use Geant4 mass radiation lengths for CT air/lung/water/bone classes.
     // Off preserves the historical all-water MCS model exactly.
     bool enable_ct_material_mcs{false};
@@ -449,34 +314,21 @@ struct TransportConfig {
     // one air slit reach the phantom. Copper EM/nuclear transport is added in
     // later modes; the default false preserves every existing source path.
     bool enable_minibeam{false};
-    // Detailed collimator counters and beam moments are useful for validation,
-    // but their global atomics are redundant in production dose runs. Beamline
-    // removed energy is still accumulated for the global energy balance.
-    bool enable_minibeam_diagnostics{true};
-    std::string minibeam_transport_mode{"copper_em"};
-    std::string minibeam_material{"Copper"};
-    // Cylindrical Copper collimator matching the TOPAS reference.  The legacy
-    // width/length fields remain available for old rectangular-input files,
-    // but Copper transport uses minibeam_radius_mm for the outer body and
+    // Cylindrical Copper collimator matching the TOPAS reference.
+    // Copper transport uses minibeam_radius_mm for the outer body and
     // minibeam_slit_length_mm for the finite parallel slits.
     // Distances are specified in the treatment-room convention: the
     // collimator centre is upstream of isocentre and the water entrance is at
     // minibeam_water_entrance_world_y_mm downstream of isocentre.
     double minibeam_collimator_center_to_isocenter_mm{30.0};
-    double minibeam_collimator_width_mm{120.0};
-    double minibeam_collimator_length_mm{50.0};
     double minibeam_collimator_thickness_mm{60.0};
     double minibeam_slit_length_mm{50.0};
     double minibeam_slit_thickness_mm{60.0};
-    // Radius is the production outer-body dimension.  Thickness and exit gap
-    // aliases are retained for old input files.
+    // Radius is the production outer-body dimension.
     double minibeam_radius_mm{60.0};
-    double minibeam_thickness_mm{60.0};
-    double minibeam_exit_to_phantom_mm{60.0};
     int minibeam_slit_count{15};
     double minibeam_slit_width_mm{0.5};
     double minibeam_slit_pitch_mm{3.6};
-    double minibeam_slit_half_length_mm{25.0};
     // Translation of the complete slit array along its periodic local-u axis.
     // Zero preserves the historical centred array; a half-pitch offset is
     // required by some opposed-field patient apertures.
@@ -489,14 +341,8 @@ struct TransportConfig {
     // Native ionization proposal clock for primary air transport.
     std::filesystem::path minibeam_air_ionization_rate_file{};
     // Primary beamline air transport, independent of the water MCS selector.
-    std::string minibeam_air_mcs_model{"none"};
     double minibeam_air_slit_max_step_mm{1.0e6};
     std::filesystem::path minibeam_air_urban_package_file{};
-    // Restricted loss-range table for the Urban v2 C12/Cu couple
-    // (theRangeTableForLoss semantics: E_total -> loss range -> restricted
-    // dE/dx). Required when minibeam_copper_mcs_model == "urban_v2"; the
-    // legacy E/stopping range placeholder is then never used.
-    std::filesystem::path minibeam_copper_loss_range_file{};
     double minibeam_copper_density_g_per_cm3{8.96};
     double minibeam_copper_radiation_length_g_per_cm2{12.8628};
     double minibeam_copper_max_step_mm{0.05};
@@ -504,11 +350,6 @@ struct TransportConfig {
     // boundary before applying Copper or air physics.
     bool minibeam_copper_exact_material_boundaries{false};
     bool minibeam_copper_enable_mcs{true};
-    // `highland` preserves the historical end-of-step Gaussian kick.
-    // `fermi_eyges_tail` uses a local, step-invariant scattering power,
-    // correlated displacement, and a path-length Poisson tail constrained by
-    // the independent Geant4/Urban Copper-slab phase space.
-    std::string minibeam_copper_mcs_model{"urban_v2"};
     // Extracted discrete General Ion Elastic interactions. Condensed Copper
     // electromagnetic MCS remains independent of this switch.
     bool minibeam_copper_enable_elastic{true};
@@ -517,7 +358,7 @@ struct TransportConfig {
     bool minibeam_copper_enable_energy_straggling{true};
     double minibeam_copper_straggling_scale{1.0};
     // Research selector applies to Z=1,A=1 primary and fragment tracks only.
-    std::string minibeam_copper_proton_straggling_model{"legacy_clipped_gaussian"};
+    std::string minibeam_copper_proton_straggling_model{"clipped_gaussian"};
     // Research candidate: native restricted mean law for primary protons in Cu.
     bool minibeam_copper_primary_native_mean_loss{false};
     // Separate Copper fragment control, enabled in all default minibeams.
@@ -534,99 +375,40 @@ struct TransportConfig {
     // preserves the historical terminal-absorption approximation. Copper and
     // water generation counters are independent.
     std::uint32_t minibeam_copper_fragment_cascade_generations{0};
-    // Legacy-named local Copper stopping correction.  It is now applied to
-    // dE/dx inside every Copper step, so MCS and nuclear transport see the same
-    // energy history.  Production configs keep this at 1 until a homogeneous
-    // slab benchmark supplies a material-local calibration.
-    double minibeam_copper_survivor_energy_loss_scale{1.0};
-    // Optional piecewise-linear local-energy calibration of that stopping
-    // scale.  The historical survivor-only values are not valid here because
-    // they contain a selection bias from tracks stopped before the exit.
-    std::vector<double>
-        minibeam_copper_survivor_energy_loss_energies_MeVu{};
-    std::vector<double>
-        minibeam_copper_survivor_energy_loss_scales{};
-    // Residual primary range correction in the downstream water phantom.
-    // Default 1.0; the minibeam value is frozen from a TOPAS/GPU primary-origin
-    // R80 comparison after the water-entrance phase space has been matched.
-    double minibeam_water_primary_stopping_power_scale{1.0};
     bool minibeam_copper_enable_nuclear_attenuation{false};
     std::filesystem::path minibeam_copper_cross_section_file{};
-    // Copper-only TOPAS banks, loaded only by CARBON_ENABLE_MINIBEAM builds.
+    // Copper-only TOPAS banks, loaded only for minibeam runs.
     std::filesystem::path minibeam_copper_inclxx_file{};
     std::filesystem::path minibeam_copper_elastic_file{};
     std::filesystem::path minibeam_copper_ion_stopping_power_file{};
     std::filesystem::path minibeam_copper_ion_cross_section_file{};
-    std::filesystem::path minibeam_copper_neutral_cross_section_file{};
-    // Used by spots_geometry_mode=minibeam_topas_y to map TOPAS world Y to
+    // Used by spots_geometry_mode=minibeam_pbs_y to map TOPAS world Y to
     // canonical GPU depth: gpu_z = world_y - this value.
     double minibeam_water_entrance_world_y_mm{60.0};
     // Non-empty only for a flattened multi-spot SYCL plan. All entries share
     // the physics/scorer fields above; source and energy fields come from here.
     std::vector<PrimarySpotBatchEntry> primary_spot_batch{};
-    // TOPAS-format spots plan (spots_*.txt L0–L14). Input-compatible with TOPAS
-    // TimeFeature dumps; GPU does NOT simulate timeline — it just runs spots in
-    // file order and accumulates absolute energy (MeV), then normalizes by total
-    // histories across spots.
-    std::filesystem::path topas_spots_file{};
-    // Multiple TOPAS files are concatenated in the listed order. This is used
-    // for plans split only for parallel TOPAS execution.
-    std::vector<std::filesystem::path> topas_spots_files{};
-    // Optional one-column optimization weights, one per concatenated spot.
-    // number_of_histories becomes the total plan MC budget and is allocated
-    // proportionally (rather than overriding every spot with an equal count).
-    std::filesystem::path spot_weights_file{};
-    // |TransY| used when building spot source pose (TOPAS SAD). Default 450 mm.
-    double spots_sad_mm{450.0};
-    // "topas": legacy full BeamPosition2 pose (Rx,Ry + SAD).
-    // "beam_plus_z": water-IDD convenience — force +z beam at z=0 with lateral
-    //   offsets (TransX,TransZ) as (x,y); ignores gantry for depth scoring.
-    // The modes below are legacy beam-repacked-CT adapters. New clinical CT
-    // configurations should use tpsSource with a native patient-coordinate CT.
-    // "tps_90": TPS 90-degree incidence. Spot rotations establish the fixed
-    //   TPS 0-degree source direction, while Patient RotZ=90 supplies the plan
-    //   angle. The transform maps either patient-X travel direction to GPU +Z;
-    //   use the xneg CT packing when Patient RotZ makes the beam travel −X.
-    // "tps_gantry_y": TPS 0-degree incidence used by lung plans. The CT is
-    //   packed as GPU (x,y,z)=patient (x,z,+/-y), preserving each spot's L7/L8.
-    std::string spots_geometry_mode{"topas"};
     double spots_patient_trans_x_mm{0.0};
     double spots_patient_trans_y_mm{0.0};
     double spots_patient_trans_z_mm{0.0};
     double spots_patient_rot_z_deg{0.0};
     double spots_ct_axis_min_mm{0.0};
-    // Multiplies TOPAS BiGaussian SigmaX/Y when applying spots (position width).
-    // 1.0 = plan values. Modest >1 widens entrance/outer envelope.
-    double spots_emittance_sigma_scale{1.0};
-    // Multiplies SigmaXprime/Yprime (angular divergence).
-    double spots_emittance_prime_scale{1.0};
     // Optional continuous C-12 energy loss through the TOPAS World air gap
     // before the reoriented CT entrance. This is intentionally separate from
     // CT in-grid air material handling. It applies only to TPS spot geometry
     // modes, is disabled by default, and currently omits air MCS/straggling.
     bool spots_enable_upstream_air_energy_loss{false};
-    // Smoke-only uniform World-Air MCS covariance; no beam-model file tuning.
-    bool spots_enable_upstream_air_mcs{false};
-    bool ct_secondary_exact_faces_diagnostic{false};
-    // Promoted formal behavior (validated: lung full20 local30 81.35->91.41,
-    // single-shard cost +7%). Default ON. The diagnostic key above remains
-    // as a deprecated explicit alias: when present it overrides this field,
-    // so frozen runs stay bit-reproducible with an explicit false.
-    // Inert without a CT grid (callers branch on enable_ct_grid && sec_in_ct).
+    // Exact CT face handling is the current production behavior. Inert in water.
     bool ct_secondary_exact_faces{true};
-    bool ct_secondary_mcs_off_diagnostic{false};
-    std::filesystem::path spots_upstream_air_mcs_file{};
     std::filesystem::path spots_upstream_air_stopping_power_file{};
     // Keep all clinical geometry in the fixed DICOM LPS patient frame. This is
     // independent of the spot input format (TOPAS TimeFeature or TPS CSV).
     bool enable_tps_coordinate_system{false};
-    // TPS CSV source switch. tpsSource/tps_source are legacy YAML aliases.
+    // TPS CSV source switch, configured with the formal tpsSource key.
     bool enable_tps_source{false};
-    // Optional CSV columns: spot_id,energy_MeVu,x_mm,y_mm,mu_weight plus
-    // energy_spread_percent and emittance parameters. Empty => one central
-    // spot using initial_energy_MeVu and the source defaults above.
-    // PencilBeamScanning aliases energy_MeV (total ion KE) and weight are
-    // accepted when the corresponding legacy columns are absent.
+    // CSV columns: energy_MeV (total ion KE), x_mm, y_mm, weight;
+    // optional spot_id, energy_spread_percent and emittance parameters.
+    // Empty file => central spot from initial_energy_MeVu and source defaults.
     std::filesystem::path tps_spots_file{};
     // Optional energy-dependent optics table (PBS beam_model.csv). Applied
     // only to spots that omit per-row emittance / energy-spread columns.
@@ -652,12 +434,11 @@ struct TransportConfig {
     // Source coordinates are DICOM LPS: +X patient-left, +Y posterior, +Z
     // superior. "dicom_lps" keeps the CT fixed, defines TPS 0 deg as +Y, and
     // rotates the beam frame about +Z: w=(-sin(theta), cos(theta), 0).
-    // "topas_patient_rot_z" is accepted as a deprecated alias. "iec61217" is
-    // retained for legacy water-phantom configurations.
+    // "iec61217" is the water-phantom convention (carbon water minibeam).
     std::string tps_angle_convention{"iec61217"};
     // Public YAML name: tps_beam_angle_deg. This is the in-plane beam angle
-    // about patient +Z for dicom_lps; tps_gantry_angle_deg is a legacy alias.
-    double tps_gantry_angle_deg{0.0};
+    // about patient +Z for dicom_lps.
+    double tps_beam_angle_deg{0.0};
     double tps_couch_angle_deg{0.0};
     double tps_collimator_angle_deg{0.0};
     double tps_isocenter_x_mm{0.0};
@@ -667,39 +448,6 @@ struct TransportConfig {
     // HFS, HFP, FFS, or FFP. Axes are converted to the simulation's patient
     // coordinate system; isocenter coordinates are already in that system.
     std::string tps_patient_position{"HFS"};
-    // Per-species secondary depth-dose scoring. Off in production; validation
-    // mode turns it on. Voxel-only full-plan runs should leave this false.
-    bool enable_fragment_species_scoring{false};
-    // "production": DoseToMedium + optional LET_d.
-    // "validation": extra fluence / survival / reaction / ledger outputs.
-    // Requires a binary built with -DCARBON_VALIDATION_SCORERS=ON.
-    std::string scorer_mode{"production"};
-    // If set in validation mode, default extra CSV/JSON paths are placed here.
-    std::filesystem::path validation_output_directory{};
-
-    [[nodiscard]] bool validation_scorers() const noexcept;
-    // Dose-averaged electronic LET scorer compatible with the
-    // Villadslj/Topas-Extension myHadronLET definition. YAML also accepts the
-    // requested camel-case alias `scorerLET`.
-    bool enable_let_scoring{false};
-    // V1 transports only neutral-package e-/e+ in homogeneous G4_WATER.
-    // Ion delta electrons remain condensed in unrestricted ion stopping power.
-    // Experimental optional neutron transport (research mode only).
-    // Descendant coverage and event interpolation remain incomplete.
-    // Optional CINEL03 neutron-birth audit, independent of transport enable.
-    // Records true birth coordinates/direction before neutral products are skipped.
-    std::filesystem::path neutron_birth_output_file{};
-    std::size_t neutron_birth_capacity{1000000};
-    bool enable_neutron_transport{false};
-    std::filesystem::path neutron_package_file{};
-    double neutron_world_half_width_mm{3000.0};
-    unsigned neutron_max_collisions{4096};
-    std::filesystem::path neutron_recoil_stopping_manifest{};
-    bool neutron_elastic_two_body{false};
-    bool neutron_water_recoil_urban{false};
-    bool neutron_exact_plane_boundaries{true};
-    std::filesystem::path neutron_proton_birth_output_file{};
-    std::size_t neutron_proton_birth_capacity{2000000};
     double max_device_memory_fraction{0.50};
     // Explicit tracked-USM allocation budget in GiB. 0 keeps the historical
     // unbounded behavior; a positive value makes the DeviceMemoryTracker reject
@@ -717,29 +465,17 @@ struct TransportConfig {
     // CUDA defaults to a small chunk so WSL/Windows can reclaim the GPU between
     // launches (long single kernels freeze WSL). Intel GPU uses a larger default.
     std::size_t history_chunk_size{0};
-    // When false, boundary snaps use sycl::nextafter (master). When true, a
-    // fixed 1e-5 mm physical nudge is used to escape CT/voxel face thrash.
-    // Minibeam 0.1 mm scorer cases should enable this explicitly.
-    bool robust_boundary_nudge{false};
     std::uint64_t random_seed{20'260'714};
     // Reference energy grid for independent nuclear/recoil interpolation only;
     // water/CT primary stopping comes exclusively from em_package_file.
     std::filesystem::path primary_stopping_power_file{
-        "data/stopping_power_water_geant4_11_3_2.csv"};
-    // Optional E_delta/(Edep+E_delta) lookup on the stopping-power energy grid.
-    // Used only by the HadronLET-compatible scorer; dose transport is unchanged.
-    std::filesystem::path let_delta_electron_fraction_file{};
+        "data/stopping/water/carbon.csv"};
     // Independent reference for unsupported elastic recoils only.
     std::filesystem::path particle_stopping_power_file{
-        "data/ion_stopping_power_water_geant4_11_3_2.csv"};
+        "data/stopping/water/ions.csv"};
     // MeV energy-deposition scorer outputs (absolute MeV → MeV/primary in writers).
-    std::filesystem::path output_file{"out/cpu_depth_dose.csv"};
+    std::filesystem::path output_file{};
     std::filesystem::path fragment_species_output_file{};
-    std::filesystem::path let_output_file{"out/gpu_letd_depth.csv"};
-    std::filesystem::path fragment_species_let_output_file{};
-    // Optional p/d/t/He-3/He-4/N/O/F depth LET diagnostics. Empty avoids the
-    // extra per-step FP64 atomics in normal production runs.
-    std::filesystem::path light_isotope_let_output_file{};
     // Optional selected-species birth-spectrum diagnostics (CSV prefix). Empty
     // disables all birth-spectrum buffers and atomics.
     // Writes: <path>_summary.csv, <path>_mevu.csv, <path>_depth.csv,
@@ -761,20 +497,15 @@ struct TransportConfig {
     // water secondary queue.  Kept separate from the one-record-per-primary
     // phase space because one source history can produce many fragments.
     std::filesystem::path minibeam_fragment_phase_space_output_file{};
-    // Prefix/header path for dense primary and all-hadron 3D LET_d MHD maps.
-    // Requires both scorerLET and enable_voxel_scoring.
-    std::filesystem::path let_voxel_mhd_output_file{};
-    std::filesystem::path voxel_dose_output_file{"out/gpu_voxel_dose.csv"};
+    std::filesystem::path voxel_dose_output_file{};
     std::filesystem::path charged_origin_voxel_output_file{
         "out/gpu_charged_origin_voxel_dose.csv"};
-    std::filesystem::path neutral_origin_voxel_output_file{
-        "out/gpu_neutral_origin_voxel_dose.csv"};
     // Dose scorers (total Gy over all histories). Empty path disables that dose
     // file; MeV scorers always write when their paths are set. Defaults write Gy
     // alongside MeV.
-    std::filesystem::path dose_output_file{"out/cpu_depth_dose_Gy.csv"};
+    std::filesystem::path dose_output_file{};
     std::filesystem::path fragment_species_dose_output_file{};
-    std::filesystem::path voxel_dose_Gy_output_file{"out/gpu_voxel_dose_Gy.csv"};
+    std::filesystem::path voxel_dose_Gy_output_file{};
     std::filesystem::path charged_origin_voxel_dose_Gy_output_file{
         "out/gpu_charged_origin_voxel_dose_Gy.csv"};
     // Optional dense CT dose-to-medium maps for primary ion and charged
@@ -786,7 +517,7 @@ struct TransportConfig {
     // Diagnostic-only primary track-length fluence map (/mm2). Empty disables
     // both the device buffer and output, so production transport is unchanged.
     std::filesystem::path primary_voxel_fluence_mhd_output_file{};
-    std::string device{"serial"};
+    std::string device{"cuda"};
 
     [[nodiscard]] double initial_total_energy_MeV() const noexcept {
         return initial_energy_MeVu * static_cast<double>(primary_mass_number);
@@ -805,56 +536,23 @@ struct TransportConfig {
         }
         unified_water_nuclear_transport = is_water_mode();
     }
-    [[nodiscard]] double resolved_primary_rest_mass_MeV() const noexcept {
-        return primary_rest_mass_MeV > 0.0
-                   ? primary_rest_mass_MeV
-                   : default_primary_rest_mass_MeV(primary_atomic_number, primary_mass_number);
-    }
-    // Preserve the legacy C12 MCS reference when mass was not specified.
-    // All new particles and explicit YAML masses use the same primary mass.
-    [[nodiscard]] double primary_mcs_mass_override_MeV() const noexcept {
-        return primary_rest_mass_MeV > 0.0 || primary_atomic_number != 6 || primary_mass_number != 12
-            ? resolved_primary_rest_mass_MeV() : 0.0;
-    }
-    void require_primary_reference_mass(double reference_mass_MeV, const char* package) const {
-        // Old C12 inputs leave mass selection to their established references.
-        if (primary_rest_mass_MeV == 0.0 && primary_atomic_number == 6 && primary_mass_number == 12) return;
-        const auto expected = resolved_primary_rest_mass_MeV();
-        if (!std::isfinite(reference_mass_MeV) || !(reference_mass_MeV > 0.0) ||
-            std::abs(reference_mass_MeV - expected) > 2.0e-6 * expected)
-            throw std::invalid_argument(std::string(package) + " primary mass disagrees with YAML source mass");
-    }
-    void validate_primary_urban_reference_identity() const {
-        const bool proton = primary_atomic_number == 1 && primary_mass_number == 1;
-        const auto suffix = "_Z" + std::to_string(primary_atomic_number) + "_A" +
-            std::to_string(primary_mass_number) + "_charge" + std::to_string(primary_atomic_number);
-        if (!primary_urban_reference_particle.empty() &&
-            !(proton && primary_urban_reference_particle == "proton") &&
-            !primary_urban_reference_particle.ends_with(suffix))
-            throw std::invalid_argument("primary_urban_reference_particle conflicts with source Z/A/charge");
-        const auto expected_process = proton ? "hIoni" : "ionIoni";
-        if (!primary_urban_ionisation_process.empty() && primary_urban_ionisation_process != expected_process)
-            throw std::invalid_argument("primary_urban_ionisation_process conflicts with source particle");
-    }
-    [[nodiscard]] std::string resolved_primary_urban_reference_particle() const {
-        if (!primary_urban_reference_particle.empty()) return primary_urban_reference_particle;
-        if (primary_atomic_number == 1 && primary_mass_number == 1) return "proton";
-        if (primary_atomic_number == 6 && primary_mass_number == 12) return "C12_Z6_A12_charge6";
-        return {}; // require explicit exporter identity for other ions
-    }
-    [[nodiscard]] std::string resolved_primary_urban_ionisation_process() const {
-        if (!primary_urban_ionisation_process.empty()) return primary_urban_ionisation_process;
-        return primary_atomic_number == 1 && primary_mass_number == 1 ? "hIoni" : "ionIoni";
+    void require_primary_reference_mass(double reference_mass_MeV, const char* package,
+                                        PrimaryMassConvention convention = PrimaryMassConvention::Nuclear) const {
+        const double expected = convention == PrimaryMassConvention::Kinematic
+            ? primary_kinematic_mass_MeV(primary_atomic_number, primary_mass_number)
+            : primary_nuclear_mass_MeV(primary_atomic_number, primary_mass_number);
+        if (!std::isfinite(expected) || !std::isfinite(reference_mass_MeV) ||
+            !(reference_mass_MeV > 0.0) || std::abs(reference_mass_MeV - expected) > 2.0e-6 * expected)
+            throw std::invalid_argument(std::string(package) + " primary mass disagrees with its production mass convention");
     }
     [[nodiscard]] PrimaryIonDefinition primary_ion() const {
-        return make_primary_ion_definition(
-            primary_atomic_number, primary_mass_number, primary_rest_mass_MeV);
+        return make_primary_ion_definition(primary_atomic_number, primary_mass_number);
     }
 
     [[nodiscard]] std::size_t number_of_bins() const;
     [[nodiscard]] std::size_t number_of_voxels() const;
     [[nodiscard]] double scorer_spacing_z_mm() const noexcept {
-        return voxel_size_z_mm > 0.0 ? voxel_size_z_mm : depth_bin_width_mm;
+        return voxel_size_z_mm;
     }
     [[nodiscard]] double effective_secondary_local_deposit_cutoff_MeV()
         const noexcept {
@@ -866,16 +564,7 @@ struct TransportConfig {
     [[nodiscard]] bool uses_fixed_patient_coordinates() const noexcept {
         return enable_tps_coordinate_system || enable_tps_source;
     }
-    [[nodiscard]] bool is_primary_attenuation_only_mode() const noexcept {
-        return ct_validation_mode == "primary-attenuation-only";
-    }
-    // Diagnostic-only allocation gate for per-depth primary survival /
-    // inelastic-reaction buffers. Write-only diagnostics; no transport,
-    // dose, or RNG effect.
-    [[nodiscard]] bool needs_primary_survival_buffers() const noexcept {
-        return validation_scorers() || is_primary_attenuation_only_mode() ||
-               enable_fragment_species_scoring;
-    }
+
     void validate() const;
 };
 

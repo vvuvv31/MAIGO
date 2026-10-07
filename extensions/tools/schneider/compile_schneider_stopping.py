@@ -3,8 +3,8 @@ tools/compile_schneider_stopping.py
 
 Step 14 Canonical Stopping Power Compiler:
 Compiles raw TOPAS/Geant4 C12 stopping-power extraction into official repository data products:
-  1. data/schneider/c12_schneider_stopping_power.csv + .metadata.json
-  2. data/schneider/schneider_stopping_v1.bin + .metadata.json
+  1. data/stopping/schneider/carbon_audit.csv + .metadata.json
+  2. data/stopping/schneider/carbon.bin + .metadata.json
 
 Enforces:
   - Byte-for-byte determinism
@@ -13,7 +13,7 @@ Enforces:
   - Full domain coverage up to 430.11 MeV/u (supporting 430.0 MeV/u source domain plus guard node)
   - Unit consistency check: linear_stopping == mass_stopping * density within 1e-4 relative
   - Monotonicity of energy and CSDA range
-  - Section Identity & Composition Hash verification against data/HUtoMaterialSchneider.txt
+  - Section Identity & Composition Hash verification against data/materials/schneider/hu_to_material.txt
   - Clean, separate metadata sidecars for binary and CSV
 """
 import argparse
@@ -25,7 +25,7 @@ import struct
 import sys
 from pathlib import Path
 REPO_ROOT = Path(os.environ.get('MAIGO_REPO_ROOT', Path(__file__).resolve().parents[3]))
-SCHNEIDER_TXT = REPO_ROOT / 'data/HUtoMaterialSchneider.txt'
+SCHNEIDER_TXT = REPO_ROOT / 'data/materials/schneider/hu_to_material.txt'
 EXPECTED_SECTIONS = 25
 EXPECTED_ENERGIES = 4302
 ENERGY_MIN = 0.01
@@ -55,17 +55,18 @@ def main():
     parser = argparse.ArgumentParser(description='Compile Schneider stopping-power tables.')
     parser.add_argument('--raw-csv', required=True)
     parser.add_argument('--raw-json', required=True)
-    parser.add_argument('--output-dir', default=str(REPO_ROOT / 'data/schneider'))
+    parser.add_argument('--output-dir', required=True)
     parser.add_argument('--projectile-z', type=int, default=6)
     parser.add_argument('--projectile-a', type=int, default=12)
-    parser.add_argument('--prefix', default='', help='Prefix for a new species package; old names retained by default')
+    
     args = parser.parse_args()
     if args.projectile_z <= 0 or args.projectile_a < args.projectile_z:
         parser.error('Require positive Z and A >= Z')
-    if (args.projectile_z, args.projectile_a) != (6, 12) and (not args.prefix):
-        parser.error('Non-C12 extraction requires --prefix to protect historical outputs')
-    binary_name = args.prefix + 'schneider_stopping_v1.bin'
-    csv_name = args.prefix + 'schneider_stopping_power.csv' if args.prefix else 'c12_schneider_stopping_power.csv'
+    if (args.projectile_z, args.projectile_a) not in [(1, 1), (6, 12)]:
+        parser.error('Only proton and carbon primary tables are supported')
+    species = 'proton' if args.projectile_z == 1 else 'carbon'
+    binary_name = species + '.bin'
+    csv_name = species + '_audit.csv' # offline audit companion
     raw_csv_path = Path(args.raw_csv)
     raw_json_path = Path(args.raw_json)
     out_dir = Path(args.output_dir)
@@ -191,7 +192,7 @@ def main():
     section_manifest = []
     for s in range(EXPECTED_SECTIONS):
         section_manifest.append({'section_id': s, 'material_name': material_names[s], 'nominal_density_g_cm3': round(densities[s], 7), 'mean_excitation_energy_eV': round(i_values_ev[s], 4), 'element_weights': weights[s]})
-    common_meta = {'schema_version': 2, 'topas_version': '4.2.p3', 'geant4_version': 'geant4-11-03-patch-02 [MT]', 'em_physics_module': 'g4em-standard_opt4', 'projectile': proj, 'raw_inputs': [str(raw_csv_path.resolve()), str(raw_json_path.resolve())], 'schneider_source_path': 'data/HUtoMaterialSchneider.txt', 'sections_count': EXPECTED_SECTIONS, 'energies_count': EXPECTED_ENERGIES, 'energy_grid': {'type': 'uniform', 'min_MeVu': ENERGY_MIN, 'max_MeVu': ENERGY_MAX, 'step_MeVu': ENERGY_STEP, 'nodes': EXPECTED_ENERGIES, 'covers_430mevu_domain': True, 'has_guard_node': True}, 'section_manifest': section_manifest, 'dimension_order': {'payload_1': ['section_id (0..24)', 'energy_node (0..4301)'], 'payload_2': ['section_id (0..24)', 'energy_node (0..4301)']}, 'units': {'mass_stopping_power': '(MeV/mm) / (g/cm3)', 'csda_range': 'mm', 'density': 'g/cm3', 'energy': 'MeV/u'}}
+    common_meta = {'schema_version': 2, 'topas_version': '4.2.p3', 'geant4_version': 'geant4-11-03-patch-02 [MT]', 'em_physics_module': 'g4em-standard_opt4', 'projectile': proj, 'raw_inputs': [str(raw_csv_path.resolve()), str(raw_json_path.resolve())], 'schneider_source_path': 'data/materials/schneider/hu_to_material.txt', 'sections_count': EXPECTED_SECTIONS, 'energies_count': EXPECTED_ENERGIES, 'energy_grid': {'type': 'uniform', 'min_MeVu': ENERGY_MIN, 'max_MeVu': ENERGY_MAX, 'step_MeVu': ENERGY_STEP, 'nodes': EXPECTED_ENERGIES, 'covers_430mevu_domain': True, 'has_guard_node': True}, 'section_manifest': section_manifest, 'dimension_order': {'payload_1': ['section_id (0..24)', 'energy_node (0..4301)'], 'payload_2': ['section_id (0..24)', 'energy_node (0..4301)']}, 'units': {'mass_stopping_power': '(MeV/mm) / (g/cm3)', 'csda_range': 'mm', 'density': 'g/cm3', 'energy': 'MeV/u'}}
     bin_meta = dict(common_meta)
     bin_meta['data_filename'] = binary_name
     bin_meta['format'] = 'binary'

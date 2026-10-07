@@ -10,7 +10,6 @@ inline int elastic_target_index_from_z(int z) noexcept {
         if(kSchneiderCanonicalZ[i]==z) return static_cast<int>(i);
     return -1;
 }
-inline constexpr float kElasticTargetMassU[13]={1,12,14,16,24,31,32,35,40,40,23,39,48};
 struct NuclearElasticOutcome {
     float projectile_ke_MeV{},recoil_ke_MeV{};
     float proj_dir_x{},proj_dir_y{},proj_dir_z{1};
@@ -50,12 +49,5 @@ inline NuclearElasticOutcome elastic_two_body(float kinetic, float dx,float dy,f
     if(n1>0){out.proj_dir_x=(nx*pz1+rx*pt)/n1;out.proj_dir_y=(ny*pz1+ry*pt)/n1;out.proj_dir_z=(nz*pz1+rz*pt)/n1;}
     if(n2>0){out.recoil_dir_x=(nx*pz2-rx*pt)/n2;out.recoil_dir_y=(ny*pz2-ry*pt)/n2;out.recoil_dir_z=(nz*pz2-rz*pt)/n2;}
     return out;
-}
-// Legacy diagnostic only. Isotropic CM is not a TOPAS angular model.
-inline NuclearElasticOutcome sample_c12_target_elastic(float T,float dx,float dy,float dz,
-    float u,float phi,float target_a) noexcept {
-    constexpr double carbon_mass=11174.86323534;
-    const double target_mass=target_a==1?938.27208816:target_a*931.49410242;
-    return elastic_two_body(T,dx,dy,dz,2*u-1,phi,carbon_mass,target_a>0?target_mass:0);
 }
 } // namespace carbon

@@ -1,0 +1,17 @@
+{
+  "passed": true,
+  "checks": [
+    "explicit_C12_projectile",
+    "missing_projectile_rejected",
+    "nuclear_mass_checked",
+    "CINEL03_kinematic_mass_checked",
+    "wrong_mass_conventions_rejected",
+    "proton_reference_masses_checked",
+    "generic_primary_rejected",
+    "carbon_source_numeric_values",
+    "retired_TPS_columns_rejected",
+    "duplicate_TPS_columns_rejected",
+    "CT_face_distance",
+    "missing_CT_dimensions_invalid"
+  ]
+}

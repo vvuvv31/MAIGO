@@ -124,6 +124,6 @@ def probe(source,metadata,out):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--source',type=Path,default=Path('data/archive/ion_em_native_20261005/unified_em_v1.bin'))
+    p.add_argument('--source',type=Path,required=True)
     p.add_argument('--metadata',type=Path,required=True);p.add_argument('--output',type=Path,required=True)
     a=p.parse_args();probe(a.source,a.metadata,a.output)

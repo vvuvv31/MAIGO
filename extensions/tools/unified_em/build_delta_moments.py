@@ -51,9 +51,9 @@ def build(source,output):
                   max_relative_quadrature_error=maxerr,units=['MeV/mm','MeV^2/mm'],
                   data_file=output.name,generator='extensions/tools/unified_em/build_delta_moments.py')
         verify(tmp,source,metadata=meta);os.replace(tmp,output)
-        output.with_suffix('.json').write_text(json.dumps(meta,indent=2)+'\n')
+        output.with_suffix('.metadata.json').write_text(json.dumps(meta,indent=2)+'\n')
         print(f'Generated {output}; max quadrature discrepancy={maxerr:.3g}')
     finally:
         if tmp.exists():tmp.unlink()
 if __name__=='__main__':
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--source',type=Path,default=ROOT/'data/archive/ion_em_native_20261005/unified_em_v1.bin');p.add_argument('--output',type=Path,default=ROOT/'data/archive/ion_em_native_20261005/unified_em_delta_moments_v2.bin');a=p.parse_args();build(a.source,a.output)
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--source',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();build(a.source,a.output)

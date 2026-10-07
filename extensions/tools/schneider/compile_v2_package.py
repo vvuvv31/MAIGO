@@ -15,9 +15,9 @@ Rules enforced (any violation aborts, no partial package):
 - record raw input paths and sizes, compiler commit + command
 - write to temp path, verify by re-reading, then atomic rename
 Outputs:
-  data/schneider/cinel03_secondary_targets_v2.bin
-  data/schneider/cinel03_secondary_targets_v2.metadata.json
-  data/schneider/cinel03_secondary_targets_v2.channels.json
+  data/nuclear/schneider/secondary/final_states.bin
+  data/nuclear/schneider/secondary/final_states.metadata.json
+  data/nuclear/schneider/secondary/final_states.channels.json
 """
 import datetime
 import json
@@ -30,20 +30,21 @@ import tempfile
 from collections import defaultdict
 from pathlib import Path
 REPO = Path(os.environ.get('MAIGO_REPO_ROOT', Path(__file__).resolve().parents[3]))
+STAGE = Path(os.environ.get('MAIGO_ASSET_OUTPUT_ROOT', REPO/'extensions/work/packages'))
+
 WORK = Path(os.environ.get('MAIGO_PACKAGE_WORK_ROOT', REPO / 'extensions' / 'work'))
 V2 = Path(os.environ.get('MAIGO_V2_CAMPAIGN_ROOT', WORK / 'schneider-secondary-v2'))
 sys.path.insert(0, str(REPO / 'extensions' / 'package_tools'))
 import cinel02
 import cinel03
-V1_BIN = REPO / 'data/schneider/cinel03_secondary_targets.bin'
 V1_UUID = '00000000-0000-4000-8000-000000000020'
 V2_UUID = '00000000-0000-4000-8000-000000000022'
 V2_1_UUID = '00000000-0000-4000-8000-000000000023'
 V2_1_14P_UUID = '00000000-0000-4000-8000-000000000026'
-TAG = sys.argv[sys.argv.index('--tag') + 1] if '--tag' in sys.argv else 'v2'
-WITH_C12 = '--c12-secondary' in sys.argv
+TAG = 'v2_1'
+WITH_C12 = True
 UUID = V2_1_14P_UUID if WITH_C12 else V2_1_UUID if TAG == 'v2_1' else V2_UUID
-OUT_STEM = f'cinel03_secondary_targets_{TAG}_14p' if WITH_C12 else f'cinel03_secondary_targets_{TAG}'
+OUT_STEM = 'final_states'
 MAX_EVENTS_PER_FILE = 30
 C12_V1_PROD = Path(os.environ.get('MAIGO_PRIMARY_CAMPAIGN_ROOT', WORK / 'production'))
 
@@ -61,6 +62,7 @@ def audit_event(rec, prods):
     return True
 
 def main():
+    (STAGE/'data/nuclear/schneider/secondary').mkdir(parents=True, exist_ok=True)
     events = []
     raw_input_bytes = {}
     v1_root = Path(os.environ.get('MAIGO_SECONDARY_V1_RAW_ROOT', WORK / 'step20_secondary_campaigns' / 'raw'))
@@ -78,7 +80,6 @@ def main():
             kept += 1
         n_v1 += kept
     print(f'v1 base events kept: {n_v1} (package has 33139 interactions)')
-    raw_input_bytes[str(V1_BIN)] = V1_BIN.stat().st_size
     val_name = sys.argv[sys.argv.index('--validation') + 1] if '--validation' in sys.argv else 'raw_validation.json'
     man_name = sys.argv[sys.argv.index('--manifest') + 1] if '--manifest' in sys.argv else 'campaign_manifest.json'
     validation = json.load(open(V2 / val_name))
@@ -203,13 +204,13 @@ def main():
         pkg.event_offsets.append(start)
     pkg.event_offsets.append(len(events))
     pkg.event_indices = list(range(len(events)))
-    tmpdir = Path(tempfile.mkdtemp(prefix='cinel03v2_', dir=REPO / 'data/schneider'))
+    tmpdir = Path(tempfile.mkdtemp(prefix='cinel03v2_', dir=STAGE / 'data/nuclear/schneider/secondary'))
     tmp_bin = tmpdir / (OUT_STEM + '.bin')
     pkg.write_binary(tmp_bin)
     reread = cinel03.Cinel03Package.read_binary(tmp_bin)
     assert len(reread.interactions) == len(events), 're-read event mismatch'
     assert len(reread.energy_nodes) == len(pkg.energy_nodes), 'node mismatch'
-    final_bin = REPO / ('data/schneider/' + OUT_STEM + '.bin')
+    final_bin = STAGE / ('data/nuclear/schneider/secondary/' + OUT_STEM + '.bin')
     tmp_bin.replace(final_bin)
     ch = defaultdict(list)
     for e_idx, (pz, pa, tz, en) in enumerate(pkg.energy_nodes):
@@ -219,7 +220,7 @@ def main():
         a = sorted(nodes)
         gaps = [a[i + 1] - a[i] for i in range(len(a) - 1)]
         channels.append({'projectile_z': pz, 'projectile_a': pa, 'target_element_z': tz, 'energy_min_MeV_per_u': min(a), 'energy_max_MeV_per_u': max(a), 'energy_nodes': len(a), 'maximum_observed_node_gap_MeV_per_u': max(gaps) if gaps else 0.0, 'maximum_allowed_node_gap_MeV_per_u': 5.0, 'interpolation_policy': 'stochastic_bracketing', 'target_alias_allowed': False})
-    (REPO / ('data/schneider/' + OUT_STEM + '.channels.json')).write_text(json.dumps({'channels': channels}, indent=1))
+    (STAGE / ('data/nuclear/schneider/secondary/' + OUT_STEM + '.channels.json')).write_text(json.dumps({'channels': channels}, indent=1))
     if WITH_C12:
         projs = sorted({(c['projectile_z'], c['projectile_a']) for c in channels})
         assert len(projs) == 14, f'14p scope requires 14 projectiles, got {len(projs)}'
@@ -228,8 +229,8 @@ def main():
             if (c['projectile_z'], c['projectile_a']) == (6, 12):
                 assert c['maximum_observed_node_gap_MeV_per_u'] <= 5.0, f'C12/tz={c['target_element_z']} gap {c['maximum_observed_node_gap_MeV_per_u']} exceeds 5.0'
     ext_files = ['CarbonInelasticEventWriter.cc', 'CarbonInelasticEventWriter.hh', 'CarbonInelasticCapturePhysics.cc', 'CarbonInelasticCapturePhysics.hh', 'CarbonInelasticCaptureProcess.cc', 'CarbonInelasticCaptureProcess.hh', 'CarbonInelasticExposureNtuple.cc', 'CarbonInelasticExposureNtuple.hh']
-    meta = {'schema_version': 1, 'format': 'CINPKG04', 'data_filename': OUT_STEM + '.bin', 'file_size_bytes': final_bin.stat().st_size, 'topas_version': '4.2.p3', 'geant4_version': 'geant4-11-03-patch-02', 'physics_list': manifest.get('physics_list', 'g4em-standard_opt4 g4h-phy_QGSP_BIC_HP g4ion-inclxx CarbonInelasticCapturePhysics g4h-elastic_HP g4stopping'), 'schneider_source_path': 'data/HUtoMaterialSchneider.txt', 'extractor_git_commit': None, 'compiler_git_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO).decode().strip(), 'compiler_command': 'python3 tools/compile_v2_package.py ' + ' '.join(sys.argv[1:]), 'raw_input_bytes': raw_input_bytes, 'energy_min_MeVu': min((c['energy_min_MeV_per_u'] for c in channels)), 'energy_max_MeVu': max((c['energy_max_MeV_per_u'] for c in channels)), 'energy_grid': 'campaign-energy nodes; per-channel max gap <= 5 MeV/u', 'projectiles': sorted({(c['projectile_z'], c['projectile_a']) for c in channels}), 'target_elements': sorted({c['target_element_z'] for c in channels}), 'units': 'mm, MeV, ns', 'generation_timestamp_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'policy': {'be6_status': 'EXCLUDED (TopasCompatKill)', 'aliasing_status': 'FORBIDDEN (exact target element Z only)'}}
-    (REPO / ('data/schneider/' + OUT_STEM + '.metadata.json')).write_text(json.dumps(meta, indent=1))
+    meta = {'schema_version': 1, 'format': 'CINPKG04', 'data_filename': OUT_STEM + '.bin', 'file_size_bytes': final_bin.stat().st_size, 'topas_version': '4.2.p3', 'geant4_version': 'geant4-11-03-patch-02', 'physics_list': manifest.get('physics_list', 'g4em-standard_opt4 g4h-phy_QGSP_BIC_HP g4ion-inclxx CarbonInelasticCapturePhysics g4h-elastic_HP g4stopping'), 'schneider_source_path': 'data/materials/schneider/hu_to_material.txt', 'extractor_git_commit': None, 'compiler_git_commit': os.environ.get('MAIGO_GENERATOR_REVISION', 'release-extraction-kit'), 'compiler_command': 'python3 tools/compile_v2_package.py ' + ' '.join(sys.argv[1:]), 'raw_input_bytes': raw_input_bytes, 'energy_min_MeVu': min((c['energy_min_MeV_per_u'] for c in channels)), 'energy_max_MeVu': max((c['energy_max_MeV_per_u'] for c in channels)), 'energy_grid': 'campaign-energy nodes; per-channel max gap <= 5 MeV/u', 'projectiles': sorted({(c['projectile_z'], c['projectile_a']) for c in channels}), 'target_elements': sorted({c['target_element_z'] for c in channels}), 'units': 'mm, MeV, ns', 'generation_timestamp_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'policy': {'be6_status': 'EXCLUDED (TopasCompatKill)', 'aliasing_status': 'FORBIDDEN (exact target element Z only)'}}
+    (STAGE / ('data/nuclear/schneider/secondary/' + OUT_STEM + '.metadata.json')).write_text(json.dumps(meta, indent=1))
     print(f'compiled {final_bin} ({final_bin.stat().st_size / 1000000.0:.1f} MB)')
 if __name__ == '__main__':
     sys.exit(main())

@@ -4,7 +4,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <cstring>
 #include <fstream>
 #include <iomanip>
 #include <limits>
@@ -85,18 +84,8 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     report.mode = config.run_mode;
     if(result.conditional_copper_response_enabled)
         report.approximations.push_back({"conditional_copper_response_accuracy_pending",
-            "Research170MeV Cu interior conditional event bank; coherent zero/output events, charged entries at water and native Cu neutron births. Absolute0.1x1mm entrance bins without translations; finite-bank dose/gamma accuracy not certified.",1.,0.});
-    if(config.enable_neutron_transport){
-        report.approximations.push_back({"experimental_neutron_transport",
-            "Unvalidated draft neutron rates and correlated energy rescaling; CSDA charged descendants with optional water Urban where covered, no descendant nuclear reactions; photon/electron and missing-ion energy unresolved; inspect neutron_transport.json. Dose uncertainties and charged species/LET component maps exclude this new contribution.",1.,0.});
-        const auto& n=result.neutron_experimental;
-        const auto& e=n.energy;
-        const double closure=std::abs(e[NInput]+e[NKineticGain]-e[NDepositWater]-e[NDepositOutside]-e[NEscape]-e[NUnsupported]-e[NBelowGrid]-e[NStepLimit]-e[NQueueOverflow]);
-        if(closure>1.e-4*std::max(1.,e[NInput]))report.failures.push_back({"neutron_energy_closure","Experimental neutron kinetic bookkeeping does not close",closure,1.e-4*std::max(1.,e[NInput])});
-        if(n.counts[NOverflowCount])report.failures.push_back({"neutron_stack_overflow","Experimental neutron stack overflow; energy recorded but tracks lost",double(n.counts[NOverflowCount]),0.});
-    }
-    if(config.em_model=="g4_material_joint_v1")
-        report.approximations.push_back({"condensed_delta_partition_v1",
+            "Research170MeV Cu interior conditional event bank; coherent zero/output events, charged entries at water and explicit untracked Cu neutral products. Absolute0.1x1mm entrance bins without translations; finite-bank dose/gamma accuracy not certified.",1.,0.});
+    report.approximations.push_back({"condensed_delta_partition_v1",
             "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition unless an explicit spatial response is enabled, configured combined mean-loss guard (default 1%); higher spectrum moments and patient BODY Gamma not validated",1.,0.});
     if (config.enable_minibeam && !config.material_electron_charged_index_file.empty()) {
         report.approximations.push_back({"minibeam_primary_electron_transport",
@@ -105,12 +94,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             "channel-averaged yields remain approximations. Secondary-ion electron births and "
             "upstream electron production are not included. Carbon minibeam dose acceptance is pending", 1., 0.});
     }
-    if(config.em_primary_step_scale!=1.0)
-        report.approximations.push_back({"em_primary_step_extension",
-            "Research EM step multiplier; only E/A >=20 MeV, both node ranges >=5 mm and density >=0.2 g/cm3; accuracy gate pending",config.em_primary_step_scale,1.0});
-    if(config.em_secondary_step_scale!=1.0)
-        report.approximations.push_back({"em_secondary_step_extension",
-            "Research EM step multiplier; only E/A >=20 MeV, both node ranges >=5 mm and density >=0.2 g/cm3; accuracy gate pending",config.em_secondary_step_scale,1.0});
     if (config.secondary_species_grouping && config.enable_inelastic &&
         config.enable_secondary_transport)
         report.approximations.push_back({"secondary_species_grouping_accuracy_pending",
@@ -124,26 +107,21 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                 ? "user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)"
                 : "experimental scheduling interval; production default is 16; not a new TOPAS Gamma validation"),
             1., 0.});
-    if(config.em_model=="g4_material_joint_v1")
-        report.approximations.push_back({"unified_material_em_accuracy_pending",
+    report.approximations.push_back({"unified_material_em_accuracy_pending",
             "Unified water/Schneider EM for all 18 charged ions; local delta deposition unless an explicit spatial response is enabled; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",1.,0.});
 
     if(!config.all_ion_elastic_file.empty()) {
         report.approximations.push_back({"all_ion_elastic_candidate",
             "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",1.,0.});
     }
-    if (config.enable_minibeam && config.minibeam_copper_proton_straggling_model != "legacy_clipped_gaussian")
+    if (config.enable_minibeam && config.minibeam_copper_proton_straggling_model != "clipped_gaussian")
         report.approximations.push_back({"copper_proton_total_fluctuation",
-            "Native copper proton loss candidate: total-loss or native 0.05 mm cut plus sampled delta transfers; electron transport and other ion fluctuation models are not included",1.,0.});
-    if (config.enable_minibeam && config.minibeam_transport_mode == "copper_em") {
+            "Native copper proton loss candidate: native 0.05 mm cut plus sampled delta transfers; electron transport and other ion fluctuation models are not included",1.,0.});
+    if (config.enable_minibeam) {
         report.approximations.push_back({"minibeam_copper_candidate",
             "Copper primary transport uses the configured source ZA, elastic bank and nuclear event package; charged nuclear products use the available species stopping tables with source-charge-scaled fallback in Copper. Copper secondary MCS retains the Highland model. Neutral products are an explicit beamline energy sink. This remains a research comparison, not a validated neutral-dose model",1.,0.});
     }
 
-    if (result.fe_sampling_counts[7])
-        report.failures.push_back({"invalid_fe_moments","Nonfinite or non-positive-semidefinite FE covariance",static_cast<double>(result.fe_sampling_counts[7]),0.});
-    if (config.fermi_eyges_sampling=="moments")
-        report.approximations.push_back({"fe_moment_merge_candidate","Research single-frame Gaussian moment integration; finite-step rotations and CT interfaces require independent dose validation",1.,0.});
     if(config.fermi_eyges_gaussian_only)
         report.approximations.push_back({"gaussian_fermi_eyges_candidate",
             "Gaussian FE matches local angular/displacement second moments of the existing FE core+tail model; non-Gaussian tails and heterogeneous patient dose require independent validation",1.,0.});
@@ -152,9 +130,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             "Research FE mean-loss cap relaxed; geometry faces, nuclear competition and sampled loss remain active; patient gamma requires validation",
             config.broadbeam_maximum_mean_loss_fraction,0.01});
     if(config.transport_profile=="broadbeam_fast") {
-        if(config.broadbeam_independent_electrons && config.broadbeam_electron_external_air_local)
-            report.approximations.push_back({"broadbeam_external_air_local_electrons",
-                "Low-density electron births outside the pinned anatomical BODY mask and optional surface margin remain local. Internal low-density cavities retain tracking. This is a research spatial approximation, not an electron/photon range bound",config.broadbeam_electron_external_air_margin_mm,0.});
         if(config.broadbeam_independent_electrons && config.broadbeam_electron_low_density_survival!=1)
             report.approximations.push_back({"broadbeam_low_density_electron_roulette",
                 "Unbiased deterministic per-task Russian roulette of electrons born at density<=threshold; survivors carry W/p and a signed weight ledger closes energy accounting. Not a physics approximation; finite-statistics patient gamma requires validation",
@@ -163,13 +138,9 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             report.approximations.push_back({"broadbeam_tissue_electron_roulette",
                 "Unbiased per-task roulette of selected electron births at density>threshold; survivors and photon descendants carry W/p with a signed energy ledger. Changes variance; validate regional noise and patient gamma",
                 config.broadbeam_electron_tissue_survival,1.0});
-        if(config.broadbeam_independent_electrons && config.broadbeam_electron_expected_scoring)
-            report.approximations.push_back({"broadbeam_low_density_expected_scoring",
-                "Unbiased expected-value (track-length) energy-packet scoring while electrons are in density<=threshold voxels; transport laws and step limits unchanged",
-                config.broadbeam_electron_expected_min_energy_MeV,0.0});
         if(config.broadbeam_independent_electrons)
             report.approximations.push_back({"broadbeam_selected_independent_electrons",
-                "Primary ionization in low-density voxels and the configured box/euclidean-box-distance halo uses shared FP32 electron/photon transport with projectile-specific births; continuation is unrestricted. Elsewhere local; halo is a research approximation, not a range proof; secondary-ion electrons remain local",config.broadbeam_electron_halo_mm,0.});
+                "Primary ionization in low-density voxels and the configured box halo uses shared FP32 electron/photon transport with projectile-specific births; continuation is unrestricted. Elsewhere local; halo is a research approximation, not a range proof; secondary-ion electrons remain local",config.broadbeam_electron_halo_mm,0.});
         else if(config.broadbeam_electron_tracking)
             report.approximations.push_back({"broadbeam_empty_water_electron_selection",
                 "Low-density-plus-halo tracking is enabled, but uniform water exceeds the density threshold; no selected births, no electron bank loading, ionization remains local",config.broadbeam_electron_density_threshold,0.});
@@ -183,19 +154,19 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         auto& scope_issues=config.run_mode==RunMode::research?report.approximations:report.failures;
             scope_issues.push_back({"unvalidated_electron_fp32_transport","Independent electron birth/joint/charged/photon transport and CT geometry use FP32 with integer CDF sampling; precision-sensitive thresholds and local CT dose require separate validation",1.,0.});
         if(!config.material_electron_charged_index_file.empty())
-            scope_issues.push_back({"unvalidated_independent_charged_response","Independent single-scattering/Urban/collision transport with native terminal rules, mass-response density interpolation and joint handoff; no legacy bank fallback. Full CT local-dose validation pending",1.,0.});
+            scope_issues.push_back({"unvalidated_independent_charged_response","Composition26 charged transport with continuous density scalars, actual-cut mass-scaled hard rates, calibrated Penelope/Moller and SB/2BS outcomes, and spatial joint handoff; no density-node fallback. Dose validation is configuration-specific",1.,0.});
         if(!config.material_photon_response_index_file.empty())
-            scope_issues.push_back({"unvalidated_independent_photon_response","Independent optical-depth flight and native conditional collision bank; finite energy bins and density-node mixing require independent CT dose validation",1.,0.});
+            scope_issues.push_back({"unvalidated_independent_photon_response","Actual-geometry optical-depth flight with density-scaled attenuation and one calibrated FP32 photon conditional law per composition; density/cut terminal approximations remain explicit",1.,0.});
         if(!config.material_electron_birth_file.empty())
             scope_issues.push_back({"unvalidated_independent_electron_birth",config.primary_atomic_number==6?
-                "C12 birth-only law from the original finite ion-response extraction, shared independent electron propagation; carbon CT dose acceptance pending":
-                "Fresh proton birth-only bank; finite birth statistics and interface continuation need independent dose validation",1.,0.});
+                "C12 actual-cut composition26 shell birth law with projectile-specific parameters; broadbeam validation does not qualify carbon minibeam accuracy":
+                "Proton actual-cut composition26 shell birth law with projectile-specific parameters; head and lung minibeam dose validation have separate scopes",1.,0.});
         if(!config.material_electron_joint_pilot_file.empty())
             scope_issues.push_back({"unvalidated_material_electron_joint_pilot","Experimental material joint operator (including optional density scaling); homogeneous screens do not certify CT dose accuracy",1.,0.});
         if(config.enable_ct_grid && (config.enable_inelastic || config.enable_secondary_transport))
             report.approximations.push_back({"ct_nuclear_primary_electron_response_only",
                 "CT material electron response relocates primary-loop ionization loss only, before nuclear interactions; charged secondary electron losses remain local. This is a partial full-physics integration, not a complete electron transport model",1.,0.});
-        if(config.enable_ct_grid && config.enable_inelastic && !config.enable_neutron_transport)
+        if(config.enable_ct_grid && config.enable_inelastic)
             report.approximations.push_back({"ct_nuclear_neutron_dose_missing",
                 "CT nuclear reactions enabled but neutron transport is unavailable; neutral energy sinks do not contribute neutron-induced patient dose",1.,0.});
         if(result.material_electron_photon_untracked_MeV>0)
@@ -207,28 +178,16 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     if (config.unified_water_nuclear_transport)
         report.approximations.push_back({"water_topas_match_pending",
             "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",1.,0.});
-    // Keep the two closure equations explicit.  The physical residual omits
-    // the intentional TOPAS compatibility sink; the accounting residual
-    // includes it. No independent analytic-model residual bucket remains.
+    // One physical ledger includes all explicit terminal sinks.
     const auto physical_raw_residual =
-        result.initial_energy_MeV + result.neutron_experimental.energy[NKineticGain] +
+        result.initial_energy_MeV + 
         result.electron_variance_reduction_weight_gain_MeV - result.total_deposited_energy_MeV -
         result.escaped_energy_MeV - result.beamline_removed_energy_MeV -
         result.untracked_nuclear_energy_MeV -
-        result.material_electron_untracked_MeV;
-    const auto accounting_raw_residual =
-        physical_raw_residual;
+        result.primary_other_terminal_kinetic_MeV - result.material_electron_untracked_MeV;
     report.absolute_physical_energy_residual_MeV = std::abs(physical_raw_residual);
     report.physical_relative_energy_residual =
         result.physical_relative_energy_balance_error();
-    report.absolute_accounting_energy_residual_MeV = std::abs(accounting_raw_residual);
-    report.accounting_relative_energy_residual =
-        result.relative_energy_balance_error();
-    // Preserve the v1 field meanings for existing scripts: they represented
-    // accounting closure.
-    report.absolute_energy_residual_MeV = report.absolute_accounting_energy_residual_MeV;
-    report.relative_energy_residual = report.accounting_relative_energy_residual;
-
     const auto add_issue = [&](const QualityIssue& issue,
                                const bool production_failure) {
         if (production_failure && config.run_mode == RunMode::production) {
@@ -249,9 +208,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         const QualityIssue issue{
             code, std::string(label) + " queue overflow",
             static_cast<double>(count), 0.0};
-        if (config.quality_reject_any_queue_overflow &&
-            (config.run_mode == RunMode::production ||
-             config.validation_scorers())) {
+        if ((config.quality_reject_any_queue_overflow) && (config.run_mode == RunMode::production)) {
             report.failures.push_back(issue);
         } else {
             report.approximations.push_back(issue);
@@ -269,9 +226,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                  "minibeam Copper cascade",
                  result.minibeam.copper_fragment_cascade_queue_overflows,
                  0.0);
-    add_overflow("neutral_queue_overflow", "neutral",
-                 result.neutral_queue_overflow,
-                 result.neutral_queue_overflow_energy_MeV);
 
     {
         double voxel_sum_MeV = 0.0;
@@ -302,9 +256,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         // inference): total ≈ in + outside, voxel_sum ≈ in_grid. Tolerance
         // 1e-3 covers float32/float64 atomic accumulation order only;
         // measured device agreement is ~1e-6 on slabs and shards. The gates
-        // stay silent when the split sinks are all zero (legacy/CPU results
-        // predate them): any current-binary run with deposits records a
-        // nonzero split, since every deposited-ledger credit splits.
+        // require split accounting for every nonzero deposited total.
         constexpr double kGridClosureTolerance = 1.0e-3;
         const double split_sum =
             report.in_grid_deposited_energy_MeV +
@@ -320,7 +272,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                 : (voxel_sum_MeV > 0.0
                        ? std::numeric_limits<double>::infinity()
                        : 0.0);
-        if (config.quality_reject_grid_closure && split_sum > 0.0) {
+        if (config.quality_reject_grid_closure && (total > 0.0 || split_sum > 0.0)) {
             if (std::abs(report.grid_split_closure_ratio - 1.0) >
                 kGridClosureTolerance) {
                 report.failures.push_back(
@@ -353,39 +305,22 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             result.generated_direct_secondary_energy_MeV,
             result.queued_secondary_energy_MeV,
             result.secondary_queue_overflow_energy_MeV,
-            result.untransported_neutral_energy_MeV,
-            result.untransported_unsupported_charged_energy_MeV,
             result.nuclear_energy_not_in_direct_secondaries_MeV,
             result.elastic_local_deposited_energy_MeV,
             result.elastic_queued_charged_energy_MeV,
-            result.elastic_queued_neutral_energy_MeV,
             result.elastic_queue_overflow_energy_MeV,
             result.secondary_deposited_energy_MeV,
             result.secondary_escaped_energy_MeV,
             result.queued_cascade_energy_MeV,
             result.cascade_nuclear_energy_MeV,
-            result.queued_neutral_energy_MeV,
-            result.neutral_queue_overflow_energy_MeV,
-            result.neutral_deposited_energy_MeV,
-            result.neutral_escaped_energy_MeV,
-            result.residual_neutral_energy_MeV,
-            result.charged_from_neutral_energy_MeV,
-            result.neutral_unsupported_product_energy_MeV,
-            result.neutral_package_closure_residual_MeV,
             result.cascade_selection_energy_distance_sum_MeVu,
             result.cascade_selection_energy_distance_max_MeVu,
             result.elapsed_seconds,
             result.primary_kernel_seconds,
             result.secondary_kernel_seconds,
-            result.neutral_kernel_seconds,
             result.electron_kernel_seconds,
-            result.charged_after_neutral_kernel_seconds,
             report.absolute_physical_energy_residual_MeV,
             report.physical_relative_energy_residual,
-            report.absolute_accounting_energy_residual_MeV,
-            report.accounting_relative_energy_residual,
-            report.absolute_energy_residual_MeV,
-            report.relative_energy_residual,
         };
         if (!std::all_of(std::begin(scalars), std::end(scalars),
                          [](const double value) { return std::isfinite(value); })) {
@@ -405,7 +340,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                  {"charged-origin dose", &result.charged_origin_voxel_deposited_energy_MeV},
                  {"minibeam component dose",
                   &result.minibeam_component_voxel_deposited_energy_MeV},
-                 {"neutral-origin dose", &result.neutral_origin_voxel_deposited_energy_MeV},
                  {"primary dose", &result.primary_deposited_energy_MeV},
                  {"secondary carbon dose", &result.secondary_carbon_deposited_energy_MeV},
                  {"secondary boron dose", &result.secondary_boron_deposited_energy_MeV},
@@ -422,21 +356,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                  {"secondary helium fluence", &result.secondary_helium_fluence_mm},
                  {"secondary proton fluence", &result.secondary_proton_fluence_mm},
                  {"secondary other fluence", &result.secondary_other_charged_fluence_mm},
-                 {"primary LET numerator", &result.primary_letd_numerator},
-                 {"primary LET denominator", &result.primary_letd_denominator},
-                 {"hadron LET numerator", &result.all_hadron_letd_numerator},
-                 {"hadron LET denominator", &result.all_hadron_letd_denominator},
-                 {"charged-origin LET numerator", &result.charged_origin_letd_numerator},
-                 {"charged-origin LET denominator", &result.charged_origin_letd_denominator},
-                 {"light-isotope LET numerator", &result.light_isotope_letd_numerator},
-                 {"light-isotope LET denominator", &result.light_isotope_letd_denominator},
                  {"birth kinetic-energy sum", &result.birth_ke_sum_MeV_by_generation},
-                 {"primary voxel LET numerator", &result.primary_voxel_letd_numerator},
-                 {"primary voxel LET denominator", &result.primary_voxel_letd_denominator},
-                 {"hadron voxel LET numerator", &result.all_hadron_voxel_letd_numerator},
-                 {"hadron voxel LET denominator", &result.all_hadron_voxel_letd_denominator},
-                 {"neutron-origin dose", &result.neutron_origin_deposited_energy_MeV},
-                 {"gamma-origin dose", &result.gamma_origin_deposited_energy_MeV},
              }) {
             if (!finite_vector(*values)) {
                 finite_issue(label);
@@ -444,20 +364,16 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         }
     }
 
-
-
-
-
-    if (std::isfinite(report.absolute_accounting_energy_residual_MeV) &&
-        std::isfinite(report.accounting_relative_energy_residual)) {
+    if (std::isfinite(report.absolute_physical_energy_residual_MeV) &&
+        std::isfinite(report.physical_relative_energy_residual)) {
         const auto allowed_residual = std::max(
             config.quality_maximum_absolute_energy_residual_MeV,
             config.quality_maximum_relative_energy_residual *
                 std::abs(result.initial_energy_MeV));
-        if (report.absolute_accounting_energy_residual_MeV > allowed_residual) {
+        if (report.absolute_physical_energy_residual_MeV > allowed_residual) {
             add_issue({"energy_residual_exceeded",
-                       "accounting energy ledger residual exceeds the configured tolerance",
-                       report.absolute_accounting_energy_residual_MeV, allowed_residual}, true);
+                       "physical energy ledger residual exceeds the configured tolerance",
+                       report.absolute_physical_energy_residual_MeV, allowed_residual}, true);
         }
     }
 
@@ -475,7 +391,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     // named diagnostics fails validation. Research mode still completes and
     // writes diagnostics, but accepted is false. Production likewise reports
     // accepted=false so the dose is refused as a formal result.
-    if ((config.is_schneider_ct_mode() || config.unified_water_nuclear_transport) && !config.is_primary_attenuation_only_mode()) {
+    if ((config.is_schneider_ct_mode() || config.unified_water_nuclear_transport)) {
         const auto& sch = result.schneider_diagnostics;
         const auto schneider_fail = [&](const char* code, const std::string& message,
                                         const double value) {
@@ -512,7 +428,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         // (continuous slowing only, never a nuclear hazard), so they need
         // no rate/CINEL data.
         //
-        // v3 (bundle) amendments — v1 gates below are byte-identical:
+        // Current bundle-scope coverage policy:
         // (a) missing_projectile fails only on bundle-SCOPE misses: actual
         //     lookup misses, or logged unsupported tracks whose (Z,A) IS in
         //     the bundle registry. Out-of-scope isotopes (no event data on
@@ -523,102 +439,65 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         //     Sampler-empty draws (slowing left every channel domain between
         //     hazard and collision; no query issued) resolve via
         //     stopped-before-replay and never fail.
-        bool is_v3_bundle = false;
         std::set<std::pair<int, int>> bundle_registry;
-        {
-            std::filesystem::path sec_rate = config.ct_schneider_secondary_rate_file;
-            if (sec_rate.empty()) {
-                sec_rate = "data/schneider/secondary_inelastic_rates_v1.bin";
+        if (config.ct_schneider_physics_bundle_file.empty()) {
+            schneider_fail("schneider_bundle_missing",
+                           "Current nuclear rates require ct_schneider_physics_bundle_file", 1.0);
+        } else {
+            std::ifstream bundle_in(config.ct_schneider_physics_bundle_file);
+            if (!bundle_in) {
+                throw std::runtime_error("Cannot open nuclear physics bundle for quality audit");
             }
-            if (std::filesystem::exists(sec_rate)) {
-                std::ifstream rate_in(sec_rate, std::ios::binary);
-                char magic[8]{};
-                std::uint32_t version{0};
-                rate_in.read(magic, 8);
-                rate_in.read(reinterpret_cast<char*>(&version), sizeof(version));
-                if (rate_in && std::memcmp(magic, "SCHN2RAT", 8) == 0 && version == 3) {
-                    is_v3_bundle = true;
-                    if (config.ct_schneider_physics_bundle_file.empty()) {
-                        schneider_fail("schneider_bundle_missing",
-                                       "v3 rate file requires ct_schneider_physics_bundle_file",
-                                       1.0);
-                    } else {
-                        std::ifstream bundle_in(config.ct_schneider_physics_bundle_file);
-                        std::string bundle_content((std::istreambuf_iterator<char>(bundle_in)),
-                                                   std::istreambuf_iterator<char>());
-                        minjson::Parser bundle_parser(bundle_content);
-                        const minjson::Value bundle_doc = bundle_parser.parse();
-                        for (const auto& entry :
-                             bundle_doc.at("projectile_registry").arr) {
-                            const int z = static_cast<int>(
-                                minjson::require_uint(entry.at("z"), "registry.z"));
-                            const int a = static_cast<int>(
-                                minjson::require_uint(entry.at("a"), "registry.a"));
-                            bundle_registry.emplace(z, a);
-                        }
-                    }
-                }
+            const std::string bundle_content((std::istreambuf_iterator<char>(bundle_in)),
+                                             std::istreambuf_iterator<char>());
+            const auto bundle_doc = minjson::Parser(bundle_content).parse();
+            for (const auto& entry : bundle_doc.at("projectile_registry").arr) {
+                const auto z = static_cast<int>(minjson::require_uint(entry.at("z"), "registry.z"));
+                const auto a = static_cast<int>(minjson::require_uint(entry.at("a"), "registry.a"));
+                bundle_registry.emplace(z, a);
             }
         }
-        const auto unsupported_nonbe6_tracks =
-            sch.unsupported_projectile_tracks - std::min(sch.unsupported_projectile_tracks,
-                                                         sch.unsupported_be6_tracks);
-        if (!is_v3_bundle) {
-            if (sch.secondary_missing_projectile != 0 || unsupported_nonbe6_tracks != 0) {
-                schneider_fail("schneider_secondary_missing_projectile",
-                               "Schneider secondary lookup hit an unsupported non-Be6 projectile",
-                               static_cast<double>(sch.secondary_missing_projectile +
-                                                   unsupported_nonbe6_tracks));
-            }
-            if (sch.secondary_missing_target != 0 || sch.unsupported_targets != 0) {
-                schneider_fail("schneider_secondary_missing_target",
-                               "Schneider secondary lookup missed an exact target channel (no alias allowed)",
-                               static_cast<double>(sch.secondary_missing_target +
-                                                   sch.unsupported_targets));
-            }
+        if (sch.secondary_missing_projectile != 0) {
+            schneider_fail("schneider_secondary_missing_projectile",
+                           "Schneider secondary lookup hit an unsupported non-Be6 projectile",
+                           static_cast<double>(sch.secondary_missing_projectile));
+        }
+        if (sch.unsupported_log_dropped != 0) {
+            schneider_fail("schneider_unsupported_log_truncated",
+                           "unsupported-track log truncated; bundle scope unprovable",
+                           static_cast<double>(sch.unsupported_log_dropped));
         } else {
-            if (sch.secondary_missing_projectile != 0) {
+            std::uint64_t bundle_scope_unsupported = 0;
+            for (const auto& track : result.schneider_unsupported_tracks) {
+                if (track.projectile_z == 4 && track.projectile_a == 6) {
+                    continue;  // Be6 TopasCompatKill exempt
+                }
+                if (bundle_registry.count({track.projectile_z, track.projectile_a}) != 0) {
+                    ++bundle_scope_unsupported;
+                }
+            }
+            if (bundle_scope_unsupported != 0) {
                 schneider_fail("schneider_secondary_missing_projectile",
-                               "Schneider secondary lookup hit an unsupported non-Be6 projectile",
-                               static_cast<double>(sch.secondary_missing_projectile));
+                               "Schneider secondary bundle-scope projectile unsupported",
+                               static_cast<double>(bundle_scope_unsupported));
             }
-            if (sch.unsupported_log_dropped != 0) {
-                schneider_fail("schneider_unsupported_log_truncated",
-                               "unsupported-track log truncated; bundle scope unprovable",
-                               static_cast<double>(sch.unsupported_log_dropped));
-            } else {
-                std::uint64_t bundle_scope_unsupported = 0;
-                for (const auto& track : result.schneider_unsupported_tracks) {
-                    if (track.projectile_z == 4 && track.projectile_a == 6) {
-                        continue;  // Be6 TopasCompatKill exempt
-                    }
-                    if (bundle_registry.count({track.projectile_z, track.projectile_a}) != 0) {
-                        ++bundle_scope_unsupported;
-                    }
-                }
-                if (bundle_scope_unsupported != 0) {
-                    schneider_fail("schneider_secondary_missing_projectile",
-                                   "Schneider secondary bundle-scope projectile unsupported",
-                                   static_cast<double>(bundle_scope_unsupported));
-                }
-            }
-            // UnsupportedTargets is a hard failure in every mode (v1/v3):
-            // the v3 post-EM null collision has its own counter and never
-            // touches this slot.
-            if (sch.secondary_missing_target != 0 || sch.unsupported_targets != 0) {
-                schneider_fail("schneider_secondary_missing_target",
-                               "Schneider secondary lookup missed an exact target channel (no alias allowed)",
-                               static_cast<double>(sch.secondary_missing_target +
-                                                   sch.unsupported_targets));
-            }
-            // Declared research approximations (reported, never failed):
-            // post-EM null collisions resolve via track continuation.
-            if (sch.secondary_post_em_null_collisions != 0) {
-                report.approximations.push_back(
-                    {"schneider_post_em_null_collisions",
-                     "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
-                     static_cast<double>(sch.secondary_post_em_null_collisions), 0.0});
-            }
+        }
+        // UnsupportedTargets is always a hard failure:
+        // the v3 post-EM null collision has its own counter and never
+        // touches this slot.
+        if (sch.secondary_missing_target != 0 || sch.unsupported_targets != 0) {
+            schneider_fail("schneider_secondary_missing_target",
+                           "Schneider secondary lookup missed an exact target channel (no alias allowed)",
+                           static_cast<double>(sch.secondary_missing_target +
+                                               sch.unsupported_targets));
+        }
+        // Declared research approximations (reported, never failed):
+        // post-EM null collisions resolve via track continuation.
+        if (sch.secondary_post_em_null_collisions != 0) {
+            report.approximations.push_back(
+                {"schneider_post_em_null_collisions",
+                 "sampled candidates resolved as post-EM null collisions (track continues, no lookup)",
+                 static_cast<double>(sch.secondary_post_em_null_collisions), 0.0});
         }
         if (sch.secondary_below_domain != 0 || sch.secondary_above_domain != 0) {
             schneider_fail("schneider_secondary_out_of_domain",
@@ -722,7 +601,7 @@ void write_run_quality_report_json(const std::filesystem::path& path,
         throw std::runtime_error("Cannot create run quality report: " + path.string());
     }
     output << std::setprecision(12)
-           << "{\n  \"schema_version\": 3,\n  \"status\": ";
+           << "{\n  \"schema_version\": 4,\n  \"status\": ";
     append_json_string(output, report.status());
     output << ",\n  \"run_mode\": ";
     append_json_string(output, run_mode_name(report.mode));
@@ -731,14 +610,6 @@ void write_run_quality_report_json(const std::filesystem::path& path,
     write_json_number(output, report.absolute_physical_energy_residual_MeV);
     output << ",\n  \"physical_relative_energy_residual\": ";
     write_json_number(output, report.physical_relative_energy_residual);
-    output << ",\n  \"absolute_accounting_energy_residual_MeV\": ";
-    write_json_number(output, report.absolute_accounting_energy_residual_MeV);
-    output << ",\n  \"accounting_relative_energy_residual\": ";
-    write_json_number(output, report.accounting_relative_energy_residual);
-    output << ",\n  \"absolute_energy_residual_MeV\": ";
-    write_json_number(output, report.absolute_energy_residual_MeV);
-    output << ",\n  \"relative_energy_residual\": ";
-    write_json_number(output, report.relative_energy_residual);
     output
            << ",\n  \"queue_overflow_count\": " << report.queue_overflow_count
            << ",\n  \"queue_overflow_energy_MeV\": ";

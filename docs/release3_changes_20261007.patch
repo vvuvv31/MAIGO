@@ -1,0 +1,263 @@
+--- before/src/config.cpp
++++ src/config.cpp
+@@ -433,7 +433,7 @@
+             throw std::invalid_argument("enable_neutron_transport requires neutron_package_file");
+         if (run_mode != RunMode::research)
+             throw std::invalid_argument("Experimental neutron transport requires run_mode: research");
+-        const auto package=NeutronPackage::load(neutron_package_file,false);
++        const auto package=NeutronPackage::load(neutron_package_file);
+         if(package.macroscopic_rates.empty())
+             throw std::invalid_argument("Experimental neutron transport requires a v2 independent-rate package");
+         if(!std::isfinite(neutron_world_half_width_mm) || neutron_world_half_width_mm<=urban_water_half_width_mm ||
+@@ -1173,10 +1173,10 @@
+                 throw std::runtime_error("Duplicate primary package target channel");
+             seen_targets[ti] = true;
+             const auto& dom = pri_table.channel_domain(ti);
+-            if (c.contains("has_support") &&
++            if (!c.contains("has_support") ||
+                 c.at("has_support").type != minjson::Value::Type::Boolean)
+-                throw std::runtime_error("Primary channel has_support must be boolean");
+-            const bool has_support = !c.contains("has_support") || c.at("has_support").boolean;
++                throw std::runtime_error("Primary channel requires explicit boolean has_support");
++            const bool has_support = c.at("has_support").boolean;
+             if (static_cast<bool>(dom.has_support) != has_support ||
+                 dom.energy_min_mevu != lo || dom.energy_max_mevu != hi) {
+                 throw std::runtime_error(
+@@ -1863,33 +1863,8 @@
+     }
+     config.tps_beam_angle_deg = parse_number(values,
+         "tps_beam_angle_deg", config.tps_beam_angle_deg);
+-    {
+-        const auto vector = values.find("tps_isocenter_mm");
+-        const auto has_components = values.contains("tps_isocenter_x_mm") ||
+-                                    values.contains("tps_isocenter_y_mm") ||
+-                                    values.contains("tps_isocenter_z_mm");
+-        if (vector != values.end() && has_components) {
+-            throw std::runtime_error(
+-                "Use either tps_isocenter_mm or its x/y/z component keys, not both");
+-        }
+-        if (vector != values.end()) {
+-            auto text = trim(vector->second);
+-            if (text.size() >= 2 && text.front() == '[' && text.back() == ']') {
+-                text = text.substr(1, text.size() - 2);
+-            }
+-            const auto coordinates = parse_double_list(text, "tps_isocenter_mm");
+-            if (coordinates.size() != 3) {
+-                throw std::runtime_error(
+-                    "tps_isocenter_mm must contain exactly [x, y, z]");
+-            }
+-            config.tps_isocenter_x_mm = coordinates[0];
+-            config.tps_isocenter_y_mm = coordinates[1];
+-            config.tps_isocenter_z_mm = coordinates[2];
+-        } else {
+-                            config.tps_isocenter_z_mm = parse_number(
+-                values, "tps_isocenter_z_mm", config.tps_isocenter_z_mm);
+-        }
+-    }
++    config.tps_isocenter_z_mm = parse_number(
++        values, "tps_isocenter_z_mm", config.tps_isocenter_z_mm);
+     config.tps_sad_mm = parse_number(values, "tps_sad_mm", config.tps_sad_mm);
+ 
+     if (const auto seed = values.find("random_seed"); seed != values.end()) {
+--- before/src/neutron_package.cpp
++++ src/neutron_package.cpp
+@@ -15,31 +15,29 @@
+ void require(bool okay,const char* message){if(!okay)throw std::runtime_error(message);}
+ bool direction(float x,float y,float z){return std::isfinite(x+y+z)&&std::abs(x*x+y*y+z*z-1.f)<2e-5f;}
+ }
+-NeutronPackage NeutronPackage::load(const std::filesystem::path& manifest,bool runtime) {
++NeutronPackage NeutronPackage::load(const std::filesystem::path& manifest) {
+  require(std::endian::native==std::endian::little,"Neutron package requires little-endian host");
+  require(std::filesystem::file_size(manifest)<16*1024*1024,"Neutron manifest too large");
+  std::ifstream in(manifest);std::string text((std::istreambuf_iterator<char>(in)),{});
+  auto root=minjson::Parser(text).parse();
+- const bool separate_rates=root.at("schema").str=="maigo.neutron.native-collisions.v2";
+- require(separate_rates||root.at("schema").str=="maigo.neutron.native-collisions.v1","Unsupported neutron manifest schema");
++ require(root.at("schema").str=="maigo.neutron.native-collisions.v2","Neutron package requires native-collisions.v2");
+  const auto& models=root.at("models");
+  require(models.type==minjson::Value::Type::Array&&!models.arr.empty(),"Missing neutron model registry");
+  for(const auto& model:models.arr)require(model.type==minjson::Value::Type::String&&!model.str.empty(),"Invalid neutron model name");
+  const auto& validated=root.at("runtime_validated");
+  require(validated.type==minjson::Value::Type::Boolean,"Invalid neutron validation field");
+- require(!runtime || validated.boolean,"Neutron package is native extraction only; runtime validation incomplete");
++ require(!validated.boolean,"Current neutron v2 backend remains experimental");
+  const std::filesystem::path relative=root.at("binary").str;
+  require(!relative.empty()&&!relative.is_absolute()&&relative.filename()==relative,"Invalid neutron binary filename");
+  auto path=manifest.parent_path()/relative;
+  std::ifstream stream(path,std::ios::binary);char magic[8];std::array<std::uint32_t,7> h{};
+  stream.read(magic,8);stream.read(reinterpret_cast<char*>(h.data()),28);
+  const auto [version,flags,nm,nr,ne,np,reserved]=h;
+- require(stream&&std::memcmp(magic,"NEUTV001",8)==0&&version==1&&reserved==0&&flags<=1,"Invalid neutron header");
+- require((flags==1)==validated.boolean,"Neutron manifest/header validation disagreement");
++ require(stream&&std::memcmp(magic,"NEUTV001",8)==0&&version==1&&reserved==0&&flags==0,"Invalid neutron header");
+  require(nm==3&&nr>0&&ne>0&&np>0,"Empty neutron package");
+  const std::uint64_t bytes=36+std::uint64_t(nm)*16+std::uint64_t(nr)*28+std::uint64_t(ne)*52+std::uint64_t(np)*36;
+  require(bytes==std::filesystem::file_size(path)&&bytes<4ULL*1024*1024*1024,"Invalid neutron package size");
+- NeutronPackage result;result.runtime_validated=validated.boolean;result.materials.resize(nm);result.rates.resize(nr);result.events.resize(ne);result.products.resize(np);
++ NeutronPackage result;result.materials.resize(nm);result.rates.resize(nr);result.events.resize(ne);result.products.resize(np);
+  auto read=[&](auto& a){stream.read(reinterpret_cast<char*>(a.data()),static_cast<std::streamsize>(a.size()*sizeof(a[0])));};
+  read(result.materials);read(result.rates);read(result.events);read(result.products);require(bool(stream),"Truncated neutron package");
+  std::set<int> sections;
+@@ -55,7 +53,7 @@
+   double energy=result.rates[e.rate].energy;require(std::abs(sum-energy-e.kinetic_gain)<2e-5*std::max(1.,energy),"Neutron serialized kinetic bookkeeping mismatch");
+  }
+  require(next_product==np,"Unreferenced neutron products");
+- if(separate_rates){
++ {
+   const auto& meta=root.at("macroscopic");
+   const std::filesystem::path filename=meta.at("binary").str;
+   require(!filename.empty()&&!filename.is_absolute()&&filename.filename()==filename,"Invalid neutron macroscopic filename");
+@@ -91,8 +89,6 @@
+     for(const auto& r:result.rates)if(r.material==m&&r.subtype==subtype)require(r.energy>=grid.front().energy&&r.energy<=grid.back().energy,"Neutron rate grid does not cover event bank");
+    }
+   }
+-  // v2 remains an audit format until event interpolation and descendants exist.
+-  require(!runtime&&!result.runtime_validated,"Independent neutron grids are not runtime validated");
+  }
+  return result;
+ }
+--- before/src/neutron_transport_sycl.cpp
++++ src/neutron_transport_sycl.cpp
+@@ -281,7 +281,7 @@
+  const auto package_file=config.neutron_package_file;
+  const auto key=companion_input_key(package_file,{"binary"});
+  if(!inputs || !inputs->contains<NeutronPackage>(key))
+-  neutron_package_prefetch().start(key,[package_file]{return NeutronPackage::load(package_file,false);});
++  neutron_package_prefetch().start(key,[package_file]{return NeutronPackage::load(package_file);});
+  const auto stop_key=neutron_stop_key(config);
+  if(!inputs || !inputs->contains<NeutronStopTables>(stop_key))
+   neutron_stop_prefetch().start(stop_key,[config]{return load_neutron_stop_tables(config);});
+@@ -294,7 +294,7 @@
+  const auto key=companion_input_key(config.neutron_package_file,{"binary"});
+  const bool hit=inputs.contains<NeutronPackage>(key);
+  const auto& package=inputs.get<NeutronPackage>(key,[&] {
+-  return neutron_package_prefetch().take(key,[&]{return NeutronPackage::load(config.neutron_package_file,false);});
++  return neutron_package_prefetch().take(key,[&]{return NeutronPackage::load(config.neutron_package_file);});
+  });
+  std::cout<<"[neutron-package-cache] "<<(hit?"hit":"miss")<<'\n';
+  const auto nb=result.neutron_birth_records.size();if(!nb)return;
+--- before/include/carbon/neutron_package.hpp
++++ include/carbon/neutron_package.hpp
+@@ -31,11 +31,10 @@
+ static_assert(sizeof(NeutronEventRecord)==52 && sizeof(NeutronProductRecord)==36);
+ class NeutronPackage {
+ public:
+- // Audit mode can inspect unvalidated native extraction packages. Runtime
+- // loading rejects them. The explicitly experimental research backend uses
+- // draft loading; this does not certify physical validity.
+- static NeutronPackage load(const std::filesystem::path& manifest,bool require_runtime_validation=true);
+- bool runtime_validated{};
++ // Current v2 package: required macroscopic grid and native event bank.
++ // The supplied backend/package remain explicitly experimental; loading does
++ // not certify physical validity. No audit/runtime mode or v1 reader exists.
++ static NeutronPackage load(const std::filesystem::path& manifest);
+  std::vector<NeutronMaterialRecord> materials;
+  std::vector<NeutronRateRecord> rates;
+  std::vector<NeutronEventRecord> events;
+--- before/scripts/check_interfaces.py
++++ scripts/check_interfaces.py
+@@ -4,7 +4,7 @@
+ from pathlib import Path
+ import yaml
+ ROOT=Path(__file__).resolve().parents[1]
+-KEYS=['primary_particle','initial_energy_MeV','primary_rest_mass_MeV','beam_energy_spread_percent','primary_urban_reference_particle','primary_urban_ionisation_process','minibeam_copper_loss_range_file','scorer_mode','enable_fragment_species_scoring','cinel02_max_secondary_inelastic_generations','ct_dicom_origin_mode','scorerLET','enable_let_scoring','output_file','dose_output_file','topas_spots_file','topas_spots_files','spot_weights_file','spots_geometry_mode','ion_physics_file','ct_validation_mode','tps_source','ct_schneider_cross_section_file','minibeam_collimator_width_mm','minibeam_collimator_length_mm','primary_inelastic_package_v2_file','material_electron_rate26_file','broadbeam_electron_region_diagnostics','enable_layered_phantom']
++KEYS=['tps_isocenter_mm','tps_isocenter_x_mm','tps_isocenter_y_mm','primary_particle','initial_energy_MeV','primary_rest_mass_MeV','beam_energy_spread_percent','primary_urban_reference_particle','primary_urban_ionisation_process','minibeam_copper_loss_range_file','scorer_mode','enable_fragment_species_scoring','cinel02_max_secondary_inelastic_generations','ct_dicom_origin_mode','scorerLET','enable_let_scoring','output_file','dose_output_file','topas_spots_file','topas_spots_files','spot_weights_file','spots_geometry_mode','ion_physics_file','ct_validation_mode','tps_source','ct_schneider_cross_section_file','minibeam_collimator_width_mm','minibeam_collimator_length_mm','primary_inelastic_package_v2_file','material_electron_rate26_file','broadbeam_electron_region_diagnostics','enable_layered_phantom']
+ FLAGS=['--plan-manifest','--sequential-spots','--scorer-let','--dose-output','--straggling-scale']
+ def main():
+     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--binary',type=Path,default=ROOT/'build/carbon_mc');p.add_argument('--output',type=Path,required=True);a=p.parse_args()
+--- before/scripts/check_package_contracts.py
++++ scripts/check_package_contracts.py
+@@ -0,0 +1,93 @@
++#!/usr/bin/env python3
++"""Check explicit primary channel support and the current neutron v2-only contract."""
++import argparse
++import copy
++import json
++import os
++import subprocess
++import tempfile
++from pathlib import Path
++import yaml
++ROOT = Path(__file__).resolve().parents[1]
++CHECKER = r'''
++#include "carbon/neutron_package.hpp"
++#include <iostream>
++#include <stdexcept>
++#include <string>
++int main(int argc,char** argv) {
++    if(argc!=3)return 2;
++    const std::string expected=argv[2];
++    try {
++        const auto package=carbon::NeutronPackage::load(argv[1]);
++        if(expected!="valid")throw std::runtime_error("Invalid package was accepted");
++        if(package.materials.size()!=3 || package.macroscopic_rates.empty() ||
++           package.events.empty() || package.products.empty())
++            throw std::runtime_error("Current neutron payload incomplete");
++        std::cout<<package.macroscopic_rates.size()<<" macroscopic records; "
++                 <<package.events.size()<<" native events\n";
++    } catch(const std::exception& error) {
++        if(expected=="valid" || std::string(error.what()).find(expected)==std::string::npos) {
++            std::cerr<<error.what()<<"\n";return 1;
++        }
++    }
++}
++'''
++def main():
++    parser=argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('--binary',type=Path,default=ROOT/'build/carbon_mc')
++    parser.add_argument('--output',type=Path,required=True)
++    args=parser.parse_args()
++    reports=[]
++    channels=ROOT/'data/schneider/cinel03_c12_targets_v2_1.channels.json'
++    carbon=json.loads(channels.read_text())
++    assert len(carbon['channels'])==13 and all(c['has_support'] is True for c in carbon['channels'])
++    proton=json.loads((ROOT/'data/proton_therapy_20260926/proton_cinel03.channels.json').read_text())
++    assert all(type(c['has_support']) is bool for c in proton['channels'])
++    assert any(c['has_support'] is False for c in proton['channels'])
++    reports.append(dict(check='explicit_carbon_and_proton_support',passed=True))
++    env={k:v for k,v in os.environ.items() if not k.startswith('CARBON_')}
++    env['LD_LIBRARY_PATH']='/home/wuwei/sycl_workspace/llvm/build/install/lib'
++    with tempfile.TemporaryDirectory(prefix='maigo_package_contracts_') as temporary:
++        temporary=Path(temporary)
++        cpp=temporary/'check.cpp';cpp.write_text(CHECKER);exe=temporary/'check'
++        subprocess.run(['g++','-std=c++20','-O2','-I',str(ROOT/'include'),str(cpp),
++                        str(ROOT/'src/neutron_package.cpp'),'-o',str(exe)],check=True)
++        native=ROOT/'data/neutron/native/package.json'
++        neutron=json.loads(native.read_text())
++        for filename in [neutron['binary'],neutron['macroscopic']['binary']]:
++            (temporary/filename).symlink_to(native.parent/filename)
++        for name,expected in [('current_v2','valid'),('retired_v1','native-collisions.v2'),
++                ('missing_macroscopic','macroscopic'),('forged_validation','remains experimental')]:
++            payload=copy.deepcopy(neutron)
++            if name=='retired_v1':payload['schema']='maigo.neutron.native-collisions.v1'
++            if name=='missing_macroscopic':del payload['macroscopic']
++            if name=='forged_validation':payload['runtime_validated']=True
++            manifest=temporary/(name+'.json');manifest.write_text(json.dumps(payload))
++            subprocess.run([str(exe),str(manifest),expected],check=True)
++            reports.append(dict(check=name,passed=True))
++        cfg=yaml.safe_load((ROOT/'config/carbon_water_broadbeam.yaml').read_text())
++        for key,value in cfg.items():
++            if isinstance(value,str) and value.startswith(('data/','inputs/')):cfg[key]=str(ROOT/value)
++        package=Path(cfg['ct_schneider_primary_cinel03_file'])
++        local_package=temporary/package.name;local_package.symlink_to(package)
++        cfg['ct_schneider_primary_cinel03_file']=str(local_package)
++        bundle=json.loads(Path(cfg['ct_schneider_physics_bundle_file']).read_text())
++        bundle['primary_package']['channels_file']=channels.name
++        local_bundle=temporary/'bundle.json';local_bundle.write_text(json.dumps(bundle))
++        cfg['ct_schneider_physics_bundle_file']=str(local_bundle)
++        file=temporary/'case.yaml';file.write_text(yaml.safe_dump(cfg,sort_keys=False))
++        for name,expected in [('missing_support','requires explicit boolean has_support'),
++                ('nonboolean_support','requires explicit boolean has_support'),
++                ('false_support','primary rate/package domain mismatch')]:
++            payload=copy.deepcopy(carbon)
++            if name=='missing_support':del payload['channels'][0]['has_support']
++            if name=='nonboolean_support':payload['channels'][0]['has_support']='true'
++            if name=='false_support':payload['channels'][0]['has_support']=False
++            (temporary/channels.name).write_text(json.dumps(payload))
++            result=subprocess.run([str(args.binary.resolve()),'--config',str(file),'--histories','1'],cwd=ROOT,
++                env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
++            assert result.returncode!=0 and expected in result.stdout and '[unified-em-audit]' not in result.stdout,(name,result.stdout)
++            reports.append(dict(check=name,passed=True))
++    args.output.write_text(json.dumps(dict(passed=True,checks=reports),indent=2)+'\n')
++    print('Passed',len(reports),'package contract checks')
++if __name__=='__main__':main()

@@ -55,7 +55,7 @@ def main():
             values[s, k, i] = lin / density
     if not seen.all():
         raise ValueError('Incomplete table')
-    refpath = REPO / 'data/schneider/schneider_stopping_v1.bin'
+    refpath = REPO / 'data/stopping/schneider/carbon.bin'
     with refpath.open('rb') as f:
         header = f.read(44)
         if header[:8] != b'SCHNSTOP':

@@ -4,7 +4,6 @@
 
 namespace carbon {
 
-
 struct SecondaryParticle {
     int16_t z{0};
     int16_t a{0};
@@ -24,8 +23,5 @@ struct SecondaryParticle {
     // sites override it explicitly before queue insertion.
     std::uint8_t birth_region{2};
 };
-
-
-
 
 }  // namespace carbon

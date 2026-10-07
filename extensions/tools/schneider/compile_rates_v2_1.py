@@ -4,7 +4,7 @@ nodes), 14 projectiles (13 legacy + C12 secondary), per-channel valid
 domains, masked totals.
 
 Inputs:
-- /mnt/sda/wuwei/secondary-rates-v2-1/raw/<pid>_dump.json (13 + c12)
+- MAIGO_RATE_DUMP_ROOT/<pid>_dump.json (13 + c12)
 - 14p package channels (authoritative support map: has_support + bounds)
 - campaign_manifest_all.json + raw_validation_all.json (null evidence)
 
@@ -27,7 +27,7 @@ Layout: SCHN2RAT version 3:
   domain block [14][13] x {double emin, double emax, uint8 has + 7 pad}.
 
 Outputs (new names; v1 untouched):
-  data/schneider/secondary_inelastic_rates_v2_1.bin (.metadata.json)
+  data/nuclear/schneider/secondary/inelastic_rates.bin (.metadata.json)
 """
 import datetime
 
@@ -40,6 +40,8 @@ import tempfile
 from pathlib import Path
 
 REPO = Path(os.environ.get("MAIGO_REPO_ROOT", Path(__file__).resolve().parents[3]))
+STAGE = Path(os.environ.get('MAIGO_ASSET_OUTPUT_ROOT', REPO/'extensions/work/packages'))
+
 WORK = Path(os.environ.get("MAIGO_PACKAGE_WORK_ROOT", REPO / "extensions" / "work"))
 DUMP_RAW = Path(os.environ.get("MAIGO_RATE_DUMP_ROOT", WORK / "secondary-rates-v2-1" / "raw"))
 V2 = Path(os.environ.get("MAIGO_V2_CAMPAIGN_ROOT", WORK / "schneider-secondary-v2"))
@@ -61,7 +63,7 @@ def f32(x):
 
 
 CHANNELS_NAME = sys.argv[sys.argv.index("--channels") + 1] \
-    if "--channels" in sys.argv else "cinel03_secondary_targets_v2_1_14p.channels.json"
+    if "--channels" in sys.argv else "final_states.channels.json"
 DRY_RUN = "--dry-run" in sys.argv
 
 
@@ -69,7 +71,7 @@ def package_domains():
     """(emin, emax) per (pz,pa,tz) from a package channels.json. All 14x13
     channels must exist (asserted). Bounds must be float32-exact (device
     mask/package-node agreement)."""
-    ch = json.load(open(REPO / ("data/schneider/" + CHANNELS_NAME)))
+    ch = json.load(open(STAGE / "data/nuclear/schneider/secondary" / CHANNELS_NAME))
     out = {}
     for c in ch["channels"]:
         key = (c["projectile_z"], c["projectile_a"], c["target_element_z"])
@@ -100,6 +102,7 @@ def null_evidence():
 
 
 def main():
+    (STAGE/'data/nuclear/schneider/secondary').mkdir(parents=True, exist_ok=True)
     doms = package_domains()
     maxnull = null_evidence()
     print(f'support map: {len(doms)} channels; null channels: {len(maxnull)}')
@@ -176,9 +179,9 @@ def main():
             print(f'accepting {len(need)} frozen residual NEED points (runtime-masked, see need_frozen_v2_1.json)')
         else:
             raise RuntimeError(f'refusing final compile with {len(need)} unprobed NEED points; run probe fills first')
-    out_bin = REPO / 'data/schneider/secondary_inelastic_rates_v2_1.bin'
-    tmpdir = Path(tempfile.mkdtemp(prefix='secratv3_', dir=REPO / 'data/schneider'))
-    tmp = tmpdir / 'secondary_inelastic_rates_v2_1.bin'
+    out_bin = STAGE / 'data/nuclear/schneider/secondary/inelastic_rates.bin'
+    tmpdir = Path(tempfile.mkdtemp(prefix='secratv3_', dir=STAGE / 'data/nuclear/schneider/secondary'))
+    tmp = tmpdir / 'inelastic_rates.bin'
     with open(tmp, 'wb') as f:
         f.write(b'SCHN2RAT')
         f.write(struct.pack('<I', 3))
@@ -203,10 +206,10 @@ def main():
                 f.write(struct.pack('<dd', flo, fhi))
                 f.write(struct.pack('<B', 1))
                 f.write(b'\x00' * 7)
-    meta = {'schema_version': 1, 'format': 'SCHN2RAT', 'binary_version': 3, 'data_filename': 'secondary_inelastic_rates_v2_1.bin', 'file_size_bytes': tmp.stat().st_size, 'binary_magic': 'SCHN2RAT', 'num_projectiles': 14, 'projectiles': [{'z': PROJ_ZA[pid][0], 'a': PROJ_ZA[pid][1]} for pid in PID_ORDER], 'target_order': CANON_Z, 'energy_grid': {'emin': EMIN, 'emax': EMAX, 'step': ESTEP, 'count': NE}, 'channel_domains': [{'projectile_z': PROJ_ZA[pid][0], 'projectile_a': PROJ_ZA[pid][1], 'target_z': tz, 'energy_min_mevu': doms[PROJ_ZA[pid] + (tz,)][0], 'energy_max_mevu': doms[PROJ_ZA[pid] + (tz,)][1], 'has_support': True} for pid in PID_ORDER for tz in CANON_Z], 'topas_version': '4.2.p3', 'geant4_version': '11.03.p02', 'physics_list': 'g4em-standard_opt4 + g4ion-binarycascade', 'schneider_source_file': 'data/HUtoMaterialSchneider.txt', 'zeroing_policy': 'zero iff XS==0 (model threshold), E <= per-channel max-null-beam (dynamic Geant4 nulls), or E > channel emax (package is the support map); substantial-XS-without-nodes NEVER zeroed; totals = masked-at-node sums, ascending-target order', 'zeroed_xs0': zeroed_zero, 'zeroed_below_null': zeroed_below, 'zeroed_above_emax': zeroed_above, 'units': 'mm, MeV, ns, g/cm^3', 'generation_timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'compiler_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO).decode().strip(), 'compiler_command': 'python3 tools/compile_rates_v2_1.py ' + ' '.join(sys.argv[1:])}
+    meta = {'schema_version': 1, 'format': 'SCHN2RAT', 'binary_version': 3, 'data_filename': 'inelastic_rates.bin', 'file_size_bytes': tmp.stat().st_size, 'binary_magic': 'SCHN2RAT', 'num_projectiles': 14, 'projectiles': [{'z': PROJ_ZA[pid][0], 'a': PROJ_ZA[pid][1]} for pid in PID_ORDER], 'target_order': CANON_Z, 'energy_grid': {'emin': EMIN, 'emax': EMAX, 'step': ESTEP, 'count': NE}, 'channel_domains': [{'projectile_z': PROJ_ZA[pid][0], 'projectile_a': PROJ_ZA[pid][1], 'target_z': tz, 'energy_min_mevu': doms[PROJ_ZA[pid] + (tz,)][0], 'energy_max_mevu': doms[PROJ_ZA[pid] + (tz,)][1], 'has_support': True} for pid in PID_ORDER for tz in CANON_Z], 'topas_version': '4.2.p3', 'geant4_version': '11.03.p02', 'physics_list': 'g4em-standard_opt4 + g4ion-binarycascade', 'schneider_source_file': 'data/materials/schneider/hu_to_material.txt', 'zeroing_policy': 'zero iff XS==0 (model threshold), E <= per-channel max-null-beam (dynamic Geant4 nulls), or E > channel emax (package is the support map); substantial-XS-without-nodes NEVER zeroed; totals = masked-at-node sums, ascending-target order', 'zeroed_xs0': zeroed_zero, 'zeroed_below_null': zeroed_below, 'zeroed_above_emax': zeroed_above, 'units': 'mm, MeV, ns, g/cm^3', 'generation_timestamp': datetime.datetime.now(datetime.timezone.utc).isoformat(), 'compiler_commit': os.environ.get('MAIGO_GENERATOR_REVISION', 'release-extraction-kit'), 'compiler_command': 'python3 tools/compile_rates_v2_1.py ' + ' '.join(sys.argv[1:])}
     (tmpdir / 'secondary_inelastic_rates_v2_1.metadata.json').write_text(json.dumps(meta, indent=1))
     tmp.replace(out_bin)
-    (REPO / 'data/schneider/secondary_inelastic_rates_v2_1.metadata.json').write_text(json.dumps(meta, indent=1))
+    (STAGE / 'data/nuclear/schneider/secondary/inelastic_rates.metadata.json').write_text(json.dumps(meta, indent=1))
     import shutil
     shutil.rmtree(tmpdir)
     print(f'compiled {out_bin} ({out_bin.stat().st_size / 1000000.0:.1f} MB)')

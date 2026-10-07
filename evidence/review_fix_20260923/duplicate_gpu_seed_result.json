@@ -1,7 +1,0 @@
-{
-  "schema": "maigo.dose-gate.v2",
-  "state": "INCONCLUSIVE",
-  "issues": [
-    "GPU runs must use independent unique seeds"
-  ]
-}

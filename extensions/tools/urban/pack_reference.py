@@ -5,7 +5,7 @@ import csv
 import json
 from pathlib import Path
 import struct
-MATERIALS = ['Water_75eV', 'M0', 'M1', 'M8', 'M20']
+MATERIALS = ['Water_75eV'] + [f'M{i}' for i in range(25)]
 
 def read_table(path):
     meta = {}

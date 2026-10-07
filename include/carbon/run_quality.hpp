@@ -23,14 +23,6 @@ struct RunQualityReport {
     // Physical closure includes deposited, escaped and explicitly untracked energy.
     double absolute_physical_energy_residual_MeV{};
     double physical_relative_energy_residual{};
-    // Accounting closure uses the same physical ledger.
-    double absolute_accounting_energy_residual_MeV{};
-    double accounting_relative_energy_residual{};
-    // Legacy aliases retained for consumers of schema v1 reports.  They are
-    // exactly the accounting values above and are emitted alongside the new
-    // names for one compatibility cycle.
-    double absolute_energy_residual_MeV{};
-    double relative_energy_residual{};
     std::uint64_t queue_overflow_count{};
     double queue_overflow_energy_MeV{};
     // Direct host aggregation of the scored 3D voxel energy and its closure

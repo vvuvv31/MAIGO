@@ -1,7 +1,6 @@
-# Relocated preset; provenance and changes in docs/package_manifest.json.
+# carbon_water_broadbeam: Water_75eV; current26 EM/electrons, FP32 dose.
 run_mode: research
-scorer_mode: production
-unified_water_material_file: data/water_unified/g4_water_material.json
+unified_water_material_file: data/materials/water/material.json
 enable_ct_grid: false
 number_of_histories: 10000
 initial_energy_MeVu: 200
@@ -10,7 +9,6 @@ primary_mass_number: 12
 beam_energy_spread: 0.01
 random_seed: 202609071
 water_density_g_per_cm3: 1.0
-phantom_length_mm: 200
 maximum_step_mm: 0.5
 maximum_relative_energy_loss: 0.005
 energy_cutoff_MeV: 0.1
@@ -21,33 +19,29 @@ voxel_bins_z: 400
 voxel_size_x_mm: 2.0
 voxel_size_y_mm: 2.0
 voxel_size_z_mm: 0.5
-depth_bin_width_mm: 0.5
 scorer_area_mm2: 16384
 enable_multiple_scattering: true
 multiple_scattering_model: fermi_eyges
-fermi_eyges_species: all_charged
 fermi_eyges_max_segment_mm: 0.1
 enable_inelastic: true
 nuclear_model: geant4
 enable_secondary_transport: true
-cinel02_max_secondary_inelastic_generations: 2
+max_secondary_inelastic_generations: 2
 secondary_out_of_scope_nuclear_policy: em_only
-primary_stopping_power_file: data/stopping_power_water_geant4_11_3_2.csv
-particle_stopping_power_file: data/ion_stopping_power_water_geant4_11_3_2.csv
-ct_schneider_primary_rate_file: data/schneider/schneider_inelastic_rates_v2_1.bin
-ct_schneider_secondary_rate_file: data/schneider/secondary_inelastic_rates_v2_1.bin
-ct_schneider_secondary_cinel03_file: data/schneider/cinel03_secondary_targets_v2_1_14p.bin
-ct_schneider_physics_bundle_file: data/schneider/schneider_physics_bundle_v2_1.json
+primary_stopping_power_file: data/stopping/water/carbon.csv
+particle_stopping_power_file: data/stopping/water/ions.csv
+ct_schneider_primary_rate_file: data/nuclear/schneider/carbon/inelastic_rates.bin
+ct_schneider_secondary_rate_file: data/nuclear/schneider/secondary/inelastic_rates.bin
+ct_schneider_secondary_cinel03_file: data/nuclear/schneider/secondary/final_states.bin
+ct_schneider_physics_bundle_file: data/nuclear/schneider/carbon/bundle.json
 max_device_memory_fraction: 0.8
 dose_to_medium: true
 dose_to_medium_type: mhd
 dose_to_medium_name: dose
 LET: false
 device: cuda
-em_model: g4_material_joint_v1
-em_delta_moments_file: data/em/unified_em_delta_moments_v2.bin
-# EMCNT001:26 composition responses; continuous density; no density-state expansion.
-em_package_file: data/em/unified_em_v1.bin
+em_delta_moments_file: data/em/ions/delta_moments.bin
+em_package_file: data/em/ions/continuous26.bin
 enable_energy_straggling: true
 enable_secondary_energy_straggling: true
 ct_secondary_exact_faces: true
@@ -55,21 +49,17 @@ history_chunk_size: 10000
 secondary_species_grouping: true
 secondary_step_chunking: true
 transport_profile: broadbeam_fast
-fermi_eyges_parameter_set: species_water
 fermi_eyges_gaussian_only: true
-ct_schneider_primary_cinel03_file: data/schneider/cinel03_c12_targets_v2_1.bin
+ct_schneider_primary_cinel03_file: data/nuclear/schneider/carbon/final_states.bin
 
-# Same low-density-plus-halo policy as CT. Uniform Water_75eV at 1 g/cm3
-# has no selected region: local deposition, no electron bank loading.
-# false explicitly disables tracking. This does not enable all-water tracking.
 broadbeam_electron_tracking: true
 broadbeam_electron_density_threshold: 0.1
 broadbeam_electron_halo_mm: 5.0
 
-material_electron_birth_file: data/electrons/shared/birth26.bin
+material_electron_birth_file: data/em/electrons/shared/birth26.bin
 
-material_electron_joint_pilot_file: data/electrons/shared/joint.bin
+material_electron_joint_pilot_file: data/em/electrons/shared/joint.bin
 
-material_electron_charged_index_file: data/electrons/shared/charged.index
+material_electron_charged_index_file: data/em/electrons/shared/charged.index
 
-material_photon_response_index_file: data/electrons/shared/photon.index
+material_photon_response_index_file: data/em/electrons/shared/photon.index

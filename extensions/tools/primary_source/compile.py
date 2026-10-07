@@ -1,3 +1,4 @@
+import os
 #!/usr/bin/env python3
 """Compile audited proton raw data into a CINPKG04/SCHNRATE bundle.
 
@@ -88,7 +89,7 @@ def write_package(events, out, pins):
     pkg.cells[-1]['interaction_count'] = len(events) - cell_start
     pkg.event_offsets.append(len(events))
     pkg.event_indices = list(range(len(events)))
-    path = out / 'proton_cinel03.bin'
+    path = out / 'final_states.bin'
     tmp = path.with_suffix('.tmp')
     pkg.write_binary(tmp)
     reread = cinel03.Cinel03Package.read_binary(tmp)
@@ -153,32 +154,30 @@ def rates(raw, channels, nodes, out, nulls):
         partial[:, ti, ~mask] = 0
         total += partial[:, ti, :]
         domains.append(dict(target_z=TARGETS[ti], energy_min_mevu=lo, energy_max_mevu=hi, has_support=has))
-    path = out / 'proton_rates.bin'
+    path = out / 'inelastic_rates.bin'
     with open(path, 'wb') as f:
         f.write(struct.pack('<8sIIII3d13i', b'SCHNRATE', 3, 25, 13, 921, 0.1, 460.1, 0.5, *TARGETS))
         f.write(partial.tobytes())
         f.write(total.tobytes())
         for dom in domains:
             f.write(struct.pack('<ddB7x', dom['energy_min_mevu'], dom['energy_max_mevu'], dom['has_support']))
-    meta = dict(schema_version=1, projectile=dict(z=1, a=1), data_filename=path.name, binary_magic='SCHNRATE', binary_version=3, target_order=TARGETS, energy_grid=GRID, channel_domains=domains, physics_list='g4em-standard_opt4 + QGSP_BIC_HP + g4ion-inclxx', topas_version='4.2.p3', geant4_version='11.3.2', compiler_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip(), raw_inputs=[str(raw)], source_energy_scope_MeV=[0.1, 250])
+    meta = dict(schema_version=1, projectile=dict(z=1, a=1), data_filename=path.name, binary_magic='SCHNRATE', binary_version=3, target_order=TARGETS, energy_grid=GRID, channel_domains=domains, physics_list='g4em-standard_opt4 + QGSP_BIC_HP + g4ion-inclxx', topas_version='4.2.p3', geant4_version='11.3.2', compiler_commit=os.environ.get('MAIGO_GENERATOR_REVISION', 'release-extraction-kit'), raw_inputs=[str(raw)], source_energy_scope_MeV=[0.1, 250])
     dump(path.with_suffix('.metadata.json'), meta)
     return path
 
 def bundle(out, primary, rate):
-    shared = out / 'shared'
-    old = json.loads((REPO / 'extensions/reference/schneider_physics_bundle_v2_1.json').read_text())
-    b = dict(old)
-    b['bundle_name'] = 'proton_therapy_0p1_250_20260926'
-    b['primary_projectile'] = {'z': 1, 'a': 1}
-    b['source_energy_scope_MeV'] = [0.1, 250]
-    b['physics_list_primary'] = 'QGSP_BIC_HP protonInelastic Binary Cascade'
-    for role, p in [('primary_rate', rate), ('primary_package', primary), ('secondary_rate', shared / 'secondary_inelastic_rates_v2_1.bin'), ('secondary_package', shared / 'cinel03_secondary_targets_v2_1_14p.bin'), ('stopping_table', out / 'proton_schneider_stopping_v1.bin')]:
-        b[role] = dict(file=str(p.resolve()))
-        if 'package' in role:
-            ch = p.with_suffix('.channels.json')
-            b[role].update(channels_file=str(ch.resolve()))
-    b['generation_timestamp'] = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    dump(out / 'physics_bundle.json', b)
+    b = json.loads((REPO/'extensions/reference/carbon_bundle.json').read_text())
+    b.update(bundle_name='proton_therapy_0p1_250', primary_projectile={'z':1,'a':1},
+             source_energy_scope_MeV=[0.1,250], physics_list_primary='QGSP_BIC_HP protonInelastic Binary Cascade',
+             generation_timestamp=datetime.datetime.now(datetime.timezone.utc).isoformat())
+    for role,path in [('primary_rate','data/nuclear/schneider/proton/inelastic_rates.bin'),
+                      ('primary_package','data/nuclear/schneider/proton/final_states.bin'),
+                      ('secondary_rate','data/nuclear/schneider/secondary/inelastic_rates.bin'),
+                      ('secondary_package','data/nuclear/schneider/secondary/final_states.bin'),
+                      ('stopping_table','data/stopping/schneider/proton.bin')]:
+        b[role]={'file':path}
+        if 'package' in role:b[role]['channels_file']=str(Path(path).with_suffix('.channels.json'))
+    dump(out/'bundle.json',b)
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
@@ -193,6 +192,6 @@ def main():
     dump(primary.with_suffix('.metadata.json'), dict(schema_version=1, format='CINPKG04', data_filename=primary.name, projectile=dict(z=1, a=1), models=dict(models), raw_files=pins, interactions=len(events), source_energy_scope_MeV=[0.1, 250]))
     rate = rates(a.rate_json, channels, nodes, a.output, nulls)
     bundle(a.output, primary, rate)
-    print('Compiled', a.output / 'physics_bundle.json')
+    print('Compiled', a.output / 'bundle.json')
 if __name__ == '__main__':
     main()

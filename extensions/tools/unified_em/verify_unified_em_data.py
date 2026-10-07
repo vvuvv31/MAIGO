@@ -4,7 +4,7 @@ import argparse,json,math,struct
 from pathlib import Path
 
 def verify(package):
-    meta=json.loads(package.with_suffix('.json').read_text())
+    meta=json.loads(package.with_suffix('.metadata.json').read_text())
     if meta['schema'] not in ('EMJOINT1','EMFAC001','EMCNT001') or meta['version']!=1:raise ValueError('Unsupported EM schema')
     if package.stat().st_size!=meta['package_bytes']:raise ValueError('EM size mismatch')
     with package.open('rb') as f:
@@ -34,9 +34,9 @@ def verify(package):
     print('Stored layout/fields and registry verified; physics fields are checked by the C++ loader, dose by separate reference comparisons.')
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('package',nargs='?',type=Path,default=Path(__file__).resolve().parents[3]/'data/em/unified_em_v1.bin')
+    parser.add_argument('package',nargs='?',type=Path,default=Path(__file__).resolve().parents[3]/'data/em/ions/continuous26.bin')
     parser.add_argument("--core-only",action="store_true",help="Verify the source package before generating delta moments")
     args=parser.parse_args();verify(args.package)
     if not args.core_only:
         from verify_delta_moments import verify as verify_moments
-        verify_moments(args.package.parent/"unified_em_delta_moments_v2.bin",args.package)
+        verify_moments(args.package.parent/"delta_moments.bin",args.package)

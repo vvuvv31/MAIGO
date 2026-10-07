@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 def verify(path, source=None, *, metadata=None):
     path = Path(path)
-    meta = metadata if metadata is not None else json.loads(path.with_suffix('.json').read_text())
+    meta = metadata if metadata is not None else json.loads(path.with_suffix('.metadata.json').read_text())
     if path.stat().st_size != meta['bytes']:
         raise ValueError('Delta moments size/manifest mismatch')
     with path.open('rb') as stream:
@@ -42,7 +42,7 @@ def verify(path, source=None, *, metadata=None):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('table', nargs='?', type=Path, default=ROOT/'data/em/unified_em_delta_moments_v2.bin')
-    parser.add_argument('--source', type=Path, default=ROOT/'data/em/unified_em_v1.bin')
+    parser.add_argument('table', nargs='?', type=Path, default=ROOT/'data/em/ions/delta_moments.bin')
+    parser.add_argument('--source', type=Path, default=ROOT/'data/em/ions/continuous26.bin')
     args = parser.parse_args()
     verify(args.table, args.source)

@@ -74,7 +74,7 @@ def compile_package(source, output):
             f.write(v.tobytes())
     tmp.replace(output)
     metadata = dict(manifest, validation_status='research_candidate_not_validated', schema='EMJOINT1', version=1, records=len(records), nodes=node_offset, segments=vector_offset, record_bytes=104, node_bytes=52, segment_bytes=24, package_bytes=output.stat().st_size)
-    output.with_suffix('.json').write_text(json.dumps(metadata, indent=2) + '\n')
+    output.with_suffix('.metadata.json').write_text(json.dumps(metadata, indent=2) + '\n')
     print(json.dumps({k: metadata[k] for k in ['records', 'nodes', 'segments', 'package_bytes']}, indent=2))
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)

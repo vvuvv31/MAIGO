@@ -9,13 +9,8 @@
 
 namespace carbon {
 
-constexpr std::size_t kSecondaryNumProjectiles = 13;
 constexpr std::size_t kSecondaryNumSections = 25;
 constexpr std::size_t kSecondaryNumTargets = 13;
-// v1 frozen grid: 860 nodes over [0.5, 430.0], step 0.5.
-constexpr std::size_t kSecondaryNumEnergies = 860;
-constexpr double kSecondaryV1EnergyMin = 0.5;
-constexpr double kSecondaryV1EnergyMax = 430.0;
 // v2 grid: 921 nodes over [0.1, 460.1], step 0.5. The v2.1 data product
 // covers the full chain scope so device lookup needs no clamp: outside
 // [emin, emax] the rate is exactly 0 (no hazard -> no query -> no miss).
@@ -31,9 +26,9 @@ struct SecondaryRateHeader {
     uint32_t num_projectiles;  // 13
     uint32_t num_sections;     // 25
     uint32_t num_targets;      // 13
-    uint32_t num_energies;     // 860
-    double energy_min_mevu;    // 0.5
-    double energy_max_mevu;    // 430.0
+    uint32_t num_energies;     // 921
+    double energy_min_mevu;    // 0.1
+    double energy_max_mevu;    // 460.1
     double energy_step_mevu;   // 0.5
 };
 
@@ -87,7 +82,7 @@ public:
     [[nodiscard]] const std::vector<double>& mass_partial_rates() const noexcept { return mass_partial_rates_; }
     [[nodiscard]] const std::vector<double>& mass_total_rates() const noexcept { return mass_total_rates_; }
     // v3 only: per-(projectile, target) valid domain, np*nt entries in
-    // [proj][target] order. Empty for v1 binaries.
+    // [proj][target] order. Required in the current schema.
     [[nodiscard]] bool has_channel_domains() const noexcept { return !channel_domains_.empty(); }
     [[nodiscard]] const std::vector<SecondaryRateDomainEntry>& channel_domains() const noexcept {
         return channel_domains_;
@@ -116,11 +111,11 @@ public:
     }
 
 private:
-    uint32_t num_projectiles_{13};
-    uint32_t binary_version_{1};
-    std::size_t num_energies_{kSecondaryNumEnergies};
-    double energy_min_mevu_{0.5};
-    double energy_max_mevu_{430.0};
+    uint32_t num_projectiles_{0};
+    uint32_t binary_version_{3};
+    std::size_t num_energies_{kSecondaryV2NumEnergies};
+    double energy_min_mevu_{kSecondaryV2EnergyMin};
+    double energy_max_mevu_{kSecondaryV2EnergyMax};
     double energy_step_mevu_{0.5};
     std::vector<SecondaryProjectileKey> projectiles_;
     std::array<int32_t, 13> canonical_targets_{};
@@ -131,7 +126,7 @@ private:
 
 // Current domain-masked rate API: no hardcoded registry or endpoint clamp.
 
-// ---- v3 data-driven path (binary version 3 only; v1 never calls these) ----
+// ---- v3 data-driven path (binary version 3 only) ----
 
 // Projectile registry lookup over the uploaded bundle-ordered key list
 // (layout [z0,a0,z1,a1,...], np entries). No hardcoded isotopes: any

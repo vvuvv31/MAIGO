@@ -7,7 +7,7 @@
 
 namespace carbon {
 
-// The TOPAS replay device transports fully stripped ions, gamma and neutron.
+// Native nuclear events distinguish charged ions and untracked neutral products.
 // Electrons/positrons and pions are recognized only so that the package
 // compiler can place them in the explicit unsupported-energy ledger.  They
 // are not silently converted into an ion or a neutral transport product.

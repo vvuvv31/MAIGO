@@ -173,7 +173,7 @@ def main() -> None:
     except BaseException:
         temporary_path.unlink(missing_ok=True)
         raise
-    metadata = {'schema': 'MAIGO_COPPER_FRAGMENT_CASCADE_V1', 'reference_physics': {'proton_0_to_6_GeV': 'Binary Cascade', 'd_t_He_GenericIon_0_to_3_GeV_per_u': 'INCL++ undefined', 'source_log': '/mnt/sda/wuwei/minibeam_phase_scan_6255_1.log'}, 'target': {'material': 'G4_Cu', 'element_z': 29}, 'package': str(args.output), 'projectiles': [{'z': z, 'a': a, 'model': declared[z, a]} for z, a in sorted(declared)], 'interactions': len(reread.interactions), 'products': len(reread.products), 'energy_nodes': len(reread.energy_nodes), 'sources': sources, 'reused_source_metadata': [str(path) for path in args.reuse_source_metadata], 'preservation_checks': preservation_checks, 'rejected': dict(rejected)}
+    metadata = {'schema': 'MAIGO_COPPER_FRAGMENT_CASCADE_V1', 'reference_physics': {'proton_0_to_6_GeV': 'Binary Cascade', 'd_t_He_GenericIon_0_to_3_GeV_per_u': 'INCL++ undefined', 'source_log': 'Historical model audit; actual raw inputs are recorded in sources'}, 'target': {'material': 'G4_Cu', 'element_z': 29}, 'package': str(args.output), 'projectiles': [{'z': z, 'a': a, 'model': declared[z, a]} for z, a in sorted(declared)], 'interactions': len(reread.interactions), 'products': len(reread.products), 'energy_nodes': len(reread.energy_nodes), 'sources': sources, 'reused_source_metadata': [str(path) for path in args.reuse_source_metadata], 'preservation_checks': preservation_checks, 'rejected': dict(rejected)}
     args.metadata.parent.mkdir(parents=True, exist_ok=True)
     args.metadata.write_text(json.dumps(metadata, indent=2, sort_keys=True) + '\n')
     print(json.dumps(metadata, indent=2, sort_keys=True))
