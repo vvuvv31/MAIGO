@@ -21,16 +21,16 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
     MaterialBirthTask task{};f::ElectronEnergyPacket packet{},previous{};
     f::voxel_cache_research::Cache voxel_cache;
     std::uint64_t packet_rng=0,previous_rng=0;unsigned packet_steps=0;bool need_task=true;
-    unsigned birth_region=6;
+    unsigned birth_region=6;unsigned photon_failure_reason=0;
     std::uint64_t region_counts[12]{};
     auto uniform=[&](){return f::random_draw(packet_rng);};
     auto joint=[&](){std::uint64_t counts[9]{};auto jt=[&](int k,std::uint64_t n){counts[k]+=n;
         if constexpr(region_diagnostics){if(k==0)region_counts[6]+=n;if(k==2)region_counts[7]+=n;}};
-        packet=f::transport_joint_independent(packet,float_joint,geometry,uniform,jt);
+        f::transport_joint_independent(packet,float_joint,geometry,uniform,jt);
         for(unsigned k=0;k<9;++k)if(counts[k])increment(joint_pilot_work+k,counts[k]);
     };
     for(;;){
-        if(need_task){
+        if(need_task){photon_failure_reason=0;
             const auto slot=sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
                 sycl::access::address_space::global_space>(material_task_counts[1]).fetch_add(1);
             if(slot>=count_host)break;
@@ -86,6 +86,7 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
             if(packet.cursor.pdg==22){
                 const auto r=f::transport_independent_photon(float_photon,geometry,packet.cursor.position,
                     packet.cursor.direction,packet.cursor.energy_MeV,uniform);
+                photon_failure_reason=r.failure_reason;
                 if constexpr(region_diagnostics){++region_counts[8];region_counts[9]+=r.interactions;}
                 const std::uint64_t counts[8]={1,r.interactions,r.voxel_crossings,
                     r.status==f::IndependentPhotonStatus::electron,r.status==f::IndependentPhotonStatus::deposited,
@@ -143,7 +144,7 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
             const auto first=sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
                 sycl::access::address_space::global_space>(material_untracked_device[2]).fetch_add(1);
             if(first==0){
-                MaterialPacketFailure diagnostic;diagnostic.history=task.history;diagnostic.step=task.step;
+                MaterialPacketFailure diagnostic;diagnostic.photon_reason=photon_failure_reason;diagnostic.history=task.history;diagnostic.step=task.step;
                 diagnostic.rng=previous_rng;diagnostic.before=previous;diagnostic.after=packet;*material_failure_device=diagnostic;
             }
         }

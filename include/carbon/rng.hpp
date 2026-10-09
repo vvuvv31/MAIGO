@@ -10,6 +10,7 @@ using PhiloxBlock = std::array<std::uint32_t, 4>;
 // Branch-tag roles for deterministic child RNG streams. Tags must not depend on
 // GPU atomic queue indices — only on parent stream identity and product order.
 inline constexpr std::uint32_t branch_role_primary_charged = 0x10000000U;
+inline constexpr std::uint32_t branch_role_beamline_charged = 0x20000000U;
 inline constexpr std::uint32_t branch_role_cascade_charged = 0x30000000U;
 
 inline constexpr std::uint32_t branch_tag(const std::uint32_t role,
@@ -27,6 +28,16 @@ inline std::uint64_t child_stream(const std::uint64_t parent_stream,
     z = (z ^ (z >> 30U)) * 0xBF58476D1CE4E5B9ULL;
     z = (z ^ (z >> 27U)) * 0x94D049BB133111EBULL;
     return z ^ (z >> 31U);
+}
+
+// Descendant workers use a shared Philox key, so their parent identity must
+// include the primary's full spot seed as well as its spot-local history.
+// Both maps are bijective for one fixed input; mixing a pair into 64 bits has
+// the same finite hash-collision limitation as the existing child streams.
+// Do not change the primary (seed, history) draws or use atomic queue indices.
+inline std::uint64_t primary_descendant_stream(const std::uint64_t seed,
+                                               const std::uint64_t history) noexcept {
+    return child_stream(history ^ child_stream(seed, 0x53454544U), 0x524F4F54U);
 }
 
 // Event identity and product ordinal are separate levels: siblings must never

@@ -11,6 +11,15 @@ if(NOT CARBON_SYCL_TARGETS STREQUAL "nvptx64-nvidia-cuda")
     message(FATAL_ERROR "This runtime supports only the nvptx64-nvidia-cuda SYCL target")
 endif()
 set(CARBON_CUDA_ARCH "" CACHE STRING "Optional GPU AOT architecture; empty uses portable PTX")
+option(CARBON_ENABLE_PROTON_BROADBEAM "Compile proton broadbeam transport" ON)
+option(CARBON_ENABLE_PROTON_MINIBEAM "Compile proton minibeam transport" ON)
+option(CARBON_ENABLE_CARBON_BROADBEAM "Compile carbon broadbeam transport" ON)
+option(CARBON_ENABLE_CARBON_MINIBEAM "Compile carbon minibeam transport" ON)
+option(CARBON_ENABLE_GENERIC "Compile generic proton/C12 transport" ON)
+if(NOT (CARBON_ENABLE_PROTON_BROADBEAM OR CARBON_ENABLE_PROTON_MINIBEAM OR
+        CARBON_ENABLE_CARBON_BROADBEAM OR CARBON_ENABLE_CARBON_MINIBEAM OR CARBON_ENABLE_GENERIC))
+    message(FATAL_ERROR "Enable at least one transport pipeline")
+endif()
 add_library(carbon_core
     src/all_ion_elastic.cpp
     src/batch_run.cpp
@@ -44,6 +53,11 @@ target_compile_definitions(carbon_core PUBLIC
     CARBON_SECONDARY_SEGMENT_STEPS=16 CARBON_EM_EMPTY_BUCKET_AUDIT=0
     CARBON_EM_SEARCH_KEY_AUDIT=0 CARBON_EM_INTERVAL_WIDTH_AUDIT=0
     CARBON_EM_LOCAL_AUDIT=0 CARBON_SECONDARY_STEP_PROFILE=0)
+foreach(pipeline PROTON_BROADBEAM PROTON_MINIBEAM CARBON_BROADBEAM CARBON_MINIBEAM GENERIC)
+    message(STATUS "Transport pipeline ${pipeline}: ${CARBON_ENABLE_${pipeline}}")
+    target_compile_definitions(carbon_core PRIVATE
+        CARBON_ENABLE_${pipeline}=$<BOOL:${CARBON_ENABLE_${pipeline}}>)
+endforeach()
 set_property(SOURCE src/transport_sycl.cpp APPEND PROPERTY COMPILE_DEFINITIONS CARBON_DEFINE_SYCL_CONTEXT=1)
 target_compile_options(carbon_core PRIVATE -Wall -Wextra -Wpedantic -fsycl -fsycl-targets=${CARBON_SYCL_TARGETS})
 target_link_options(carbon_core PUBLIC -fsycl -fsycl-targets=${CARBON_SYCL_TARGETS})

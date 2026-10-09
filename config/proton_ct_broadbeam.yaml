@@ -1,4 +1,5 @@
 # proton_ct_broadbeam: RT07575 head; current26 EM/electrons, FP32 dose.
+transport_pipeline: proton_broadbeam
 run_mode: research
 enable_ct_grid: true
 number_of_histories: 12531500

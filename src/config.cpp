@@ -603,6 +603,23 @@ void TransportConfig::validate() const {
             "max_secondary_inelastic_generations must be between 0 and 2");
     }
 
+    const bool pipeline_compiled =
+        (transport_pipeline == "proton_broadbeam" && CARBON_ENABLE_PROTON_BROADBEAM) ||
+        (transport_pipeline == "proton_minibeam" && CARBON_ENABLE_PROTON_MINIBEAM) ||
+        (transport_pipeline == "carbon_broadbeam" && CARBON_ENABLE_CARBON_BROADBEAM) ||
+        (transport_pipeline == "carbon_minibeam" && CARBON_ENABLE_CARBON_MINIBEAM) ||
+        (transport_pipeline == "generic" && CARBON_ENABLE_GENERIC);
+    if (transport_pipeline != "generic") {
+        const bool proton = primary_atomic_number == 1 && primary_mass_number == 1;
+        const bool carbon = primary_atomic_number == 6 && primary_mass_number == 12;
+        const std::string expected = (proton ? "proton" : carbon ? "carbon" : "unsupported") +
+            std::string(transport_profile == "broadbeam_fast" ? "_broadbeam" :
+                        enable_minibeam ? "_minibeam" : "_reference");
+        if (transport_pipeline != expected || (!proton && !carbon))
+            throw std::invalid_argument("transport_pipeline must be generic or match the proton/C12 source and beam mode");
+    }
+    if (!pipeline_compiled)
+        throw std::invalid_argument("Transport pipeline is not compiled: " + transport_pipeline);
     if(transport_profile!="reference" && transport_profile!="broadbeam_fast")
         throw std::invalid_argument("transport_profile must be reference or broadbeam_fast");
     if(transport_profile=="broadbeam_fast") {
@@ -824,22 +841,30 @@ void TransportConfig::validate() const {
                     "minibeam Copper INCLXX requires minibeam_copper_inclxx_file");
             }
             if (minibeam_copper_primary_native_mean_loss &&
-                (run_mode == RunMode::production || primary_atomic_number != 1 ||
-                 primary_mass_number != 1 || multiple_scattering_model != "urban_v2" ||
+                (run_mode == RunMode::production || multiple_scattering_model != "urban_v2" ||
                  !minibeam_copper_enable_mcs ||
                  !minibeam_copper_enable_energy_straggling ||
-                 minibeam_copper_proton_straggling_model != "g4_universal_delta"))
-                throw std::invalid_argument("Native Cu primary mean requires research proton Urban v2 and finite-cut fluctuations");
-            if (minibeam_copper_proton_straggling_model != "clipped_gaussian" &&
-                minibeam_copper_proton_straggling_model != "g4_universal_delta")
-                throw std::invalid_argument("Unknown copper proton straggling model");
-            if (minibeam_copper_proton_straggling_model == "g4_universal_delta" &&
+                 (minibeam_copper_straggling_model != "g4_universal_delta" &&
+                  minibeam_copper_straggling_model != "g4_ion_delta")))
+                throw std::invalid_argument("Native Cu primary mean requires Urban v2 and finite-cut fluctuations");
+            if (minibeam_copper_straggling_model != "clipped_gaussian" &&
+                minibeam_copper_straggling_model != "g4_universal_delta" &&
+                minibeam_copper_straggling_model != "g4_ion_delta")
+                throw std::invalid_argument("Unknown copper straggling model");
+            if (minibeam_copper_straggling_model == "g4_ion_delta" &&
+                (primary_atomic_number != 6 || primary_mass_number != 12 ||
+                 !minibeam_copper_primary_native_mean_loss ||
+                 minibeam_copper_fragment_urban_package_file.empty() ||
+                 !minibeam_copper_fragment_enable_energy_straggling ||
+                 (minibeam_copper_enable_elastic && minibeam_copper_fragment_elastic_file.empty())))
+                throw std::invalid_argument("Cu ion transport requires C12, native mean, fragment fluctuations and native fragment Urban data and a species-specific elastic bank");
+            if (minibeam_copper_straggling_model != "clipped_gaussian" &&
                 std::abs(minibeam_copper_density_g_per_cm3 - 8.96) > 1e-5)
-                throw std::invalid_argument("Native copper proton cut is pinned to G4_Cu at 8.96 g/cm3");
-            if (minibeam_copper_proton_straggling_model != "clipped_gaussian" &&
+                throw std::invalid_argument("Native copper cut is pinned to G4_Cu at 8.96 g/cm3");
+            if (minibeam_copper_straggling_model != "clipped_gaussian" &&
                 (run_mode == RunMode::production || minibeam_copper_straggling_scale != 1.0 ||
                  minibeam_copper_fragment_straggling_scale != 1.0))
-                throw std::invalid_argument("Native copper proton fluctuation requires research/smoke and unit straggling scales");
+                throw std::invalid_argument("Native copper fluctuation requires research/smoke and unit straggling scales");
             if (minibeam_copper_enable_elastic &&
                 minibeam_copper_elastic_file.empty()) {
                 throw std::invalid_argument(
@@ -1283,6 +1308,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     TransportConfig config;
     config.transport_profile=profile;
+    if (auto pipeline=values.find("transport_pipeline"); pipeline!=values.end())
+        config.transport_pipeline=pipeline->second;
     config.broadbeam_electron_tracking=tracking_requested;
     config.broadbeam_independent_electrons=independent_profile;
     config.broadbeam_electron_density_threshold=parse_number(values,"broadbeam_electron_density_threshold",config.broadbeam_electron_density_threshold);
@@ -1667,8 +1694,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_copper_primary_native_mean_loss = parse_bool(
         values, "minibeam_copper_primary_native_mean_loss",
         config.minibeam_copper_primary_native_mean_loss);
-    if (const auto it = values.find("minibeam_copper_proton_straggling_model"); it != values.end())
-        config.minibeam_copper_proton_straggling_model = it->second;
+    if (const auto it = values.find("minibeam_copper_straggling_model"); it != values.end())
+        config.minibeam_copper_straggling_model = it->second;
     config.minibeam_copper_straggling_scale = parse_number(
         values, "minibeam_copper_straggling_scale",
         config.minibeam_copper_straggling_scale);
@@ -1699,6 +1726,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_copper_elastic_file = parse_path(
         values, "minibeam_copper_elastic_file",
         config.minibeam_copper_elastic_file);
+    config.minibeam_copper_fragment_urban_package_file = parse_path(
+        values, "minibeam_copper_fragment_urban_package_file",
+        config.minibeam_copper_fragment_urban_package_file);
+    config.minibeam_copper_fragment_elastic_file = parse_path(
+        values, "minibeam_copper_fragment_elastic_file",
+        config.minibeam_copper_fragment_elastic_file);
     config.minibeam_copper_ion_stopping_power_file = parse_path(
         values, "minibeam_copper_ion_stopping_power_file",
         config.minibeam_copper_ion_stopping_power_file);

@@ -684,6 +684,7 @@ struct PhotonFlight {
     float distance_mm{},remaining_optical_depth{};
     std::uint8_t section{};float density{};
     std::uint64_t voxel_crossings{};
+    unsigned failure_reason{};
 };
 // rates(section, physical_density, energy) must return an independently
 // validated attenuation coefficient, including all retained photon processes.
@@ -693,42 +694,42 @@ template<class Rates>
 inline PhotonFlight transport_photon_optical_depth(const ElectronCtGeometry& g,
     const Position& start,const std::array<float,3>& direction,
     float energy_MeV,float optical_depth,Rates rates) {
-    PhotonFlight out;out.position=start;out.remaining_optical_depth=optical_depth;
+    PhotonFlight out;auto invalid=[&](unsigned reason){out.failure_reason=reason;return out;};out.position=start;out.remaining_optical_depth=optical_depth;
     if(!g.density || !g.section || !std::isfinite(energy_MeV) || energy_MeV<=0 ||
-       !std::isfinite(optical_depth) || optical_depth<0)return out;
+       !std::isfinite(optical_depth) || optical_depth<0)return invalid(1);
     std::array<std::int64_t,3> cell{};
     std::array<int,3> sign{};
-    Position next{},delta{};
+    Position next{};
     float norm=0;bool outward=false;
     for(unsigned k=0;k<3;++k) {
         if(!g.bins[k] || !std::isfinite(g.origin[k]) || !std::isfinite(g.spacing[k]) || g.spacing[k]<=0 ||
-           !std::isfinite(start[k]) || !std::isfinite(direction[k]))return out;
+           !std::isfinite(start[k]) || !std::isfinite(direction[k]))return invalid(2);
         norm+=direction[k]*direction[k];
         cell[k]=directed_cell(start[k],direction[k],g.origin[k],g.spacing[k],g.bins[k]);
-        if(cell[k]==INT64_MIN)return out;
+        if(cell[k]==INT64_MIN)return invalid(3);
         if(cell[k]<0 || cell[k]>=g.bins[k])outward=true;
         sign[k]=(direction[k]>0)-(direction[k]<0);
-        next[k]=delta[k]=std::numeric_limits<float>::infinity();
+        next[k]=std::numeric_limits<float>::infinity();
         if(sign[k]) {
             const Coordinate face=g.origin[k]+(cell[k]+(sign[k]>0))*g.spacing[k];
-            next[k]=(face-start[k])/direction[k];delta[k]=g.spacing[k]/std::abs(direction[k]);
-            if(next[k]<0 && !outward)return out;
+            next[k]=(face-start[k])/direction[k];
+            if(next[k]<0 && !outward)return invalid(4);
         }
     }
-    if(std::abs(norm-1)>32*std::numeric_limits<float>::epsilon())return out;
+    if(std::abs(norm-1)>32*std::numeric_limits<float>::epsilon())return invalid(5);
     if(outward){out.status=PhotonFlightStatus::escaped;return out;}
     Coordinate previous=0;
     const auto limit=std::uint64_t(g.bins[0])+g.bins[1]+g.bins[2]+3;
     for(std::uint64_t hop=0;hop<limit;++hop) {
         const auto index=(std::uint64_t(cell[2])*g.bins[1]+cell[1])*g.bins[0]+cell[0];
         out.section=g.section[index];out.density=g.density[index];
-        if(out.section>=kElectronMaterialCount || !std::isfinite(out.density) || out.density<=0)return out;
+        if(out.section>=kElectronMaterialCount || !std::isfinite(out.density) || out.density<=0)return invalid(6);
         const auto coefficient=rates(out.section,out.density,energy_MeV);
         if(!coefficient.valid) {out.status=PhotonFlightStatus::coverage_missing;return out;}
-        if(!std::isfinite(coefficient.per_mm) || coefficient.per_mm<0)return out;
+        if(!std::isfinite(coefficient.per_mm) || coefficient.per_mm<0)return invalid(7);
         const Coordinate face=std::min(next[0],std::min(next[1],next[2]));
         const Coordinate segment=face-previous;
-        if(!std::isfinite(face) || segment<0)return out;
+        if(!std::isfinite(face) || segment<0)return invalid(8);
         const Coordinate hazard=coefficient.per_mm*segment;
         if(coefficient.per_mm>0 && out.remaining_optical_depth<hazard) {
             const Coordinate distance=previous+out.remaining_optical_depth/coefficient.per_mm;
@@ -737,13 +738,18 @@ inline PhotonFlight transport_photon_optical_depth(const ElectronCtGeometry& g,
             out.status=PhotonFlightStatus::interaction;return out;
         }
         out.remaining_optical_depth-=hazard;
-        if(!std::isfinite(out.remaining_optical_depth) || out.remaining_optical_depth<0)return out;
+        if(!std::isfinite(out.remaining_optical_depth) || out.remaining_optical_depth<0)return invalid(1);
         out.distance_mm=face;
         for(unsigned k=0;k<3;++k)out.position[k]=start[k]+face*direction[k];
         for(unsigned k=0;k<3;++k)if(next[k]==face) {
             // Exact face ownership, not epsilon displacement into a neighbour.
             out.position[k]=g.origin[k]+(cell[k]+(sign[k]>0))*g.spacing[k];
-            cell[k]+=sign[k];next[k]+=delta[k];
+            cell[k]+=sign[k];
+            // Accumulating delta drifts away from the represented physical
+            // face; a near-exit collision can then be placed outside the CT.
+            // Recompute the clock from the same FP32 cell plane and ray origin.
+            const Coordinate following_face=g.origin[k]+float(cell[k]+(sign[k]>0))*g.spacing[k];
+            next[k]=(following_face-start[k])/direction[k];
         }
         ++out.voxel_crossings;
         for(unsigned k=0;k<3;++k)if(cell[k]<0 || cell[k]>=g.bins[k]) {
@@ -842,6 +848,7 @@ struct IndependentPhotonResult {
     Position position{};std::array<float,3> direction{};
     float energy{},physical_density{};
     unsigned node{};std::uint64_t interactions{},voxel_crossings{};
+    unsigned failure_reason{};
 };
 // Photon-only chain. A selected electron returns its complete physical state
 // for charged transport. A selected photon child starts a new independent
@@ -853,16 +860,16 @@ inline IndependentPhotonResult transport_independent_photon(PhotonResponseBankVi
     std::array<float,3> direction,float energy,Uniform& uniform) {
     IndependentPhotonResult out;out.position=position;out.direction=direction;out.energy=energy;
     for(unsigned i=0;i<65536;++i) {
-        const float u=uniform();if(!std::isfinite(u)||u<=0||u>=1)return out;
+        const float u=uniform();if(!std::isfinite(u)||u<=0||u>=1){out.failure_reason=100;return out;}
         auto rates=[&](int section,float rho,float e){return photon_bank_attenuation(bank,section,rho,e);};
         const auto flight=transport_photon_optical_depth(geometry,out.position,out.direction,out.energy,-std::log(u),rates);
         out.position=flight.position;out.voxel_crossings+=flight.voxel_crossings;out.physical_density=flight.density;
-        if(flight.status==PhotonFlightStatus::invalid)return out;
+        if(flight.status==PhotonFlightStatus::invalid){out.failure_reason=flight.failure_reason?flight.failure_reason:199;return out;}
         if(flight.status==PhotonFlightStatus::escaped){out.status=IndependentPhotonStatus::escaped;return out;}
         if(flight.status==PhotonFlightStatus::coverage_missing){out.status=IndependentPhotonStatus::coverage_missing;return out;}
         const auto bracket=photon_density_bracket(bank,flight.section,flight.density);
         if(!bracket.valid){out.status=IndependentPhotonStatus::coverage_missing;return out;}
-        const float density_u=uniform();if(!std::isfinite(density_u)||density_u<0||density_u>=1)return out;
+        const float density_u=uniform();if(!std::isfinite(density_u)||density_u<0||density_u>=1){out.failure_reason=101;return out;}
         out.node=density_u<bracket.upper_weight?bracket.high:bracket.low;
         const auto model=bank.nodes[out.node];
         // Optical depth uses actual density; conditional final states use the
@@ -876,9 +883,9 @@ inline IndependentPhotonResult transport_independent_photon(PhotonResponseBankVi
         if(draw.pdg==0){out.status=IndependentPhotonStatus::deposited;return out;}
         out.energy=draw.energy;out.direction={draw.direction.x,draw.direction.y,draw.direction.z};
         if(draw.pdg==11){out.status=IndependentPhotonStatus::electron;return out;}
-        if(draw.pdg!=22)return out;
+        if(draw.pdg!=22){out.failure_reason=102;return out;}
     }
-    return out; // iteration cap is a failure, never dose/escape
+    out.failure_reason=103;return out; // iteration cap is a failure, never dose/escape
 }
 
 // Actual-cut birth26 output and shared direction construction.
@@ -919,26 +926,26 @@ inline bool joint_homogeneous(const ElectronCtGeometry& g,const Position& p,
 // Counters: eligible, started, advances, fallback, below-table terminal draws,
 // deposited, escaped, photon gap, invalid. W stays with the original packet.
 template<class Uniform,class Tally>
-inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
+inline void transport_joint_pilot(ElectronEnergyPacket& packet,
     ElectronJointPilotView pilot,const ElectronMaterialIdentity& material,
     const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally) {
     using namespace joint_math;
     if(pilot.sections) {
-        if(material.section<0 || unsigned(material.section)>=pilot.section_count)return packet;
+        if(material.section<0 || unsigned(material.section)>=pilot.section_count)return;
         pilot=pilot.sections[material.section];
     }
     const float scale=pilot.density_scaling?pilot.density/material.density_g_cm3:1.f;
     // The bank uses the lowest indexed density per composition. Unsupported
     // nodes never enlarge the source support or silently extrapolate.
-    if(!(scale>0 && scale<=1.0000001f))return packet;
+    if(!(scale>0 && scale<=1.0000001f))return;
     const float radius=pilot.radius*scale;
     const auto m=pilot.model;
     if(!m.steps || packet.status!=ElectronPacketStatus::active ||
        material.section!=pilot.section || (!pilot.density_scaling && material.density_g_cm3!=pilot.density) ||
-       packet.cursor.energy_MeV>m.edges[m.bins]*(1+1e-7f))return packet;
+       packet.cursor.energy_MeV>m.edges[m.bins]*(1+1e-7f))return;
     tally(0,1);
     if(!joint_homogeneous(geometry,packet.cursor.position,pilot.section,
-                          packet.cursor.physical_density_g_cm3,radius))return packet;
+                          packet.cursor.physical_density_g_cm3,radius))return;
     tally(1,1);
     auto p=PositionVector{packet.cursor.position[0],packet.cursor.position[1],packet.cursor.position[2]};
     auto d=V{packet.cursor.direction[0],packet.cursor.direction[1],packet.cursor.direction[2]};
@@ -949,7 +956,7 @@ inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
         packet.cursor.position={p.x,p.y,p.z};d=unit(d);packet.cursor.direction={d.x,d.y,d.z};
         packet.cursor.energy_MeV=energy;packet.cursor.pdg=pdg;
     };
-    auto invalid=[&]() {state();packet.status=ElectronPacketStatus::invalid;tally(8,1);return packet;};
+    auto invalid=[&]() {state();packet.status=ElectronPacketStatus::invalid;tally(8,1);return;};
     const unsigned iteration_cap=pilot.density_scaling?65536:4096;
     for(unsigned iteration=0;iteration<iteration_cap;++iteration) {
         const bool exact=cursor>=0;
@@ -960,20 +967,20 @@ inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
             d=rotate(target,project(original,pilot.pre[cursor]));
             if(pdg==22) {
                 state();packet.cursor.row=kElectronContinuationEnd;
-                return packet; // physical photon state, no native source flight replay
+                return; // physical photon state, no native source flight replay
             }
             if(!g->inside) {
                 if(pdg!=22)return invalid();
                 // The native source sphere ended. This is missing photon
                 // coverage, not evidence that it escaped the actual patient.
                 state();packet.status=ElectronPacketStatus::coverage_missing;
-                packet.gap=ElectronPacketGap::photon_continuation;tally(7,1);return packet;
+                packet.gap=ElectronPacketGap::photon_continuation;tally(7,1);return;
             }
         }else pdg=11;
         if(pdg==11 && (!joint_homogeneous(geometry,{p.x,p.y,p.z},pilot.section,
               packet.cursor.physical_density_g_cm3,radius) || energy>m.edges[m.bins]*(1+1e-7f))) {
             state();tally(3,1);
-            packet.cursor.row=kElectronContinuationEnd;return packet;
+            packet.cursor.row=kElectronContinuationEnd;return;
         }
         V delta;const float* f;
         if(exact) {delta=rotate(target,project(original,g->delta));f=g->fraction;}
@@ -1000,7 +1007,7 @@ inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
                 p={boundary.position[0],boundary.position[1],boundary.position[2]};state();
                 if(boundary.status==ElectronCtBoundaryStatus::escaped){packet.status=ElectronPacketStatus::escaped;tally(6,1);}
                 else {packet.status=ElectronPacketStatus::coverage_missing;packet.gap=ElectronPacketGap::photon_continuation;tally(7,1);}
-                return packet;
+                return;
             }
         }
         ++packet.advances;tally(2,1);
@@ -1009,7 +1016,7 @@ inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
         if(coin<Probability{cuts[0]}) {
             p=p+(pdg==11?uniform():1.f)*delta;
             packet.deposit_position={p.x,p.y,p.z};packet.status=ElectronPacketStatus::deposited;
-            state();tally(5,1);return packet;
+            state();tally(5,1);return;
         }
         p=endpoint;
         unsigned channel=1;
@@ -1034,11 +1041,11 @@ inline ElectronEnergyPacket transport_joint_pilot(ElectronEnergyPacket packet,
 // This overload needs only the physical material identity; it never binds a
 // material continuation record on leaving homogeneous joint support.
 template<class Uniform,class Tally>
-inline ElectronEnergyPacket transport_joint_independent(ElectronEnergyPacket packet,
+inline void transport_joint_independent(ElectronEnergyPacket& packet,
     ElectronJointPilotView pilot,const ElectronCtGeometry& geometry,Uniform& uniform,Tally& tally){
     ElectronMaterialIdentity identity{};identity.section=packet.cursor.section;
     identity.density_g_cm3=packet.cursor.physical_density_g_cm3;
-    return transport_joint_pilot(packet,pilot,identity,geometry,uniform,tally);
+    transport_joint_pilot(packet,pilot,identity,geometry,uniform,tally);
 }
 
 } // namespace carbon::electron_fp32

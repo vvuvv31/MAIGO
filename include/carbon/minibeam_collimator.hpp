@@ -12,6 +12,20 @@ inline int nearest_minibeam_slit(const float u_mm, const float pitch_mm) noexcep
                           : static_cast<int>(scaled - 0.5F);
 }
 
+struct MinibeamSlitInterval {
+    float lower_mm, upper_mm;
+};
+
+// Navigation and material ownership must use the same represented walls.
+// Subtracting the offset first gives slit zero different FP32 walls: a ray
+// already on a wall can then propose a positive step that cannot move x/y.
+inline MinibeamSlitInterval minibeam_slit_interval(
+    const int slit, const float pitch, const float width,
+    const float offset) noexcept {
+    const float center = offset + static_cast<float>(slit) * pitch;
+    return {center - 0.5F * width, center + 0.5F * width};
+}
+
 inline bool minibeam_point_in_slit(
     const float x_mm,
     const float y_mm,
@@ -36,8 +50,9 @@ inline bool minibeam_point_in_slit(
     if (slit_index < -half_count || slit_index > half_count) {
         return false;
     }
-    const auto delta = centered_u_mm - static_cast<float>(slit_index) * slit_pitch_mm;
-    return delta > -0.5F * slit_width_mm && delta < 0.5F * slit_width_mm;
+    const auto walls = minibeam_slit_interval(
+        slit_index, slit_pitch_mm, slit_width_mm, slit_offset_mm);
+    return u_mm > walls.lower_mm && u_mm < walls.upper_mm;
 }
 
 // Rectangular equivalent used by the GPU minibeam path.  The outer body is a
@@ -61,10 +76,9 @@ inline bool minibeam_point_in_rectangular_slit(
     slit_index = nearest_minibeam_slit(centered_u_mm, slit_pitch_mm);
     const auto half_count = slit_count / 2;
     if (slit_index < -half_count || slit_index > half_count) return false;
-    const auto slit_center_mm =
-        slit_offset_mm + static_cast<float>(slit_index) * slit_pitch_mm;
-    return u_mm > slit_center_mm - 0.5F * slit_width_mm &&
-           u_mm < slit_center_mm + 0.5F * slit_width_mm;
+    const auto walls = minibeam_slit_interval(
+        slit_index, slit_pitch_mm, slit_width_mm, slit_offset_mm);
+    return u_mm > walls.lower_mm && u_mm < walls.upper_mm;
 }
 
 inline bool minibeam_point_in_rectangular_copper(
@@ -246,12 +260,12 @@ inline float minibeam_path_to_material_boundary(
     for (int local_offset = -1; local_offset <= 1; ++local_offset) {
         const auto slit = nearest_slit + local_offset;
         if (slit < -half_count || slit > half_count) continue;
-        const auto center_u =
-            slit_offset_mm + static_cast<float>(slit) * slit_pitch_mm;
+        const auto walls = minibeam_slit_interval(
+            slit, slit_pitch_mm, slit_width_mm, slit_offset_mm);
         if (std::fabs(direction_u) > 1.0e-8F) {
-            consider((center_u - 0.5F * slit_width_mm - origin_u) /
+            consider((walls.lower_mm - origin_u) /
                      direction_u);
-            consider((center_u + 0.5F * slit_width_mm - origin_u) /
+            consider((walls.upper_mm - origin_u) /
                      direction_u);
         }
         if (std::fabs(direction_v) > 1.0e-8F) {
@@ -281,7 +295,7 @@ inline float minibeam_path_to_surface_interval(
         c0=(-bb-root)/aa; c1=(-bb+root)/aa;
         consider(c0); consider(c1);
     } else if(cc>=0.0F) return max_path;
-    const float u=ca*x+sa*y-offset, v=-sa*x+ca*y;
+    const float u=ca*x+sa*y, v=-sa*x+ca*y;
     const float du=ca*dx+sa*dy, dv=-sa*dx+ca*dy;
     for(int slit=-slit_count/2;slit<=slit_count/2;++slit) {
         float enter=-1.0e30F,leave=1.0e30F;
@@ -293,7 +307,8 @@ inline float minibeam_path_to_surface_interval(
                 if(a>enter)enter=a; if(b<leave)leave=b;
             }
         };
-        slab(u,du,slit*pitch-0.5F*width,slit*pitch+0.5F*width);
+        const auto walls = minibeam_slit_interval(slit,pitch,width,offset);
+        slab(u,du,walls.lower_mm,walls.upper_mm);
         slab(v,dv,-half_length,half_length);
         if(enter<leave) {
             if(enter>=c0 && enter<=c1)consider(enter);
@@ -452,21 +467,19 @@ inline float minibeam_isotropic_safety_at_point(
     for (int local_offset = -1; local_offset <= 1; ++local_offset) {
         const auto slit = nearest_slit + local_offset;
         if (slit < -half_count || slit > half_count) continue;
-        const auto center_u =
-            slit_offset_mm + static_cast<float>(slit) * slit_pitch_mm;
-        // Distance to the two side walls of this slit.
-        const auto d_wall = std::fabs(u_mm - center_u) - 0.5F * slit_width_mm;
-        // Inside-slit (air) points: distance to the nearest wall is -d_wall
-        // when d_wall < 0; inside-copper points: distance to wall is +d_wall
-        // when the v coordinate is within the finite slit length.
+        const auto walls = minibeam_slit_interval(
+            slit, slit_pitch_mm, slit_width_mm, slit_offset_mm);
+        // Distance to the represented side walls, in either material,
+        // while within the finite slit length.
         const bool v_inside = v_mm > -slit_half_length_mm &&
                               v_mm < slit_half_length_mm;
         if (v_inside) {
-            const auto candidate = std::fabs(d_wall);
+            const auto candidate = std::fmin(std::fabs(u_mm - walls.lower_mm),
+                                             std::fabs(u_mm - walls.upper_mm));
             if (candidate < safety) safety = candidate;
         }
         // Distance to the finite slit ends (only relevant near this slit in u).
-        if (std::fabs(u_mm - center_u) < 0.5F * slit_width_mm) {
+        if (u_mm > walls.lower_mm && u_mm < walls.upper_mm) {
             const auto d_end =
                 std::fabs(std::fabs(v_mm) - slit_half_length_mm);
             if (d_end < safety) safety = d_end;

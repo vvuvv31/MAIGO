@@ -2,6 +2,28 @@
   "schema": 1,
   "scope": "All installed assets including companions, generation auxiliaries and external scene inputs. Family recipes do not imply automatic bitwise reproduction.",
   "assets": {
+    "data/elastic/copper/carbon/fragments.csv": {
+      "family": "copper_ion_transport",
+      "kind": "native_geant4_charged_products",
+      "tools": [
+        "copper_ion_transport/build_extract.sh",
+        "copper_ion_transport/prepare.py",
+        "copper_ion_transport/extract.cpp",
+        "tools/urban/extract_ct_urban.cc"
+      ],
+      "note": "324 charged species from current Cu CINPKG04; native Urban FP32 held-out gate and species elastic bank. Finite elastic bank convergence and carbon dose acceptance pending."
+    },
+    "data/elastic/copper/carbon/fragments.metadata.json": {
+      "family": "copper_ion_transport",
+      "kind": "native_geant4_charged_products",
+      "tools": [
+        "copper_ion_transport/build_extract.sh",
+        "copper_ion_transport/prepare.py",
+        "copper_ion_transport/extract.cpp",
+        "tools/urban/extract_ct_urban.cc"
+      ],
+      "note": "324 charged species from current Cu CINPKG04; native Urban FP32 held-out gate and species elastic bank. Finite elastic bank convergence and carbon dose acceptance pending."
+    },
     "data/elastic/copper/carbon/primary.csv": {
       "family": "tables",
       "kind": "native_material_tables_with_explicit_calibration",
@@ -1581,6 +1603,28 @@
         "tools/urban/merge_packages.py"
       ],
       "note": "Validate held-out FP32 queries before merging."
+    },
+    "data/scattering/urban/copper_fragments.bin": {
+      "family": "copper_ion_transport",
+      "kind": "native_geant4_charged_products",
+      "tools": [
+        "copper_ion_transport/build_extract.sh",
+        "copper_ion_transport/prepare.py",
+        "copper_ion_transport/extract.cpp",
+        "tools/urban/extract_ct_urban.cc"
+      ],
+      "note": "324 charged species from current Cu CINPKG04; native Urban FP32 held-out gate and species elastic bank. Finite elastic bank convergence and carbon dose acceptance pending."
+    },
+    "data/scattering/urban/copper_fragments.metadata.json": {
+      "family": "copper_ion_transport",
+      "kind": "native_geant4_charged_products",
+      "tools": [
+        "copper_ion_transport/build_extract.sh",
+        "copper_ion_transport/prepare.py",
+        "copper_ion_transport/extract.cpp",
+        "tools/urban/extract_ct_urban.cc"
+      ],
+      "note": "324 charged species from current Cu CINPKG04; native Urban FP32 held-out gate and species elastic bank. Finite elastic bank convergence and carbon dose acceptance pending."
     },
     "data/scattering/urban/ct_copper.bin": {
       "family": "urban",

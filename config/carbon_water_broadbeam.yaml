@@ -1,4 +1,5 @@
 # carbon_water_broadbeam: Water_75eV; current26 EM/electrons, FP32 dose.
+transport_pipeline: carbon_broadbeam
 run_mode: research
 unified_water_material_file: data/materials/water/material.json
 enable_ct_grid: false

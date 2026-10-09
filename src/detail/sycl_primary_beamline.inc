@@ -578,8 +578,8 @@
                         // Gaussian loss (or stops the run); its counter-based
                         // draws 48/49 are not consumed by anything else.
                         if (minibeam_copper_enable_energy_straggling &&
-                            !(copper_proton_native_fluctuation && primary_atomic_number == 1 &&
-                              primary_mass_number == 1)) {
+                            !(copper_ion_native_transport || (copper_proton_native_fluctuation && primary_atomic_number == 1 &&
+                              primary_mass_number == 1))) {
                             constexpr float copper_z_over_a_rel_water =
                                 (29.0F / 63.546F) / 0.55509F;
                             const auto effective_charge =
@@ -604,12 +604,16 @@
                                     sycl::sqrt(sycl::fmax(0.0F, variance)) * gaussian);
                         }
                         if (minibeam_copper_enable_energy_straggling) {
-                            if (copper_proton_native_fluctuation && primary_atomic_number == 1 && primary_mass_number == 1) {
+                            if (copper_ion_native_transport || (copper_proton_native_fluctuation && primary_atomic_number == 1 && primary_mass_number == 1)) {
                                 std::uint64_t draw_index = 0;
                                 auto uniform = [&]() { return (rng::random_u32(
                                     spot_seed, rng_history, (std::uint64_t(beamline_step) << 32) | draw_index++, 124) >> 8) * 0x1p-24f; };
-                                const auto draw = copper_proton_total_fluctuation(
-                                    energy_MeV, primary_rest_mass_MeV, mean_loss, true_loss_path_mm, minibeam_copper_density, uniform, native_restricted_mean);
+                                const auto draw = copper_ion_native_transport
+                                    ? copper_ion_total_fluctuation(energy_MeV,primary_rest_mass_MeV,
+                                        primary_atomic_number,primary_mass_number,copper_loss_context.factor,
+                                        native_restricted_mean,true_loss_path_mm,minibeam_copper_density,uniform)
+                                    : copper_proton_total_fluctuation(
+                                        energy_MeV, primary_rest_mass_MeV, mean_loss, true_loss_path_mm, minibeam_copper_density, uniform, native_restricted_mean);
                                 sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                     sycl::memory_scope::device, sycl::access::address_space::global_space>(
                                     minibeam_event_counts_device[draw.valid ? copper_proton_primary_loss_slot : copper_proton_loss_failure_slot]).fetch_add(1U);

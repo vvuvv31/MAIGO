@@ -36,6 +36,7 @@
 | `topas/unified_em/` | 全离子 native EM；与 common 的同名 stopping scorer 分开链接 |
 | `topas/all_ion_elastic/` | 弹性联合分布/反冲，含冻结 carbon 实现 |
 | `topas/electrons/` | electron/photon rates、conditional、birth、boundary、composition、joint |
+| `copper_ion_transport/` | [碳微束铜碎片弹性提取与涨落验证](copper_ion_transport/README.md) |
 | `native/` | Geant4 原生工具 CMake 项目 |
 | `tools/` | 各包族 campaign 驱动、编译器和验证器 |
 | `package_tools/` | native recorder 协议与当前 CINPKG04 写入 |
@@ -308,6 +309,24 @@ python3 scripts/check_data_manifest.py
 后两条默认检查当前安装资源。电子检查器支持 `--root` 指向具备 config/docs/data 的独立候选仓库。候选先完成包字段/能量/覆盖/completion/zero-overflow 审计及匹配剂量检查，再成套安装 payload、companions、bundle/registry；仅在主动接受替包后，按 manifest 检查器 `--help` 更新摘要。
 
 保持 fluctuations、Cu primary/fragment fluctuations、broadbeam0.5mm/minibeam0.1mm ion step caps、FP32 atomics，以及 campaign largest-remainder 权重、per-spot seed、正确归一化。本工具不改调度/源行为。
+
+### 碳离子 TOPAS 剂量参考的核弹性过程
+
+`g4h-elastic_HP` 不会为 GenericIon 注册核弹性。与当前启用碳离子核弹性的 GPU 对比时，TOPAS 必须另外加载官方 `G4IonElasticPhysics`。`topas/common/CarbonIonElasticPhysics.{hh,cc}` 将该构造器暴露为 TOPAS 模块，并在构建过程后检查 GenericIon 弹性是否实际注册；它不修改 Geant4 截面或散射模型。上述非 electrons 构建 profile 会自动 staging 此扩展；独立 PBS 剂量验证构建则将这两个文件与 PBS 扩展一起放入 `TOPAS_EXTENSIONS_DIR`。
+
+在已有物理模块列表中增加 `"CarbonIonElasticPhysics"`，并同步增加 `sv:Ph/Default/Modules` 的元素数量。例如 RT07575 head 原七模块列表补为：
+
+```text
+sv:Ph/Default/Modules = 8 "g4em-standard_opt4" "g4h-phy_QGSP_BIC_HP" "g4decay" "g4ion-inclxx" "g4h-elastic_HP" "g4stopping" "g4radioactivedecay" "CarbonIonElasticPhysics"
+```
+
+启动日志应包含 `CARBON_REFERENCE_ION_ELASTIC GenericIon process=... registered=true`。完成后检查：
+
+```bash
+python3 scripts/check_topas_carbon_reference.py /path/to/topas.log
+```
+
+该检查仅验证 GenericIon 弹性注册，不代表剂量接受。2026-10-07 RT07575 夜间参考缺少这一过程，不能继续作为与当前 GPU 核弹性配置一致的参考；原始结果必须保留，补齐后重新模拟和计算 gamma。
 
 剂量门槛：broadbeam local1%/1mm >99%、search0.1mm；proton minibeam local3%/0.2mm、search0.02mm，相对匹配旧基线下降≤1个百分点。绝对 TOPAS gamma 分开报告；carbon minibeam 剂量精度验收 deferred，runtime audits 仍必需。clean regression 是匹配 GPU 实现检查，不是新 TOPAS acceptance。性能实验前读 `../failed.md`，smoke 不支持性能结论。
 

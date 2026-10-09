@@ -2,6 +2,14 @@
   "schema": 1,
   "scope": "Installed release assets; paths relative to repository root. Includes auxiliary generation assets; historical provenance is under docs/data_provenance.",
   "files": {
+    "data/elastic/copper/carbon/fragments.csv": {
+      "bytes": 293693941,
+      "sha256": "cdded13fdb6f24a1f4ca34a147da52a1df2cadeca676684247932b79e3829191"
+    },
+    "data/elastic/copper/carbon/fragments.metadata.json": {
+      "bytes": 14454,
+      "sha256": "e547e24b5f1fcd970cbccd2623a468cb176cb178587dd103f165eb3e03a012f9"
+    },
     "data/elastic/copper/carbon/primary.csv": {
       "bytes": 103169208,
       "sha256": "0f3a837dd7fc1e39b13a09a34c3b5262a94adb055e9bafcd37becf47e65f677f"
@@ -466,6 +474,14 @@
       "bytes": 1071856,
       "sha256": "1c969cfd42ed22555352f728d54fcdd254e8413dbebfa51dde579180ee236a30"
     },
+    "data/scattering/urban/copper_fragments.bin": {
+      "bytes": 46229672,
+      "sha256": "4a8c709a77a6d3ed35f2678baa1cfbadfdff14bac7bd3c13b54d81b68fa53fa1"
+    },
+    "data/scattering/urban/copper_fragments.metadata.json": {
+      "bytes": 14934,
+      "sha256": "b7669ed5b255f34669ccb2dbf13297217c4e26a6da7bbd25168f207a49733def"
+    },
     "data/scattering/urban/ct_copper.bin": {
       "bytes": 752387952,
       "sha256": "2e9937f9a239e6b4a8e7adab60d154768244599dbdd13e4b6b0e768d8497f684"
@@ -561,6 +577,106 @@
     "inputs/rt07575_head/carbon/spots.csv": {
       "bytes": 22150,
       "sha256": "b93556eee6444262887b4dba5ecf3f6d9c249ca79977a4d4676b5dd235b2d9ec"
+    },
+    "inputs/rt07575_head/carbon_minibeam/README.md": {
+      "bytes": 5053,
+      "sha256": "7d61617c12913606456dd94d5eb6e60d8feaf02027fb462920a36bc04dee0780"
+    },
+    "inputs/rt07575_head/carbon_minibeam/beam_model.csv": {
+      "bytes": 1540,
+      "sha256": "e5fef032d1208fd8d5678074150d6ff616f095fefb6bd486d4670be5b16b0198"
+    },
+    "inputs/rt07575_head/carbon_minibeam/crossfiring_source_audit.json": {
+      "bytes": 1521,
+      "sha256": "46732821991c2a165b08f08a57383e5e8b9398337da855ddefa368a99e45e623"
+    },
+    "inputs/rt07575_head/carbon_minibeam/ct.bin": {
+      "bytes": 36852623,
+      "sha256": "1f540898c623dbffb7998e16e93fb53c156eb0193cef71a6f0a62b681cd7a39c"
+    },
+    "inputs/rt07575_head/carbon_minibeam/input_manifest.json": {
+      "bytes": 5856,
+      "sha256": "1b76be207728499b96a2b72b49d68fdf547603f673033cc38f878f553612567d"
+    },
+    "inputs/rt07575_head/carbon_minibeam/plan_export.json": {
+      "bytes": 8753,
+      "sha256": "539f5afb949b77d8374c60a565c4106b1e789dd74cde13667125c331c9e57a4b"
+    },
+    "inputs/rt07575_head/carbon_minibeam/source_reference/HUtoMaterialSchneider.txt": {
+      "bytes": 37352,
+      "sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"
+    },
+    "inputs/rt07575_head/carbon_minibeam/source_reference/aperture_3_0.7_angle01.txt": {
+      "bytes": 14584,
+      "sha256": "68967d880e925a8f98c3b75d2f6140be78faf131ed6c61422bce2e9dfb679a59"
+    },
+    "inputs/rt07575_head/carbon_minibeam/source_reference/aperture_3_0.7_angle02.txt": {
+      "bytes": 14536,
+      "sha256": "5968ca34a1e054717e4716c0d275a8e53a6c0431bbea94d8bb1047e7c4c79922"
+    },
+    "inputs/rt07575_head/carbon_minibeam/source_reference/run_c_01.txt": {
+      "bytes": 5482,
+      "sha256": "6fa8a5d429ba073e9cdee4c4ba33f92b55660656fda641a4c87d299706f11d61"
+    },
+    "inputs/rt07575_head/carbon_minibeam/source_reference/run_c_02.txt": {
+      "bytes": 5482,
+      "sha256": "d07890bb25b458e693a7e95349da77bcc879ec08ed48735e4c7354eff1041dd6"
+    },
+    "inputs/rt07575_head/carbon_minibeam/source_reference/run_c_03.txt": {
+      "bytes": 5481,
+      "sha256": "388acc8fa6944c4e12f1f37810bfaddd71ca68204caf0c259df8dd33173af9d0"
+    },
+    "inputs/rt07575_head/carbon_minibeam/source_reference/run_c_04.txt": {
+      "bytes": 5481,
+      "sha256": "17658501328c1cdfe6a006030673a8fb5fa56aefa0f7334bb7062eabb6eb04fd"
+    },
+    "inputs/rt07575_head/carbon_minibeam/source_reference/spots_c_01.txt": {
+      "bytes": 55555,
+      "sha256": "6159c5ba0bb42abc830ce183649cae9ca8c264d0055c71f6c1dbe00adde67e01"
+    },
+    "inputs/rt07575_head/carbon_minibeam/source_reference/spots_c_02.txt": {
+      "bytes": 55033,
+      "sha256": "09cb22fc435b8a3592d51833505b1c9d09d2ea86b5e4a0191fe16b7c9ac3f769"
+    },
+    "inputs/rt07575_head/carbon_minibeam/source_reference/spots_c_03.txt": {
+      "bytes": 62373,
+      "sha256": "59716271bd6a705c7cc3144f012aef696d404915da9dba94c3fe02c19f9cb6ae"
+    },
+    "inputs/rt07575_head/carbon_minibeam/source_reference/spots_c_04.txt": {
+      "bytes": 62010,
+      "sha256": "886cba24c37418bd35df20f55a4d725beeb98ed0a75e8b8afc48e09287fed095"
+    },
+    "inputs/rt07575_head/carbon_minibeam/spot_weights.csv": {
+      "bytes": 10654,
+      "sha256": "73d0eb4f2cf62aa31274068886ec06effdba4230ed28cd4c22a75337137c5fd0"
+    },
+    "inputs/rt07575_head/carbon_minibeam/spot_weights_details.csv": {
+      "bytes": 277090,
+      "sha256": "b2b62dfd6f87bb48bf9dbf7102d74ea659c1b94173b25a42e0103189b067f43f"
+    },
+    "inputs/rt07575_head/carbon_minibeam/spot_weights_details_patient_rot270.csv": {
+      "bytes": 146828,
+      "sha256": "85d37b3aa8945e00ef285ee4bf32ff2d3ff368d281469ec78898d25c67925965"
+    },
+    "inputs/rt07575_head/carbon_minibeam/spot_weights_details_patient_rot90.csv": {
+      "bytes": 130609,
+      "sha256": "f1bd9eab1fef59390e7f89f5a9b8ccc1dad7f29921d17f9ed2f9028c47e0b8f5"
+    },
+    "inputs/rt07575_head/carbon_minibeam/spot_weights_total.csv": {
+      "bytes": 10642,
+      "sha256": "7f692ff1b878560f3e3519447bcb8abd3f8f074dbd7126da982c11d3b5c81649"
+    },
+    "inputs/rt07575_head/carbon_minibeam/spots_optimized.csv": {
+      "bytes": 290636,
+      "sha256": "b9f4d3474aafe8451cb118a0f4ed12d9a99765451dd0cb8d8d39c01c18426a21"
+    },
+    "inputs/rt07575_head/carbon_minibeam/spots_optimized_total.csv": {
+      "bytes": 290625,
+      "sha256": "070e2d185e1468e8f6a490b38c369473529a122bc9bb519aa6051830d918bf9a"
+    },
+    "inputs/rt07575_head/carbon_minibeam/validation.json": {
+      "bytes": 485,
+      "sha256": "16ecd42c38d4d6759ffcca115f094fe63bb3be22e2b97b2a0c97c592f5f4f2e8"
     },
     "inputs/rt07575_head/proton/beam_model.csv": {
       "bytes": 1620,
@@ -675,6 +791,8 @@
       "inputs/rt07575_head/carbon/spots.csv"
     ],
     "carbon_ct_minibeam": [
+      "data/elastic/copper/carbon/fragments.csv",
+      "data/elastic/copper/carbon/fragments.metadata.json",
       "data/elastic/copper/carbon/primary.csv",
       "data/elastic/schneider/carbon/all_ion.bin",
       "data/elastic/schneider/carbon/all_ion.metadata.json",
@@ -766,6 +884,8 @@
       "data/nuclear/schneider/secondary/inelastic_rates.bin",
       "data/nuclear/schneider/secondary/inelastic_rates.metadata.json",
       "data/scattering/urban/air.bin",
+      "data/scattering/urban/copper_fragments.bin",
+      "data/scattering/urban/copper_fragments.metadata.json",
       "data/scattering/urban/ct_copper.bin",
       "data/stopping/air/carbon.csv",
       "data/stopping/air/carbon.metadata.json",
@@ -869,6 +989,8 @@
       "data/stopping/water/ions.csv"
     ],
     "carbon_water_minibeam": [
+      "data/elastic/copper/carbon/fragments.csv",
+      "data/elastic/copper/carbon/fragments.metadata.json",
       "data/elastic/copper/carbon/primary.csv",
       "data/elastic/schneider/carbon/all_ion.bin",
       "data/elastic/schneider/carbon/all_ion.metadata.json",
@@ -961,6 +1083,8 @@
       "data/nuclear/schneider/secondary/inelastic_rates.bin",
       "data/nuclear/schneider/secondary/inelastic_rates.metadata.json",
       "data/scattering/urban/air.bin",
+      "data/scattering/urban/copper_fragments.bin",
+      "data/scattering/urban/copper_fragments.metadata.json",
       "data/scattering/urban/ct_copper.bin",
       "data/stopping/air/carbon.csv",
       "data/stopping/air/carbon.metadata.json",

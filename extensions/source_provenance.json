@@ -4,7 +4,7 @@
   "files": [
     {
       "file": "README.md",
-      "installed_sha256": "c537ae8d7181b4e8413dc072d859eb028cd89db513578136dd9523aad48d8e6f",
+      "installed_sha256": "6fe0acd3e97f51e88b1c7d2a78abcff79ca2a39464c5c604bcbf8d0d8c122e71",
       "status": "authored_or_curated"
     },
     {
@@ -18,8 +18,43 @@
       "status": "authored_or_curated"
     },
     {
+      "file": "copper_ion_transport/CMakeLists.txt",
+      "status": "authored_or_curated",
+      "installed_sha256": "7afaf23b06634be20dba075720ed9a1492e95ee2227f991de4b843841d9a8483"
+    },
+    {
+      "file": "copper_ion_transport/README.md",
+      "status": "authored_or_curated",
+      "installed_sha256": "441e89f23386ecf72e126918e561abd44dff34bb0d96313604128a088a5ee474"
+    },
+    {
+      "file": "copper_ion_transport/build_extract.sh",
+      "status": "authored_or_curated",
+      "installed_sha256": "c051d043ab2eeab3ccd34acac4964d75c939bd3e7ca436616cef3447cfc044c2"
+    },
+    {
+      "file": "copper_ion_transport/extract.cpp",
+      "status": "authored_or_curated",
+      "installed_sha256": "b521699e62b28d280ee7032a9e0a8fb97145bf3cc0ec45a131525e1baa01ca0e"
+    },
+    {
+      "file": "copper_ion_transport/native_setup.hpp",
+      "status": "authored_or_curated",
+      "installed_sha256": "c003c3797bd332528f25daf93fd9438f2ce11dd0485b7d9467fad11a6fbed1bf"
+    },
+    {
+      "file": "copper_ion_transport/prepare.py",
+      "status": "authored_or_curated",
+      "installed_sha256": "a11599cc017049ff97c42cceca411e7adf9779e3a7f087529b9d94cd93ee392d"
+    },
+    {
+      "file": "copper_ion_transport/validate.cpp",
+      "status": "authored_or_curated",
+      "installed_sha256": "44ea1cf6115a8b120a434fe90f46b3a8b0ed627fdb447dee44a957426afd11e3"
+    },
+    {
       "file": "coverage.json",
-      "installed_sha256": "2c089f3fa5f181605cfd7d921638171f96db75543a680746138d1b553fcbc902",
+      "installed_sha256": "7ba8311a7fb5e91b14e91118e0c60470e1f43760609891b3d2f53ff9e94137ff",
       "status": "authored_or_curated"
     },
     {
@@ -1229,14 +1264,14 @@
       "file": "topas/common/CarbonIonElasticPhysics.cc",
       "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/topas/common/CarbonIonElasticPhysics.cc",
       "source_sha256": "da759e91de90958bf487a609c4fd8da580c96a0edced7b5a27e46ca6108bc952",
-      "installed_sha256": "da759e91de90958bf487a609c4fd8da580c96a0edced7b5a27e46ca6108bc952",
+      "installed_sha256": "aa66ad064bfc4e60485f227d2b0269d820c03dc2fd69d31d3a62bf21fd99b07d",
       "status": "copied"
     },
     {
       "file": "topas/common/CarbonIonElasticPhysics.hh",
       "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/topas/common/CarbonIonElasticPhysics.hh",
       "source_sha256": "28e8f5f4ac5a6efe7463d4232e8b0dd7c97059aa82de59ec6ca219a4af03762f",
-      "installed_sha256": "28e8f5f4ac5a6efe7463d4232e8b0dd7c97059aa82de59ec6ca219a4af03762f",
+      "installed_sha256": "0a1784ab924dbdb76449af01c243b45356081597f0e307530932f675b716e1a5",
       "status": "copied"
     },
     {

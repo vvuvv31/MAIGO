@@ -6,7 +6,7 @@ import yaml
 ROOT=Path(__file__).resolve().parents[1]
 KEYS=['tps_isocenter_mm','tps_isocenter_x_mm','tps_isocenter_y_mm','primary_particle','initial_energy_MeV','primary_rest_mass_MeV','beam_energy_spread_percent','primary_urban_reference_particle','primary_urban_ionisation_process','minibeam_copper_loss_range_file','scorer_mode','enable_fragment_species_scoring','cinel02_max_secondary_inelastic_generations','ct_dicom_origin_mode','scorerLET','enable_let_scoring','output_file','dose_output_file','topas_spots_file','topas_spots_files','spot_weights_file','spots_geometry_mode','ion_physics_file','ct_validation_mode','tps_source','ct_schneider_cross_section_file','minibeam_collimator_width_mm','minibeam_collimator_length_mm','primary_inelastic_package_v2_file','material_electron_rate26_file','broadbeam_electron_region_diagnostics','enable_layered_phantom']
 KEYS += ['enable_neutron_transport', 'neutron_birth_output_file', 'neutron_birth_capacity', 'neutron_package_file', 'neutron_world_half_width_mm', 'neutron_max_collisions', 'neutron_recoil_stopping_manifest', 'neutron_elastic_two_body', 'neutron_water_recoil_urban', 'neutron_exact_plane_boundaries', 'neutron_proton_birth_output_file', 'neutron_proton_birth_capacity', 'neutral_origin_voxel_output_file']
-KEYS += ['phantom_length_mm', 'depth_bin_width_mm']
+KEYS += ['phantom_length_mm', 'depth_bin_width_mm', 'minibeam_copper_proton_straggling_model']
 KEYS += ['physics_profile','spots_lateral_yz_skew','spots_lateral_yz_skew_auto_pivot','spots_lateral_yz_skew_pivot_mm','spots_lateral_yz_rotation_deg','spots_lateral_yz_rotation_pivot_y_mm','mass_number','stopping_power_file','nuclear_cross_section_file','reaction_package_file','tps_particle_type']
 FLAGS=['--plan-manifest','--sequential-spots','--scorer-let','--dose-output','--straggling-scale']
 def main():
@@ -20,6 +20,12 @@ def main():
             r=subprocess.run([str(a.binary.resolve()),'--config',str(f)],cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
             ok=r.returncode!=0 and 'Unsupported preset configuration key' in r.stdout and '[unified-em-audit]' not in r.stdout
             reports.append(dict(key=key,passed=ok));assert ok,(key,r.stdout)
+        for pipeline in ['combined','carbon_broadbeam','proton_minibeam','']:
+            c=dict(cfg);c['transport_pipeline']=pipeline
+            f=Path(tmp)/'case.yaml';f.write_text(yaml.safe_dump(c,sort_keys=False))
+            r=subprocess.run([str(a.binary.resolve()),'--config',str(f)],cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+            ok=r.returncode!=0 and 'transport_pipeline' in r.stdout and '[unified-em-audit]' not in r.stdout
+            reports.append(dict(transport_pipeline=pipeline,passed=ok));assert ok,(pipeline,r.stdout)
         for device in ['gpu','cpu','default','nvidia','level_zero','intel','arc','opencl','hip','native_cpu','']:
             c=dict(cfg);c['device']=device
             f=Path(tmp)/'case.yaml';f.write_text(yaml.safe_dump(c,sort_keys=False))

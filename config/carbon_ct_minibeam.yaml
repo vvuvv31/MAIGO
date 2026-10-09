@@ -1,4 +1,5 @@
 # carbon_ct_minibeam: lung CT benchmark (not RT07575); current26 EM/electrons, FP32 dose.
+transport_pipeline: carbon_minibeam
 run_mode: research
 enable_ct_grid: true
 number_of_histories: 100000
@@ -80,10 +81,10 @@ minibeam_copper_inclxx_file: data/nuclear/copper/carbon/cascade.cinpkg
 minibeam_copper_ion_stopping_power_file: data/stopping/copper/ions_carbon.csv
 minibeam_copper_ion_cross_section_file: data/nuclear/copper/ion_cross_sections.csv
 minibeam_air_urban_package_file: data/scattering/urban/air.bin
-minibeam_copper_proton_straggling_model: clipped_gaussian
+minibeam_copper_straggling_model: g4_ion_delta
 minibeam_phase_space_at_copper_exit: false
 enable_charged_origin_voxel_scoring: false
-minibeam_copper_primary_native_mean_loss: false
+minibeam_copper_primary_native_mean_loss: true
 minibeam_primary_specialization: false
 minibeam_primary_pipeline: compact
 ct_grid_file: inputs/lung_minibeam/ct.bin
@@ -106,3 +107,5 @@ material_electron_birth_file: data/em/electrons/shared/birth26.bin
 material_electron_joint_pilot_file: data/em/electrons/shared/joint.bin
 material_electron_charged_index_file: data/em/electrons/shared/charged.index
 material_photon_response_index_file: data/em/electrons/shared/photon.index
+minibeam_copper_fragment_elastic_file: data/elastic/copper/carbon/fragments.csv
+minibeam_copper_fragment_urban_package_file: data/scattering/urban/copper_fragments.bin

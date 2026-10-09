@@ -757,8 +757,8 @@ private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 
-    template<bool BroadBeam, int JointResponse>
-    friend TransportResult transport_sycl_impl(
+    template<class Pipeline, int JointResponse>
+    friend TransportResult transport_pipeline(
         const TransportConfig&, const StoppingPowerTable&,
         const std::string&, SyclTransportContext*);
     friend TransportResult transport_sycl(

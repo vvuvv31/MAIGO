@@ -1,4 +1,5 @@
 # carbon_water_minibeam: Water_75eV; current26 EM/electrons, FP32 dose.
+transport_pipeline: carbon_minibeam
 run_mode: research
 number_of_histories: 2500000
 initial_energy_MeVu: 250.0
@@ -55,6 +56,8 @@ minibeam_copper_radiation_length_g_per_cm2: 12.8628
 minibeam_copper_enable_mcs: true
 minibeam_copper_enable_elastic: true
 minibeam_copper_enable_energy_straggling: true
+minibeam_copper_straggling_model: g4_ion_delta
+minibeam_copper_primary_native_mean_loss: true
 minibeam_copper_straggling_scale: 1.0
 minibeam_copper_mcs_scale: 1.0
 minibeam_copper_fragment_mcs_scale: 1.0
@@ -113,3 +116,5 @@ material_electron_birth_file: data/em/electrons/shared/birth26.bin
 material_electron_joint_pilot_file: data/em/electrons/shared/joint.bin
 material_photon_response_index_file: data/em/electrons/shared/photon.index
 material_electron_charged_index_file: data/em/electrons/shared/charged.index
+minibeam_copper_fragment_elastic_file: data/elastic/copper/carbon/fragments.csv
+minibeam_copper_fragment_urban_package_file: data/scattering/urban/copper_fragments.bin

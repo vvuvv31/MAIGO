@@ -124,7 +124,8 @@
         "inputs/rt07575_head/carbon/beam_model.csv",
         "inputs/rt07575_head/carbon/ct.bin",
         "inputs/rt07575_head/carbon/spots.csv"
-      ]
+      ],
+      "transport_pipeline": "carbon_broadbeam"
     },
     "carbon_ct_minibeam": {
       "config": "config/carbon_ct_minibeam.yaml",
@@ -161,9 +162,13 @@
         "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
         "material_electron_charged_index_file": "data/em/electrons/shared/charged.index",
-        "material_photon_response_index_file": "data/em/electrons/shared/photon.index"
+        "material_photon_response_index_file": "data/em/electrons/shared/photon.index",
+        "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv",
+        "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin"
       },
       "files": [
+        "data/elastic/copper/carbon/fragments.csv",
+        "data/elastic/copper/carbon/fragments.metadata.json",
         "data/elastic/copper/carbon/primary.csv",
         "data/elastic/schneider/carbon/all_ion.bin",
         "data/elastic/schneider/carbon/all_ion.metadata.json",
@@ -255,6 +260,8 @@
         "data/nuclear/schneider/secondary/inelastic_rates.bin",
         "data/nuclear/schneider/secondary/inelastic_rates.metadata.json",
         "data/scattering/urban/air.bin",
+        "data/scattering/urban/copper_fragments.bin",
+        "data/scattering/urban/copper_fragments.metadata.json",
         "data/scattering/urban/ct_copper.bin",
         "data/stopping/air/carbon.csv",
         "data/stopping/air/carbon.metadata.json",
@@ -266,7 +273,8 @@
         "data/stopping/water/carbon.metadata.json",
         "data/stopping/water/ions.csv",
         "inputs/lung_minibeam/ct.bin"
-      ]
+      ],
+      "transport_pipeline": "carbon_minibeam"
     },
     "carbon_water_broadbeam": {
       "config": "config/carbon_water_broadbeam.yaml",
@@ -383,7 +391,8 @@
         "data/stopping/water/carbon.csv",
         "data/stopping/water/carbon.metadata.json",
         "data/stopping/water/ions.csv"
-      ]
+      ],
+      "transport_pipeline": "carbon_broadbeam"
     },
     "carbon_water_minibeam": {
       "config": "config/carbon_water_minibeam.yaml",
@@ -421,9 +430,13 @@
         "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
         "material_photon_response_index_file": "data/em/electrons/shared/photon.index",
-        "material_electron_charged_index_file": "data/em/electrons/shared/charged.index"
+        "material_electron_charged_index_file": "data/em/electrons/shared/charged.index",
+        "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv",
+        "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin"
       },
       "files": [
+        "data/elastic/copper/carbon/fragments.csv",
+        "data/elastic/copper/carbon/fragments.metadata.json",
         "data/elastic/copper/carbon/primary.csv",
         "data/elastic/schneider/carbon/all_ion.bin",
         "data/elastic/schneider/carbon/all_ion.metadata.json",
@@ -516,6 +529,8 @@
         "data/nuclear/schneider/secondary/inelastic_rates.bin",
         "data/nuclear/schneider/secondary/inelastic_rates.metadata.json",
         "data/scattering/urban/air.bin",
+        "data/scattering/urban/copper_fragments.bin",
+        "data/scattering/urban/copper_fragments.metadata.json",
         "data/scattering/urban/ct_copper.bin",
         "data/stopping/air/carbon.csv",
         "data/stopping/air/carbon.metadata.json",
@@ -527,7 +542,8 @@
         "data/stopping/water/carbon.metadata.json",
         "data/stopping/water/ions.csv",
         "inputs/water_minibeam/carbon/spots.csv"
-      ]
+      ],
+      "transport_pipeline": "carbon_minibeam"
     },
     "proton_ct_broadbeam": {
       "config": "config/proton_ct_broadbeam.yaml",
@@ -655,7 +671,8 @@
         "inputs/rt07575_head/proton/beam_model.csv",
         "inputs/rt07575_head/proton/ct.bin",
         "inputs/rt07575_head/proton/spots.csv"
-      ]
+      ],
+      "transport_pipeline": "proton_broadbeam"
     },
     "proton_ct_minibeam": {
       "config": "config/proton_ct_minibeam.yaml",
@@ -799,7 +816,8 @@
         "data/stopping/water/proton.csv",
         "data/stopping/water/proton.metadata.json",
         "inputs/lung_minibeam/ct.bin"
-      ]
+      ],
+      "transport_pipeline": "proton_minibeam"
     },
     "proton_water_broadbeam": {
       "config": "config/proton_water_broadbeam.yaml",
@@ -922,7 +940,8 @@
         "data/stopping/water/ions.csv",
         "data/stopping/water/proton.csv",
         "data/stopping/water/proton.metadata.json"
-      ]
+      ],
+      "transport_pipeline": "proton_broadbeam"
     },
     "proton_water_minibeam": {
       "config": "config/proton_water_minibeam.yaml",
@@ -1065,7 +1084,8 @@
         "data/stopping/water/ions.csv",
         "data/stopping/water/proton.csv",
         "data/stopping/water/proton.metadata.json"
-      ]
+      ],
+      "transport_pipeline": "proton_minibeam"
     }
   },
   "files": {
@@ -1345,6 +1365,12 @@
     "inputs/rt07575_head/carbon/spots.csv": {
       "bytes": 22150
     },
+    "data/elastic/copper/carbon/fragments.csv": {
+      "bytes": 293693941
+    },
+    "data/elastic/copper/carbon/fragments.metadata.json": {
+      "bytes": 14454
+    },
     "data/elastic/copper/carbon/primary.csv": {
       "bytes": 103169208
     },
@@ -1371,6 +1397,12 @@
     },
     "data/scattering/urban/air.bin": {
       "bytes": 1071856
+    },
+    "data/scattering/urban/copper_fragments.bin": {
+      "bytes": 46229672
+    },
+    "data/scattering/urban/copper_fragments.metadata.json": {
+      "bytes": 14934
     },
     "data/scattering/urban/ct_copper.bin": {
       "bytes": 752387952
@@ -1472,6 +1504,6 @@
       "bytes": 88565
     }
   },
-  "total_unique_bytes": 6175900615,
+  "total_unique_bytes": 6515853616,
   "electron_registry": "docs/electron_packages_manifest.json"
 }

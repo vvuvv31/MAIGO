@@ -18,6 +18,8 @@ std::uint32_t child_step = 0;
 float child_copper_segment_path = 0.0F;
 float child_nuclear_tau_remaining = 0.0F;
 bool child_nuclear_tau_active = false;
+UrbanV2TrackState child_urban_state{};
+bool child_at_boundary = true;
 const auto child_species_category =
     product.z == 6 ? 0U :
     product.z == 5 ? 1U :
@@ -29,8 +31,8 @@ const auto child_species_category =
     (product.z == 1 && product.a == 3) ? 7U : 8U;
 const auto child_rng_stream =
     rng::event_product_stream(
-        rng_history, beamline_step,
-        rng::branch_role_primary_charged,
+        rng::primary_descendant_stream(spot_seed, rng_history), beamline_step,
+        rng::branch_role_beamline_charged,
         product_index);
 while (child_energy > energy_cutoff_MeV &&
        child_direction.z > 1.0e-8F &&
@@ -72,7 +74,7 @@ while (child_energy > energy_cutoff_MeV &&
     auto child_inelastic_rate = 0.0F;
     auto child_collision_in_step = false;
     auto child_transport_path = child_path;
-    if (child_in_copper) {
+    if (child_in_copper && !copper_ion_native_transport) {
         child_inelastic_rate =
             minibeam_copper_ion_inelastic_rate(
                 minibeam_copper_ion_xs_device,
@@ -106,13 +108,27 @@ while (child_energy > energy_cutoff_MeV &&
                 child_inelastic_rate;
         }
     }
+    if (copper_ion_native_transport) {
+        auto& f_energy = child_energy; auto& f_x = child_x; auto& f_y = child_y; auto& f_z = child_z;
+        auto& f_direction = child_direction; auto& f_path = child_transport_path;
+        auto& f_rate = child_inelastic_rate; auto& f_collision = child_collision_in_step;
+        auto& f_tau = child_nuclear_tau_remaining; auto& f_tau_active = child_nuclear_tau_active;
+        auto& f_urban_state = child_urban_state; auto& f_at_boundary = child_at_boundary;
+        const auto f_charge = product.z; const auto f_a = product.a;
+        const auto f_seed = spot_seed; const auto f_stream = child_rng_stream; const auto f_step = child_step;
+        const auto f_in_copper = child_in_copper; constexpr bool f_terminal = false;
+        float f_ignored_tau = 0;
+#include "sycl_copper_ion_fragment_step.inc"
+    } else {
     child_x += child_transport_path *
         child_direction.x;
     child_y += child_transport_path *
         child_direction.y;
     child_z += child_transport_path *
         child_direction.z;
+    }
     if (child_in_copper) {
+      if (!copper_ion_native_transport) {
         const auto child_stopping =
             minibeam_copper_ion_stopping(
                 minibeam_copper_sp_energies_device,
@@ -239,6 +255,7 @@ while (child_energy > energy_cutoff_MeV &&
                 spot_seed, child_rng_stream,
                 child_step, 0);
         }
+      }
         if (child_collision_in_step) {
             child_nuclear_tau_active = false;
             if (minibeam_copper_cascade_queue_device != nullptr &&
@@ -769,10 +786,7 @@ if (secondary_queue_device != nullptr) {
         child.dir_z = child_direction.z;
         child.weight = 1.0F;
         child.parent_history = global_history;
-        child.rng_stream = rng::event_product_stream(
-            rng_history, beamline_step,
-            rng::branch_role_primary_charged,
-            product_index);
+        child.rng_stream = child_rng_stream;
         child.birth_region =
             minibeam_birth_region_copper;
         secondary_queue_device[output] = child;

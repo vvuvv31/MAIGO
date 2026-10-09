@@ -67,7 +67,7 @@ def inventory(root):
             files[filename] = {'bytes': p.stat().st_size}
         entries[path.stem] = dict(config=str(path.relative_to(root)),
              primary=path.stem.split('_')[0], medium=path.stem.split('_')[1],
-             beam=path.stem.split('_')[2], ion_scattering=cfg['multiple_scattering_model'],
+             beam=path.stem.split('_')[2], transport_pipeline=cfg.get('transport_pipeline','generic'), ion_scattering=cfg['multiple_scattering_model'],
              electron_packages=packages, inputs=dependencies)
         entries[path.stem]['files'] = sorted(expanded)
     return dict(schema=3, scope='Eight preset inputs, fixed runtime defaults, electron payloads/aliases, bundle members and companion metadata. Generation provenance is not a runtime dependency.',

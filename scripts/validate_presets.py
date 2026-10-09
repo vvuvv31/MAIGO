@@ -31,6 +31,9 @@ def run(case,arm,binary,input_root,out,histories):
     for line in text.splitlines():
         if line.startswith(tuple('['+key+']' for key in AUDITS[2:])):
             assert all(int(n)==0 for n in re.findall(r'(?:coverage_missing|invalid|photon_gap)=(\d+)',line)),line
+    if arm=='candidate':
+        selected=re.findall(r'^\[transport-pipeline\] name=(\S+)',text,re.M)
+        assert selected==[cfg.get('transport_pipeline','generic')]*2,(case,selected)
     rows=re.findall(r'^\[unified-em-audit\] (.*)$',text,re.M)
     assert len(rows)==2 and all(int(row.split()[0])==0 for row in rows)
     return directory,text
@@ -38,14 +41,14 @@ def run(case,arm,binary,input_root,out,histories):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--control',type=Path,required=True);p.add_argument('--control-root',type=Path,required=True)
-    p.add_argument('--candidate',type=Path,default=ROOT/'build/carbon_mc');p.add_argument('--out',type=Path,required=True)
+    p.add_argument('--candidate',type=Path,default=ROOT/'build/carbon_mc');p.add_argument('--candidate-root',type=Path,default=ROOT);p.add_argument('--out',type=Path,required=True)
     p.add_argument('--histories',type=int,default=10000)
     p.add_argument('--cases',nargs='+',choices=CASES,default=CASES)
     a=p.parse_args();a.out=a.out.resolve();a.out.mkdir(parents=True,exist_ok=False)
     reports=[]
     for case in a.cases:
         c,ct=run(case,'control',a.control.resolve(),a.control_root.resolve(),a.out,a.histories)
-        n,nt=run(case,'candidate',a.candidate.resolve(),ROOT,a.out,a.histories)
+        n,nt=run(case,'candidate',a.candidate.resolve(),a.candidate_root.resolve(),a.out,a.histories)
         if case.endswith('_minibeam'):
             assert len(re.findall(r'^\[primary-compact\] enabled=1 ',nt,re.M))==2,(case,'compact pipeline not used')
             assert len(re.findall(r'^\[primary-split-time\] ',nt,re.M))==2,(case,'split kernels not launched')

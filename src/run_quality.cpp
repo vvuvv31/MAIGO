@@ -114,12 +114,15 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         report.approximations.push_back({"all_ion_elastic_candidate",
             "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",1.,0.});
     }
-    if (config.enable_minibeam && config.minibeam_copper_proton_straggling_model != "clipped_gaussian")
-        report.approximations.push_back({"copper_proton_total_fluctuation",
-            "Native copper proton loss candidate: native 0.05 mm cut plus sampled delta transfers; electron transport and other ion fluctuation models are not included",1.,0.});
-    if (config.enable_minibeam) {
+    if (config.enable_minibeam && config.minibeam_copper_straggling_model == "g4_ion_delta") {
+        report.approximations.push_back({"copper_ion_transport",
+            "Cu primary/charged fragments use native restricted mean, G4 ion/universal fluctuations plus delta transfers, species Urban scattering and finite species elastic banks. Delta electrons and nuclear neutrals remain beamline energy sinks. Elastic bank convergence and carbon minibeam dose acceptance remain pending",1.,0.});
+    } else if (config.enable_minibeam) {
+        if (config.minibeam_copper_straggling_model == "g4_universal_delta")
+            report.approximations.push_back({"copper_proton_total_fluctuation",
+                "Native copper proton loss: native 0.05 mm cut plus sampled delta transfers; delta electrons are not transported",1.,0.});
         report.approximations.push_back({"minibeam_copper_candidate",
-            "Copper primary transport uses the configured source ZA, elastic bank and nuclear event package; charged nuclear products use the available species stopping tables with source-charge-scaled fallback in Copper. Copper secondary MCS retains the Highland model. Neutral products are an explicit beamline energy sink. This remains a research comparison, not a validated neutral-dose model",1.,0.});
+            "Copper primary transport uses the configured source ZA, elastic bank and nuclear event package; charged nuclear products use species stopping tables with source-charge-scaled fallback in Copper and Highland secondary MCS. Nuclear neutrals remain an explicit beamline energy sink; dose acceptance pending",1.,0.});
     }
 
     if(config.fermi_eyges_gaussian_only)

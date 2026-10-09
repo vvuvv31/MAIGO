@@ -1,6 +1,8 @@
 {
   "description": "Current installed release assets; historical generation records are under docs/data_provenance",
   "files": [
+    "data/elastic/copper/carbon/fragments.csv",
+    "data/elastic/copper/carbon/fragments.metadata.json",
     "data/elastic/copper/carbon/primary.csv",
     "data/elastic/copper/proton/primary.csv",
     "data/elastic/schneider/carbon/all_ion.bin",
@@ -118,6 +120,8 @@
     "data/nuclear/schneider/secondary/inelastic_rates.bin",
     "data/nuclear/schneider/secondary/inelastic_rates.metadata.json",
     "data/scattering/urban/air.bin",
+    "data/scattering/urban/copper_fragments.bin",
+    "data/scattering/urban/copper_fragments.metadata.json",
     "data/scattering/urban/ct_copper.bin",
     "data/scattering/urban/proton_water_copper.metadata.json",
     "data/stopping/air/carbon.csv",

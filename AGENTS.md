@@ -1,7 +1,8 @@
 # MAIGO_clean
 
-- This is a production-only runtime for exactly the eight proton/carbon ×
-  water/CT × broadbeam/minibeam presets in `config/`. Do not reintroduce old
+- This is a production-only runtime with eight proton/carbon ×
+  water/CT × broadbeam/minibeam release presets in `config/`. Custom proton/C12
+  configurations may use the generic pipeline with the same validated packages. Do not reintroduce old
   package readers, diagnostic build modes, CPU transport stubs, generic source
   species, TOPAS text-plan replay or DICOM conversion into this runtime.
 - RT07575 is a **head** case. Its CT, source, weights, placement, collimator and
@@ -30,7 +31,8 @@
   not new TOPAS acceptance. Explicit calibration approximations of continuous26
   hard rates/conditional terminals remain unchanged.
 - Release configurations use `max_secondary_inelastic_generations` and
-  `clipped_gaussian`; do not restore old aliases or retired scorer keys.
+  current Cu fluctuations (`g4_universal_delta` for proton minibeams and
+  `g4_ion_delta` for carbon minibeams); do not restore old aliases or retired scorer keys.
   YAML source identity requires explicit Z/A, energies use `initial_energy_MeVu`,
   and TPS CSV uses `energy_MeV,x_mm,y_mm,weight`. Urban loss/range/MFP uses only
   current packages; no CSV oracle route. Primary reference masses are checked

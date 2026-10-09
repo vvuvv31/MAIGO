@@ -72,7 +72,7 @@ struct SyclTransportContext::Impl {
     ~Impl() { clear(); }
 
     void clear() noexcept {
-        resident_em.reset();resident_urban.reset();resident_air.reset();
+        resident_em.reset();resident_urban.reset();resident_air.reset();resident_copper_ions.reset();
         const auto release = [this](auto*& pointer) {
             if (pointer != nullptr) {
                 sycl::free(pointer, queue);
@@ -107,14 +107,14 @@ struct SyclTransportContext::Impl {
     };
     CachedElectronCt electron_ct;
     CachedUnifiedEm unified_em_cache;
-    std::shared_ptr<ResidentPhysicsTables> resident_em, resident_urban, resident_air;
+    std::shared_ptr<ResidentPhysicsTables> resident_em, resident_urban, resident_air, resident_copper_ions;
     SchneiderHostCache schneider_host_cache;
     ImmutableInputCache immutable_inputs;
     std::uint64_t physics_cache_hits{0};
     std::uint64_t physics_cache_misses{0};
 
     void clear_physics_cache() noexcept {
-        resident_em.reset();resident_urban.reset();resident_air.reset();
+        resident_em.reset();resident_urban.reset();resident_air.reset();resident_copper_ions.reset();
         immutable_inputs = ImmutableInputCache{};
         unified_em_cache = CachedUnifiedEm{};
         schneider_host_cache = SchneiderHostCache{};

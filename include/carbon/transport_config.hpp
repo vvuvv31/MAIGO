@@ -275,6 +275,8 @@ struct TransportConfig {
     // Explicit dispatch/physics preset. YAML loading defaults non-minibeam
     // configurations to enabled FE for all charged species; explicit choices win.
     std::string transport_profile{"reference"};
+    // Implementation selection only; custom configs default to the shared generic pipeline.
+    std::string transport_pipeline{"generic"};
     bool fermi_eyges_gaussian_only{false};
     std::string multiple_scattering_model{"urban_v2"};
     // Global Urban v2: exact material/cut couples, every transported charged ion.
@@ -357,9 +359,9 @@ struct TransportConfig {
     // independent of downstream ion straggling; both default to enabled.
     bool minibeam_copper_enable_energy_straggling{true};
     double minibeam_copper_straggling_scale{1.0};
-    // Research selector applies to Z=1,A=1 primary and fragment tracks only.
-    std::string minibeam_copper_proton_straggling_model{"clipped_gaussian"};
-    // Research candidate: native restricted mean law for primary protons in Cu.
+    // Native Cu selectors: universal/delta for proton; ion/delta for C12 and charged fragments.
+    std::string minibeam_copper_straggling_model{"clipped_gaussian"};
+    // Native restricted mean law for the configured primary in Cu.
     bool minibeam_copper_primary_native_mean_loss{false};
     // Separate Copper fragment control, enabled in all default minibeams.
     bool minibeam_copper_fragment_enable_energy_straggling{true};
@@ -367,7 +369,7 @@ struct TransportConfig {
     // Amplitude scale for the selected Copper MCS model. The legacy Highland
     // benchmark uses 0.785; the slab-constrained model uses 1.0.
     double minibeam_copper_mcs_scale{0.785};
-    // Copper fragments still use their independently controlled cumulative
+    // Copper fragments use independently controlled Urban (ion/delta) or cumulative
     // Highland path.  Do not inherit the primary Fermi--Eyges normalization.
     double minibeam_copper_fragment_mcs_scale{0.785};
     // Number of fragment+Cu reactions whose process-faithful correlated
@@ -380,6 +382,8 @@ struct TransportConfig {
     // Copper-only TOPAS banks, loaded only for minibeam runs.
     std::filesystem::path minibeam_copper_inclxx_file{};
     std::filesystem::path minibeam_copper_elastic_file{};
+    std::filesystem::path minibeam_copper_fragment_elastic_file{};
+    std::filesystem::path minibeam_copper_fragment_urban_package_file{};
     std::filesystem::path minibeam_copper_ion_stopping_power_file{};
     std::filesystem::path minibeam_copper_ion_cross_section_file{};
     // Used by spots_geometry_mode=minibeam_pbs_y to map TOPAS world Y to

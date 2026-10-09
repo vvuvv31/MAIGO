@@ -53,3 +53,5 @@ python3 scripts/check_electron_packages.py
 八个预设均通过匹配 GPU 回归，源 CSV/种子和离散审计计数一致，全部 16 个候选批次审计通过且队列零溢出。最大剂量相对 L1 差异为 `2.79985540757e-07`（阈值 `1e-5`），最大物理相对能量残差为 `7.26634417886e-06`（阈值 `1e-4`）。
 
 该检查只验证实现和迁移的一致性，不是性能测量或新的 TOPAS 剂量验收；碳 minibeam 剂量精度验收仍待完成。
+
+碳微束铜碎片另用 `data/scattering/urban/copper_fragments.bin`（当前 324 种 CINPKG04 带电产物）与 `data/elastic/copper/carbon/fragments.csv`，均有同名 metadata。提取/验证入口为 `extensions/copper_ion_transport/build_extract.sh`；原水/CT Urban 包保留。

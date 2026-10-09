@@ -12,6 +12,10 @@ Build with the installed SYCL compiler:
 BUILD_JOBS=6 bash scripts/build.sh
 ```
 
+All five transport families are enabled by default. To compile only the family
+being optimized, use `BUILD_DIR` and the `CARBON_ENABLE_*` CMake switches described
+in [selective compilation](docs/transport_pipelines.md#selective-compilation).
+
 Run one scene, or continuous batches sharing one GPU context and package load:
 
 ```bash
@@ -19,6 +23,12 @@ build/carbon_mc --config config/proton_water_broadbeam.yaml --histories 10000
 build/carbon_mc --config config/proton_ct_minibeam.yaml \
   --batch-count 2 --histories-per-batch 10000 --batch-output out/proton_ct_minibeam_smoke
 ```
+
+The eight release presets select their proton/carbon broadbeam/minibeam
+implementation with `transport_pipeline`. Custom proton/C12 configurations
+without that key use `generic`; a copied release preset retains its explicit
+selection until the key is removed or changed. Pipeline layout and optimization
+boundaries are documented in [docs/transport_pipelines.md](docs/transport_pipelines.md).
 
 Use a new output directory. CLI options are `--config`, `--histories`, `--seed`,
 `--batch-count`, `--histories-per-batch`, `--batch-output` and `--help`.
@@ -55,8 +65,10 @@ conversion, TOPAS text-channel plan reader, sequential spot replay, old CLI
 aliases, diagnostic build modes or alternative precision scorers. Unsupported
 configuration keys fail before transport. Mandatory quality/energy/coverage,
 completion and overflow audits remain. LET/research scorer routes are outside
-this runtime. Internally required fragments and the active copper fluctuation
-model `clipped_gaussian` remain part of the current physics.
+this runtime. Internally required fragments remain part of the current physics.
+Proton minibeams retain `g4_universal_delta`; carbon minibeams use `g4_ion_delta`
+with native Cu fragment Urban and species elastic transport. See
+[Cu ion extraction and limits](extensions/copper_ion_transport/README.md).
 
 The data/inputs are local external assets and are excluded from Git. The
 installed inventory is `docs/copied_inputs.json`; expanded preset dependencies

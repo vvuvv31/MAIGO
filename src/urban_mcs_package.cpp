@@ -12,7 +12,7 @@ UrbanMcsPackage UrbanMcsPackage::load(const std::filesystem::path& path) {
     stream.read(magic,8);stream.read(reinterpret_cast<char*>(header.data()),28);
     const auto [version,nm,ns,nn,nf,ng,validated]=header;
     if(!stream || std::memcmp(magic,"URBANV22",8) || version!=2 || validated!=1 ||
-       nm==0 || nm>2048 || ns==0 || ns>200 || nn<2 || nf<2 || ng<3)
+       nm==0 || nm>2048 || ns==0 || ns>512 || nn<2 || nf<2 || ng<3)
         throw std::runtime_error("Invalid or unvalidated Urban MSC package header");
     const std::uint64_t nr=std::uint64_t(nm)*ns;
     const std::uint64_t bytes=36+std::uint64_t(nm)*20+std::uint64_t(ns)*12+nr*48+

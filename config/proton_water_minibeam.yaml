@@ -1,4 +1,5 @@
 # proton_water_minibeam: Water_75eV; current26 EM/electrons, FP32 dose.
+transport_pipeline: proton_minibeam
 run_mode: research
 unified_water_material_file: data/materials/water/material.json
 enable_ct_grid: false
@@ -87,7 +88,7 @@ minibeam_copper_inclxx_file: data/nuclear/copper/proton/cascade.cinpkg
 minibeam_copper_ion_stopping_power_file: data/stopping/copper/ions_proton.csv
 minibeam_copper_ion_cross_section_file: data/nuclear/copper/ion_cross_sections.csv
 minibeam_air_urban_package_file: data/scattering/urban/air.bin
-minibeam_copper_proton_straggling_model: g4_universal_delta
+minibeam_copper_straggling_model: g4_universal_delta
 minibeam_phase_space_at_copper_exit: false
 minibeam_air_ionization_rate_file: data/ionization/air/proton_rate.csv
 minibeam_copper_primary_native_mean_loss: false

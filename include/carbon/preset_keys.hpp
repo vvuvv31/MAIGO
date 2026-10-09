@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <array>
 namespace carbon {
-inline constexpr std::array<std::string_view,170> preset_keys{
+inline constexpr std::array<std::string_view,172> preset_keys{
     "LET",
     "all_ion_elastic_file",
     "beam_energy_spread",
@@ -88,6 +88,8 @@ inline constexpr std::array<std::string_view,170> preset_keys{
     "minibeam_copper_enable_nuclear_attenuation",
     "minibeam_copper_exact_material_boundaries",
     "minibeam_copper_fragment_cascade_generations",
+    "minibeam_copper_fragment_elastic_file",
+    "minibeam_copper_fragment_urban_package_file",
     "minibeam_copper_fragment_enable_energy_straggling",
     "minibeam_copper_fragment_mcs_scale",
     "minibeam_copper_fragment_straggling_scale",
@@ -97,7 +99,7 @@ inline constexpr std::array<std::string_view,170> preset_keys{
     "minibeam_copper_max_step_mm",
     "minibeam_copper_mcs_scale",
     "minibeam_copper_primary_native_mean_loss",
-    "minibeam_copper_proton_straggling_model",
+    "minibeam_copper_straggling_model",
     "minibeam_copper_radiation_length_g_per_cm2",
     "minibeam_copper_stopping_power_file",
     "minibeam_copper_straggling_scale",
@@ -148,6 +150,7 @@ inline constexpr std::array<std::string_view,170> preset_keys{
     "tps_virtual_scanning_magnet_y_mm",
     "tps_virtual_source_to_isocenter_mm",
     "transport_profile",
+    "transport_pipeline",
     "unified_water_material_file",
     "unified_water_nuclear_transport",
     "urban_ct_density_scaling",

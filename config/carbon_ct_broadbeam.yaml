@@ -1,4 +1,5 @@
 # carbon_ct_broadbeam: RT07575 head; current26 EM/electrons, FP32 dose.
+transport_pipeline: carbon_broadbeam
 run_mode: research
 number_of_histories: 6481909
 primary_atomic_number: 6
