@@ -7,11 +7,9 @@
       "primary": "carbon",
       "medium": "ct",
       "beam": "broadbeam",
+      "transport_pipeline": "carbon_broadbeam",
       "ion_scattering": "fermi_eyges",
-      "electron_packages": [
-        "carbon",
-        "shared"
-      ],
+      "electron_packages": [],
       "inputs": {
         "ct_grid_file": "inputs/rt07575_head/carbon/ct.bin",
         "tps_spots_file": "inputs/rt07575_head/carbon/spots.csv",
@@ -25,84 +23,18 @@
         "ct_schneider_physics_bundle_file": "data/nuclear/schneider/carbon/bundle.json",
         "em_delta_moments_file": "data/em/ions/delta_moments.bin",
         "em_package_file": "data/em/ions/continuous26.bin",
-        "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/carbon/final_states.bin",
-        "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
-        "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
-        "material_photon_response_index_file": "data/em/electrons/shared/photon.index",
-        "material_electron_charged_index_file": "data/em/electrons/shared/charged.index"
+        "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/carbon/final_states.bin"
       },
+      "enable_electron_transport": false,
+      "optional_electron_inputs": {},
       "files": [
-        "data/em/electrons/carbon/manifest.json",
-        "data/em/electrons/carbon/parameters.bin",
-        "data/em/electrons/shared/atomic26.bin",
-        "data/em/electrons/shared/birth26.bin",
-        "data/em/electrons/shared/brems26.bin",
-        "data/em/electrons/shared/carbon26.bin",
-        "data/em/electrons/shared/charged.index",
-        "data/em/electrons/shared/elastic00.bin",
-        "data/em/electrons/shared/elastic01.bin",
-        "data/em/electrons/shared/elastic02.bin",
-        "data/em/electrons/shared/elastic03.bin",
-        "data/em/electrons/shared/elastic04.bin",
-        "data/em/electrons/shared/elastic05.bin",
-        "data/em/electrons/shared/elastic06.bin",
-        "data/em/electrons/shared/elastic07.bin",
-        "data/em/electrons/shared/elastic08.bin",
-        "data/em/electrons/shared/elastic09.bin",
-        "data/em/electrons/shared/elastic10.bin",
-        "data/em/electrons/shared/elastic11.bin",
-        "data/em/electrons/shared/elastic12.bin",
-        "data/em/electrons/shared/elastic13.bin",
-        "data/em/electrons/shared/elastic14.bin",
-        "data/em/electrons/shared/elastic15.bin",
-        "data/em/electrons/shared/elastic16.bin",
-        "data/em/electrons/shared/elastic17.bin",
-        "data/em/electrons/shared/elastic18.bin",
-        "data/em/electrons/shared/elastic19.bin",
-        "data/em/electrons/shared/elastic20.bin",
-        "data/em/electrons/shared/elastic21.bin",
-        "data/em/electrons/shared/elastic22.bin",
-        "data/em/electrons/shared/elastic23.bin",
-        "data/em/electrons/shared/elastic24.bin",
-        "data/em/electrons/shared/elastic25.bin",
-        "data/em/electrons/shared/joint.bin",
-        "data/em/electrons/shared/manifest.json",
-        "data/em/electrons/shared/penelope26.bin",
-        "data/em/electrons/shared/photon.index",
-        "data/em/electrons/shared/photon00.bin",
-        "data/em/electrons/shared/photon01.bin",
-        "data/em/electrons/shared/photon02.bin",
-        "data/em/electrons/shared/photon03.bin",
-        "data/em/electrons/shared/photon04.bin",
-        "data/em/electrons/shared/photon05.bin",
-        "data/em/electrons/shared/photon06.bin",
-        "data/em/electrons/shared/photon07.bin",
-        "data/em/electrons/shared/photon08.bin",
-        "data/em/electrons/shared/photon09.bin",
-        "data/em/electrons/shared/photon10.bin",
-        "data/em/electrons/shared/photon11.bin",
-        "data/em/electrons/shared/photon12.bin",
-        "data/em/electrons/shared/photon13.bin",
-        "data/em/electrons/shared/photon14.bin",
-        "data/em/electrons/shared/photon15.bin",
-        "data/em/electrons/shared/photon16.bin",
-        "data/em/electrons/shared/photon17.bin",
-        "data/em/electrons/shared/photon18.bin",
-        "data/em/electrons/shared/photon19.bin",
-        "data/em/electrons/shared/photon20.bin",
-        "data/em/electrons/shared/photon21.bin",
-        "data/em/electrons/shared/photon22.bin",
-        "data/em/electrons/shared/photon23.bin",
-        "data/em/electrons/shared/photon24.bin",
-        "data/em/electrons/shared/photon25.bin",
-        "data/em/electrons/shared/proton26.bin",
-        "data/em/electrons/shared/rates26.bin",
-        "data/em/electrons/shared/scalar26.bin",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
+        "data/materials/schneider/radiation_lengths.json",
+        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/nuclear/schneider/carbon/bundle.json",
         "data/nuclear/schneider/carbon/final_states.bin",
         "data/nuclear/schneider/carbon/final_states.channels.json",
@@ -124,19 +56,16 @@
         "inputs/rt07575_head/carbon/beam_model.csv",
         "inputs/rt07575_head/carbon/ct.bin",
         "inputs/rt07575_head/carbon/spots.csv"
-      ],
-      "transport_pipeline": "carbon_broadbeam"
+      ]
     },
     "carbon_ct_minibeam": {
       "config": "config/carbon_ct_minibeam.yaml",
       "primary": "carbon",
       "medium": "ct",
       "beam": "minibeam",
+      "transport_pipeline": "carbon_minibeam",
       "ion_scattering": "urban_v2",
-      "electron_packages": [
-        "carbon",
-        "shared"
-      ],
+      "electron_packages": [],
       "inputs": {
         "primary_stopping_power_file": "data/stopping/water/carbon.csv",
         "ct_schneider_primary_rate_file": "data/nuclear/schneider/carbon/inelastic_rates.bin",
@@ -159,12 +88,15 @@
         "ct_schneider_file": "data/materials/schneider/hu_to_material.txt",
         "all_ion_elastic_file": "data/elastic/schneider/carbon/all_ion.bin",
         "elastic_recoil_stopping_file": "data/elastic/schneider/carbon/recoil_stopping.bin",
+        "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv",
+        "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin"
+      },
+      "enable_electron_transport": false,
+      "optional_electron_inputs": {
         "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
         "material_electron_charged_index_file": "data/em/electrons/shared/charged.index",
-        "material_photon_response_index_file": "data/em/electrons/shared/photon.index",
-        "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv",
-        "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin"
+        "material_photon_response_index_file": "data/em/electrons/shared/photon.index"
       },
       "files": [
         "data/elastic/copper/carbon/fragments.csv",
@@ -174,77 +106,13 @@
         "data/elastic/schneider/carbon/all_ion.metadata.json",
         "data/elastic/schneider/carbon/recoil_stopping.bin",
         "data/elastic/schneider/carbon/recoil_stopping.metadata.json",
-        "data/em/electrons/carbon/manifest.json",
-        "data/em/electrons/carbon/parameters.bin",
-        "data/em/electrons/shared/atomic26.bin",
-        "data/em/electrons/shared/birth26.bin",
-        "data/em/electrons/shared/brems26.bin",
-        "data/em/electrons/shared/carbon26.bin",
-        "data/em/electrons/shared/charged.index",
-        "data/em/electrons/shared/elastic00.bin",
-        "data/em/electrons/shared/elastic01.bin",
-        "data/em/electrons/shared/elastic02.bin",
-        "data/em/electrons/shared/elastic03.bin",
-        "data/em/electrons/shared/elastic04.bin",
-        "data/em/electrons/shared/elastic05.bin",
-        "data/em/electrons/shared/elastic06.bin",
-        "data/em/electrons/shared/elastic07.bin",
-        "data/em/electrons/shared/elastic08.bin",
-        "data/em/electrons/shared/elastic09.bin",
-        "data/em/electrons/shared/elastic10.bin",
-        "data/em/electrons/shared/elastic11.bin",
-        "data/em/electrons/shared/elastic12.bin",
-        "data/em/electrons/shared/elastic13.bin",
-        "data/em/electrons/shared/elastic14.bin",
-        "data/em/electrons/shared/elastic15.bin",
-        "data/em/electrons/shared/elastic16.bin",
-        "data/em/electrons/shared/elastic17.bin",
-        "data/em/electrons/shared/elastic18.bin",
-        "data/em/electrons/shared/elastic19.bin",
-        "data/em/electrons/shared/elastic20.bin",
-        "data/em/electrons/shared/elastic21.bin",
-        "data/em/electrons/shared/elastic22.bin",
-        "data/em/electrons/shared/elastic23.bin",
-        "data/em/electrons/shared/elastic24.bin",
-        "data/em/electrons/shared/elastic25.bin",
-        "data/em/electrons/shared/joint.bin",
-        "data/em/electrons/shared/manifest.json",
-        "data/em/electrons/shared/penelope26.bin",
-        "data/em/electrons/shared/photon.index",
-        "data/em/electrons/shared/photon00.bin",
-        "data/em/electrons/shared/photon01.bin",
-        "data/em/electrons/shared/photon02.bin",
-        "data/em/electrons/shared/photon03.bin",
-        "data/em/electrons/shared/photon04.bin",
-        "data/em/electrons/shared/photon05.bin",
-        "data/em/electrons/shared/photon06.bin",
-        "data/em/electrons/shared/photon07.bin",
-        "data/em/electrons/shared/photon08.bin",
-        "data/em/electrons/shared/photon09.bin",
-        "data/em/electrons/shared/photon10.bin",
-        "data/em/electrons/shared/photon11.bin",
-        "data/em/electrons/shared/photon12.bin",
-        "data/em/electrons/shared/photon13.bin",
-        "data/em/electrons/shared/photon14.bin",
-        "data/em/electrons/shared/photon15.bin",
-        "data/em/electrons/shared/photon16.bin",
-        "data/em/electrons/shared/photon17.bin",
-        "data/em/electrons/shared/photon18.bin",
-        "data/em/electrons/shared/photon19.bin",
-        "data/em/electrons/shared/photon20.bin",
-        "data/em/electrons/shared/photon21.bin",
-        "data/em/electrons/shared/photon22.bin",
-        "data/em/electrons/shared/photon23.bin",
-        "data/em/electrons/shared/photon24.bin",
-        "data/em/electrons/shared/photon25.bin",
-        "data/em/electrons/shared/proton26.bin",
-        "data/em/electrons/shared/rates26.bin",
-        "data/em/electrons/shared/scalar26.bin",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
+        "data/materials/schneider/radiation_lengths.json",
+        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/nuclear/copper/carbon/cascade.cinpkg",
         "data/nuclear/copper/carbon/primary_rate.csv",
         "data/nuclear/copper/ion_cross_sections.csv",
@@ -273,19 +141,16 @@
         "data/stopping/water/carbon.metadata.json",
         "data/stopping/water/ions.csv",
         "inputs/lung_minibeam/ct.bin"
-      ],
-      "transport_pipeline": "carbon_minibeam"
+      ]
     },
     "carbon_water_broadbeam": {
       "config": "config/carbon_water_broadbeam.yaml",
       "primary": "carbon",
       "medium": "water",
       "beam": "broadbeam",
+      "transport_pipeline": "carbon_broadbeam",
       "ion_scattering": "fermi_eyges",
-      "electron_packages": [
-        "carbon",
-        "shared"
-      ],
+      "electron_packages": [],
       "inputs": {
         "unified_water_material_file": "data/materials/water/material.json",
         "primary_stopping_power_file": "data/stopping/water/carbon.csv",
@@ -296,84 +161,23 @@
         "ct_schneider_physics_bundle_file": "data/nuclear/schneider/carbon/bundle.json",
         "em_delta_moments_file": "data/em/ions/delta_moments.bin",
         "em_package_file": "data/em/ions/continuous26.bin",
-        "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/carbon/final_states.bin",
+        "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/carbon/final_states.bin"
+      },
+      "enable_electron_transport": false,
+      "optional_electron_inputs": {
         "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
         "material_electron_charged_index_file": "data/em/electrons/shared/charged.index",
         "material_photon_response_index_file": "data/em/electrons/shared/photon.index"
       },
       "files": [
-        "data/em/electrons/carbon/manifest.json",
-        "data/em/electrons/carbon/parameters.bin",
-        "data/em/electrons/shared/atomic26.bin",
-        "data/em/electrons/shared/birth26.bin",
-        "data/em/electrons/shared/brems26.bin",
-        "data/em/electrons/shared/carbon26.bin",
-        "data/em/electrons/shared/charged.index",
-        "data/em/electrons/shared/elastic00.bin",
-        "data/em/electrons/shared/elastic01.bin",
-        "data/em/electrons/shared/elastic02.bin",
-        "data/em/electrons/shared/elastic03.bin",
-        "data/em/electrons/shared/elastic04.bin",
-        "data/em/electrons/shared/elastic05.bin",
-        "data/em/electrons/shared/elastic06.bin",
-        "data/em/electrons/shared/elastic07.bin",
-        "data/em/electrons/shared/elastic08.bin",
-        "data/em/electrons/shared/elastic09.bin",
-        "data/em/electrons/shared/elastic10.bin",
-        "data/em/electrons/shared/elastic11.bin",
-        "data/em/electrons/shared/elastic12.bin",
-        "data/em/electrons/shared/elastic13.bin",
-        "data/em/electrons/shared/elastic14.bin",
-        "data/em/electrons/shared/elastic15.bin",
-        "data/em/electrons/shared/elastic16.bin",
-        "data/em/electrons/shared/elastic17.bin",
-        "data/em/electrons/shared/elastic18.bin",
-        "data/em/electrons/shared/elastic19.bin",
-        "data/em/electrons/shared/elastic20.bin",
-        "data/em/electrons/shared/elastic21.bin",
-        "data/em/electrons/shared/elastic22.bin",
-        "data/em/electrons/shared/elastic23.bin",
-        "data/em/electrons/shared/elastic24.bin",
-        "data/em/electrons/shared/elastic25.bin",
-        "data/em/electrons/shared/joint.bin",
-        "data/em/electrons/shared/manifest.json",
-        "data/em/electrons/shared/penelope26.bin",
-        "data/em/electrons/shared/photon.index",
-        "data/em/electrons/shared/photon00.bin",
-        "data/em/electrons/shared/photon01.bin",
-        "data/em/electrons/shared/photon02.bin",
-        "data/em/electrons/shared/photon03.bin",
-        "data/em/electrons/shared/photon04.bin",
-        "data/em/electrons/shared/photon05.bin",
-        "data/em/electrons/shared/photon06.bin",
-        "data/em/electrons/shared/photon07.bin",
-        "data/em/electrons/shared/photon08.bin",
-        "data/em/electrons/shared/photon09.bin",
-        "data/em/electrons/shared/photon10.bin",
-        "data/em/electrons/shared/photon11.bin",
-        "data/em/electrons/shared/photon12.bin",
-        "data/em/electrons/shared/photon13.bin",
-        "data/em/electrons/shared/photon14.bin",
-        "data/em/electrons/shared/photon15.bin",
-        "data/em/electrons/shared/photon16.bin",
-        "data/em/electrons/shared/photon17.bin",
-        "data/em/electrons/shared/photon18.bin",
-        "data/em/electrons/shared/photon19.bin",
-        "data/em/electrons/shared/photon20.bin",
-        "data/em/electrons/shared/photon21.bin",
-        "data/em/electrons/shared/photon22.bin",
-        "data/em/electrons/shared/photon23.bin",
-        "data/em/electrons/shared/photon24.bin",
-        "data/em/electrons/shared/photon25.bin",
-        "data/em/electrons/shared/proton26.bin",
-        "data/em/electrons/shared/rates26.bin",
-        "data/em/electrons/shared/scalar26.bin",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
+        "data/materials/schneider/radiation_lengths.json",
+        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/materials/water/material.json",
         "data/nuclear/schneider/carbon/bundle.json",
         "data/nuclear/schneider/carbon/final_states.bin",
@@ -391,19 +195,16 @@
         "data/stopping/water/carbon.csv",
         "data/stopping/water/carbon.metadata.json",
         "data/stopping/water/ions.csv"
-      ],
-      "transport_pipeline": "carbon_broadbeam"
+      ]
     },
     "carbon_water_minibeam": {
       "config": "config/carbon_water_minibeam.yaml",
       "primary": "carbon",
       "medium": "water",
       "beam": "minibeam",
+      "transport_pipeline": "carbon_minibeam",
       "ion_scattering": "urban_v2",
-      "electron_packages": [
-        "carbon",
-        "shared"
-      ],
+      "electron_packages": [],
       "inputs": {
         "tps_spots_file": "inputs/water_minibeam/carbon/spots.csv",
         "minibeam_copper_stopping_power_file": "data/stopping/copper/carbon.csv",
@@ -427,12 +228,15 @@
         "minibeam_air_urban_package_file": "data/scattering/urban/air.bin",
         "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/carbon/final_states.bin",
         "urban_mcs_package_file": "data/scattering/urban/ct_copper.bin",
+        "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv",
+        "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin"
+      },
+      "enable_electron_transport": false,
+      "optional_electron_inputs": {
         "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
         "material_photon_response_index_file": "data/em/electrons/shared/photon.index",
-        "material_electron_charged_index_file": "data/em/electrons/shared/charged.index",
-        "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv",
-        "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin"
+        "material_electron_charged_index_file": "data/em/electrons/shared/charged.index"
       },
       "files": [
         "data/elastic/copper/carbon/fragments.csv",
@@ -442,77 +246,13 @@
         "data/elastic/schneider/carbon/all_ion.metadata.json",
         "data/elastic/schneider/carbon/recoil_stopping.bin",
         "data/elastic/schneider/carbon/recoil_stopping.metadata.json",
-        "data/em/electrons/carbon/manifest.json",
-        "data/em/electrons/carbon/parameters.bin",
-        "data/em/electrons/shared/atomic26.bin",
-        "data/em/electrons/shared/birth26.bin",
-        "data/em/electrons/shared/brems26.bin",
-        "data/em/electrons/shared/carbon26.bin",
-        "data/em/electrons/shared/charged.index",
-        "data/em/electrons/shared/elastic00.bin",
-        "data/em/electrons/shared/elastic01.bin",
-        "data/em/electrons/shared/elastic02.bin",
-        "data/em/electrons/shared/elastic03.bin",
-        "data/em/electrons/shared/elastic04.bin",
-        "data/em/electrons/shared/elastic05.bin",
-        "data/em/electrons/shared/elastic06.bin",
-        "data/em/electrons/shared/elastic07.bin",
-        "data/em/electrons/shared/elastic08.bin",
-        "data/em/electrons/shared/elastic09.bin",
-        "data/em/electrons/shared/elastic10.bin",
-        "data/em/electrons/shared/elastic11.bin",
-        "data/em/electrons/shared/elastic12.bin",
-        "data/em/electrons/shared/elastic13.bin",
-        "data/em/electrons/shared/elastic14.bin",
-        "data/em/electrons/shared/elastic15.bin",
-        "data/em/electrons/shared/elastic16.bin",
-        "data/em/electrons/shared/elastic17.bin",
-        "data/em/electrons/shared/elastic18.bin",
-        "data/em/electrons/shared/elastic19.bin",
-        "data/em/electrons/shared/elastic20.bin",
-        "data/em/electrons/shared/elastic21.bin",
-        "data/em/electrons/shared/elastic22.bin",
-        "data/em/electrons/shared/elastic23.bin",
-        "data/em/electrons/shared/elastic24.bin",
-        "data/em/electrons/shared/elastic25.bin",
-        "data/em/electrons/shared/joint.bin",
-        "data/em/electrons/shared/manifest.json",
-        "data/em/electrons/shared/penelope26.bin",
-        "data/em/electrons/shared/photon.index",
-        "data/em/electrons/shared/photon00.bin",
-        "data/em/electrons/shared/photon01.bin",
-        "data/em/electrons/shared/photon02.bin",
-        "data/em/electrons/shared/photon03.bin",
-        "data/em/electrons/shared/photon04.bin",
-        "data/em/electrons/shared/photon05.bin",
-        "data/em/electrons/shared/photon06.bin",
-        "data/em/electrons/shared/photon07.bin",
-        "data/em/electrons/shared/photon08.bin",
-        "data/em/electrons/shared/photon09.bin",
-        "data/em/electrons/shared/photon10.bin",
-        "data/em/electrons/shared/photon11.bin",
-        "data/em/electrons/shared/photon12.bin",
-        "data/em/electrons/shared/photon13.bin",
-        "data/em/electrons/shared/photon14.bin",
-        "data/em/electrons/shared/photon15.bin",
-        "data/em/electrons/shared/photon16.bin",
-        "data/em/electrons/shared/photon17.bin",
-        "data/em/electrons/shared/photon18.bin",
-        "data/em/electrons/shared/photon19.bin",
-        "data/em/electrons/shared/photon20.bin",
-        "data/em/electrons/shared/photon21.bin",
-        "data/em/electrons/shared/photon22.bin",
-        "data/em/electrons/shared/photon23.bin",
-        "data/em/electrons/shared/photon24.bin",
-        "data/em/electrons/shared/photon25.bin",
-        "data/em/electrons/shared/proton26.bin",
-        "data/em/electrons/shared/rates26.bin",
-        "data/em/electrons/shared/scalar26.bin",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
+        "data/materials/schneider/radiation_lengths.json",
+        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/materials/water/material.json",
         "data/nuclear/copper/carbon/cascade.cinpkg",
         "data/nuclear/copper/carbon/primary_rate.csv",
@@ -542,19 +282,16 @@
         "data/stopping/water/carbon.metadata.json",
         "data/stopping/water/ions.csv",
         "inputs/water_minibeam/carbon/spots.csv"
-      ],
-      "transport_pipeline": "carbon_minibeam"
+      ]
     },
     "proton_ct_broadbeam": {
       "config": "config/proton_ct_broadbeam.yaml",
       "primary": "proton",
       "medium": "ct",
       "beam": "broadbeam",
+      "transport_pipeline": "proton_broadbeam",
       "ion_scattering": "fermi_eyges",
-      "electron_packages": [
-        "proton",
-        "shared"
-      ],
+      "electron_packages": [],
       "inputs": {
         "ct_schneider_primary_rate_file": "data/nuclear/schneider/proton/inelastic_rates.bin",
         "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/proton/final_states.bin",
@@ -569,88 +306,22 @@
         "tps_beam_model_file": "inputs/rt07575_head/proton/beam_model.csv",
         "spots_upstream_air_stopping_power_file": "data/stopping/air/proton.csv",
         "primary_stopping_power_file": "data/stopping/water/proton.csv",
-        "tps_spots_file": "inputs/rt07575_head/proton/spots.csv",
-        "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
-        "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
-        "material_photon_response_index_file": "data/em/electrons/shared/photon.index",
-        "material_electron_charged_index_file": "data/em/electrons/shared/charged.index"
+        "tps_spots_file": "inputs/rt07575_head/proton/spots.csv"
       },
+      "enable_electron_transport": false,
+      "optional_electron_inputs": {},
       "files": [
         "data/elastic/schneider/proton/all_ion.bin",
         "data/elastic/schneider/proton/all_ion.metadata.json",
         "data/elastic/schneider/proton/recoil_stopping.bin",
         "data/elastic/schneider/proton/recoil_stopping.metadata.json",
-        "data/em/electrons/proton/manifest.json",
-        "data/em/electrons/proton/parameters.bin",
-        "data/em/electrons/shared/atomic26.bin",
-        "data/em/electrons/shared/birth26.bin",
-        "data/em/electrons/shared/brems26.bin",
-        "data/em/electrons/shared/carbon26.bin",
-        "data/em/electrons/shared/charged.index",
-        "data/em/electrons/shared/elastic00.bin",
-        "data/em/electrons/shared/elastic01.bin",
-        "data/em/electrons/shared/elastic02.bin",
-        "data/em/electrons/shared/elastic03.bin",
-        "data/em/electrons/shared/elastic04.bin",
-        "data/em/electrons/shared/elastic05.bin",
-        "data/em/electrons/shared/elastic06.bin",
-        "data/em/electrons/shared/elastic07.bin",
-        "data/em/electrons/shared/elastic08.bin",
-        "data/em/electrons/shared/elastic09.bin",
-        "data/em/electrons/shared/elastic10.bin",
-        "data/em/electrons/shared/elastic11.bin",
-        "data/em/electrons/shared/elastic12.bin",
-        "data/em/electrons/shared/elastic13.bin",
-        "data/em/electrons/shared/elastic14.bin",
-        "data/em/electrons/shared/elastic15.bin",
-        "data/em/electrons/shared/elastic16.bin",
-        "data/em/electrons/shared/elastic17.bin",
-        "data/em/electrons/shared/elastic18.bin",
-        "data/em/electrons/shared/elastic19.bin",
-        "data/em/electrons/shared/elastic20.bin",
-        "data/em/electrons/shared/elastic21.bin",
-        "data/em/electrons/shared/elastic22.bin",
-        "data/em/electrons/shared/elastic23.bin",
-        "data/em/electrons/shared/elastic24.bin",
-        "data/em/electrons/shared/elastic25.bin",
-        "data/em/electrons/shared/joint.bin",
-        "data/em/electrons/shared/manifest.json",
-        "data/em/electrons/shared/penelope26.bin",
-        "data/em/electrons/shared/photon.index",
-        "data/em/electrons/shared/photon00.bin",
-        "data/em/electrons/shared/photon01.bin",
-        "data/em/electrons/shared/photon02.bin",
-        "data/em/electrons/shared/photon03.bin",
-        "data/em/electrons/shared/photon04.bin",
-        "data/em/electrons/shared/photon05.bin",
-        "data/em/electrons/shared/photon06.bin",
-        "data/em/electrons/shared/photon07.bin",
-        "data/em/electrons/shared/photon08.bin",
-        "data/em/electrons/shared/photon09.bin",
-        "data/em/electrons/shared/photon10.bin",
-        "data/em/electrons/shared/photon11.bin",
-        "data/em/electrons/shared/photon12.bin",
-        "data/em/electrons/shared/photon13.bin",
-        "data/em/electrons/shared/photon14.bin",
-        "data/em/electrons/shared/photon15.bin",
-        "data/em/electrons/shared/photon16.bin",
-        "data/em/electrons/shared/photon17.bin",
-        "data/em/electrons/shared/photon18.bin",
-        "data/em/electrons/shared/photon19.bin",
-        "data/em/electrons/shared/photon20.bin",
-        "data/em/electrons/shared/photon21.bin",
-        "data/em/electrons/shared/photon22.bin",
-        "data/em/electrons/shared/photon23.bin",
-        "data/em/electrons/shared/photon24.bin",
-        "data/em/electrons/shared/photon25.bin",
-        "data/em/electrons/shared/proton26.bin",
-        "data/em/electrons/shared/rates26.bin",
-        "data/em/electrons/shared/scalar26.bin",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
+        "data/materials/schneider/radiation_lengths.json",
+        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/nuclear/schneider/proton/bundle.json",
         "data/nuclear/schneider/proton/final_states.bin",
         "data/nuclear/schneider/proton/final_states.channels.json",
@@ -671,19 +342,16 @@
         "inputs/rt07575_head/proton/beam_model.csv",
         "inputs/rt07575_head/proton/ct.bin",
         "inputs/rt07575_head/proton/spots.csv"
-      ],
-      "transport_pipeline": "proton_broadbeam"
+      ]
     },
     "proton_ct_minibeam": {
       "config": "config/proton_ct_minibeam.yaml",
       "primary": "proton",
       "medium": "ct",
       "beam": "minibeam",
+      "transport_pipeline": "proton_minibeam",
       "ion_scattering": "urban_v2",
-      "electron_packages": [
-        "proton",
-        "shared"
-      ],
+      "electron_packages": [],
       "inputs": {
         "primary_stopping_power_file": "data/stopping/water/proton.csv",
         "ct_schneider_primary_rate_file": "data/nuclear/schneider/proton/inelastic_rates.bin",
@@ -706,7 +374,10 @@
         "ct_grid_file": "inputs/lung_minibeam/ct.bin",
         "ct_schneider_file": "data/materials/schneider/hu_to_material.txt",
         "all_ion_elastic_file": "data/elastic/schneider/proton/all_ion.bin",
-        "elastic_recoil_stopping_file": "data/elastic/schneider/proton/recoil_stopping.bin",
+        "elastic_recoil_stopping_file": "data/elastic/schneider/proton/recoil_stopping.bin"
+      },
+      "enable_electron_transport": false,
+      "optional_electron_inputs": {
         "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
         "material_photon_response_index_file": "data/em/electrons/shared/photon.index",
@@ -718,78 +389,14 @@
         "data/elastic/schneider/proton/all_ion.metadata.json",
         "data/elastic/schneider/proton/recoil_stopping.bin",
         "data/elastic/schneider/proton/recoil_stopping.metadata.json",
-        "data/em/electrons/proton/manifest.json",
-        "data/em/electrons/proton/parameters.bin",
-        "data/em/electrons/shared/atomic26.bin",
-        "data/em/electrons/shared/birth26.bin",
-        "data/em/electrons/shared/brems26.bin",
-        "data/em/electrons/shared/carbon26.bin",
-        "data/em/electrons/shared/charged.index",
-        "data/em/electrons/shared/elastic00.bin",
-        "data/em/electrons/shared/elastic01.bin",
-        "data/em/electrons/shared/elastic02.bin",
-        "data/em/electrons/shared/elastic03.bin",
-        "data/em/electrons/shared/elastic04.bin",
-        "data/em/electrons/shared/elastic05.bin",
-        "data/em/electrons/shared/elastic06.bin",
-        "data/em/electrons/shared/elastic07.bin",
-        "data/em/electrons/shared/elastic08.bin",
-        "data/em/electrons/shared/elastic09.bin",
-        "data/em/electrons/shared/elastic10.bin",
-        "data/em/electrons/shared/elastic11.bin",
-        "data/em/electrons/shared/elastic12.bin",
-        "data/em/electrons/shared/elastic13.bin",
-        "data/em/electrons/shared/elastic14.bin",
-        "data/em/electrons/shared/elastic15.bin",
-        "data/em/electrons/shared/elastic16.bin",
-        "data/em/electrons/shared/elastic17.bin",
-        "data/em/electrons/shared/elastic18.bin",
-        "data/em/electrons/shared/elastic19.bin",
-        "data/em/electrons/shared/elastic20.bin",
-        "data/em/electrons/shared/elastic21.bin",
-        "data/em/electrons/shared/elastic22.bin",
-        "data/em/electrons/shared/elastic23.bin",
-        "data/em/electrons/shared/elastic24.bin",
-        "data/em/electrons/shared/elastic25.bin",
-        "data/em/electrons/shared/joint.bin",
-        "data/em/electrons/shared/manifest.json",
-        "data/em/electrons/shared/penelope26.bin",
-        "data/em/electrons/shared/photon.index",
-        "data/em/electrons/shared/photon00.bin",
-        "data/em/electrons/shared/photon01.bin",
-        "data/em/electrons/shared/photon02.bin",
-        "data/em/electrons/shared/photon03.bin",
-        "data/em/electrons/shared/photon04.bin",
-        "data/em/electrons/shared/photon05.bin",
-        "data/em/electrons/shared/photon06.bin",
-        "data/em/electrons/shared/photon07.bin",
-        "data/em/electrons/shared/photon08.bin",
-        "data/em/electrons/shared/photon09.bin",
-        "data/em/electrons/shared/photon10.bin",
-        "data/em/electrons/shared/photon11.bin",
-        "data/em/electrons/shared/photon12.bin",
-        "data/em/electrons/shared/photon13.bin",
-        "data/em/electrons/shared/photon14.bin",
-        "data/em/electrons/shared/photon15.bin",
-        "data/em/electrons/shared/photon16.bin",
-        "data/em/electrons/shared/photon17.bin",
-        "data/em/electrons/shared/photon18.bin",
-        "data/em/electrons/shared/photon19.bin",
-        "data/em/electrons/shared/photon20.bin",
-        "data/em/electrons/shared/photon21.bin",
-        "data/em/electrons/shared/photon22.bin",
-        "data/em/electrons/shared/photon23.bin",
-        "data/em/electrons/shared/photon24.bin",
-        "data/em/electrons/shared/photon25.bin",
-        "data/em/electrons/shared/proton26.bin",
-        "data/em/electrons/shared/rates26.bin",
-        "data/em/electrons/shared/scalar26.bin",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/ionization/air/proton_rate.csv",
         "data/materials/schneider/hu_to_material.txt",
+        "data/materials/schneider/radiation_lengths.json",
+        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/nuclear/copper/ion_cross_sections.csv",
         "data/nuclear/copper/proton/cascade.cinpkg",
         "data/nuclear/copper/proton/cascade.metadata.json",
@@ -816,19 +423,16 @@
         "data/stopping/water/proton.csv",
         "data/stopping/water/proton.metadata.json",
         "inputs/lung_minibeam/ct.bin"
-      ],
-      "transport_pipeline": "proton_minibeam"
+      ]
     },
     "proton_water_broadbeam": {
       "config": "config/proton_water_broadbeam.yaml",
       "primary": "proton",
       "medium": "water",
       "beam": "broadbeam",
+      "transport_pipeline": "proton_broadbeam",
       "ion_scattering": "fermi_eyges",
-      "electron_packages": [
-        "proton",
-        "shared"
-      ],
+      "electron_packages": [],
       "inputs": {
         "unified_water_material_file": "data/materials/water/material.json",
         "primary_stopping_power_file": "data/stopping/water/proton.csv",
@@ -841,7 +445,10 @@
         "em_delta_moments_file": "data/em/ions/delta_moments.bin",
         "em_package_file": "data/em/ions/continuous26.bin",
         "all_ion_elastic_file": "data/elastic/schneider/proton/all_ion.bin",
-        "elastic_recoil_stopping_file": "data/elastic/schneider/proton/recoil_stopping.bin",
+        "elastic_recoil_stopping_file": "data/elastic/schneider/proton/recoil_stopping.bin"
+      },
+      "enable_electron_transport": false,
+      "optional_electron_inputs": {
         "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
         "material_electron_charged_index_file": "data/em/electrons/shared/charged.index",
@@ -852,77 +459,13 @@
         "data/elastic/schneider/proton/all_ion.metadata.json",
         "data/elastic/schneider/proton/recoil_stopping.bin",
         "data/elastic/schneider/proton/recoil_stopping.metadata.json",
-        "data/em/electrons/proton/manifest.json",
-        "data/em/electrons/proton/parameters.bin",
-        "data/em/electrons/shared/atomic26.bin",
-        "data/em/electrons/shared/birth26.bin",
-        "data/em/electrons/shared/brems26.bin",
-        "data/em/electrons/shared/carbon26.bin",
-        "data/em/electrons/shared/charged.index",
-        "data/em/electrons/shared/elastic00.bin",
-        "data/em/electrons/shared/elastic01.bin",
-        "data/em/electrons/shared/elastic02.bin",
-        "data/em/electrons/shared/elastic03.bin",
-        "data/em/electrons/shared/elastic04.bin",
-        "data/em/electrons/shared/elastic05.bin",
-        "data/em/electrons/shared/elastic06.bin",
-        "data/em/electrons/shared/elastic07.bin",
-        "data/em/electrons/shared/elastic08.bin",
-        "data/em/electrons/shared/elastic09.bin",
-        "data/em/electrons/shared/elastic10.bin",
-        "data/em/electrons/shared/elastic11.bin",
-        "data/em/electrons/shared/elastic12.bin",
-        "data/em/electrons/shared/elastic13.bin",
-        "data/em/electrons/shared/elastic14.bin",
-        "data/em/electrons/shared/elastic15.bin",
-        "data/em/electrons/shared/elastic16.bin",
-        "data/em/electrons/shared/elastic17.bin",
-        "data/em/electrons/shared/elastic18.bin",
-        "data/em/electrons/shared/elastic19.bin",
-        "data/em/electrons/shared/elastic20.bin",
-        "data/em/electrons/shared/elastic21.bin",
-        "data/em/electrons/shared/elastic22.bin",
-        "data/em/electrons/shared/elastic23.bin",
-        "data/em/electrons/shared/elastic24.bin",
-        "data/em/electrons/shared/elastic25.bin",
-        "data/em/electrons/shared/joint.bin",
-        "data/em/electrons/shared/manifest.json",
-        "data/em/electrons/shared/penelope26.bin",
-        "data/em/electrons/shared/photon.index",
-        "data/em/electrons/shared/photon00.bin",
-        "data/em/electrons/shared/photon01.bin",
-        "data/em/electrons/shared/photon02.bin",
-        "data/em/electrons/shared/photon03.bin",
-        "data/em/electrons/shared/photon04.bin",
-        "data/em/electrons/shared/photon05.bin",
-        "data/em/electrons/shared/photon06.bin",
-        "data/em/electrons/shared/photon07.bin",
-        "data/em/electrons/shared/photon08.bin",
-        "data/em/electrons/shared/photon09.bin",
-        "data/em/electrons/shared/photon10.bin",
-        "data/em/electrons/shared/photon11.bin",
-        "data/em/electrons/shared/photon12.bin",
-        "data/em/electrons/shared/photon13.bin",
-        "data/em/electrons/shared/photon14.bin",
-        "data/em/electrons/shared/photon15.bin",
-        "data/em/electrons/shared/photon16.bin",
-        "data/em/electrons/shared/photon17.bin",
-        "data/em/electrons/shared/photon18.bin",
-        "data/em/electrons/shared/photon19.bin",
-        "data/em/electrons/shared/photon20.bin",
-        "data/em/electrons/shared/photon21.bin",
-        "data/em/electrons/shared/photon22.bin",
-        "data/em/electrons/shared/photon23.bin",
-        "data/em/electrons/shared/photon24.bin",
-        "data/em/electrons/shared/photon25.bin",
-        "data/em/electrons/shared/proton26.bin",
-        "data/em/electrons/shared/rates26.bin",
-        "data/em/electrons/shared/scalar26.bin",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
+        "data/materials/schneider/radiation_lengths.json",
+        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/materials/water/material.json",
         "data/nuclear/schneider/proton/bundle.json",
         "data/nuclear/schneider/proton/final_states.bin",
@@ -940,19 +483,16 @@
         "data/stopping/water/ions.csv",
         "data/stopping/water/proton.csv",
         "data/stopping/water/proton.metadata.json"
-      ],
-      "transport_pipeline": "proton_broadbeam"
+      ]
     },
     "proton_water_minibeam": {
       "config": "config/proton_water_minibeam.yaml",
       "primary": "proton",
       "medium": "water",
       "beam": "minibeam",
+      "transport_pipeline": "proton_minibeam",
       "ion_scattering": "urban_v2",
-      "electron_packages": [
-        "proton",
-        "shared"
-      ],
+      "electron_packages": [],
       "inputs": {
         "unified_water_material_file": "data/materials/water/material.json",
         "primary_stopping_power_file": "data/stopping/water/proton.csv",
@@ -974,7 +514,10 @@
         "minibeam_copper_ion_cross_section_file": "data/nuclear/copper/ion_cross_sections.csv",
         "minibeam_air_urban_package_file": "data/scattering/urban/air.bin",
         "minibeam_air_ionization_rate_file": "data/ionization/air/proton_rate.csv",
-        "urban_mcs_package_file": "data/scattering/urban/ct_copper.bin",
+        "urban_mcs_package_file": "data/scattering/urban/ct_copper.bin"
+      },
+      "enable_electron_transport": false,
+      "optional_electron_inputs": {
         "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
         "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
         "material_photon_response_index_file": "data/em/electrons/shared/photon.index",
@@ -986,78 +529,14 @@
         "data/elastic/schneider/proton/all_ion.metadata.json",
         "data/elastic/schneider/proton/recoil_stopping.bin",
         "data/elastic/schneider/proton/recoil_stopping.metadata.json",
-        "data/em/electrons/proton/manifest.json",
-        "data/em/electrons/proton/parameters.bin",
-        "data/em/electrons/shared/atomic26.bin",
-        "data/em/electrons/shared/birth26.bin",
-        "data/em/electrons/shared/brems26.bin",
-        "data/em/electrons/shared/carbon26.bin",
-        "data/em/electrons/shared/charged.index",
-        "data/em/electrons/shared/elastic00.bin",
-        "data/em/electrons/shared/elastic01.bin",
-        "data/em/electrons/shared/elastic02.bin",
-        "data/em/electrons/shared/elastic03.bin",
-        "data/em/electrons/shared/elastic04.bin",
-        "data/em/electrons/shared/elastic05.bin",
-        "data/em/electrons/shared/elastic06.bin",
-        "data/em/electrons/shared/elastic07.bin",
-        "data/em/electrons/shared/elastic08.bin",
-        "data/em/electrons/shared/elastic09.bin",
-        "data/em/electrons/shared/elastic10.bin",
-        "data/em/electrons/shared/elastic11.bin",
-        "data/em/electrons/shared/elastic12.bin",
-        "data/em/electrons/shared/elastic13.bin",
-        "data/em/electrons/shared/elastic14.bin",
-        "data/em/electrons/shared/elastic15.bin",
-        "data/em/electrons/shared/elastic16.bin",
-        "data/em/electrons/shared/elastic17.bin",
-        "data/em/electrons/shared/elastic18.bin",
-        "data/em/electrons/shared/elastic19.bin",
-        "data/em/electrons/shared/elastic20.bin",
-        "data/em/electrons/shared/elastic21.bin",
-        "data/em/electrons/shared/elastic22.bin",
-        "data/em/electrons/shared/elastic23.bin",
-        "data/em/electrons/shared/elastic24.bin",
-        "data/em/electrons/shared/elastic25.bin",
-        "data/em/electrons/shared/joint.bin",
-        "data/em/electrons/shared/manifest.json",
-        "data/em/electrons/shared/penelope26.bin",
-        "data/em/electrons/shared/photon.index",
-        "data/em/electrons/shared/photon00.bin",
-        "data/em/electrons/shared/photon01.bin",
-        "data/em/electrons/shared/photon02.bin",
-        "data/em/electrons/shared/photon03.bin",
-        "data/em/electrons/shared/photon04.bin",
-        "data/em/electrons/shared/photon05.bin",
-        "data/em/electrons/shared/photon06.bin",
-        "data/em/electrons/shared/photon07.bin",
-        "data/em/electrons/shared/photon08.bin",
-        "data/em/electrons/shared/photon09.bin",
-        "data/em/electrons/shared/photon10.bin",
-        "data/em/electrons/shared/photon11.bin",
-        "data/em/electrons/shared/photon12.bin",
-        "data/em/electrons/shared/photon13.bin",
-        "data/em/electrons/shared/photon14.bin",
-        "data/em/electrons/shared/photon15.bin",
-        "data/em/electrons/shared/photon16.bin",
-        "data/em/electrons/shared/photon17.bin",
-        "data/em/electrons/shared/photon18.bin",
-        "data/em/electrons/shared/photon19.bin",
-        "data/em/electrons/shared/photon20.bin",
-        "data/em/electrons/shared/photon21.bin",
-        "data/em/electrons/shared/photon22.bin",
-        "data/em/electrons/shared/photon23.bin",
-        "data/em/electrons/shared/photon24.bin",
-        "data/em/electrons/shared/photon25.bin",
-        "data/em/electrons/shared/proton26.bin",
-        "data/em/electrons/shared/rates26.bin",
-        "data/em/electrons/shared/scalar26.bin",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/ionization/air/proton_rate.csv",
         "data/materials/schneider/hu_to_material.txt",
+        "data/materials/schneider/radiation_lengths.json",
+        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/materials/water/material.json",
         "data/nuclear/copper/ion_cross_sections.csv",
         "data/nuclear/copper/proton/cascade.cinpkg",
@@ -1084,209 +563,10 @@
         "data/stopping/water/ions.csv",
         "data/stopping/water/proton.csv",
         "data/stopping/water/proton.metadata.json"
-      ],
-      "transport_pipeline": "proton_minibeam"
+      ]
     }
   },
   "files": {
-    "data/em/electrons/carbon/manifest.json": {
-      "bytes": 375
-    },
-    "data/em/electrons/carbon/parameters.bin": {
-      "bytes": 44
-    },
-    "data/em/electrons/shared/atomic26.bin": {
-      "bytes": 16844
-    },
-    "data/em/electrons/shared/birth26.bin": {
-      "bytes": 15920
-    },
-    "data/em/electrons/shared/brems26.bin": {
-      "bytes": 22942700
-    },
-    "data/em/electrons/shared/carbon26.bin": {
-      "bytes": 44
-    },
-    "data/em/electrons/shared/charged.index": {
-      "bytes": 925
-    },
-    "data/em/electrons/shared/elastic00.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic01.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic02.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic03.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic04.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic05.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic06.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic07.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic08.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic09.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic10.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic11.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic12.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic13.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic14.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic15.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic16.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic17.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic18.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic19.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic20.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic21.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic22.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic23.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic24.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/elastic25.bin": {
-      "bytes": 9540
-    },
-    "data/em/electrons/shared/joint.bin": {
-      "bytes": 1423915788
-    },
-    "data/em/electrons/shared/manifest.json": {
-      "bytes": 3710
-    },
-    "data/em/electrons/shared/penelope26.bin": {
-      "bytes": 18932
-    },
-    "data/em/electrons/shared/photon.index": {
-      "bytes": 899
-    },
-    "data/em/electrons/shared/photon00.bin": {
-      "bytes": 11279432
-    },
-    "data/em/electrons/shared/photon01.bin": {
-      "bytes": 11168480
-    },
-    "data/em/electrons/shared/photon02.bin": {
-      "bytes": 11189024
-    },
-    "data/em/electrons/shared/photon03.bin": {
-      "bytes": 11182976
-    },
-    "data/em/electrons/shared/photon04.bin": {
-      "bytes": 11183912
-    },
-    "data/em/electrons/shared/photon05.bin": {
-      "bytes": 11176064
-    },
-    "data/em/electrons/shared/photon06.bin": {
-      "bytes": 11175536
-    },
-    "data/em/electrons/shared/photon07.bin": {
-      "bytes": 11170088
-    },
-    "data/em/electrons/shared/photon08.bin": {
-      "bytes": 11176664
-    },
-    "data/em/electrons/shared/photon09.bin": {
-      "bytes": 11318528
-    },
-    "data/em/electrons/shared/photon10.bin": {
-      "bytes": 11334152
-    },
-    "data/em/electrons/shared/photon11.bin": {
-      "bytes": 11344640
-    },
-    "data/em/electrons/shared/photon12.bin": {
-      "bytes": 11353016
-    },
-    "data/em/electrons/shared/photon13.bin": {
-      "bytes": 11354672
-    },
-    "data/em/electrons/shared/photon14.bin": {
-      "bytes": 11360792
-    },
-    "data/em/electrons/shared/photon15.bin": {
-      "bytes": 11367968
-    },
-    "data/em/electrons/shared/photon16.bin": {
-      "bytes": 11365400
-    },
-    "data/em/electrons/shared/photon17.bin": {
-      "bytes": 11370632
-    },
-    "data/em/electrons/shared/photon18.bin": {
-      "bytes": 11377520
-    },
-    "data/em/electrons/shared/photon19.bin": {
-      "bytes": 11378408
-    },
-    "data/em/electrons/shared/photon20.bin": {
-      "bytes": 11381576
-    },
-    "data/em/electrons/shared/photon21.bin": {
-      "bytes": 11385968
-    },
-    "data/em/electrons/shared/photon22.bin": {
-      "bytes": 11384048
-    },
-    "data/em/electrons/shared/photon23.bin": {
-      "bytes": 11387552
-    },
-    "data/em/electrons/shared/photon24.bin": {
-      "bytes": 11660864
-    },
-    "data/em/electrons/shared/photon25.bin": {
-      "bytes": 11164232
-    },
-    "data/em/electrons/shared/proton26.bin": {
-      "bytes": 44
-    },
-    "data/em/electrons/shared/rates26.bin": {
-      "bytes": 5188176
-    },
-    "data/em/electrons/shared/scalar26.bin": {
-      "bytes": 325888
-    },
     "data/em/ions/continuous26.bin": {
       "bytes": 225707600
     },
@@ -1301,6 +581,12 @@
     },
     "data/materials/schneider/hu_to_material.txt": {
       "bytes": 37352
+    },
+    "data/materials/schneider/radiation_lengths.json": {
+      "bytes": 6544
+    },
+    "data/materials/schneider/radiation_lengths.metadata.json": {
+      "bytes": 712
     },
     "data/nuclear/schneider/carbon/bundle.json": {
       "bytes": 1887
@@ -1434,12 +720,6 @@
     "data/elastic/schneider/proton/recoil_stopping.metadata.json": {
       "bytes": 6588
     },
-    "data/em/electrons/proton/manifest.json": {
-      "bytes": 374
-    },
-    "data/em/electrons/proton/parameters.bin": {
-      "bytes": 44
-    },
     "data/nuclear/schneider/proton/bundle.json": {
       "bytes": 2027
     },
@@ -1504,6 +784,6 @@
       "bytes": 88565
     }
   },
-  "total_unique_bytes": 6515853616,
+  "total_unique_bytes": 4769189981,
   "electron_registry": "docs/electron_packages_manifest.json"
 }

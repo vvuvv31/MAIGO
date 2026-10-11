@@ -13,6 +13,7 @@
 #include <iomanip>
 #include <iostream>
 #include <map>
+#include <memory>
 #include <numeric>
 #include <sstream>
 #include <stdexcept>
@@ -28,15 +29,18 @@ double voxel_mass_kg(const TransportConfig& config) {
            config.scorer_spacing_z_mm() *
            config.water_density_g_per_cm3 * 1.0e-6;
 }
-std::vector<double> voxel_masses_kg(const TransportConfig& config) {
+struct ScorerMasses {
+    double uniform_mass_kg{};
+    std::shared_ptr<const std::vector<double>> medium;
+    double operator[](std::size_t i)const {return medium?(*medium)[i]:uniform_mass_kg;}
+};
+ScorerMasses voxel_masses_kg(const TransportConfig& config) {
+    if (!config.enable_ct_grid)return {voxel_mass_kg(config),{}};
     const auto count = config.number_of_voxels();
-    std::vector<double> masses(count, voxel_mass_kg(config));
     const auto volume_mm3 = config.voxel_size_x_mm * config.voxel_size_y_mm *
         config.scorer_spacing_z_mm();
-    if (!config.enable_ct_grid) {
-        return masses;
-    }
-    const auto grid = CtGrid::from_config(config);
+    const auto grid_owner = CtGrid::load(config.ct_grid_file);
+    const auto& grid = *grid_owner;
     if (grid.nx != config.voxel_bins_x || grid.ny != config.voxel_bins_y ||
         grid.nz != config.number_of_bins() ||
         std::abs(static_cast<double>(grid.spacing_x_mm) - config.voxel_size_x_mm) > 1.0e-6 ||
@@ -45,13 +49,22 @@ std::vector<double> voxel_masses_kg(const TransportConfig& config) {
         throw std::invalid_argument(
             "CT dose-to-medium requires the voxel scorer grid to match the CT grid");
     }
-    for (std::size_t i = 0; i < count; ++i) {
-        // Keep very-low-density CT voxels finite while retaining their actual
-        // dose-to-medium mass rather than assuming unit-density water.
-        const auto density = std::max(1.0e-6, static_cast<double>(grid.density_g_per_cm3[i]));
-        masses[i] = volume_mm3 * density * 1.0e-6;
+    struct Cache {
+        std::shared_ptr<const CtGrid> grid;
+        double volume_mm3{};
+        std::shared_ptr<const std::vector<double>> masses;
+    };
+    thread_local Cache cached;
+    if(cached.grid!=grid_owner || cached.volume_mm3!=volume_mm3 || !cached.masses) {
+        auto masses=std::make_shared<std::vector<double>>(count);
+        for (std::size_t i = 0; i < count; ++i) {
+            // Preserve the dose-to-medium density floor and FP64 evaluation.
+            const auto density = std::max(1.0e-6, static_cast<double>(grid.density_g_per_cm3[i]));
+            (*masses)[i] = volume_mm3 * density * 1.0e-6;
+        }
+        cached={grid_owner,volume_mm3,std::move(masses)};
     }
-    return masses;
+    return {0.,cached.masses};
 }
 double energy_MeV_to_dose_Gy(double energy_MeV, double mass_kg) {
     if (mass_kg <= 0.0) {
@@ -309,7 +322,8 @@ void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
     double origin_y = 0.5 * config.voxel_size_y_mm - 0.5 * y_extent_mm;
     double origin_z = 0.5 * config.scorer_spacing_z_mm();
     if (config.enable_ct_grid && !config.ct_grid_file.empty()) {
-        const auto grid = CtGrid::from_config(config);
+        const auto grid_owner = CtGrid::load(config.ct_grid_file);
+        const auto& grid = *grid_owner;
         if (grid.nx == nx && grid.ny == ny && grid.nz == nz &&
             std::abs(static_cast<double>(grid.spacing_x_mm) - config.voxel_size_x_mm) <
                 1.0e-6 &&
@@ -405,7 +419,8 @@ void write_energy_ledger_json(const std::filesystem::path& path,
         output << "  \"nuclear_recoil_reference_grid_file\": \"" << config.primary_stopping_power_file.string() << "\",\n"
                << "  \"unified_water_material_id_note\": \"255 is a diagnostic sentinel, not a Schneider section; rate uses a separate water row\",\n";
     }
-    output << "  \"broadbeam_electron_tracking\": " << (config.broadbeam_electron_tracking ? "true" : "false") << ",\n"
+    output << "  \"enable_electron_transport\": " << (config.enable_electron_transport ? "true" : "false") << ",\n"
+           << "  \"broadbeam_electron_tracking\": " << (config.broadbeam_electron_tracking ? "true" : "false") << ",\n"
            << "  \"broadbeam_independent_electrons\": " << (config.broadbeam_independent_electrons ? "true" : "false") << ",\n"
            << "  \"broadbeam_electron_density_threshold\": " << config.broadbeam_electron_density_threshold << ",\n"
            << "  \"broadbeam_electron_halo_mm\": " << config.broadbeam_electron_halo_mm << ",\n"

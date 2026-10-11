@@ -1,10 +1,12 @@
-# carbon_ct_broadbeam: RT07575 head; current26 EM/electrons, FP32 dose.
+enable_electron_transport: false
+# carbon_ct_broadbeam: RT07575 head; current26 ion EM, local electron energy, FP32 dose.
+# Patient-interior approximation; electron transport is disabled explicitly.
 transport_pipeline: carbon_broadbeam
 run_mode: research
 number_of_histories: 6481909
 primary_atomic_number: 6
 primary_mass_number: 12
-maximum_step_mm: 0.5
+maximum_step_mm: 1.0
 maximum_relative_energy_loss: 0.005
 energy_cutoff_MeV: 0.1
 enable_ct_grid: true
@@ -69,12 +71,8 @@ material_electron_group_size: 32
 material_electron_queue_chunk: 524288
 material_electron_queue_lanes: 16384
 material_electron_queue_budget_MiB: 576
-material_electron_retain_bank: true
-material_electron_joint_pilot_file: data/em/electrons/shared/joint.bin
-material_electron_birth_file: data/em/electrons/shared/birth26.bin
-material_photon_response_index_file: data/em/electrons/shared/photon.index
-material_electron_charged_index_file: data/em/electrons/shared/charged.index
-broadbeam_electron_tracking: true
+material_electron_retain_bank: false
+broadbeam_electron_tracking: false
 broadbeam_electron_density_threshold: 0.1
 broadbeam_electron_halo_mm: 5.0
 broadbeam_electron_low_density_survival: 0.5

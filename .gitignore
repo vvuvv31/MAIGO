@@ -8,3 +8,6 @@ __pycache__/
 /data/
 /inputs/
 /extensions/work/
+
+# Local Monte Carlo experiments and generated patient results
+/tmp/

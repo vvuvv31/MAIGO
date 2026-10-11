@@ -1,5 +1,7 @@
 # MAIGO_clean
 
+论文材料与方法中文稿见 [mm_zh.md](mm_zh.md)。
+
 A standalone GPU runtime for the eight current MAIGO presets. The source and
 runtime inputs were copied independently from MAIGO_minibeam; there are no
 symlinks back to it. Shared electron projectile aliases are hardlinks **within
@@ -35,23 +37,30 @@ Use a new output directory. CLI options are `--config`, `--histories`, `--seed`,
 Batch histories count incident primaries. Plan weights are allocated across the
 whole campaign; output dose retains the original absolute normalization.
 
-| Preset | Source/ion path | Electron path |
+| Preset | Source/ion path | Default electron path |
 |---|---|---|
 | proton_water_broadbeam | Flat source → Gaussian FE → Water_75eV | Empty uniform-water selection; local deposition |
 | carbon_water_broadbeam | Carbon source → Gaussian FE → Water_75eV | Same policy |
-| proton_ct_broadbeam | RT07575 head TPS CSV → Gaussian FE → proton CT kernel | FP32 tracking in low density + 5 mm halo |
+| proton_ct_broadbeam | RT07575 head TPS CSV → Gaussian FE → proton CT kernel | Local electron energy; tracking disabled |
 | carbon_ct_broadbeam | RT07575 head TPS CSV → Gaussian FE → C12 CT kernel | Same policy |
-| proton_water_minibeam | Flat source → compact copper/air → Urban water | Independent FP32 group32; nuclear neutrals untracked |
-| carbon_water_minibeam | TPS CSV → compact copper/air → Urban water | Independent FP32 group32 |
-| proton_ct_minibeam | Flat source → compact copper/air → Urban proton CT | FP32 group32, spatial joint |
-| carbon_ct_minibeam | Flat source → compact copper/air → Urban CT | FP32 group32, spatial joint; dose accuracy deferred |
+| proton_water_minibeam | Flat source → compact copper/air → Urban water | Local deposition; nuclear neutrals untracked |
+| carbon_water_minibeam | TPS CSV → compact copper/air → Urban water | Local deposition |
+| proton_ct_minibeam | Flat source → compact copper/air → Urban proton CT | Local deposition |
+| carbon_ct_minibeam | Flat source → compact copper/air → Urban CT | Local deposition; dose accuracy deferred |
 
 Each row has the matching `config/<preset>.yaml`. Default CT minibeams are lung
-benchmarks, **not RT07575 head full plans**. Broadbeam caps ion steps at0.5 mm;
-minibeam at0.1 mm. All use continuous26 ion EM and strict26 electron packages.
-Broadbeam tracks primary-ionization electrons only in density≤0.1 g/cm³ plus
-5 mm halo; charged nuclear-secondary ionization is local. Uniform water has
-no selected region and does not load electron banks. Minibeam water uses
+benchmarks, **not RT07575 head full plans**. CT broadbeam caps ion steps at 1.0 mm,
+water broadbeam and CT minibeam at 0.5 mm, and water minibeam at 0.1 mm.
+Minibeam copper retains its separate 0.05 mm cap. All use continuous26 ion EM;
+Electron/photon transport is optional for all presets and custom configurations.
+It defaults to off; only `enable_electron_transport: true` loads the configured
+strict26 birth, charged, photon and spatial-joint packages. Package paths alone
+do not enable transport, and disabled paths need not exist. When off, ionization
+electron energy is deposited locally. Enabled transport still requires complete,
+projectile-matched packages. CT broadbeam also uses
+`broadbeam_electron_tracking: true` to select its tracking region. The optional broadbeam
+electron selection uses density≤0.1 g/cm³ plus a 5 mm halo; charged nuclear-secondary
+ionization is local. Uniform broadbeam water has no selected region and does not load electron banks. Enabled minibeam water uses
 independent electron steps; Schneider materials preserve spatial joint.
 
 `src/main.cpp` handles startup, `cli.cpp` parses the small CLI, `run_session.cpp`
@@ -115,7 +124,7 @@ retired interfaces and zero-only nuclear output layouts. See
 Primary nuclear channel metadata requires explicit boolean `has_support`.
 Nuclear neutrals are not transported; their energy remains in explicit sinks.
 Neutron packages, birth captures, transport settings and dose outputs are removed.
-Electromagnetic electron/photon transport is retained. See
+Optional electromagnetic electron/photon transport is retained. See
 `docs/no_neutral_20261007.md` for removal scope and matched regression evidence. The proton water minibeam
 therefore no longer includes the former neutron-dose contribution.
 TPS isocenter input uses only the supported `tps_isocenter_z_mm` key.

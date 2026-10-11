@@ -167,6 +167,30 @@
     const bool global_urban=!BroadBeam && config.multiple_scattering_model=="urban_v2";
     const bool uses_urban_package=global_urban;
     const bool retain_physics_device = context != nullptr;
+    const auto nuclear_input_key = [](const std::filesystem::path& path) {
+        return !path.empty() && std::filesystem::exists(path)
+            ? input_cache_key(path) : path.string()+"|missing";
+    };
+    const std::string schneider_signature =
+        std::to_string(config.primary_atomic_number)+":"+std::to_string(config.primary_mass_number)+"|"+
+        nuclear_input_key(config.ct_schneider_primary_rate_file)+"|"+
+        nuclear_input_key(config.ct_schneider_primary_cinel03_file)+"|"+
+        nuclear_input_key(config.ct_schneider_secondary_rate_file)+"|"+
+        nuclear_input_key(config.ct_schneider_secondary_cinel03_file)+"|"+
+        std::to_string(static_cast<int>(config.material_physics_mode))+"|"+
+        std::to_string(config.unified_water_nuclear_transport)+"|"+
+        std::to_string(config.enable_secondary_transport)+"|"+
+        std::to_string(static_cast<int>(config.run_mode))+"|"+device_name+
+        (config.unified_water_nuclear_transport ? "|"+nuclear_input_key(config.unified_water_material_file)+
+            "|"+nuclear_input_key(config.ct_schneider_file.empty()
+                ? std::filesystem::path("data/materials/schneider/hu_to_material.txt") : config.ct_schneider_file) : "");
+    if (context) {
+        auto& cached=context->impl_->schneider_device;
+        if (!std::is_same_v<Pipeline, pipelines::ProtonBroadbeam> || JointResponse!=0 || !enable_ct_grid ||
+            config.unified_water_nuclear_transport || cached.signature!=schneider_signature)
+            cached=SyclTransportContext::Impl::CachedSchneiderDevice{};
+    }
+
     if (context && retain_physics_device) {
         if (!uses_urban_package) context->impl_->resident_urban.reset();
         if (BroadBeam || !config.enable_minibeam) context->impl_->resident_air.reset();
@@ -395,14 +419,6 @@
     SchneiderHostCache* schneider_host_cache = nullptr;
     if (context != nullptr) {
         auto& cache = context->impl_->schneider_host_cache;
-        const std::string schneider_signature =
-            std::to_string(config.primary_atomic_number) + ":" + std::to_string(config.primary_mass_number) + "|" +
-            config.ct_schneider_primary_rate_file.string() + "|" +
-            config.ct_schneider_primary_cinel03_file.string() + "|" +
-            config.ct_schneider_secondary_rate_file.string() + "|" +
-            config.ct_schneider_secondary_cinel03_file.string() + "|" +
-            (config.unified_water_nuclear_transport ? "water" : "ct") + "|" +
-            device_name;
         if (!cache.valid || cache.signature != schneider_signature) {
             cache = SchneiderHostCache{};
             cache.signature = schneider_signature;
@@ -528,9 +544,8 @@
     // still uses its native water EM/nuclear route (enable_ct_grid stays false).
     if (enable_ct_grid || use_material_electron) {
         std::shared_ptr<const CtGrid> grid_storage;
-        const auto make_geometry = [&]() {
-            if(enable_ct_grid) return std::make_shared<CtGrid>(CtGrid::load(
-                config.ct_grid_file));
+        const auto make_geometry = [&]() -> std::shared_ptr<const CtGrid> {
+            if(enable_ct_grid) return CtGrid::load(config.ct_grid_file);
             auto water=std::make_shared<CtGrid>();
             water->file_version=CtGrid::version_value;
             water->nx=water->ny=water->nz=1;
@@ -688,6 +703,68 @@
         ct_material_device = mem_tracker.allocate<std::uint8_t>(voxel_count);
         queue.copy(grid.density_g_per_cm3.data(), ct_density_device, voxel_count);
         queue.copy(grid.material_id.data(), ct_material_device, voxel_count).wait_and_throw();
+        }
+
+        if constexpr(std::is_same_v<Pipeline,pipelines::ProtonBroadbeam> && JointResponse==0) {
+            if(enable_ct_grid && !use_material_electron && !use_unified_water) {
+                RuntimeScope fields_setup("setup_ct_exact_material_fields");
+                const auto key=geometry_key+"|"+input_cache_key(config.em_package_file)+"|"+
+                    input_cache_key(unified_em_request(config).delta_file)+"|"+device_name+"|ct_exact_fields_v1";
+                auto resident=context ? resident_tables(context->impl_->resident_ct_fields,key,"ct_exact_fields") : nullptr;
+                std::uint16_t* voxel_tuples=nullptr;
+                UnifiedEmCtFields* fields=nullptr;
+                unsigned tuple_count=0;
+                if(resident && resident->contains("ready")) {
+                    voxel_tuples=resident->template get<std::uint16_t>("voxels");
+                    fields=resident->template get<UnifiedEmCtFields>("fields");
+                    tuple_count=static_cast<unsigned>(resident->blocks.at("fields").count/18);
+                } else {
+                    std::unordered_map<std::uint64_t,std::uint16_t> directory;
+                    std::vector<std::uint16_t> indices(voxel_count);
+                    std::vector<float> densities;
+                    std::vector<std::uint8_t> sections;
+                    bool too_many=false;
+                    for(std::size_t i=0;i<voxel_count;++i) {
+                        std::uint32_t bits;std::memcpy(&bits,&grid.density_g_per_cm3[i],sizeof bits);
+                        const auto id=std::uint64_t(bits)|(std::uint64_t(grid.material_id[i])<<32);
+                        auto it=directory.find(id);
+                        if(it==directory.end()) {
+                            if(directory.size()>=65536){too_many=true;break;}
+                            const auto index=static_cast<std::uint16_t>(directory.size());
+                            it=directory.emplace(id,index).first;
+                            densities.push_back(grid.density_g_per_cm3[i]);sections.push_back(grid.material_id[i]);
+                        }
+                        indices[i]=it->second;
+                    }
+                    // Optional memoization can be ineligible without changing the
+                    // underlying continuous-density evaluation or physics coverage.
+                    if(!too_many) {
+                        tuple_count=densities.size();
+                        auto upload_fields=[&]<class T>(const char* name,const std::vector<T>& values) {
+                            if(resident)return resident->upload(name,values,mem_tracker);
+                            auto* ptr=mem_tracker.allocate<T>(values.size());if(!ptr)throw std::bad_alloc();
+                            queue.copy(values.data(),ptr,values.size()).wait_and_throw();return ptr;
+                        };
+                        voxel_tuples=upload_fields("voxels",indices);
+                        auto* rho=upload_fields("densities",densities);
+                        auto* section=upload_fields("sections",sections);
+                        fields=upload_fields("fields",std::vector<UnifiedEmCtFields>(tuple_count*18));
+                        const auto source=unified_device;
+                        queue.parallel_for(sycl::range<1>(tuple_count*18),[=](sycl::id<1> id) {
+                            const unsigned i=id[0],t=i/18,ion=i%18;
+                            const auto state=source.select(section[t],rho[t],ion);
+                            UnifiedEmCtFields value;value.valid=state.valid;
+                            if(state.valid){const auto p=state.lo();value.material=p.material;value.coordinate=p.continuous_coordinate;}
+                            fields[i]=value;
+                        }).wait_and_throw();
+                        if(resident)resident->upload("ready",std::vector<unsigned>{1},mem_tracker);
+                    }
+                }
+                unified_device.ct_fields=fields;unified_device.ct_fields_voxels=voxel_tuples;
+                unified_device.ct_fields_count=tuple_count;
+                std::cout<<"[ct-exact-material-fields] tuples="<<tuple_count<<" voxels="<<voxel_count
+                         <<" enabled="<<(fields!=nullptr)<<"\n";
+            }
         }
 
         if (enable_ct_grid) {
@@ -988,8 +1065,24 @@
     }
     // Water-Urban loss-range table: independent of the Copper transport mode.
     RuntimeScope t_sch_ctx("setup_schneider_ctx_host_and_device");
-    const SchneiderCtDeviceContext schneider_ct_device_ctx = upload_schneider_ct_device_context(
-        queue, mem_tracker, config, schneider_host_cache);
+    const SchneiderCtDeviceContext schneider_ct_device_ctx = [&] {
+        if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam> && JointResponse==0) {
+            if (context && enable_ct_grid && !config.unified_water_nuclear_transport) {
+                auto& cached=context->impl_->schneider_device;
+                const bool hit=cached.valid && cached.signature==schneider_signature;
+                auto tables=resident_tables(cached.tables,schneider_signature,"schneider");
+                if (!hit) {
+                    cached.valid=false;
+                    cached.view=upload_schneider_ct_device_context(
+                        queue,mem_tracker,config,schneider_host_cache,tables.get());
+                    cached.signature=schneider_signature;
+                    cached.valid=true;
+                }
+                return cached.view;
+            }
+        }
+        return upload_schneider_ct_device_context(queue,mem_tracker,config,schneider_host_cache);
+    }();
     t_sch_ctx.finish();
     if (context != nullptr && schneider_host_cache != nullptr) {
         std::cout << "[physics-cache] schneider hits=" << schneider_host_cache->hits
@@ -1353,7 +1446,7 @@
     // The shared beamline and generic material-aware stage 4 retain the
     // projectile ZA and total kinetic energy in their runtime state. C12 may
     // use this handoff with its own pinned packages. The proton-only stage 11
-    // and Cu-child queue eligibility checks below remain unchanged.
+    // remains unchanged; C12 CT also uses the shared Cu-child queue.
     const bool ct_minibeam_projectile_supported =
         (config.primary_atomic_number == 1 && config.primary_mass_number == 1) ||
         (config.primary_atomic_number == 6 && config.primary_mass_number == 12);
@@ -1363,16 +1456,21 @@
         config.multiple_scattering_model!="urban_v2" ||
         !config.enable_secondary_transport))
         throw std::invalid_argument("CT split minibeam requires research proton/C12 Urban copper transport without TPS/replay");
-    // Proton Cu/air charged children are queued and transported after the
+    // Proton and C12 CT Cu/air charged children are queued after the
     // compact beamline launch instead of inline in the primary kernel.
     const bool queue_copper_primary_children = !BroadBeam && config.run_mode==RunMode::research &&
         config.enable_minibeam && (!config.enable_ct_grid || ct_minibeam_split) && !config.enable_tps_source &&
-        !config.enable_tps_coordinate_system && config.primary_atomic_number==1 &&
-        config.primary_mass_number==1 && config.multiple_scattering_model=="urban_v2" &&
+        !config.enable_tps_coordinate_system &&
+        ((config.primary_atomic_number==1 && config.primary_mass_number==1) ||
+         (ct_minibeam_split && config.primary_atomic_number==6 && config.primary_mass_number==12)) &&
+        config.multiple_scattering_model=="urban_v2" &&
         config.enable_secondary_transport &&
         (config.minibeam_primary_specialization || ct_minibeam_split);
+    // Carbon nuclear events can create more charged children than proton events.
+    // Retain the configured secondary cap and reject any overflow without truncation.
     const auto copper_primary_child_capacity=std::min<std::size_t>(max_secondaries,
-        std::max<std::size_t>(4096,2*number_of_histories));
+        std::max<std::size_t>(4096,
+            (config.primary_atomic_number==6 ? 16 : 2)*number_of_histories));
     auto* copper_primary_child_tasks=queue_copper_primary_children
         ? mem_tracker.allocate<CopperPrimaryChildTask>(copper_primary_child_capacity) : nullptr;
     auto* copper_primary_child_counts=queue_copper_primary_children
@@ -1632,6 +1730,38 @@
     // Broadbeam CT (shared FP32 electrons): fold the fixed configuration into
     // dedicated primary/secondary kernels. Ineligible runs keep generic stage 6.
     bool broadbeam_ct_primary_specialize=false,broadbeam_ct_secondary_specialize=false;
+    // Explicit local-electron mode: prove the fixed CT proton configuration
+    // before dispatching a kernel that omits electron births and queues.
+    if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam> && JointResponse==0) {
+        broadbeam_ct_primary_specialize = enable_ct_grid && !use_unified_water &&
+            enable_voxel_scoring && enable_multiple_scattering && enable_inelastic &&
+            use_schneider_primary_xs && !use_material_ct && !use_material_electron &&
+            !defer_material_packets && !use_electron_fp32 && !use_independent_charged &&
+            !enable_charged_origin_voxel_scoring && !enable_minibeam_component_voxel_scoring &&
+            !enable_minibeam_energy_band_roi_scoring && !enable_primary_voxel_fluence &&
+            primary_atomic_number==1 && primary_mass_number==1 && inverse_mass_number==1.0F &&
+            nonion_primary_package_safe;
+        std::cout << "[proton-ct-local-electron-specialize] enabled="
+                  << broadbeam_ct_primary_specialize << "\n";
+    }
+
+    if constexpr (std::is_same_v<Pipeline, pipelines::CarbonBroadbeam> && JointResponse==0) {
+        broadbeam_ct_primary_specialize = enable_ct_grid && !use_unified_water &&
+            enable_voxel_scoring && enable_multiple_scattering && enable_inelastic &&
+            use_schneider_primary_xs && !use_material_ct && !use_material_electron &&
+            !defer_material_packets && !use_electron_fp32 && !use_independent_charged &&
+            !enable_charged_origin_voxel_scoring && !enable_minibeam_component_voxel_scoring &&
+            !enable_minibeam_energy_band_roi_scoring && !enable_primary_voxel_fluence &&
+            primary_atomic_number==6 && primary_mass_number==12 && inverse_mass_number==1.0F/12.0F;
+        broadbeam_ct_secondary_specialize = enable_ct_grid && enable_voxel_scoring &&
+            ct_secondary_exact_faces && ct_skip_homogeneous_face_clamp && !use_unified_water &&
+            !enable_charged_origin_voxel_scoring && !enable_minibeam_component_voxel_scoring &&
+            !enable_minibeam_energy_band_roi_scoring && !enable_primary_voxel_fluence;
+        std::cout << "[carbon-ct-local-electron-specialize] primary="
+                  << broadbeam_ct_primary_specialize << " secondary="
+                  << broadbeam_ct_secondary_specialize << "\n";
+    }
+
     if constexpr(BroadBeam && JointResponse==3) {
         const bool primary_eligible = enable_ct_grid && !use_unified_water &&
             enable_voxel_scoring && enable_multiple_scattering && enable_inelastic && use_schneider_primary_xs &&

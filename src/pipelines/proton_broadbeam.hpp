@@ -23,6 +23,8 @@ struct ProtonBroadbeam {
         (void)source_z; (void)source_a;
         if constexpr (JointResponse == 3) if (ct_specialized)
             return launch(std::false_type{}, std::integral_constant<int, 13>{});
+        if constexpr (JointResponse == 0) if (ct_specialized)
+            return launch(std::false_type{}, std::integral_constant<int, 15>{});
         if constexpr (JointResponse == 0) if (nonion)
             return launch(std::false_type{}, std::integral_constant<int, 7>{});
         return launch(std::false_type{}, std::integral_constant<int, 6>{});

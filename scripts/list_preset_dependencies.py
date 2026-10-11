@@ -19,19 +19,27 @@ def inventory(root):
     for path in paths:
         cfg = yaml.safe_load(path.read_text())
         dependencies = {}
+        optional_electron_inputs = {}
+        electron_keys = {'material_electron_birth_file', 'material_electron_charged_index_file',
+                         'material_photon_response_index_file', 'material_electron_joint_pilot_file'}
         for key, value in cfg.items():
             if isinstance(value, str) and value.startswith(('data/', 'inputs/')):
+                if key in electron_keys and not cfg.get('enable_electron_transport', False):
+                    optional_electron_inputs[key] = value
+                    continue
                 dependencies[key] = value
         # The unified loss model resolves this default even if absent in YAML.
         if cfg.get('em_package_file'):
             dependencies.setdefault('em_delta_moments_file',
                                     str(Path(cfg['em_package_file']).parent/'delta_moments.bin'))
         packages = []
-        if cfg.get('material_electron_birth_file'):
+        if cfg.get('enable_electron_transport', False) and cfg.get('material_electron_birth_file'):
             packages = [path.stem.split('_')[0], 'shared']
         expanded = set(dependencies.values())
         if cfg.get('enable_ct_grid') or cfg.get('unified_water_material_file'):
             expanded.add(cfg.get('ct_schneider_file', 'data/materials/schneider/hu_to_material.txt'))
+            expanded.add(cfg.get('ct_schneider_radiation_length_file',
+                                 'data/materials/schneider/radiation_lengths.json'))
         if cfg.get('all_ion_elastic_file'):
             expanded.add(cfg.get('particle_stopping_power_file', 'data/stopping/water/ions.csv'))
         for name in packages:
@@ -69,6 +77,8 @@ def inventory(root):
              primary=path.stem.split('_')[0], medium=path.stem.split('_')[1],
              beam=path.stem.split('_')[2], transport_pipeline=cfg.get('transport_pipeline','generic'), ion_scattering=cfg['multiple_scattering_model'],
              electron_packages=packages, inputs=dependencies)
+        entries[path.stem]['enable_electron_transport'] = cfg.get('enable_electron_transport', False)
+        entries[path.stem]['optional_electron_inputs'] = optional_electron_inputs
         entries[path.stem]['files'] = sorted(expanded)
     return dict(schema=3, scope='Eight preset inputs, fixed runtime defaults, electron payloads/aliases, bundle members and companion metadata. Generation provenance is not a runtime dependency.',
                 presets=entries, files=files,

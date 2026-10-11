@@ -562,6 +562,17 @@
     free_device(schneider_track_count_device);
 
     TransportResult result;
+    if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam> && JointResponse==0)
+        result.primary_first_order_delta_enabled=broadbeam_ct_primary_specialize;
+    if constexpr (std::is_same_v<Pipeline, pipelines::CarbonBroadbeam> && JointResponse==0) {
+        result.carbon_primary_first_order_delta_enabled=broadbeam_ct_primary_specialize;
+        result.carbon_secondary_first_order_delta_enabled=broadbeam_ct_secondary_specialize;
+    }
+    if constexpr (BroadBeam && JointResponse==0) {
+        result.ct_primary_first_order_restricted_enabled=broadbeam_ct_primary_specialize;
+        result.ct_secondary_first_order_restricted_enabled=broadbeam_ct_secondary_specialize;
+    }
+    if constexpr(BroadBeam) result.ct_broadbeam_step_cap_enabled=enable_ct_grid;
     result.fe_sampling_diagnostics_enabled=fe_diagnostics;
     if (fe_counts) {
         queue.copy(fe_counts,result.fe_sampling_counts.data(),8).wait_and_throw();

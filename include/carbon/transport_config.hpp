@@ -187,6 +187,8 @@ struct TransportConfig {
     std::string secondary_out_of_scope_nuclear_policy{};
     std::filesystem::path ct_schneider_radiation_length_file{"data/materials/schneider/radiation_lengths.json"};
     // Nonempty selects the exact proton packed+prevalidated runtime artifact.
+    // Electron/photon packages are loaded only after an explicit opt-in.
+    bool enable_electron_transport{false};
     // Experimental material joint electron operator.
     std::filesystem::path material_electron_joint_pilot_file{};
     std::filesystem::path material_electron_charged_index_file{};
@@ -539,6 +541,19 @@ struct TransportConfig {
             material_physics_mode = MaterialPhysicsMode::Water;
         }
         unified_water_nuclear_transport = is_water_mode();
+    }
+    void resolve_electron_transport() noexcept {
+        if (enable_electron_transport) return;
+        material_electron_charged_index_file.clear();
+        material_electron_birth_file.clear();
+        material_photon_response_index_file.clear();
+        material_electron_joint_pilot_file.clear();
+        material_electron_retain_bank = false;
+        broadbeam_electron_tracking = false;
+        broadbeam_independent_electrons = false;
+        broadbeam_electron_low_density_survival = 1.0;
+        broadbeam_electron_tissue_survival = 1.0;
+        broadbeam_electron_birth_order = false;
     }
     void require_primary_reference_mass(double reference_mass_MeV, const char* package,
                                         PrimaryMassConvention convention = PrimaryMassConvention::Nuclear) const {

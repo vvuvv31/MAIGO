@@ -14,6 +14,22 @@ generic charged fragment species remain supported in every secondary worker.
 | Carbon broadbeam | `src/pipelines/carbon_broadbeam.hpp` |
 | Carbon minibeam | `src/pipelines/carbon_minibeam.hpp` |
 
+The proton CT broadbeam explicit local-electron mode uses stage15, or stage16
+when a host certificate proves identical CT/scorer grids. Stage16 reuses the
+directed scoring cell for material reads; unclamped validity and exact face
+ownership remain authoritative. Other configurations keep their existing
+stages. Electron transport remains controlled explicitly by the YAML profile;
+this specialization does not provide a missing-package fallback.
+
+Stages15/16 use a step-start delta first moment for the proton primary, retaining
+the current continuous26 rate, variance, restricted-loss slope and fluctuations.
+The two nearby-energy delta evaluations are omitted. Secondary particles and
+other stages keep the slope correction. The executed specialization sets
+`primary_first_order_delta_enabled`, so quality reports declare the approximation
+only when it ran. RT07575 head full-plan TOPAS qualification and measured
+throughput are recorded in `docs/proton_ct_first_order_delta_20261009.md`;
+this qualification applies to the patient-interior broadbeam dose gate.
+
 Policies own primary workgroup size, default history chunk selection, secondary
 segment length and tail threshold. Broadbeam policies also select their
 projectile-specific CT primary stage. Explicit YAML history chunks remain

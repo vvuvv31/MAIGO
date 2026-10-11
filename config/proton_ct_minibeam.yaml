@@ -1,3 +1,4 @@
+enable_electron_transport: false
 # proton_ct_minibeam: lung CT benchmark (not RT07575); current26 EM/electrons, FP32 dose.
 transport_pipeline: proton_minibeam
 run_mode: research
@@ -7,7 +8,7 @@ initial_energy_MeVu: 170
 beam_energy_spread: 0.0
 random_seed: 929100004
 water_density_g_per_cm3: 1.0
-maximum_step_mm: 0.1
+maximum_step_mm: 0.5
 maximum_relative_energy_loss: 0.005
 energy_cutoff_MeV: 0.1
 enable_voxel_scoring: true

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the default three26-composition packages and all eight preset paths.
+"""Check installed strict26 packages and explicitly enabled preset paths.
 
 No digests. GPU loaders additionally check numerical support and majorants.
 """
@@ -48,11 +48,17 @@ def verify(root):
         report[name]=dict(files=len(spec['files']),bytes=total,compositions=26,density_nodes=0,verified=True)
     require(sum(x['bytes'] for x in report.values())==registry['total_unique_bytes'],'Unique size')
     expected=dict(material_electron_birth_file='data/em/electrons/shared/birth26.bin',material_electron_joint_pilot_file='data/em/electrons/shared/joint.bin',material_electron_charged_index_file='data/em/electrons/shared/charged.index',material_photon_response_index_file='data/em/electrons/shared/photon.index')
+    presets={}
     for species in ['proton','carbon']:
         for geometry in ['ct','water']:
             for beam in ['broadbeam','minibeam']:
                 cfg=yaml.safe_load((root/f'config/{species}_{geometry}_{beam}.yaml').read_text())
-                require(all(cfg.get(k)==v for k,v in expected.items()),'Preset does not select default26')
+                enabled=cfg.get('enable_electron_transport',False)
+                require(type(enabled) is bool,'Electron transport switch must be boolean')
+                if enabled:
+                    require(all(cfg.get(k)==v for k,v in expected.items()),'Enabled preset does not select strict26')
+                presets[f'{species}_{geometry}_{beam}']=dict(enabled=enabled,paths_checked=enabled)
+    report['presets']=presets
     return report
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--root',type=Path,default=ROOT);p.add_argument('--output',type=Path);a=p.parse_args()

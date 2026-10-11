@@ -85,6 +85,25 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     if(result.conditional_copper_response_enabled)
         report.approximations.push_back({"conditional_copper_response_accuracy_pending",
             "Research170MeV Cu interior conditional event bank; coherent zero/output events, charged entries at water and explicit untracked Cu neutral products. Absolute0.1x1mm entrance bins without translations; finite-bank dose/gamma accuracy not certified.",1.,0.});
+    if(result.primary_first_order_delta_enabled)
+        report.approximations.push_back({"proton_ct_primary_first_order_delta",
+            "Dedicated local-electron proton CT broadbeam primary uses the step-start continuous26 delta first moment without its within-step energy-slope correction; current rate, variance, restricted-loss correction and fluctuations remain active. Patient TOPAS gamma qualification is configuration-specific",1.,0.});
+    if(result.carbon_primary_first_order_delta_enabled)
+        report.approximations.push_back({"carbon_ct_primary_first_order_delta",
+            "Dedicated local-electron carbon CT broadbeam primary uses the step-start continuous26 delta first moment without its within-step delta slope correction; current rate, variance, restricted-loss correction and fluctuations remain active. Patient TOPAS qualification is configuration-specific",1.,0.});
+    if(result.carbon_secondary_first_order_delta_enabled)
+        report.approximations.push_back({"carbon_ct_secondary_first_order_delta",
+            "Dedicated local-electron carbon CT broadbeam charged fragments use the step-start continuous26 delta first moment without its within-step delta slope correction; all charged species, current rate, variance, restricted-loss correction and fluctuations remain active. Patient TOPAS qualification is configuration-specific",1.,0.});
+    if(result.ct_broadbeam_step_cap_enabled)
+        report.approximations.push_back({"ct_broadbeam_ion_step_cap",
+            "Configured maximum ion step is enforced before CT face and nuclear competition for primary and charged fragments; FP32 Fermi-Eyges and ion fluctuations retained",
+            config.maximum_step_mm,0.});
+    if(result.ct_primary_first_order_restricted_enabled)
+        report.approximations.push_back({"ct_broadbeam_primary_step_start_restricted_mean",
+            "Dedicated local-electron CT broadbeam primary uses step-start restricted stopping without its within-step stopping-slope correction. Nominal stopping/range, ion charge correction, full range-derived terminals, nominal delta moments, hard rates and fluctuations remain active. Patient TOPAS qualification is configuration-specific",1.,0.});
+    if(result.ct_secondary_first_order_restricted_enabled)
+        report.approximations.push_back({"ct_broadbeam_fragment_step_start_restricted_mean",
+            "Dedicated local-electron carbon CT broadbeam charged fragments use step-start restricted stopping without its within-step stopping-slope correction. Nominal stopping/range, ion charge correction, full range-derived terminals, nominal delta moments, hard rates and fluctuations remain active. Patient TOPAS qualification is configuration-specific",1.,0.});
     report.approximations.push_back({"condensed_delta_partition_v1",
             "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition unless an explicit spatial response is enabled, configured combined mean-loss guard (default 1%); higher spectrum moments and patient BODY Gamma not validated",1.,0.});
     if (config.enable_minibeam && !config.material_electron_charged_index_file.empty()) {

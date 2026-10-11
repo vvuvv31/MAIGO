@@ -7,13 +7,12 @@
 #include <cstdint>
 #include <filesystem>
 #include <limits>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
 
 namespace carbon {
-
-struct TransportConfig;
 
 inline constexpr std::array<std::string_view, 13> schneider_canonical_element_names = {
     "Hydrogen", "Carbon", "Nitrogen", "Oxygen",
@@ -101,9 +100,8 @@ struct CtGrid {
     }
 
     static CtGrid from_binary(const std::filesystem::path& path);
-    static CtGrid from_config(const TransportConfig& config);
-    // File: CCTG binary. Directory or .dcm: CT Image series + Schneider HU map.
-    static CtGrid load(const std::filesystem::path& path);
+    // Current CCTG binary, decoded once into an immutable shared grid.
+    static std::shared_ptr<const CtGrid> load(const std::filesystem::path& path);
 
     void write_binary(const std::filesystem::path& path) const;
 };

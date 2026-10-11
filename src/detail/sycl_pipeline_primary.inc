@@ -72,6 +72,12 @@
               << " entry_bytes=" << sizeof(PrimaryMediumEntryState) << "\n";
     std::vector<sycl::event> electron_events;
     std::uint64_t electron_tasks_total=0, electron_queue_peak=0;
+    // Exact host certificate, never a tolerance-based grid approximation.
+    const bool primary_shared_ct_cell = enable_ct_grid &&
+        ct_nx==voxel_bins_x && ct_ny==voxel_bins_y && ct_nz==number_of_bins &&
+        ct_spacing_x==voxel_size_x_mm && ct_spacing_y==voxel_size_y_mm &&
+        ct_spacing_z==depth_bin_width_mm && ct_origin_x==voxel_min_x_mm &&
+        ct_origin_y==voxel_min_y_mm && ct_origin_z==0.0F;
     std::vector<sycl::event> primary_events;
     primary_events.reserve((compact_minibeam_primary ? 2 : 1) *
         ((number_of_histories + history_chunk - 1) / history_chunk));
@@ -89,11 +95,15 @@
             constexpr bool kCtQueuedPrimaryPath = kKernelStage == 11;
             // Stage 12 is broadbeam stage 6 with host-proven CT-shared-electron
             // configuration folded at compile time (no physics difference).
-            constexpr bool kBroadBeamCtPath = kKernelStage == 12 || kKernelStage == 13 || kKernelStage == 14;
+            constexpr bool kSharedCtCell = kKernelStage == 16 || kKernelStage == 18;
+            constexpr bool kLocalProtonCtPath = kKernelStage == 15 || kKernelStage == 16;
+            constexpr bool kLocalCarbonCtPath = kKernelStage == 17 || kKernelStage == 18;
+            constexpr bool kLocalElectronCtPath = kLocalProtonCtPath || kLocalCarbonCtPath;
+            constexpr bool kBroadBeamCtPath = kKernelStage == 12 || kKernelStage == 13 || kKernelStage == 14 || kLocalElectronCtPath;
             // 13/14 additionally fold the host-checked projectile (proton / C12).
-            constexpr int kFoldZ = kKernelStage == 13 ? 1 : kKernelStage == 14 ? 6 : 0;
-            constexpr int kFoldA = kKernelStage == 13 ? 1 : kKernelStage == 14 ? 12 : 0;
-            static_assert(!kBroadBeamCtPath || (BroadBeam && JointResponse==3));
+            constexpr int kFoldZ = (kKernelStage == 13 || kLocalProtonCtPath) ? 1 : (kKernelStage == 14 || kLocalCarbonCtPath) ? 6 : 0;
+            constexpr int kFoldA = (kKernelStage == 13 || kLocalProtonCtPath) ? 1 : (kKernelStage == 14 || kLocalCarbonCtPath) ? 12 : 0;
+            static_assert(!kBroadBeamCtPath || (BroadBeam && (kLocalElectronCtPath ? JointResponse==0 : JointResponse==3)));
             constexpr int kPrimaryStage = kCtQueuedPrimaryPath ? 4 : kKernelStage == 9 ? 3 : kBroadBeamCtPath ? 6 : kKernelStage;
             constexpr bool kUniformWaterPrimaryPath = decltype(uniform_water_path_tag)::value;
             // Host eligibility requires global Urban for every split beamline.
@@ -131,9 +141,9 @@
                 const auto enable_multiple_scattering = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_multiple_scattering;
                 const auto enable_inelastic = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_inelastic;
                 const auto use_schneider_primary_xs = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_schneider_primary_xs;
-                const auto use_material_electron = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_material_electron;
-                const auto use_material_ct = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_material_ct;
-                const auto defer_material_packets = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_defer_material_packets;
+                const auto use_material_electron = kLocalElectronCtPath ? false : (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_material_electron;
+                const auto use_material_ct = kLocalElectronCtPath ? false : (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_material_ct;
+                const auto defer_material_packets = kLocalElectronCtPath ? false : (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_defer_material_packets;
                 const auto primary_atomic_number = kCtQueuedPrimaryPath ? 1 : (kFoldZ ? kFoldZ : ct_runtime_primary_atomic_number);
                 const auto primary_mass_number = kCtQueuedPrimaryPath ? 1 : (kFoldA ? kFoldA : ct_runtime_primary_mass_number);
                 const auto inverse_mass_number = kCtQueuedPrimaryPath ? 1.0F : (kFoldA ? 1.0F / static_cast<float>(kFoldA) : ct_runtime_inverse_mass_number);
@@ -141,8 +151,8 @@
                 const auto enable_charged_origin_voxel_scoring = kBroadBeamCtPath ? false : ct_runtime_enable_charged_origin_voxel_scoring;
                 const auto enable_minibeam_component_voxel_scoring = kBroadBeamCtPath ? false : ct_runtime_enable_minibeam_component_voxel_scoring;
                 const auto enable_minibeam_energy_band_roi_scoring = kBroadBeamCtPath ? false : ct_runtime_enable_minibeam_energy_band_roi_scoring;
-                const auto use_electron_fp32 = kBroadBeamCtPath ? true : ct_runtime_use_electron_fp32;
-                const auto use_independent_charged = kBroadBeamCtPath ? true : ct_runtime_use_independent_charged;
+                const auto use_electron_fp32 = kLocalElectronCtPath ? false : kBroadBeamCtPath ? true : ct_runtime_use_electron_fp32;
+                const auto use_independent_charged = kLocalElectronCtPath ? false : kBroadBeamCtPath ? true : ct_runtime_use_independent_charged;
                 const auto enable_primary_voxel_fluence = kBroadBeamCtPath ? false : ct_runtime_enable_primary_voxel_fluence;
                 const auto lane = item.get_global_linear_id();
                 if (lane >= chunk_count) {
@@ -264,6 +274,9 @@
                                          sycl::ceil(position_z_mm / depth_bin_width_mm)) - 1
                                    : static_cast<int>(
                                          sycl::floor(position_z_mm / depth_bin_width_mm));
+                    bool ct_score_cell_valid = false;
+                    if constexpr (kSharedCtCell)
+                        ct_score_cell_valid = bin >= 0 && bin < static_cast<int>(number_of_bins);
                     bin = sycl::max(0, sycl::min(bin, static_cast<int>(number_of_bins) - 1));
 
                     auto voxel_x = static_cast<int>(voxel_bins_x / 2);
@@ -279,6 +292,10 @@
                         voxel_y = direction_y < 0.0F
                                       ? static_cast<int>(sycl::ceil(y_coordinate)) - 1
                                       : static_cast<int>(sycl::floor(y_coordinate));
+                        if constexpr (kSharedCtCell)
+                            ct_score_cell_valid = ct_score_cell_valid &&
+                                voxel_x >= 0 && voxel_x < static_cast<int>(voxel_bins_x) &&
+                                voxel_y >= 0 && voxel_y < static_cast<int>(voxel_bins_y);
                         voxel_x = sycl::max(
                             0, sycl::min(voxel_x, static_cast<int>(voxel_bins_x) - 1));
                         voxel_y = sycl::max(
@@ -308,11 +325,21 @@
                     auto in_ct = false;
                     if (((!kUniformWaterPrimaryPath && enable_ct_grid))) {
                         float ct_rho = water_density_g_per_cm3;
+                        if constexpr (kSharedCtCell) {
+                            // Use the directed, unclamped scoring-cell validity.
+                            // The clamped scorer index is read only when inside.
+                            in_ct = ct_score_cell_valid;
+                            if (in_ct) {
+                                ct_rho = ct_density_device[voxel_index];
+                                ct_material = ct_material_device[voxel_index];
+                            }
+                        } else {
                         in_ct = ct_sample(position_x_mm, position_y_mm, position_z_mm,
                                           ct_origin_x, ct_origin_y, ct_origin_z, ct_spacing_x,
                                           ct_spacing_y, ct_spacing_z, ct_nx, ct_ny, ct_nz,
                                           ct_density_device, ct_material_device, ct_rho,
                                           ct_material, direction_x, direction_y, direction_z);
+                        }
                         if (in_ct) {
                             local_density_g_per_cm3 = ct_rho;
                         }
@@ -327,6 +354,7 @@
                     float stopping_power_MeV_per_mm = 0.0F;
                     float step_mm = 0.0F;
                     UnifiedEmStep unified_primary_pre;
+                    UnifiedEmPoint unified_primary_point;
                     float unified_primary_rate=0,unified_primary_distance=std::numeric_limits<float>::infinity();
                     auto unified_uniform=[&](){return (rng::random_u32(spot_seed,rng_history,unified_primary_counter++,120)>>8)*0x1p-24f;};
                     auto unified_count=[&](int index,std::uint64_t count=1){
@@ -340,12 +368,22 @@
                         const int section=((!kUniformWaterPrimaryPath && enable_ct_grid))?(in_ct?int(ct_material):-2):-1;
                         if(!unified_primary_state.valid || unified_primary_state.section!=section ||
                            unified_primary_state.density!=local_density_g_per_cm3)
-                            unified_primary_state=unified_device.select(section,local_density_g_per_cm3,unified_primary_species);
+                        {
+                            if constexpr(kSharedCtCell && kLocalProtonCtPath)
+                                unified_primary_state=unified_device.select_ct(section,local_density_g_per_cm3,unified_primary_species,voxel_index);
+                            else unified_primary_state=unified_device.select(section,local_density_g_per_cm3,unified_primary_species);
+                        }
                         if(!unified_primary_state.covers(energy_MeV)){
                             record_unified_em_failure(unified_failure_count,unified_failure_records,1,section,primary_atomic_number,primary_mass_number,energy_MeV,local_density_g_per_cm3,0);
                             unified_count(0);break;}
                         if(unified_primary_clock.last_section!=unified_primary_state.section || unified_primary_clock.last_density!=unified_primary_state.density)primary_hadronic_cache.valid=false;
-                        unified_primary_pre=unified_primary_state.prepare(energy_MeV);
+                        if constexpr(kKernelStage==13 || kKernelStage==14 || kLocalElectronCtPath){
+                            // Reuse the material view through this step's loss
+                            // draw, without adding cross-step/resume state.
+                            unified_primary_point=unified_primary_state.lo();
+                            const auto point_pre=unified_primary_point.template prepare<kLocalElectronCtPath,kLocalElectronCtPath,kLocalElectronCtPath>(energy_MeV);
+                            unified_primary_pre={point_pre,point_pre};
+                        }else unified_primary_pre=unified_primary_state.prepare(energy_MeV);
                         stopping_power_MeV_per_mm = unified_primary_state.mix(
                             unified_primary_pre.lo.stopping + unified_primary_pre.lo.delta_stopping,
                             unified_primary_pre.hi.stopping + unified_primary_pre.hi.delta_stopping);
@@ -366,6 +404,12 @@
                         const float delta_sp=unified_primary_state.mix(unified_primary_pre.lo.delta_stopping,unified_primary_pre.hi.delta_stopping);
                         if(delta_sp>0) step_mm=sycl::fmin(step_mm,maximum_mean_loss_fraction*energy_MeV/sycl::fmax(1e-12f,delta_sp+unified_primary_state.mix(unified_primary_pre.lo.stopping,unified_primary_pre.hi.stopping)));
                     }
+
+                    // Non-Urban CT steps must honor the configured physical
+                    // cap before face/collision competition. Urban already
+                    // receives the same cap in its proposal below.
+                    if constexpr(BroadBeam) if (enable_ct_grid && !(kUniformWaterPrimaryPath || global_urban))
+                        step_mm=sycl::fmin(step_mm,maximum_step_mm);
 
                     if (!(kUniformWaterPrimaryPath || global_urban) && absolute_direction_z >= 1.0e-6F) {
                         const auto boundary_z_mm =
@@ -534,12 +578,18 @@
                     float em_delta_sampled_MeV = 0.0F;
                     float birth_expected_loss_MeV=urban_range_limited?energy_MeV:0.f;
                     if(!urban_range_limited){
-                        auto draw=unified_em_loss<kPrimaryStage==7>(
-                            unified_primary_state, unified_primary_clock,
-                            energy_MeV, accepted_loss_path_mm,
-                            unified_primary_rate, unified_primary_distance,
-                            enable_energy_straggling, unified_primary_pre,
-                            unified_uniform);
+                        auto draw=[&](){
+                            if constexpr(kKernelStage==13 || kKernelStage==14 || kLocalElectronCtPath)return unified_em_explicit_loss<kLocalProtonCtPath,true>(
+                                unified_primary_state,unified_primary_clock,energy_MeV,accepted_loss_path_mm,
+                                unified_primary_rate,unified_primary_distance,enable_energy_straggling,
+                                unified_primary_pre,unified_uniform,&unified_primary_point);
+                            else return unified_em_loss<kPrimaryStage==7>(
+                                unified_primary_state, unified_primary_clock,
+                                energy_MeV, accepted_loss_path_mm,
+                                unified_primary_rate, unified_primary_distance,
+                                enable_energy_straggling, unified_primary_pre,
+                                unified_uniform);
+                        }();
                         if(!draw.valid){
                             record_unified_em_failure(
                                 unified_failure_count, unified_failure_records,
@@ -655,9 +705,14 @@
                                         // the ion table's energy minimum.
                                         birth.valid=true;birth.fraction=0.f;
                                     } else if(state.covers(parent)) {
-                                        const auto point=state.prepare(parent);
-                                        const float restricted=state.mix(point.lo.stopping,point.hi.stopping);
-                                        const float delta=state.mix(point.lo.delta_stopping,point.hi.delta_stopping);
+                                        float restricted,delta;
+                                        if constexpr(kKernelStage==13 || kKernelStage==14 || kLocalElectronCtPath)
+                                            state.lo().birth_stopping(parent,restricted,delta);
+                                        else {
+                                            const auto point=state.prepare(parent);
+                                            restricted=state.mix(point.lo.stopping,point.hi.stopping);
+                                            delta=state.mix(point.lo.delta_stopping,point.hi.delta_stopping);
+                                        }
                                         const float total=restricted+delta;
                                         birth.valid=sycl::isfinite(total)&&total>0.f&&restricted>=0.f&&delta>=0.f;
                                         birth.fraction=delta/total;
@@ -1654,6 +1709,14 @@
         };
         const auto dispatch_primary_chunk = [&]() {
             if constexpr(BroadBeam) {
+                if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam> && JointResponse==0) {
+                    if (broadbeam_ct_primary_specialize && primary_shared_ct_cell)
+                        return launch_primary_chunk(std::false_type{}, std::integral_constant<int,16>{});
+                }
+                if constexpr (std::is_same_v<Pipeline, pipelines::CarbonBroadbeam> && JointResponse==0) {
+                    if (broadbeam_ct_primary_specialize && primary_shared_ct_cell)
+                        return launch_primary_chunk(std::false_type{}, std::integral_constant<int,18>{});
+                }
                 return Pipeline::template launch_primary<JointResponse>(
                     broadbeam_ct_primary_specialize, nonion_primary,
                     primary_atomic_number, primary_mass_number, launch_primary_chunk);

@@ -700,7 +700,8 @@ std::vector<PrimarySpotBatchEntry> TpsSourcePlan::make_primary_batch(
     double ct_max_y_mm = 0.0;
     double ct_max_z_mm = 0.0;
     if (config.enable_ct_grid) {
-        const auto grid = CtGrid::from_config(config);
+        const auto grid_owner = CtGrid::load(config.ct_grid_file);
+        const auto& grid = *grid_owner;
         const auto number_of_bins = config.number_of_bins();
         const auto close = [](const double left, const double right) {
             return std::abs(left - right) <=

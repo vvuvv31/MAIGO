@@ -98,6 +98,7 @@ struct UnifiedEmPoint {
         const float left=em_chebyshev(a+1,continuous_lengths?continuous_lengths[low]:continuous_degree,x),right=em_chebyshev(b+1,continuous_lengths?continuous_lengths[low+1]:continuous_degree,x);
         return left+w*(right-left);
     }
+    template<bool ZeroDensityGuard=false>
     float corrected_raw_stopping(float energy,float* derivative=nullptr)const {
         // Raw DEDX/range splines use a proton or alpha reference mass.
         const bool alpha=record->z==2 && record->a==4;
@@ -110,9 +111,23 @@ struct UnifiedEmPoint {
             const bool bragg=e*(938.272013f/mass)<=2;
             const float cb=std::min(tm,bragg?std::max(continuous->base_cut,floor):continuous->base_cut);
             const float ct=std::min(tm,bragg?std::max(material.cut,floor):material.cut);
-            const float x=.5f*std::log10(bg2);
-            const float dd=em_density_effect(x,material.c,material.m,material.a,material.x0,material.x1,material.d0)
-                -em_density_effect(x,continuous->base_c,continuous->base_m,continuous->base_a,continuous->base_x0,continuous->base_x1,continuous->base_d0);
+            // For 0<bg2<=1, x=.5*log10(bg2)<=0. If both density
+            // laws start strictly above zero and d0==0, both are exactly
+            // zero. No threshold, curve or nonzero response is approximated.
+            const bool zero_density = ZeroDensityGuard && bg2>0.f && bg2<=1.f &&
+                material.d0==0.f && continuous->base_d0==0.f &&
+                material.x0>0.f && material.x1>0.f &&
+                continuous->base_x0>0.f && continuous->base_x1>0.f;
+            // Coincident effective cuts make log(ct/cb), ct-cb and the
+            // spin difference zero as well. Keep the derivative's +/-eps
+            // evaluations separate: they each prove their own zero branch.
+            if(zero_density && cb==ct && cb>0.f)return 0.f;
+            float dd=0.f;
+            if(!zero_density) {
+                const float x=.5f*std::log10(bg2);
+                dd=em_density_effect(x,material.c,material.m,material.a,material.x0,material.x1,material.d0)
+                    -em_density_effect(x,continuous->base_c,continuous->base_m,continuous->base_a,continuous->base_x0,continuous->base_x1,continuous->base_d0);
+            }
             const float coeff=material.coefficient*(alpha?4.f:1.f)/beta;
             float v=std::log(ct/cb)-beta*(ct-cb)/tm-dd;
             if(spin)v+=.25f*(ct*ct-cb*cb)/((e+mass)*(e+mass));
@@ -252,23 +267,40 @@ struct UnifiedEmPoint {
     float factor(float kinetic)const {return at(kinetic/record->a).factor*(continuous_model()?1.f:density_scale);}
     float range(float kinetic)const {return (continuous_model()?corrected_raw_range(kinetic*record->ratio):raw(1,kinetic*record->ratio))/(factor(kinetic)*record->ratio);}
     float rate(float kinetic,float pre_factor)const {return continuous_model()?continuous_rate(kinetic,pre_factor):std::max(0.f,pre_factor*raw(3,kinetic*record->ratio));}
+    // Continuous26 birth partition needs only two means, not the range,
+    // fluctuations or energy derivatives of a transport step.
+    void birth_stopping(float kinetic,float& restricted,float& delta)const {
+        const float f=at(kinetic/record->a).factor;
+        restricted=f*corrected_raw_stopping(kinetic*record->ratio);
+        float variance=0.f;
+        continuous_moments(kinetic,continuous_rate(kinetic,f),delta,variance);
+    }
+    template<bool ZeroDensityGuard=false,bool FirstOrderDelta=false,bool FirstOrderRestricted=false>
     UnifiedEmPointStep prepare(float kinetic,UnifiedEmPrepareIndices* found=nullptr,const UnifiedEmPrepareIndices* shared=nullptr)const {
         const auto& r=*record;float delta=0,variance=0,delta_slope=0,raw_slope=0;const auto n=at(kinetic/r.a,&delta,&variance,&delta_slope,found?&found->node:nullptr,shared?shared->node:~0u);
         if(continuous_model()) {
-            float slope=0;const float f=n.factor,stop=f*corrected_raw_stopping(kinetic*r.ratio,&slope);
+            // Eligible local-electron CT paths may use step-start restricted
+            // stopping. Range inversion and charge-dependent native corrections
+            // remain unchanged; only the within-step linear slope is omitted.
+            float slope=0;const float f=n.factor,stop=f*corrected_raw_stopping<ZeroDensityGuard>(kinetic*r.ratio,FirstOrderRestricted?nullptr:&slope);
             const float rate=continuous_rate(kinetic,f);continuous_moments(kinetic,rate,delta,variance);
-            // Derivative of the corrected delta first moment, with identical
-            // support/veto law at nearby energies (FP32 throughout).
-            const float eps=.001f*kinetic;
-            float dl=0,dh=0,v=0;
-            continuous_moments(kinetic-eps,continuous_rate(kinetic-eps,f),dl,v);
-            continuous_moments(kinetic+eps,continuous_rate(kinetic+eps,f),dh,v);
+            // Eligible local-electron CT ion paths may use the step-start
+            // delta mean. This first-order approximation retains the current
+            // rate, variance and fluctuations, but omits this slope correction.
+            delta_slope=0.f;
+            if constexpr(!FirstOrderDelta) {
+                const float eps=.001f*kinetic;
+                float dl=0,dh=0,v=0;
+                continuous_moments(kinetic-eps,continuous_rate(kinetic-eps,f),dl,v);
+                continuous_moments(kinetic+eps,continuous_rate(kinetic+eps,f),dh,v);
+                delta_slope=(dh-dl)/(2*eps);
+            }
             const float u=kinetic/r.mass,re=.51099891f/r.mass,bg2=u*(u+2),beta=bg2/((u+1)*(u+1));
             const float tm=2*.51099891f*bg2/(1+2*(u+1)*re+re*re);
             const float ratio=(tm/beta-.5f*std::min(tm,material.cut))/(tm/beta-.5f*std::min(tm,continuous->base_cut));
             return {f,corrected_raw_range(kinetic*r.ratio)/(f*r.ratio),stop,n.q2,
                 n.dispersion*density_scale*ratio,n.universal_dispersion*density_scale*ratio,n.fluctuation==1,
-                delta,variance,f*r.ratio*slope,(dh-dl)/(2*eps),rate};
+                delta,variance,f*r.ratio*slope,delta_slope,rate};
         }
         const float f=n.factor*density_scale;
         const float stop=f*raw(0,kinetic*r.ratio,&raw_slope,found?&found->stopping:nullptr,shared?shared->stopping:~0u);
@@ -308,6 +340,13 @@ struct UnifiedEmPoint {
     }
 };
 struct UnifiedEmDevice;
+// Exact material fields evaluated on the GPU at a CT's actual density bits.
+// This is a memoized polynomial evaluation, not a density response node.
+struct UnifiedEmCtFields {
+    EmContinuousMaterial material{};
+    float coordinate{};
+    bool valid{};
+};
 struct alignas(16) UnifiedEmState {
     const UnifiedEmDevice* tables{};
     const UnifiedEmRecord* host_record{};
@@ -316,6 +355,7 @@ struct alignas(16) UnifiedEmState {
     float weight{}, density{}, lo_scale{1}, hi_scale{1};
     int section{-2};
     bool valid{false};
+    unsigned ct_fields_index{~0u};
     UnifiedEmPoint lo() const;
     UnifiedEmPoint hi() const;
     const UnifiedEmRecord* record() const { return tables ? lo().record : host_record; }
@@ -356,11 +396,14 @@ struct UnifiedEmDevice {
     const float* continuous_ranges{};
     unsigned continuous_degree{},continuous_scalar_count{};
     const unsigned* continuous_lengths{};
+    const UnifiedEmCtFields* ct_fields{};
+    const std::uint16_t* ct_fields_voxels{};
+    unsigned ct_fields_count{};
     int species_index(unsigned z,unsigned a)const {
         for(int i=0;i<18;++i)if(species[i].z==z && species[i].a==a)return i;
         return -1;
     }
-    UnifiedEmPoint point(unsigned material,int ion,float density_scale
+    UnifiedEmPoint point(unsigned material,int ion,float density_scale,unsigned ct_index=~0u
                          )const {
         auto* r=records+material*18+ion;
         UnifiedEmPoint p{r,nodes+r->node_offset,segments,density_scale,
@@ -369,9 +412,15 @@ struct UnifiedEmDevice {
             };
         if(unified_em_continuous_device_only || continuous_descriptors) {
             p.continuous=continuous_descriptors+material*18+ion;
-            const auto& d=*p.continuous;const float lr=std::log(materials[material].density*density_scale);
-            p.continuous_coordinate=d.log_max>d.log_min?std::clamp((lr-d.log_min)/(d.log_max-d.log_min),0.f,1.f):.5f;
-            p.material=em_continuous_material(continuous_scalars+material*continuous_scalar_count*8,continuous_scalar_count,p.continuous_coordinate);
+            const auto& d=*p.continuous;
+            if(ct_index!=~0u && ct_fields) {
+                const auto& cached=ct_fields[ct_index*18+ion];
+                p.continuous_coordinate=cached.coordinate;p.material=cached.material;
+            } else {
+                const float lr=std::log(materials[material].density*density_scale);
+                p.continuous_coordinate=d.log_max>d.log_min?std::clamp((lr-d.log_min)/(d.log_max-d.log_min),0.f,1.f):.5f;
+                p.material=em_continuous_material(continuous_scalars+material*continuous_scalar_count*8,continuous_scalar_count,p.continuous_coordinate);
+            }
             p.continuous_lengths=continuous_lengths?continuous_lengths+d.range_offset:nullptr;
             p.continuous_degree=continuous_degree;p.continuous_range=continuous_ranges+d.range_offset*(continuous_degree+1);
         }
@@ -409,14 +458,26 @@ struct UnifiedEmDevice {
         state.ion=ion;state.lo_scale=density/materials[low].density;state.hi_scale=density/materials[high].density;
         state.weight=w;state.density=density;state.section=section;state.valid=true;return state;
     }
+    UnifiedEmState select_ct(int section,float density,int ion,std::size_t voxel)const {
+        if(!ct_fields || !ct_fields_voxels)return select(section,density,ion);
+        UnifiedEmState state;
+        if(ion<0 || ion>=18 || section<0 || section>24 || !(density>0))return state;
+        const unsigned index=ct_fields_voxels[voxel];
+        if(index>=ct_fields_count || !ct_fields[index*18+ion].valid)return state;
+        const unsigned m=section+1;
+        state.tables=this;state.lo_mat=state.hi_mat=m;state.ion=ion;
+        state.lo_scale=state.hi_scale=density/materials[m].density;
+        state.density=density;state.section=section;state.valid=true;state.ct_fields_index=index;
+        return state;
+    }
 };
 inline bool UnifiedEmState::tables_continuous()const{return unified_em_continuous_device_only || (tables && tables->continuous_descriptors);}
 inline UnifiedEmPoint UnifiedEmState::lo() const {
-    return tables?tables->point(lo_mat,ion,lo_scale
+    return tables?tables->point(lo_mat,ion,lo_scale,ct_fields_index
         ):UnifiedEmPoint{};
 }
 inline UnifiedEmPoint UnifiedEmState::hi() const {
-    return tables?tables->point(hi_mat,ion,hi_scale
+    return tables?tables->point(hi_mat,ion,hi_scale,ct_fields_index
         ):UnifiedEmPoint{};
 }
 // Searches are shared only inside this preparation, never cached across steps.
@@ -440,13 +501,20 @@ struct UnifiedEmClock {
     }
 };
 struct UnifiedEmLoss {float loss{},continuous{},delta{};bool valid{false};unsigned proposed{},accepted{};std::uint8_t failure_stage{0};float mean{},delta_mean{},delta_variance{};};
-template<bool NonIon=false,class Uniform>
-UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& cache,float t,float h,float proposal_rate,float distance,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform){
-    UnifiedEmLoss out;const auto lo=s.lo(),hi=s.hi();const auto& r=*lo.record;
-    float mean=s.template mean<NonIon>(t,h,pre),tau=t/r.mass,ratio=.51099891f/r.mass;
+// PreparedPoint reuses continuous26 views in dedicated CT broadbeam steps.
+// The supplied view belongs to the same step-start state as pre; it must not
+// survive a density/material change. Other paths keep their original evaluator.
+template<bool NonIon=false,bool PreparedPoint=false,class Uniform>
+UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& cache,float t,float h,float proposal_rate,float distance,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform,const UnifiedEmPoint* prepared_point=nullptr){
+    UnifiedEmLoss out;
+    const auto lo=[&](){if constexpr(PreparedPoint)return *prepared_point;else return s.lo();}();
+    const auto hi=s.hi();const auto& r=*lo.record;
+    const float mean=[&](){if constexpr(PreparedPoint)return lo.template mean<NonIon>(t,h,pre.lo);else return s.template mean<NonIon>(t,h,pre);}();
+    float tau=t/r.mass,ratio=.51099891f/r.mass;
     out.mean=mean;
     float tmax=2*.51099891f*tau*(tau+2)/(1+2*(tau+1)*ratio+ratio*ratio);
-    float cut=std::min(s.cut(),tmax);float loss=mean;
+    const float material_cut=[&](){if constexpr(PreparedPoint)return lo.material.cut;else return s.cut();}();
+    float cut=std::min(material_cut,tmax);float loss=mean;
     if(fluctuations && mean<t){
         UnifiedEmPointStep fluct_lo=pre.lo,fluct_hi=pre.hi;
         RestrictedFluctuationInput<float> input{t,r.mass,mean,s.mix(fluct_lo.dispersion,fluct_hi.dispersion)*h,s.mix(fluct_lo.universal_dispersion,fluct_hi.universal_dispersion)*h,cut,tmax,s.mix(r.excitation,hi.record->excitation),s.mix(r.e0,hi.record->e0)};

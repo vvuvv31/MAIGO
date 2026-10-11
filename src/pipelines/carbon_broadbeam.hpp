@@ -23,6 +23,8 @@ struct CarbonBroadbeam {
         (void)source_z; (void)source_a;
         if constexpr (JointResponse == 3) if (ct_specialized)
             return launch(std::false_type{}, std::integral_constant<int, 14>{});
+        if constexpr (JointResponse == 0) if (ct_specialized)
+            return launch(std::false_type{}, std::integral_constant<int, 17>{});
         (void)nonion;
         return launch(std::false_type{}, std::integral_constant<int, 6>{});
     }

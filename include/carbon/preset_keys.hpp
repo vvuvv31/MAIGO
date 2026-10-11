@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <array>
 namespace carbon {
-inline constexpr std::array<std::string_view,172> preset_keys{
+inline constexpr std::array<std::string_view,173> preset_keys{
     "LET",
     "all_ion_elastic_file",
     "beam_energy_spread",
@@ -43,6 +43,7 @@ inline constexpr std::array<std::string_view,172> preset_keys{
     "enable_ct_grid",
     "enable_ct_material_mcs",
     "enable_emittance_source",
+    "enable_electron_transport",
     "enable_energy_straggling",
     "enable_flat_source",
     "enable_inelastic",

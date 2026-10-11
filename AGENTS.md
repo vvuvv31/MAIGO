@@ -8,13 +8,17 @@
 - RT07575 is a **head** case. Its CT, source, weights, placement, collimator and
   normalization must stay together. Default CT minibeams use a separate lung
   benchmark; do not report them as RT07575 head full-plan validation.
-- Preserve EMCNT001 continuous26 ion EM; strict26 electron/photon packages;
+- Electron transport is optional in every configuration, default off. Only
+  explicit `enable_electron_transport: true` loads electron/photon packages.
+  Preserve EMCNT001 continuous26 ion EM; when enabled, strict26 electron/photon packages;
   proton/carbon-specific birth parameters; current spatial joint; Urban and
   FP32 electron geometry/loss/scoring. No density-node fallback or missing-data
   local-deposition substitution. Water reference is Water_75eV (I=75 eV).
 - All eight defaults enable primary and secondary ion fluctuations. Copper
   primary/fragment fluctuations remain enabled in minibeams. Ion step caps
-  are 0.5 mm broadbeam and 0.1 mm minibeam. GPU dose atomics stay FP32.
+  are 1.0 mm CT broadbeam, 0.5 mm water broadbeam/CT minibeam, and
+  0.1 mm water minibeam. Minibeam copper remains 0.05 mm.
+  GPU dose atomics stay FP32.
 - All four minibeams use compact scheduling. Carbon water retains its TPS CSV
   source, emittance and generic Urban water medium kernel. Preserve physical/
   source behavior in refactors. Generic charged fragment species are required.
@@ -42,7 +46,7 @@
 - Nuclear primary channel sidecars require explicit boolean `has_support`.
   Nuclear neutrals remain explicit untracked energy sinks; do not restore
   neutron transport/packages or replace their energy with local deposition.
-  Electron electromagnetic photon transport remains required.
+  Enabled electron transport requires electromagnetic photon transport.
   TPS isocenter configuration uses only the supported Z component key.
 - Water Z geometry requires explicit `voxel_bins_z` and `voxel_size_z_mm`.
   CT geometry comes from the CCTG header. Do not restore independent YAML

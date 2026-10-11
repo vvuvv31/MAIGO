@@ -1,3 +1,4 @@
+enable_electron_transport: false
 # carbon_water_minibeam: Water_75eV; current26 EM/electrons, FP32 dose.
 transport_pipeline: carbon_minibeam
 run_mode: research

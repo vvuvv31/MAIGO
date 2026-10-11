@@ -121,6 +121,8 @@
                                                         unsigned active_size) {
                 constexpr bool kProductionSecondaryPath =
                     decltype(production_path_tag)::value;
+                constexpr bool kCarbonCtPointReuse = kProductionSecondaryPath &&
+                    std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>;
                 constexpr int kExactSpecies = -1;
                 constexpr unsigned kSliceSegmentSteps = Pipeline::secondary_segment_steps;
                 return queue.submit([&](sycl::handler& cgh) {
@@ -505,6 +507,7 @@
 
                             float sec_step_mm = maximum_step_mm;
                             UnifiedEmStep unified_secondary_pre;
+                            UnifiedEmPoint unified_secondary_point;
                             float unified_secondary_rate=0,unified_secondary_distance=std::numeric_limits<float>::infinity();
                             if(unified_secondary){
                                 const int section=(kProductionSecondaryPath ? true : enable_ct_grid)?(sec_in_ct?int(sec_ct_material):-2):-1;
@@ -514,7 +517,13 @@
                                 if(!unified_secondary_state.covers(sec_e)){
                                     record_unified_em_failure(unified_failure_count,unified_failure_records,3,section,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,0);
                                     unified_secondary_count(0);break;}
-                                unified_secondary_pre=unified_secondary_state.prepare(sec_e);
+                                if constexpr(kCarbonCtPointReuse) {
+                                    // Same-step view only; never retained across continuation.
+                                    unified_secondary_point=unified_secondary_state.lo();
+                                    const auto point_pre=unified_secondary_point.template prepare<
+                                        JointResponse == 0, JointResponse == 0, JointResponse == 0>(sec_e);
+                                    unified_secondary_pre={point_pre,point_pre};
+                                } else unified_secondary_pre=unified_secondary_state.prepare(sec_e);
                                 if(sec_global_urban) {
                                     unified_secondary_rate=unified_secondary_clock.update(unified_secondary_state,sec_e,
                                         unified_secondary_pre.lo.factor,unified_secondary_pre.hi.factor);
@@ -527,6 +536,9 @@
                                 const float delta_sp=unified_secondary_state.mix(unified_secondary_pre.lo.delta_stopping,unified_secondary_pre.hi.delta_stopping);
                                 if(delta_sp>0) sec_step_mm=sycl::fmin(sec_step_mm,maximum_mean_loss_fraction*sec_e/sycl::fmax(1e-12f,delta_sp+unified_secondary_state.mix(unified_secondary_pre.lo.stopping,unified_secondary_pre.hi.stopping)));
                             }
+
+                            if constexpr(BroadBeam) if((kProductionSecondaryPath ? true : enable_ct_grid) && !sec_global_urban)
+                                sec_step_mm=sycl::fmin(sec_step_mm,maximum_step_mm);
 
                             bool depth_boundary_limited = false;
                             if (!sec_global_urban && sec_dz > 1.0e-6F) {
@@ -737,7 +749,16 @@
                             const auto collision_input_dz = sec_dz;
                             if(sec_global_urban && sec_urban_scattering.range_terminal)dE=sec_e;
                             if(unified_secondary && !(sec_global_urban && sec_urban_scattering.range_terminal)){
-                                auto draw=unified_em_loss(unified_secondary_state,unified_secondary_clock,sec_e,sec_step_mm,unified_secondary_rate,unified_secondary_distance,enable_secondary_energy_straggling,unified_secondary_pre,unified_secondary_uniform);
+                                auto draw=[&]() {
+                                    if constexpr(kCarbonCtPointReuse)
+                                        return unified_em_explicit_loss<false,true>(unified_secondary_state,
+                                            unified_secondary_clock,sec_e,sec_step_mm,unified_secondary_rate,
+                                            unified_secondary_distance,enable_secondary_energy_straggling,
+                                            unified_secondary_pre,unified_secondary_uniform,&unified_secondary_point);
+                                    else return unified_em_loss(unified_secondary_state,unified_secondary_clock,
+                                        sec_e,sec_step_mm,unified_secondary_rate,unified_secondary_distance,
+                                        enable_secondary_energy_straggling,unified_secondary_pre,unified_secondary_uniform);
+                                }();
                                 if(!draw.valid){
                                     record_unified_em_failure(unified_failure_count,unified_failure_records,40+static_cast<int>(draw.failure_stage),unified_secondary_state.section,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
                                     unified_secondary_count(0);unified_secondary_count(7);break;}
@@ -2032,7 +2053,7 @@
                         production_path_tag,exact_species_tag,active_begin,active_size);
                 };
                 if constexpr(BroadBeam) {
-                    if constexpr(JointResponse==3) {
+                    if constexpr(JointResponse==3 || std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>) {
                         if(broadbeam_ct_secondary_specialize)
                             submit_secondary_slice(std::true_type{},std::integral_constant<int,-1>{},0,resume_active);
                         else submit_secondary_slice(std::false_type{},std::integral_constant<int,-1>{},0,resume_active);

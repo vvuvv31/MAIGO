@@ -56,6 +56,7 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <filesystem>
 #include <iostream>
 #include <limits>
@@ -67,6 +68,7 @@
 #include <string_view>
 #include <map>
 #include <typeindex>
+#include <type_traits>
 #include <tuple>
 #include <type_traits>
 #include <vector>
@@ -911,7 +913,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     sycl::queue& queue,
     carbon::detail::DeviceMemoryTracker& mem_tracker,
     const TransportConfig& config,
-    SchneiderHostCache* host_cache = nullptr) {
+    SchneiderHostCache* host_cache = nullptr,
+    ResidentPhysicsTables* resident = nullptr) {
 
     SchneiderCtDeviceContext ctx{};
     ctx.mode = config.material_physics_mode;
@@ -920,6 +923,13 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     if (!ctx.uses_cinel03()) {
         return ctx;
     }
+    const auto upload = [&](const char* name, const auto& values) {
+        using T = typename std::remove_cvref_t<decltype(values)>::value_type;
+        if (resident) return resident->upload(name, values, mem_tracker);
+        auto* pointer = mem_tracker.allocate<T>(values.size());
+        if (pointer) queue.copy(values.data(), pointer, values.size()).wait_and_throw();
+        return pointer;
+    };
     PureWaterMaterial water_material{};
     SchneiderMaterialTable water_source_materials{};
     if (ctx.unified_water) {
@@ -972,22 +982,14 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         // Current masked partials and per-target domains only.
         {
             const auto& partials = target_sampler->partial_rates();
-            float* dev_partial = mem_tracker.allocate<float>(partials.size());
-            float* dev_emin = mem_tracker.allocate<float>(target_sampler->domain_emin().size());
-            float* dev_emax = mem_tracker.allocate<float>(target_sampler->domain_emax().size());
-            unsigned char* dev_has =
-                mem_tracker.allocate<unsigned char>(target_sampler->domain_has().size());
+            auto* dev_partial = upload("dev_partial", partials);
+            auto* dev_emin = upload("dev_emin", target_sampler->domain_emin());
+            auto* dev_emax = upload("dev_emax", target_sampler->domain_emax());
+            auto* dev_has = upload("dev_has", target_sampler->domain_has());
             if (dev_partial == nullptr || dev_emin == nullptr || dev_emax == nullptr ||
                 dev_has == nullptr) {
                 throw std::bad_alloc();
             }
-            queue.copy(partials.data(), dev_partial, partials.size());
-            queue.copy(target_sampler->domain_emin().data(), dev_emin,
-                       target_sampler->domain_emin().size());
-            queue.copy(target_sampler->domain_emax().data(), dev_emax,
-                       target_sampler->domain_emax().size());
-            queue.copy(target_sampler->domain_has().data(), dev_has,
-                       target_sampler->domain_has().size());
             ctx.primary_sampler.partial_rates = dev_partial;
             ctx.primary_sampler.domain_emin = dev_emin;
             ctx.primary_sampler.domain_emax = dev_emax;
@@ -1023,20 +1025,15 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 node.projectile_a != config.primary_mass_number)
                 throw std::runtime_error("Primary CINEL03 binary projectile does not match YAML source Z/A");
         }
-        auto* dev_c12_nodes = mem_tracker.allocate<Cinel03EnergyNode>(c12_dev->energy_nodes.size());
-        auto* dev_c12_offsets = mem_tracker.allocate<std::uint32_t>(c12_dev->event_offsets.size());
-        auto* dev_c12_indices = mem_tracker.allocate<std::uint32_t>(c12_dev->event_indices.size());
-        auto* dev_c12_ints = mem_tracker.allocate<Cinel03DeviceInteraction>(c12_dev->interactions.size());
-        auto* dev_c12_prods = mem_tracker.allocate<Cinel03DeviceProduct>(c12_dev->products.size());
+        auto* dev_c12_nodes = upload("dev_c12_nodes", c12_dev->energy_nodes);
+        auto* dev_c12_offsets = upload("dev_c12_offsets", c12_dev->event_offsets);
+        auto* dev_c12_indices = upload("dev_c12_indices", c12_dev->event_indices);
+        auto* dev_c12_ints = upload("dev_c12_ints", c12_dev->interactions);
+        auto* dev_c12_prods = upload("dev_c12_prods", c12_dev->products);
         if (dev_c12_nodes == nullptr || dev_c12_offsets == nullptr || dev_c12_indices == nullptr ||
             dev_c12_ints == nullptr || dev_c12_prods == nullptr) {
             throw std::bad_alloc();
         }
-        queue.copy(c12_dev->energy_nodes.data(), dev_c12_nodes, c12_dev->energy_nodes.size());
-        queue.copy(c12_dev->event_offsets.data(), dev_c12_offsets, c12_dev->event_offsets.size());
-        queue.copy(c12_dev->event_indices.data(), dev_c12_indices, c12_dev->event_indices.size());
-        queue.copy(c12_dev->interactions.data(), dev_c12_ints, c12_dev->interactions.size());
-        queue.copy(c12_dev->products.data(), dev_c12_prods, c12_dev->products.size());
 
         ctx.primary_energy_nodes = dev_c12_nodes;
         ctx.primary_event_offsets = dev_c12_offsets;
@@ -1071,11 +1068,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         for (std::size_t i = 0; i < sec_rate_table->mass_partial_rates().size(); ++i) {
             sec_partial_rates_float[i] = static_cast<float>(sec_rate_table->mass_partial_rates()[i]);
         }
-        float* dev_sec_partial = mem_tracker.allocate<float>(sec_partial_rates_float.size());
+        auto* dev_sec_partial = upload("dev_sec_partial", sec_partial_rates_float);
         if (dev_sec_partial == nullptr) {
             throw std::bad_alloc();
         }
-        queue.copy(sec_partial_rates_float.data(), dev_sec_partial, sec_partial_rates_float.size());
 
         ctx.sec_partial_rates = dev_sec_partial;
         // v3: bundle-ordered projectile registry + per-(projectile,target)
@@ -1088,11 +1084,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 keys.push_back(p.z);
                 keys.push_back(p.a);
             }
-            std::int32_t* dev_keys = mem_tracker.allocate<std::int32_t>(keys.size());
+            auto* dev_keys = upload("dev_keys", keys);
             if (dev_keys == nullptr) {
                 throw std::bad_alloc();
             }
-            queue.copy(keys.data(), dev_keys, keys.size());
             ctx.sec_proj_keys = dev_keys;
             const auto& doms = sec_rate_table->channel_domains();
             std::vector<float> demin;
@@ -1106,15 +1101,12 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 demax.push_back(static_cast<float>(d.energy_max_mevu));
                 dhas.push_back(d.has_support);
             }
-            float* dev_demin = mem_tracker.allocate<float>(demin.size());
-            float* dev_demax = mem_tracker.allocate<float>(demax.size());
-            unsigned char* dev_dhas = mem_tracker.allocate<unsigned char>(dhas.size());
+            auto* dev_demin = upload("dev_demin", demin);
+            auto* dev_demax = upload("dev_demax", demax);
+            auto* dev_dhas = upload("dev_dhas", dhas);
             if (dev_demin == nullptr || dev_demax == nullptr || dev_dhas == nullptr) {
                 throw std::bad_alloc();
             }
-            queue.copy(demin.data(), dev_demin, demin.size());
-            queue.copy(demax.data(), dev_demax, demax.size());
-            queue.copy(dhas.data(), dev_dhas, dhas.size());
             ctx.sec_domain_emin = dev_demin;
             ctx.sec_domain_emax = dev_demax;
             ctx.sec_domain_has = dev_dhas;
@@ -1149,20 +1141,15 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 ++host_cache->misses;
             }
         }
-        auto* dev_sec_nodes = mem_tracker.allocate<Cinel03EnergyNode>(sec_dev->energy_nodes.size());
-        auto* dev_sec_offsets = mem_tracker.allocate<std::uint32_t>(sec_dev->event_offsets.size());
-        auto* dev_sec_indices = mem_tracker.allocate<std::uint32_t>(sec_dev->event_indices.size());
-        auto* dev_sec_ints = mem_tracker.allocate<Cinel03DeviceInteraction>(sec_dev->interactions.size());
-        auto* dev_sec_prods = mem_tracker.allocate<Cinel03DeviceProduct>(sec_dev->products.size());
+        auto* dev_sec_nodes = upload("dev_sec_nodes", sec_dev->energy_nodes);
+        auto* dev_sec_offsets = upload("dev_sec_offsets", sec_dev->event_offsets);
+        auto* dev_sec_indices = upload("dev_sec_indices", sec_dev->event_indices);
+        auto* dev_sec_ints = upload("dev_sec_ints", sec_dev->interactions);
+        auto* dev_sec_prods = upload("dev_sec_prods", sec_dev->products);
         if (dev_sec_nodes == nullptr || dev_sec_offsets == nullptr || dev_sec_indices == nullptr ||
             dev_sec_ints == nullptr || dev_sec_prods == nullptr) {
             throw std::bad_alloc();
         }
-        queue.copy(sec_dev->energy_nodes.data(), dev_sec_nodes, sec_dev->energy_nodes.size());
-        queue.copy(sec_dev->event_offsets.data(), dev_sec_offsets, sec_dev->event_offsets.size());
-        queue.copy(sec_dev->event_indices.data(), dev_sec_indices, sec_dev->event_indices.size());
-        queue.copy(sec_dev->interactions.data(), dev_sec_ints, sec_dev->interactions.size());
-        queue.copy(sec_dev->products.data(), dev_sec_prods, sec_dev->products.size());
 
         ctx.sec_energy_nodes = dev_sec_nodes;
         ctx.sec_event_offsets = dev_sec_offsets;

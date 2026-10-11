@@ -568,6 +568,13 @@ struct ElectronJointDiagnostics {
 
 struct TransportResult {
     bool conditional_copper_response_enabled{false};
+    // True only when the dedicated local-electron CT proton primary ran.
+    bool primary_first_order_delta_enabled{false};
+    bool carbon_primary_first_order_delta_enabled{false};
+    bool carbon_secondary_first_order_delta_enabled{false};
+    bool ct_primary_first_order_restricted_enabled{false};
+    bool ct_secondary_first_order_restricted_enabled{false};
+    bool ct_broadbeam_step_cap_enabled{false};
     bool fe_sampling_diagnostics_enabled{false};
     std::array<std::uint64_t, 8> fe_sampling_counts{};
     ElectronJointDiagnostics electron_joint_diagnostics{};

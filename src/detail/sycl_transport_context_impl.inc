@@ -2,8 +2,8 @@
 // Method definitions are emitted only when CARBON_DEFINE_SYCL_CONTEXT=1.
 
 // Parsed, immutable Schneider/CINEL03 host tables shared across shards in one
-// process. Keyed by exact input paths + file size and modification time. Device arrays are
-// still uploaded per shard by upload_schneider_ct_device_context().
+// process. Keyed by source identity, input paths, sizes and modification times.
+// A session may also retain the validated immutable device view for CT broadbeam.
 struct SchneiderHostCache {
     bool valid{false};
     std::string signature;
@@ -72,7 +72,8 @@ struct SyclTransportContext::Impl {
     ~Impl() { clear(); }
 
     void clear() noexcept {
-        resident_em.reset();resident_urban.reset();resident_air.reset();resident_copper_ions.reset();
+        schneider_device=CachedSchneiderDevice{};
+        resident_em.reset();resident_urban.reset();resident_air.reset();resident_copper_ions.reset();resident_ct_fields.reset();
         const auto release = [this](auto*& pointer) {
             if (pointer != nullptr) {
                 sycl::free(pointer, queue);
@@ -108,13 +109,24 @@ struct SyclTransportContext::Impl {
     CachedElectronCt electron_ct;
     CachedUnifiedEm unified_em_cache;
     std::shared_ptr<ResidentPhysicsTables> resident_em, resident_urban, resident_air, resident_copper_ions;
+    std::shared_ptr<ResidentPhysicsTables> resident_ct_fields;
+    // Published only after complete upload and source/mass validation.
+    // All particle/scoring/diagnostic buffers remain owned by each shard.
+    struct CachedSchneiderDevice {
+        std::shared_ptr<ResidentPhysicsTables> tables;
+        SchneiderCtDeviceContext view{};
+        std::string signature;
+        bool valid{false};
+    };
+    CachedSchneiderDevice schneider_device;
     SchneiderHostCache schneider_host_cache;
     ImmutableInputCache immutable_inputs;
     std::uint64_t physics_cache_hits{0};
     std::uint64_t physics_cache_misses{0};
 
     void clear_physics_cache() noexcept {
-        resident_em.reset();resident_urban.reset();resident_air.reset();resident_copper_ions.reset();
+        schneider_device=CachedSchneiderDevice{};
+        resident_em.reset();resident_urban.reset();resident_air.reset();resident_copper_ions.reset();resident_ct_fields.reset();
         immutable_inputs = ImmutableInputCache{};
         unified_em_cache = CachedUnifiedEm{};
         schneider_host_cache = SchneiderHostCache{};

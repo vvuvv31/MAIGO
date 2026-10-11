@@ -1,6 +1,6 @@
 #include "carbon/runtime_timing.hpp"
 #include "carbon/ct_grid.hpp"
-#include "carbon/transport_config.hpp"
+#include "carbon/immutable_input_cache.hpp"
 
 #include <algorithm>
 #include <cctype>
@@ -244,11 +244,6 @@ std::uint8_t SchneiderMaterialTable::section_id(const int hu) const noexcept {
     return static_cast<std::uint8_t>(section_count - 1);
 }
 
-CtGrid CtGrid::from_config(const TransportConfig& config) {
-    RuntimeScope runtime_ct("ct_from_config_including_load");
-    return load(config.ct_grid_file);
-}
-
 CtGrid CtGrid::from_binary(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
@@ -341,8 +336,18 @@ void CtGrid::write_binary(const std::filesystem::path& path) const {
 }  // namespace carbon
 
 namespace carbon {
-CtGrid CtGrid::load(const std::filesystem::path& path) {
+std::shared_ptr<const CtGrid> CtGrid::load(const std::filesystem::path& path) {
     RuntimeScope timer("ct_load_preprocess");
-    return from_binary(path);
+    // Bounded per-host-thread cache of the current fully validated CCTG.
+    // Geometry, density and sections are immutable; stat keys force a reparse
+    // when the source changes. GPU contexts retain their own shared ownership.
+    struct Cache {std::string key;std::shared_ptr<const CtGrid> grid;};
+    thread_local Cache cached;
+    const auto key=input_cache_key(path);
+    if(!cached.grid || cached.key!=key) {
+        auto grid=std::make_shared<const CtGrid>(from_binary(path));
+        cached.grid=std::move(grid);cached.key=key;
+    }
+    return cached.grid;
 }
 }

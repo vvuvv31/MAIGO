@@ -416,6 +416,9 @@ std::size_t TransportConfig::number_of_voxels() const {
 }
 
 void TransportConfig::validate() const {
+    const_cast<TransportConfig*>(this)->resolve_electron_transport();
+    if (enable_electron_transport && material_electron_charged_index_file.empty())
+        throw std::invalid_argument("enable_electron_transport requires explicit shared FP32 electron packages");
     if (device != "cuda") throw std::invalid_argument("device must be cuda");
     if (config_schema_version != 1U) {
         throw std::invalid_argument(
@@ -509,8 +512,6 @@ void TransportConfig::validate() const {
             unified_water_material_file.empty())
             throw std::invalid_argument("Unified water requires explicit v2.1 bundle paths and pinned G4_WATER material");
     }
-    if(enable_minibeam && material_electron_charged_index_file.empty())
-        throw std::invalid_argument("Minibeam requires the shared FP32 electron packages; spatial-response replay is retired");
     if(material_electron_retain_bank &&
        (material_electron_charged_index_file.empty() || run_mode!=RunMode::research))
         throw std::invalid_argument("Electron cache requires SYCL research shared-electron transport");
@@ -1261,7 +1262,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     // Record the mode-specific ion step default in the canonical config;
     // an explicit maximum_step_mm remains authoritative.
     values.try_emplace("maximum_step_mm",
-        parse_bool(values, "minibeam", false) ? "0.1" : "0.5");
+        parse_bool(values, "minibeam", false) &&
+        !parse_bool(values, "enable_ct_grid", false) && !values.contains("ct_grid_file")
+            ? "0.1" : "0.5");
     // Broad-beam YAML defaults apply to every source ZA, including protons.
     // Insert before canonicalization so the effective defaults are recorded.
     // Explicit model, enable/disable and species selections remain authoritative.
@@ -1275,7 +1278,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     const auto profile_it=values.find("transport_profile");
     const std::string profile=profile_it==values.end()?"reference":profile_it->second;
     const bool tracking_declared=values.contains("broadbeam_electron_tracking");
-    const bool tracking_requested=parse_bool(values,"broadbeam_electron_tracking",false);
+    values.try_emplace("enable_electron_transport", "false");
+    const bool electrons_requested=parse_bool(values,"enable_electron_transport",false);
+    const bool tracking_requested=electrons_requested && parse_bool(values,"broadbeam_electron_tracking",false);
     if(tracking_declared && profile!="broadbeam_fast")
         throw std::invalid_argument("broadbeam_electron_tracking is a broadbeam_fast setting");
     const bool independent_profile=tracking_requested && parse_bool(values,"enable_ct_grid",false);
@@ -1307,6 +1312,7 @@ TransportConfig load_config(const std::filesystem::path& path) {
         }
     }
     TransportConfig config;
+    config.enable_electron_transport=electrons_requested;
     config.transport_profile=profile;
     if (auto pipeline=values.find("transport_pipeline"); pipeline!=values.end())
         config.transport_pipeline=pipeline->second;
@@ -1432,13 +1438,15 @@ TransportConfig load_config(const std::filesystem::path& path) {
             config.ct_schneider_radiation_length_file, path);
     }
     config.material_electron_charged_index_file=parse_path(values,"material_electron_charged_index_file",config.material_electron_charged_index_file);
-    if(!config.material_electron_charged_index_file.empty())config.material_electron_charged_index_file=resolve_input_path_from_config(config.material_electron_charged_index_file,path);
     config.material_electron_birth_file=parse_path(values,"material_electron_birth_file",config.material_electron_birth_file);
     config.material_photon_response_index_file=parse_path(values,"material_photon_response_index_file",config.material_photon_response_index_file);
-    if(!config.material_photon_response_index_file.empty())config.material_photon_response_index_file=resolve_input_path_from_config(config.material_photon_response_index_file,path);
-    if(!config.material_electron_birth_file.empty())config.material_electron_birth_file=resolve_input_path_from_config(config.material_electron_birth_file,path);
     config.material_electron_joint_pilot_file=parse_path(values,"material_electron_joint_pilot_file",config.material_electron_joint_pilot_file);
-    if(!config.material_electron_joint_pilot_file.empty())config.material_electron_joint_pilot_file=resolve_input_path_from_config(config.material_electron_joint_pilot_file,path);
+    if (electrons_requested) {
+        if(!config.material_electron_charged_index_file.empty())config.material_electron_charged_index_file=resolve_input_path_from_config(config.material_electron_charged_index_file,path);
+        if(!config.material_photon_response_index_file.empty())config.material_photon_response_index_file=resolve_input_path_from_config(config.material_photon_response_index_file,path);
+        if(!config.material_electron_birth_file.empty())config.material_electron_birth_file=resolve_input_path_from_config(config.material_electron_birth_file,path);
+        if(!config.material_electron_joint_pilot_file.empty())config.material_electron_joint_pilot_file=resolve_input_path_from_config(config.material_electron_joint_pilot_file,path);
+    }
     config.material_electron_retain_bank=parse_bool(values,"material_electron_retain_bank",config.material_electron_retain_bank);
     if(const auto it=values.find("material_electron_queue_budget_MiB");it!=values.end()) {
         std::size_t used=0;const auto value=std::stoull(it->second,&used);
@@ -1474,6 +1482,7 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.enable_ct_grid = true;
     }
     config.resolve_material_physics_mode();
+    config.resolve_electron_transport();
     config.scorer_area_mm2 = parse_number(values, "scorer_area_mm2", config.scorer_area_mm2);
     config.dose_output_scale =
         parse_number(values, "dose_output_scale", config.dose_output_scale);
@@ -1498,8 +1507,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
                        });
     }
     if (config.enable_ct_grid) {
-        const auto grid = CtGrid::load(
+        const auto grid_owner = CtGrid::load(
             resolve_input_path_from_config(config.ct_grid_file, path));
+        const auto& grid = *grid_owner;
         const auto close = [](const double left, const double right) {
             return std::abs(left - right) <=
                    1.0e-6 * std::max({1.0, std::abs(left), std::abs(right)});
