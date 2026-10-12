@@ -58,6 +58,15 @@ def main():
         r=subprocess.run([str(a.binary.resolve()),'--config',str(f)],cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
         ok=r.returncode!=0 and 'minibeam_primary_pipeline must be compact' in r.stdout and '[unified-em-audit]' not in r.stdout
         reports.append(dict(key='minibeam_primary_pipeline',value='combined',passed=ok));assert ok,r.stdout
+        # Secondary mean-loss defaults must not relax the primary requirement.
+        c=dict(cfg);c.update(run_mode='production',enable_energy_straggling=False,
+                            enable_secondary_energy_straggling=False)
+        c.pop('all_ion_elastic_file',None);c.pop('elastic_recoil_stopping_file',None)
+        f=Path(tmp)/'case.yaml';f.write_text(yaml.safe_dump(c,sort_keys=False))
+        r=subprocess.run([str(a.binary.resolve()),'--config',str(f)],cwd=ROOT,env=env,
+                         stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+        ok=r.returncode!=0 and 'Production unified EM requires primary fluctuations' in r.stdout and '[unified-em-audit]' not in r.stdout
+        reports.append(dict(check='production_primary_fluctuations_required',passed=ok));assert ok,r.stdout
         for flag in FLAGS:
             r=subprocess.run([str(a.binary.resolve()),flag,'1'],cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
             ok=r.returncode!=0 and 'Unknown argument' in r.stdout;reports.append(dict(flag=flag,passed=ok));assert ok,(flag,r.stdout)

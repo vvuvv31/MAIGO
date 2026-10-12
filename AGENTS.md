@@ -14,10 +14,13 @@
   proton/carbon-specific birth parameters; current spatial joint; Urban and
   FP32 electron geometry/loss/scoring. No density-node fallback or missing-data
   local-deposition substitution. Water reference is Water_75eV (I=75 eV).
-- All eight defaults enable primary and secondary ion fluctuations. Copper
-  primary/fragment fluctuations remain enabled in minibeams. Ion step caps
-  are 1.0 mm CT broadbeam, 0.5 mm water broadbeam/CT minibeam, and
-  0.1 mm water minibeam. Minibeam copper remains 0.05 mm.
+- All eight defaults enable primary ion fluctuations and disable secondary
+  energy-loss straggling. Minibeams retain Cu primary fluctuations and disable
+  Cu fragment restricted fluctuations; native carbon Cu hard-delta sampling
+  remains. RT07575 CT proton broadbeam/minibeam and carbon broadbeam have
+  scoped paired validation; carbon minibeam is under verification. Ion step caps
+  are forced to 1.0 mm broadbeam and 0.5 mm minibeam in water and CT.
+  Minibeam copper is forced to 0.05 mm; these override YAML step-cap values.
   GPU dose atomics stay FP32.
 - All four minibeams use compact scheduling. Carbon water retains its TPS CSV
   source, emittance and generic Urban water medium kernel. Preserve physical/

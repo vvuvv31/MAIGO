@@ -471,8 +471,8 @@ void TransportConfig::validate() const {
         if (em_package_file.empty())
             throw std::invalid_argument("Unified EM requires one em_package_file");
         if (run_mode == RunMode::production &&
-            (!enable_energy_straggling || !enable_secondary_energy_straggling))
-            throw std::invalid_argument("Production unified EM requires primary/secondary fluctuations");
+            !enable_energy_straggling)
+            throw std::invalid_argument("Production unified EM requires primary fluctuations");
         if ((!enable_ct_grid) && (!is_water_mode()))
             throw std::invalid_argument("Unified EM requires unified water or a Schneider CT grid, with LET off");
         if (!ct_secondary_exact_faces)
@@ -856,9 +856,8 @@ void TransportConfig::validate() const {
                 (primary_atomic_number != 6 || primary_mass_number != 12 ||
                  !minibeam_copper_primary_native_mean_loss ||
                  minibeam_copper_fragment_urban_package_file.empty() ||
-                 !minibeam_copper_fragment_enable_energy_straggling ||
                  (minibeam_copper_enable_elastic && minibeam_copper_fragment_elastic_file.empty())))
-                throw std::invalid_argument("Cu ion transport requires C12, native mean, fragment fluctuations and native fragment Urban data and a species-specific elastic bank");
+                throw std::invalid_argument("Cu ion transport requires C12, native mean, native fragment Urban data and a species-specific elastic bank");
             if (minibeam_copper_straggling_model != "clipped_gaussian" &&
                 std::abs(minibeam_copper_density_g_per_cm3 - 8.96) > 1e-5)
                 throw std::invalid_argument("Native copper cut is pinned to G4_Cu at 8.96 g/cm3");
@@ -1259,12 +1258,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     auto values = read_key_values(path);
     for (const auto& [key,value]: values)
         if (!is_preset_key(key)) throw std::invalid_argument("Unsupported preset configuration key: "+key);
-    // Record the mode-specific ion step default in the canonical config;
-    // an explicit maximum_step_mm remains authoritative.
-    values.try_emplace("maximum_step_mm",
-        parse_bool(values, "minibeam", false) &&
-        !parse_bool(values, "enable_ct_grid", false) && !values.contains("ct_grid_file")
-            ? "0.1" : "0.5");
+    // Uniform user-selected ion caps override YAML values in every medium.
+    // Canonical config and runtime therefore report the same effective limits.
+    const bool minibeam_step_caps = parse_bool(values, "minibeam", false);
+    values["maximum_step_mm"] = minibeam_step_caps ? "0.5" : "1.0";
+    if (minibeam_step_caps)
+        values["minibeam_copper_max_step_mm"] = "0.05";
     // Broad-beam YAML defaults apply to every source ZA, including protons.
     // Insert before canonicalization so the effective defaults are recorded.
     // Explicit model, enable/disable and species selections remain authoritative.

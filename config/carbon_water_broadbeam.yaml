@@ -11,7 +11,7 @@ primary_mass_number: 12
 beam_energy_spread: 0.01
 random_seed: 202609071
 water_density_g_per_cm3: 1.0
-maximum_step_mm: 0.5
+maximum_step_mm: 1.0
 maximum_relative_energy_loss: 0.005
 energy_cutoff_MeV: 0.1
 enable_voxel_scoring: true
@@ -45,7 +45,7 @@ device: cuda
 em_delta_moments_file: data/em/ions/delta_moments.bin
 em_package_file: data/em/ions/continuous26.bin
 enable_energy_straggling: true
-enable_secondary_energy_straggling: true
+enable_secondary_energy_straggling: false
 ct_secondary_exact_faces: true
 history_chunk_size: 10000
 secondary_species_grouping: true

@@ -611,7 +611,7 @@
                                 const auto draw = copper_ion_native_transport
                                     ? copper_ion_total_fluctuation(energy_MeV,primary_rest_mass_MeV,
                                         primary_atomic_number,primary_mass_number,copper_loss_context.factor,
-                                        native_restricted_mean,true_loss_path_mm,minibeam_copper_density,uniform)
+                                        native_restricted_mean,true_loss_path_mm,minibeam_copper_density,uniform,true)
                                     : copper_proton_total_fluctuation(
                                         energy_MeV, primary_rest_mass_MeV, mean_loss, true_loss_path_mm, minibeam_copper_density, uniform, native_restricted_mean);
                                 sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,

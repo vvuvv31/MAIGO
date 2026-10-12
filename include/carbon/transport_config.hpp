@@ -143,7 +143,8 @@ struct TransportConfig {
     // Empty selects delta_moments.bin next to em_package_file.
     std::filesystem::path em_delta_moments_file{};
     double broadbeam_maximum_mean_loss_fraction{0.01};
-    double maximum_step_mm{0.5};
+    // Config loading overrides ion caps by mode: broadbeam 1mm, minibeam 0.5mm.
+    double maximum_step_mm{1.0};
     double maximum_relative_energy_loss{0.005};
     std::uint32_t maximum_primary_steps{2000000U};
     double energy_cutoff_MeV{0.1};
@@ -249,8 +250,8 @@ struct TransportConfig {
     bool enable_energy_straggling{true};
     // Smoke-only read-only primary query histogram; no RNG or physics changes.
     static constexpr bool enable_primary_loss_query_audit=false;
-    // Toggle native Unified EM fluctuations for charged secondaries.
-    bool enable_secondary_energy_straggling{true};
+    // Charged secondaries use mean Unified EM losses by default.
+    bool enable_secondary_energy_straggling{false};
     // GPU generation-wise species ordering. Production YAML opts in explicitly.
     bool secondary_species_grouping{false};
     // Compile-time geometry/model branch selection for uniform-water Urban
@@ -366,7 +367,7 @@ struct TransportConfig {
     // Native restricted mean law for the configured primary in Cu.
     bool minibeam_copper_primary_native_mean_loss{false};
     // Separate Copper fragment control, enabled in all default minibeams.
-    bool minibeam_copper_fragment_enable_energy_straggling{true};
+    bool minibeam_copper_fragment_enable_energy_straggling{false};
     double minibeam_copper_fragment_straggling_scale{1.0};
     // Amplitude scale for the selected Copper MCS model. The legacy Highland
     // benchmark uses 0.785; the slab-constrained model uses 1.0.

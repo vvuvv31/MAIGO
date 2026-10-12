@@ -48,9 +48,21 @@ whole campaign; output dose retains the original absolute normalization.
 | proton_ct_minibeam | Flat source → compact copper/air → Urban proton CT | Local deposition |
 | carbon_ct_minibeam | Flat source → compact copper/air → Urban CT | Local deposition; dose accuracy deferred |
 
+Ion step caps are forced during configuration loading: **broadbeam 1.0 mm**,
+**minibeam 0.5 mm**, and **minibeam copper 0.05 mm**, for both water and CT.
+These effective caps override the corresponding YAML values.
+
+Release presets retain primary energy-loss straggling and disable secondary
+straggling by default (`enable_secondary_energy_straggling: false`). Minibeams
+also disable restricted Cu fragment straggling; Cu primary fluctuations remain
+on. Native carbon Cu fragments retain hard-delta sampling. Scoped RT07575 CT
+validation is recorded for proton broadbeam/minibeam and carbon broadbeam;
+**carbon minibeam is under verification**. This status does not establish
+water/other-patient acceptance. See [validation scope and measured effects](docs/secondary_straggling.md).
+
 Each row has the matching `config/<preset>.yaml`. Default CT minibeams are lung
-benchmarks, **not RT07575 head full plans**. CT broadbeam caps ion steps at 1.0 mm,
-water broadbeam and CT minibeam at 0.5 mm, and water minibeam at 0.1 mm.
+benchmarks, **not RT07575 head full plans**. Broadbeam caps ion steps at 1.0 mm
+and minibeam at 0.5 mm in both water and CT.
 Minibeam copper retains its separate 0.05 mm cap. All use continuous26 ion EM;
 Electron/photon transport is optional for all presets and custom configurations.
 It defaults to off; only `enable_electron_transport: true` loads the configured

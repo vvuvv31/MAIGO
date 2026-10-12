@@ -96,7 +96,8 @@ if (!f_in_copper) {
     auto f_uniform = [&]() { return (rng::random_u32(
         f_seed, f_stream, (std::uint64_t(f_step) << 32) | f_draw_index++, 124) >> 8) * 0x1p-24f; };
     const auto f_draw = copper_ion_total_fluctuation(f_energy, f_mass, f_charge, f_a,
-        f_context.factor, f_mean, f_path, minibeam_copper_density, f_uniform);
+        f_context.factor, f_mean, f_path, minibeam_copper_density, f_uniform,
+        minibeam_copper_fragment_enable_energy_straggling);
     f_count(f_draw.valid ? copper_proton_fragment_loss_slot : copper_proton_loss_failure_slot);
     if (!f_draw.valid) break;
     if (f_draw.loss >= f_energy - energy_cutoff_MeV) { f_energy = 0; break; }

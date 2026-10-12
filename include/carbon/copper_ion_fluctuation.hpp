@@ -38,7 +38,7 @@ inline float copper_ion_dispersion_factor(float kinetic,float mass,int z,float q
 template<class Uniform>
 RestrictedFluctuationDraw<float> copper_ion_total_fluctuation(
     float kinetic,float mass,int z,int a,float q2,float restricted_mean,
-    float length,float density,Uniform& uniform) {
+    float length,float density,Uniform& uniform,bool restricted_fluctuations) {
     if(!(kinetic>0&&mass>0&&z>0&&a>=z&&q2>0&&restricted_mean>=0&&length>=0) ||
        !std::isfinite(kinetic+mass+q2+restricted_mean+length+density) ||
        std::abs(density-8.96f)>1e-5f)return {};
@@ -53,14 +53,19 @@ RestrictedFluctuationDraw<float> copper_ion_total_fluctuation(
     const float cut=std::min(tmax,copper_cut_MeV);
     const float coefficient=6.283185307179586f*electron_mass*radius*radius*
         copper_electron_density*length*(density/8.96f)*q2;
-    const float universal_variance=(tmax/beta2-.5f*cut)*coefficient;
-    const float factor=copper_ion_dispersion_factor(kinetic,mass,z,q2,beta2);
-    const float cut_factor=1+(factor-1)*2*electron_mass*beta2/(tmax*(1-beta2));
-    const float ion_variance=universal_variance*((cut_factor>.01f&&factor>.01f)?cut_factor:1);
-    RestrictedFluctuationInput<float> input{kinetic,mass,restricted_mean,ion_variance,
-        universal_variance,cut,tmax,copper_excitation_MeV,copper_e0_MeV};
-    RestrictedFluctuationSampler<float,Uniform> sampler(uniform);
-    auto draw=sampler.sample(input,!(z==1&&a==1),static_cast<float>(z));
+    // Disabling restricted fluctuations retains the mean and hard-delta
+    // Poisson/spectrum sampling below; primary callers pass true explicitly.
+    RestrictedFluctuationDraw<float> draw{restricted_mean,true};
+    if(restricted_fluctuations) {
+        const float universal_variance=(tmax/beta2-.5f*cut)*coefficient;
+        const float factor=copper_ion_dispersion_factor(kinetic,mass,z,q2,beta2);
+        const float cut_factor=1+(factor-1)*2*electron_mass*beta2/(tmax*(1-beta2));
+        const float ion_variance=universal_variance*((cut_factor>.01f&&factor>.01f)?cut_factor:1);
+        RestrictedFluctuationInput<float> input{kinetic,mass,restricted_mean,ion_variance,
+            universal_variance,cut,tmax,copper_excitation_MeV,copper_e0_MeV};
+        RestrictedFluctuationSampler<float,Uniform> sampler(uniform);
+        draw=sampler.sample(input,!(z==1&&a==1),static_cast<float>(z));
+    }
     if(!draw.valid||cut>=tmax)return draw;
     const float total2=(kinetic+mass)*(kinetic+mass);
     const float spin_term=identity->spin>0?.5f*(tmax-cut)/total2:0;

@@ -6,7 +6,7 @@ number_of_histories: 2500000
 initial_energy_MeVu: 250.0
 primary_atomic_number: 6
 primary_mass_number: 12
-maximum_step_mm: 0.1
+maximum_step_mm: 0.5
 maximum_relative_energy_loss: 0.001
 energy_cutoff_MeV: 0.1
 water_density_g_per_cm3: 1.0
@@ -62,7 +62,7 @@ minibeam_copper_primary_native_mean_loss: true
 minibeam_copper_straggling_scale: 1.0
 minibeam_copper_mcs_scale: 1.0
 minibeam_copper_fragment_mcs_scale: 1.0
-minibeam_copper_fragment_enable_energy_straggling: true
+minibeam_copper_fragment_enable_energy_straggling: false
 minibeam_copper_fragment_straggling_scale: 1.0
 minibeam_copper_fragment_cascade_generations: 3
 minibeam_copper_enable_nuclear_attenuation: true
@@ -96,7 +96,7 @@ dose_to_medium_name: dose
 LET: false
 device: cuda
 enable_secondary_transport: true
-enable_secondary_energy_straggling: true
+enable_secondary_energy_straggling: false
 secondary_species_grouping: true
 secondary_step_chunking: true
 history_chunk_size: 10000

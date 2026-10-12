@@ -42,7 +42,7 @@ device: cuda
 em_delta_moments_file: data/em/ions/delta_moments.bin
 em_package_file: data/em/ions/continuous26.bin
 enable_energy_straggling: true
-enable_secondary_energy_straggling: true
+enable_secondary_energy_straggling: false
 ct_secondary_exact_faces: true
 history_chunk_size: 524288
 secondary_species_grouping: true
