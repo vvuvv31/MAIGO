@@ -87,6 +87,11 @@ aliases, diagnostic build modes or alternative precision scorers. Unsupported
 configuration keys fail before transport. Mandatory quality/energy/coverage,
 completion and overflow audits remain. LET/research scorer routes are outside
 this runtime. Internally required fragments remain part of the current physics.
+All eight release presets enable medium nuclear elastic transport for primary and
+charged secondary particles using projectile-specific `all_ion_elastic_file` and
+`elastic_recoil_stopping_file` packages under `data/elastic/schneider/{proton,carbon}/`.
+All four minibeams also set `minibeam_copper_enable_elastic: true` for the copper collimator.
+
 Proton minibeams retain `g4_universal_delta`; carbon minibeams use `g4_ion_delta`
 with native Cu fragment Urban and species elastic transport. See
 [Cu ion extraction and limits](extensions/copper_ion_transport/README.md).

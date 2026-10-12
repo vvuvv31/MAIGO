@@ -44,6 +44,8 @@ spots_enable_upstream_air_energy_loss: true
 spots_upstream_air_stopping_power_file: data/stopping/air/carbon.csv
 primary_stopping_power_file: data/stopping/water/carbon.csv
 particle_stopping_power_file: data/stopping/water/ions.csv
+all_ion_elastic_file: data/elastic/schneider/carbon/all_ion.bin
+elastic_recoil_stopping_file: data/elastic/schneider/carbon/recoil_stopping.bin
 dose_to_medium: true
 dose_to_medium_type: mhd
 dose_to_medium_name: dose

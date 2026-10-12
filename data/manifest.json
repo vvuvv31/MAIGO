@@ -697,6 +697,10 @@
   },
   "presets": {
     "carbon_ct_broadbeam": [
+      "data/elastic/schneider/carbon/all_ion.bin",
+      "data/elastic/schneider/carbon/all_ion.metadata.json",
+      "data/elastic/schneider/carbon/recoil_stopping.bin",
+      "data/elastic/schneider/carbon/recoil_stopping.metadata.json",
       "data/em/ions/continuous26.bin",
       "data/em/ions/continuous26.metadata.json",
       "data/em/ions/delta_moments.bin",
@@ -771,6 +775,10 @@
       "inputs/lung_minibeam/ct.bin"
     ],
     "carbon_water_broadbeam": [
+      "data/elastic/schneider/carbon/all_ion.bin",
+      "data/elastic/schneider/carbon/all_ion.metadata.json",
+      "data/elastic/schneider/carbon/recoil_stopping.bin",
+      "data/elastic/schneider/carbon/recoil_stopping.metadata.json",
       "data/em/ions/continuous26.bin",
       "data/em/ions/continuous26.metadata.json",
       "data/em/ions/delta_moments.bin",

@@ -22,6 +22,9 @@
   are forced to 1.0 mm broadbeam and 0.5 mm minibeam in water and CT.
   Minibeam copper is forced to 0.05 mm; these override YAML step-cap values.
   GPU dose atomics stay FP32.
+- All eight release presets enable medium nuclear elastic transport with
+  projectile-specific all-ion elastic and recoil stopping packages. All four
+  minibeams also enable copper-collimator nuclear elastic scattering.
 - All four minibeams use compact scheduling. Carbon water retains its TPS CSV
   source, emittance and generic Urban water medium kernel. Preserve physical/
   source behavior in refactors. Generic charged fragment species are required.
