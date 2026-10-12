@@ -1,6 +1,5 @@
 #include "carbon/immutable_input_cache.hpp"
 #include "carbon/input_dependencies.hpp"
-#include "carbon/nuclear_collision.hpp"
 #include "carbon/charged_species.hpp"
 #include "carbon/secondary_schedule.hpp"
 #include "carbon/delta_moments_data.hpp"
@@ -437,6 +436,9 @@ struct alignas(16) SecondaryResumeStateT {
     // Preserve optical depth and the rate cache across scheduler slices.
     UnifiedEmClock urban_ionization_clock{};
     UnifiedEmState unified_secondary_state{};
+    float nuclear_tau_remaining{};
+    bool nuclear_tau_active{};
+    std::uint32_t nuclear_tau_rng_step{};
     uint32_t sec_steps{};
     std::uint64_t local_sec_rate_queries{};
     std::uint64_t local_sec_steps{};

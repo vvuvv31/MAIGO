@@ -332,6 +332,9 @@
                             if(count==0)return; // zero-increment diagnostics must not touch globals
                             sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[static_cast<std::size_t>(index)*kUnifiedEmAuditShards+active_pos%kUnifiedEmAuditShards]);a.fetch_add(count);
                         };
+                        float nuclear_tau_remaining = 0.0F;
+                        bool nuclear_tau_active = false;
+                        std::uint32_t nuclear_tau_rng_step = 0;
                         uint32_t sec_steps = 0;
                         const uint32_t kSecondaryMaxSteps = 30000U;
                         // Fix C4: one fMinimal track per secondary (persists
@@ -418,6 +421,9 @@
                             unified_secondary_clock=saved.urban_ionization_clock;
                             unified_secondary_state=saved.unified_secondary_state;
                             unified_secondary_state.tables=&unified_device;
+                            nuclear_tau_remaining=saved.nuclear_tau_remaining;
+                            nuclear_tau_active=saved.nuclear_tau_active;
+                            nuclear_tau_rng_step=saved.nuclear_tau_rng_step;
                             sec_steps=saved.sec_steps;
                             if constexpr (!BroadBeam) {
                             sec_urban_persist.tlimit_mm =
@@ -625,6 +631,8 @@
                             // Stash for the miss log: macro total rate at
                             // sampling (density x mass, density exactly once),
                             // sampled collision distance, and section.
+                            float macro_inelastic = 0.0F;
+                            float macro_elastic = 0.0F;
                             float schneider_hazard_total_rate = 0.0F;
                             float schneider_hazard_step_mm = 0.0F;
                             std::uint8_t schneider_hazard_section = 255;
@@ -667,26 +675,13 @@
                                         const float sec_macro_xs =
                                             sec_local_density_g_per_cm3 * sec_masked.total;
                                         schneider_hazard_total_rate = sec_macro_xs;
-                                        if (sec_macro_xs > 0.0F) {
-                                            float collision_distance = sec_step_mm;
-                                            const auto collision = sample_exponential_collision(
-                                                sec_macro_xs, sec_step_mm,
-                                                rng::uniform01(2026, frag.rng_stream, sec_steps, 13));
-                                            secondary_inelastic = collision.occurred;
-                                            collision_distance = collision.distance_mm;
-                                            if (secondary_inelastic) {
-                                                sec_step_mm = collision_distance;
-                                                schneider_hazard_total_rate = sec_macro_xs;
-                                                schneider_hazard_step_mm = sec_step_mm;
-                                                schneider_hazard_section = (kProductionSecondaryPath ? false : use_unified_water) ? 255U : sec_ct_material;
-                                            }
-                                        }
+                                        macro_inelastic = sec_macro_xs;
                                     }
                                 }
                             }
 
-                            // Independent exponential elastic clock competes with the already
-                            // sampled inelastic distance. Elastic is NOT generation-limited.
+                            // Elastic contributes to the same nuclear clock, even when
+                            // the secondary inelastic generation limit is reached.
                             if(enable_inelastic &&
                                ((kProductionSecondaryPath && !BroadBeam) ? false : use_all_elastic) && !generic_recoil && (sec_in_ct || (kProductionSecondaryPath ? false : use_unified_water))) {
                                 const int p=all_elastic.projectile(transport_z,transport_a);
@@ -696,15 +691,36 @@
                                     sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[7]).fetch_add(1);
                                     break;
                                 }
-                                const auto collision = sample_exponential_collision(
-                                    rate * sec_local_density_g_per_cm3, sec_step_mm,
-                                    rng::uniform01(2026, frag.rng_stream, sec_steps, 70));
-                                secondary_elastic = collision.occurred;
-                                if (secondary_elastic) {
-                                    sec_step_mm = collision.distance_mm;
-                                    secondary_inelastic = false;
+                                macro_elastic = rate * sec_local_density_g_per_cm3;
+                            }
+                            // Same shared optical-depth sampler as primary transport.
+                            // Retain the remaining depth across steps, material boundaries
+                            // and scheduler slices; only a nuclear candidate resets it.
+                            const float macro_nuclear = macro_inelastic + macro_elastic;
+                            if (macro_nuclear > 0.0F) {
+                                float u_nuclear = 1.0F;
+                                if (!nuclear_tau_active) {
+                                    u_nuclear = rng::uniform01(
+                                        2026, frag.rng_stream, nuclear_tau_rng_step++, 13);
+                                }
+                                const bool collision = consume_schneider_optical_depth_segment(
+                                    nuclear_tau_remaining, nuclear_tau_active,
+                                    sec_step_mm, macro_nuclear, u_nuclear);
+                                if (collision) {
+                                    secondary_elastic = macro_elastic > 0.0F &&
+                                        rng::uniform01(2026, frag.rng_stream, sec_steps, 70) *
+                                            macro_nuclear < macro_elastic;
+                                    secondary_inelastic = !secondary_elastic;
+                                    if (secondary_inelastic) {
+                                        // The inelastic audit/acceptance denominator excludes elastic.
+                                        schneider_hazard_total_rate = macro_inelastic;
+                                        schneider_hazard_step_mm = sec_step_mm;
+                                        schneider_hazard_section = (kProductionSecondaryPath ? false : use_unified_water)
+                                            ? 255U : sec_ct_material;
+                                    }
                                 }
                             }
+
                             if(sec_global_urban) {
                                 if(unified_secondary) {
                                     const bool ionization_proposal=sec_step_mm>=unified_secondary_distance;
@@ -1777,6 +1793,9 @@
                             saved.unified_secondary_counter=unified_secondary_counter;
                             saved.urban_ionization_clock=unified_secondary_clock;
                             saved.unified_secondary_state=unified_secondary_state;
+                            saved.nuclear_tau_remaining=nuclear_tau_remaining;
+                            saved.nuclear_tau_active=nuclear_tau_active;
+                            saved.nuclear_tau_rng_step=nuclear_tau_rng_step;
                             saved.sec_steps=sec_steps;
                             if constexpr (!BroadBeam) {
                             saved.urban.sec_urban_tlimit_mm =

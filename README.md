@@ -87,10 +87,17 @@ aliases, diagnostic build modes or alternative precision scorers. Unsupported
 configuration keys fail before transport. Mandatory quality/energy/coverage,
 completion and overflow audits remain. LET/research scorer routes are outside
 this runtime. Internally required fragments remain part of the current physics.
+Current process implementations and differences from TOPAS/Geant4 are documented in
+[TOPAS and GPU physics comparison](docs/topas_gpu_physics_comparison.md) (Chinese).
+
 All eight release presets enable medium nuclear elastic transport for primary and
 charged secondary particles using projectile-specific `all_ion_elastic_file` and
 `elastic_recoil_stopping_file` packages under `data/elastic/schneider/{proton,carbon}/`.
 All four minibeams also set `minibeam_copper_enable_elastic: true` for the copper collimator.
+Primary and patient-medium charged secondary transport share the nuclear optical-depth
+sampler: elastic and inelastic rates compete through one clock per track. Secondary
+continuation preserves the remaining depth and draw counter; the inelastic generation
+limit does not disable elastic scattering.
 
 Proton minibeams retain `g4_universal_delta`; carbon minibeams use `g4_ion_delta`
 with native Cu fragment Urban and species elastic transport. See
