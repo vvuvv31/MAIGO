@@ -55,3 +55,7 @@ python3 scripts/check_electron_packages.py
 该检查只验证实现和迁移的一致性，不是性能测量或新的 TOPAS 剂量验收；碳 minibeam 剂量精度验收仍待完成。
 
 碳微束铜碎片另用 `data/scattering/urban/copper_fragments.bin`（当前 324 种 CINPKG04 带电产物）与 `data/elastic/copper/carbon/fragments.csv`，均有同名 metadata。提取/验证入口为 `extensions/copper_ion_transport/build_extract.sh`；原水/CT Urban 包保留。
+
+## 反冲阻止本领的运行时依赖
+
+额外靶反冲的步长与实际能损均使用当前 `ELRSP001` 同位素/材料阻止本领包，并乘实际介质密度。已删除 `particle_stopping_power_file` 及独立水参考 LUT 的运行路径。`data/stopping/water/ions.csv` 保留为铜 δ fraction 的显式离线校准参考，属于生成辅助资产，不再属于八个预设的运行时依赖。铜物种 CSV 与其校准保持不变。

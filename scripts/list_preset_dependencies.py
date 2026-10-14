@@ -40,8 +40,6 @@ def inventory(root):
             expanded.add(cfg.get('ct_schneider_file', 'data/materials/schneider/hu_to_material.txt'))
             expanded.add(cfg.get('ct_schneider_radiation_length_file',
                                  'data/materials/schneider/radiation_lengths.json'))
-        if cfg.get('all_ion_elastic_file'):
-            expanded.add(cfg.get('particle_stopping_power_file', 'data/stopping/water/ions.csv'))
         for name in packages:
             package = electron['packages'][name]
             expanded.update(str(Path(package['root'])/p) for p in package['manifest']['files'])

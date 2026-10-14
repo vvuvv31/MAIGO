@@ -14,6 +14,8 @@ struct ElasticDraw { NuclearElasticOutcome outcome{}; int target_z{},target_a{};
 struct AllIonElasticView {
  const float* energies{};const float* rates{};const ElasticSample* samples{};
  const double* masses{};std::uint32_t ne{},nq{};
+ const float* primary_totals{};int totals_projectile{-1};
+ const float* species_totals{};
  int projectile(int z,int a) const noexcept {
   for(int i=0;i<18;++i)if(elastic_projectiles[i][0]==z&&elastic_projectiles[i][1]==a)return i;
   return -1;
@@ -29,6 +31,32 @@ struct AllIonElasticView {
   for(int t=0;t<13;++t){if(target>=0&&t!=target)continue;
    auto b=((p*26+section)*13+t)*ne+i;sum+=rates[b]*(1-w)+rates[b+1]*w;}
   return sum;
+ }
+ // Derived node totals leave target rates and sampled final states intact.
+ template<bool UseDerivedTotals=true>
+ float primary_total_rate(int p,int section,float e) const noexcept {
+  if constexpr(!UseDerivedTotals) {return rate(p,section,e);} else {
+  if(!primary_totals || p!=totals_projectile)return rate(p,section,e);
+  const int i=cell(e);if(p<0||p>=18||section<0||section>=26||i<0)return -1;
+  const float w=(e-energies[i])/(energies[i+1]-energies[i]);
+  const auto b=section*ne+i;
+  return primary_totals[b]*(1-w)+primary_totals[b+1]*w;
+  }
+ }
+ template<bool UseDerivedTotals=true>
+ float species_total_rate(int p,int section,float e) const noexcept {
+  if constexpr(!UseDerivedTotals)return rate(p,section,e);
+  else {
+   if(!species_totals)return rate(p,section,e);
+   const int i=cell(e);if(p<0||p>=18||section<0||section>=26||i<0)return -1;
+   const float w=(e-energies[i])/(energies[i+1]-energies[i]);const auto b=(p*26+section)*ne+i;
+   return species_totals[b]*(1-w)+species_totals[b+1]*w;
+  }
+ }
+ template<bool UsePrimary,bool UseSpecies>
+ float transport_total_rate(int p,int section,float e)const noexcept {
+  if constexpr(UseSpecies)return species_total_rate<true>(p,section,e);
+  else return primary_total_rate<UsePrimary>(p,section,e);
  }
  ElasticDraw draw(int p,int section,float T,float dx,float dy,float dz,
                   float ut,float un,float us,float uphi) const noexcept {

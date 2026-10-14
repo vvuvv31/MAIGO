@@ -16,7 +16,6 @@
         "tps_beam_model_file": "inputs/rt07575_head/carbon/beam_model.csv",
         "spots_upstream_air_stopping_power_file": "data/stopping/air/carbon.csv",
         "primary_stopping_power_file": "data/stopping/water/carbon.csv",
-        "particle_stopping_power_file": "data/stopping/water/ions.csv",
         "all_ion_elastic_file": "data/elastic/schneider/carbon/all_ion.bin",
         "elastic_recoil_stopping_file": "data/elastic/schneider/carbon/recoil_stopping.bin",
         "ct_schneider_primary_rate_file": "data/nuclear/schneider/carbon/inelastic_rates.bin",
@@ -58,7 +57,6 @@
         "data/stopping/schneider/carbon.metadata.json",
         "data/stopping/water/carbon.csv",
         "data/stopping/water/carbon.metadata.json",
-        "data/stopping/water/ions.csv",
         "inputs/rt07575_head/carbon/beam_model.csv",
         "inputs/rt07575_head/carbon/ct.bin",
         "inputs/rt07575_head/carbon/spots.csv"
@@ -145,7 +143,6 @@
         "data/stopping/schneider/carbon.metadata.json",
         "data/stopping/water/carbon.csv",
         "data/stopping/water/carbon.metadata.json",
-        "data/stopping/water/ions.csv",
         "inputs/lung_minibeam/ct.bin"
       ]
     },
@@ -160,7 +157,6 @@
       "inputs": {
         "unified_water_material_file": "data/materials/water/material.json",
         "primary_stopping_power_file": "data/stopping/water/carbon.csv",
-        "particle_stopping_power_file": "data/stopping/water/ions.csv",
         "all_ion_elastic_file": "data/elastic/schneider/carbon/all_ion.bin",
         "elastic_recoil_stopping_file": "data/elastic/schneider/carbon/recoil_stopping.bin",
         "ct_schneider_primary_rate_file": "data/nuclear/schneider/carbon/inelastic_rates.bin",
@@ -205,8 +201,7 @@
         "data/stopping/schneider/carbon.bin",
         "data/stopping/schneider/carbon.metadata.json",
         "data/stopping/water/carbon.csv",
-        "data/stopping/water/carbon.metadata.json",
-        "data/stopping/water/ions.csv"
+        "data/stopping/water/carbon.metadata.json"
       ]
     },
     "carbon_water_minibeam": {
@@ -234,7 +229,6 @@
         "ct_schneider_secondary_cinel03_file": "data/nuclear/schneider/secondary/final_states.bin",
         "ct_schneider_physics_bundle_file": "data/nuclear/schneider/carbon/bundle.json",
         "primary_stopping_power_file": "data/stopping/water/carbon.csv",
-        "particle_stopping_power_file": "data/stopping/water/ions.csv",
         "all_ion_elastic_file": "data/elastic/schneider/carbon/all_ion.bin",
         "elastic_recoil_stopping_file": "data/elastic/schneider/carbon/recoil_stopping.bin",
         "minibeam_air_urban_package_file": "data/scattering/urban/air.bin",
@@ -292,7 +286,6 @@
         "data/stopping/schneider/carbon.metadata.json",
         "data/stopping/water/carbon.csv",
         "data/stopping/water/carbon.metadata.json",
-        "data/stopping/water/ions.csv",
         "inputs/water_minibeam/carbon/spots.csv"
       ]
     },
@@ -348,7 +341,6 @@
         "data/stopping/air/proton.csv",
         "data/stopping/schneider/proton.bin",
         "data/stopping/schneider/proton.metadata.json",
-        "data/stopping/water/ions.csv",
         "data/stopping/water/proton.csv",
         "data/stopping/water/proton.metadata.json",
         "inputs/rt07575_head/proton/beam_model.csv",
@@ -431,7 +423,6 @@
         "data/stopping/copper/proton.csv",
         "data/stopping/schneider/proton.bin",
         "data/stopping/schneider/proton.metadata.json",
-        "data/stopping/water/ions.csv",
         "data/stopping/water/proton.csv",
         "data/stopping/water/proton.metadata.json",
         "inputs/lung_minibeam/ct.bin"
@@ -448,7 +439,6 @@
       "inputs": {
         "unified_water_material_file": "data/materials/water/material.json",
         "primary_stopping_power_file": "data/stopping/water/proton.csv",
-        "particle_stopping_power_file": "data/stopping/water/ions.csv",
         "ct_schneider_primary_rate_file": "data/nuclear/schneider/proton/inelastic_rates.bin",
         "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/proton/final_states.bin",
         "ct_schneider_secondary_rate_file": "data/nuclear/schneider/secondary/inelastic_rates.bin",
@@ -492,7 +482,6 @@
         "data/nuclear/schneider/secondary/inelastic_rates.metadata.json",
         "data/stopping/schneider/proton.bin",
         "data/stopping/schneider/proton.metadata.json",
-        "data/stopping/water/ions.csv",
         "data/stopping/water/proton.csv",
         "data/stopping/water/proton.metadata.json"
       ]
@@ -572,7 +561,6 @@
         "data/stopping/copper/proton.csv",
         "data/stopping/schneider/proton.bin",
         "data/stopping/schneider/proton.metadata.json",
-        "data/stopping/water/ions.csv",
         "data/stopping/water/proton.csv",
         "data/stopping/water/proton.metadata.json"
       ]
@@ -662,9 +650,6 @@
     },
     "data/stopping/water/carbon.metadata.json": {
       "bytes": 1158
-    },
-    "data/stopping/water/ions.csv": {
-      "bytes": 10821284
     },
     "inputs/rt07575_head/carbon/beam_model.csv": {
       "bytes": 937
@@ -796,6 +781,6 @@
       "bytes": 88565
     }
   },
-  "total_unique_bytes": 4769189981,
+  "total_unique_bytes": 4758368697,
   "electron_registry": "docs/electron_packages_manifest.json"
 }

@@ -235,7 +235,7 @@
         urban_species_host=package.species;
         urban_device.ct_density_scaling=config.urban_ct_density_scaling;
         if(config.urban_ct_density_scaling)
-            std::cout<<"[urban-v2] research CT reference-density scaling enabled; native-density dose validation pending\n";
+            std::cout<<"[urban-v2] CT continuous26 restricted loss/range; native MSC density scaling; additional elastic recoils retain their separate native context\n";
         urban_step_counts=mem_tracker.allocate<std::uint64_t>(2*package.species.size());
         if(!urban_step_counts)throw std::bad_alloc();
         queue.fill(urban_step_counts,std::uint64_t{0},2*package.species.size()).wait_and_throw();
@@ -705,19 +705,29 @@
         queue.copy(grid.material_id.data(), ct_material_device, voxel_count).wait_and_throw();
         }
 
-        if constexpr(std::is_same_v<Pipeline,pipelines::ProtonBroadbeam> && JointResponse==0) {
+        if constexpr((std::is_same_v<Pipeline,pipelines::ProtonBroadbeam> || std::is_same_v<Pipeline,pipelines::CarbonBroadbeam> || std::is_same_v<Pipeline,pipelines::ProtonMinibeam> || std::is_same_v<Pipeline,pipelines::CarbonMinibeam>) && JointResponse==0) {
             if(enable_ct_grid && !use_material_electron && !use_unified_water) {
                 RuntimeScope fields_setup("setup_ct_exact_material_fields");
                 const auto key=geometry_key+"|"+input_cache_key(config.em_package_file)+"|"+
-                    input_cache_key(unified_em_request(config).delta_file)+"|"+device_name+"|ct_exact_fields_v1";
+                    input_cache_key(unified_em_request(config).delta_file)+"|"+device_name+((std::is_same_v<Pipeline,pipelines::CarbonBroadbeam> || std::is_same_v<Pipeline,pipelines::CarbonMinibeam>)?"|ct_exact_fields_range_C12_v1":"|ct_exact_fields_range_v2");
                 auto resident=context ? resident_tables(context->impl_->resident_ct_fields,key,"ct_exact_fields") : nullptr;
                 std::uint16_t* voxel_tuples=nullptr;
                 UnifiedEmCtFields* fields=nullptr;
+                float* range_values=nullptr;unsigned* range_offsets=nullptr;
+                std::vector<UnifiedEmSpecies> range_species(18);
+                queue.copy(unified_device.species,range_species.data(),range_species.size()).wait_and_throw();
+                int range_ion=-1;
+                constexpr int range_z=(std::is_same_v<Pipeline,pipelines::CarbonBroadbeam> || std::is_same_v<Pipeline,pipelines::CarbonMinibeam>)?6:1;
+                constexpr int range_a=(std::is_same_v<Pipeline,pipelines::CarbonBroadbeam> || std::is_same_v<Pipeline,pipelines::CarbonMinibeam>)?12:1;
+                for(int i=0;i<18;++i)if(range_species[i].z==range_z && range_species[i].a==range_a)range_ion=i;
+                if(range_ion<0)throw std::runtime_error("Exact range cache requires projectile package coverage");
                 unsigned tuple_count=0;
                 if(resident && resident->contains("ready")) {
                     voxel_tuples=resident->template get<std::uint16_t>("voxels");
                     fields=resident->template get<UnifiedEmCtFields>("fields");
                     tuple_count=static_cast<unsigned>(resident->blocks.at("fields").count/18);
+                    range_values=resident->template get<float>("range_values");
+                    range_offsets=resident->template get<unsigned>("range_offsets");
                 } else {
                     std::unordered_map<std::uint64_t,std::uint16_t> directory;
                     std::vector<std::uint16_t> indices(voxel_count);
@@ -757,11 +767,27 @@
                             if(state.valid){const auto p=state.lo();value.material=p.material;value.coordinate=p.continuous_coordinate;}
                             fields[i]=value;
                         }).wait_and_throw();
+                        std::vector<EmContinuousDescriptor> descriptors(468);
+                        queue.copy(source.continuous_descriptors,descriptors.data(),descriptors.size()).wait_and_throw();
+                        std::vector<unsigned> offsets(tuple_count+1);
+                        for(unsigned t=0;t<tuple_count;++t)offsets[t+1]=offsets[t]+descriptors[(sections[t]+1)*18+range_ion].range_count;
+                        range_offsets=upload_fields("range_offsets",offsets);
+                        range_values=upload_fields("range_values",std::vector<float>(offsets.back()));
+                        queue.parallel_for(sycl::range<1>(tuple_count),[=](sycl::id<1> id) {
+                            const unsigned t=id[0];
+                            const auto state=source.select(section[t],rho[t],range_ion);
+                            if(!state.valid)return;
+                            const auto p=state.lo();const float x=2*p.continuous_coordinate-1;
+                            for(unsigned j=0;j<p.continuous->range_count;++j)
+                                range_values[range_offsets[t]+j]=em_chebyshev(p.continuous_range+j*(p.continuous_degree+1)+1,p.continuous_lengths?p.continuous_lengths[j]:p.continuous_degree,x);
+                        }).wait_and_throw();
+                        std::cout<<"[ct-exact-range-nodes] values="<<offsets.back()<<" bytes="<<offsets.back()*sizeof(float)<<"\n";
                         if(resident)resident->upload("ready",std::vector<unsigned>{1},mem_tracker);
                     }
                 }
                 unified_device.ct_fields=fields;unified_device.ct_fields_voxels=voxel_tuples;
                 unified_device.ct_fields_count=tuple_count;
+                unified_device.ct_range_values=range_values;unified_device.ct_range_offsets=range_offsets;unified_device.ct_range_ion=range_ion;
                 std::cout<<"[ct-exact-material-fields] tuples="<<tuple_count<<" voxels="<<voxel_count
                          <<" enabled="<<(fields!=nullptr)<<"\n";
             }
@@ -823,6 +849,34 @@
         queue.copy(bank.samples.data(),a,bank.samples.size());queue.copy(bank.masses.data(),m,18);
         queue.fill(elastic_audit,std::uint32_t{0},12).wait_and_throw();
         all_elastic={e,r,a,m,static_cast<std::uint32_t>(bank.energies.size()),bank.nq};
+        if constexpr(std::is_same_v<Pipeline,pipelines::CarbonBroadbeam> || std::is_same_v<Pipeline,pipelines::CarbonMinibeam>) {
+          if(enable_ct_grid && !config.enable_electron_transport) {
+            const auto ne=bank.energies.size();std::vector<float> totals(18*26*ne,0.0F);
+            for(std::size_t projectile=0;projectile<18;++projectile)
+              for(std::size_t section=0;section<26;++section)
+                for(std::size_t node=0;node<ne;++node)
+                  for(std::size_t target=0;target<13;++target)
+                    totals[(projectile*26+section)*ne+node]+=bank.rates[((projectile*26+section)*13+target)*ne+node];
+            auto* device_totals=mem_tracker.allocate<float>(totals.size());
+            if(!device_totals)throw std::bad_alloc();
+            queue.copy(totals.data(),device_totals,totals.size()).wait_and_throw();
+            all_elastic.species_totals=device_totals;
+          }
+        }
+        if constexpr(std::is_same_v<Pipeline,pipelines::ProtonBroadbeam> || std::is_same_v<Pipeline,pipelines::ProtonMinibeam>) {
+          if (enable_ct_grid && (BroadBeam || !config.enable_electron_transport)) {
+            const auto ne=bank.energies.size();std::vector<float> totals(26*ne,0.0F);
+            for(std::size_t section=0;section<26;++section)
+                for(std::size_t node=0;node<ne;++node)
+                    for(std::size_t target=0;target<13;++target)
+                        totals[section*ne+node]+=bank.rates[((primary_elastic_projectile*26+section)*13+target)*ne+node];
+            auto* device_totals=mem_tracker.allocate<float>(totals.size());
+            if(!device_totals)throw std::bad_alloc();
+            queue.copy(totals.data(),device_totals,totals.size()).wait_and_throw();
+            all_elastic.primary_totals=device_totals;all_elastic.totals_projectile=primary_elastic_projectile;
+          }
+        }
+
     }
     const bool minibeam_copper_transport = !BroadBeam && config.enable_minibeam;
     float* minibeam_copper_sp_energies_device = nullptr;
@@ -1517,20 +1571,6 @@
             queue.fill(minibeam_fragment_phase_space_count_device, 0U, 1);
         }
         queue.wait_and_throw();
-    }
-
-    float* generic_recoil_reference_sp_device = nullptr;
-    if (use_all_elastic) {
-        const auto path = use_unified_water ? config.particle_stopping_power_file
-            : std::filesystem::path("data/stopping/water/ions.csv");
-        if (use_unified_water)
-            (void)IonStoppingPowerTables::from_csv(path, stopping_power);
-        const auto reference = load_ion_species_stopping_power_lut(path, table_size, 1.0F);
-        // Preserve the existing independent generic-recoil interpolation.
-        // Supported ions never query this reference table.
-        generic_recoil_reference_sp_device = mem_tracker.allocate<float>(table_size);
-        if (!generic_recoil_reference_sp_device) throw std::bad_alloc();
-        queue.copy(reference.data(), generic_recoil_reference_sp_device, table_size).wait_and_throw();
     }
 
     auto* in_fov_dose_device =

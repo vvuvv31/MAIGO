@@ -95,10 +95,16 @@
             constexpr bool kCtQueuedPrimaryPath = kKernelStage == 11;
             // Stage 12 is broadbeam stage 6 with host-proven CT-shared-electron
             // configuration folded at compile time (no physics difference).
+            constexpr bool kMinibeamCtCache = JointResponse==0 &&
+                (std::is_same_v<Pipeline,pipelines::ProtonMinibeam> || std::is_same_v<Pipeline,pipelines::CarbonMinibeam>);
             constexpr bool kSharedCtCell = kKernelStage == 16 || kKernelStage == 18;
             constexpr bool kLocalProtonCtPath = kKernelStage == 15 || kKernelStage == 16;
             constexpr bool kLocalCarbonCtPath = kKernelStage == 17 || kKernelStage == 18;
             constexpr bool kLocalElectronCtPath = kLocalProtonCtPath || kLocalCarbonCtPath;
+            constexpr bool kPrimaryElasticTotals = kLocalProtonCtPath ||
+                (kMinibeamCtCache && std::is_same_v<Pipeline,pipelines::ProtonMinibeam>);
+            constexpr bool kSpeciesElasticTotals = kLocalCarbonCtPath ||
+                (kMinibeamCtCache && std::is_same_v<Pipeline,pipelines::CarbonMinibeam>);
             constexpr bool kBroadBeamCtPath = kKernelStage == 12 || kKernelStage == 13 || kKernelStage == 14 || kLocalElectronCtPath;
             // 13/14 additionally fold the host-checked projectile (proton / C12).
             constexpr int kFoldZ = (kKernelStage == 13 || kLocalProtonCtPath) ? 1 : (kKernelStage == 14 || kLocalCarbonCtPath) ? 6 : 0;
@@ -323,6 +329,7 @@
                     auto local_density_g_per_cm3 = water_density_g_per_cm3;
                     std::uint8_t ct_material = 2;
                     auto in_ct = false;
+                    std::size_t ct_material_index=0;
                     if (((!kUniformWaterPrimaryPath && enable_ct_grid))) {
                         float ct_rho = water_density_g_per_cm3;
                         if constexpr (kSharedCtCell) {
@@ -338,7 +345,7 @@
                                           ct_origin_x, ct_origin_y, ct_origin_z, ct_spacing_x,
                                           ct_spacing_y, ct_spacing_z, ct_nx, ct_ny, ct_nz,
                                           ct_density_device, ct_material_device, ct_rho,
-                                          ct_material, direction_x, direction_y, direction_z);
+                                          ct_material, direction_x, direction_y, direction_z, kMinibeamCtCache ? &ct_material_index : nullptr);
                         }
                         if (in_ct) {
                             local_density_g_per_cm3 = ct_rho;
@@ -369,8 +376,10 @@
                         if(!unified_primary_state.valid || unified_primary_state.section!=section ||
                            unified_primary_state.density!=local_density_g_per_cm3)
                         {
-                            if constexpr(kSharedCtCell && kLocalProtonCtPath)
+                            if constexpr(kSharedCtCell && (kLocalProtonCtPath || kLocalCarbonCtPath))
                                 unified_primary_state=unified_device.select_ct(section,local_density_g_per_cm3,unified_primary_species,voxel_index);
+                            else if constexpr(kMinibeamCtCache)
+                                unified_primary_state=unified_device.select_ct(section,local_density_g_per_cm3,unified_primary_species,ct_material_index);
                             else unified_primary_state=unified_device.select(section,local_density_g_per_cm3,unified_primary_species);
                         }
                         if(!unified_primary_state.covers(energy_MeV)){
@@ -381,7 +390,11 @@
                             // Reuse the material view through this step's loss
                             // draw, without adding cross-step/resume state.
                             unified_primary_point=unified_primary_state.lo();
-                            const auto point_pre=unified_primary_point.template prepare<kLocalElectronCtPath,kLocalElectronCtPath,kLocalElectronCtPath>(energy_MeV);
+                            // Carbon CT primary retains within-step loss slopes:
+                            // omitting them produces a coherent beam-direction
+                            // dose bias in low-density lung. Proton broadbeam
+                            // keeps its separately scoped step-start approximation.
+                            const auto point_pre=unified_primary_point.template prepare<kLocalElectronCtPath,kLocalProtonCtPath,kLocalProtonCtPath>(energy_MeV);
                             unified_primary_pre={point_pre,point_pre};
                         }else unified_primary_pre=unified_primary_state.prepare(energy_MeV);
                         stopping_power_MeV_per_mm = unified_primary_state.mix(
@@ -446,11 +459,15 @@
                                 {voxel_size_x_mm,voxel_size_y_mm,depth_bin_width_mm},voxel_bins_x,voxel_bins_y,number_of_bins,
                                 urban_water_half_width_mm);
                         global_urban_material=urban_device.material(in_ct?int(ct_material):-1,local_density_g_per_cm3);
+                        // Lifetime includes proposal, nuclear shortening and
+                        // final Urban sampling below; never stored in a queue.
+                        if(in_ct)unified_primary_point=unified_primary_state.lo();
                         global_urban_proposal=urban_global_prepare(urban_device,global_urban_material,global_urban_ion,
                             energy_MeV,sycl::fmin(step_mm,maximum_step_mm),
                             {position_x_mm,position_y_mm,position_z_mm},{direction_x,direction_y,direction_z},
                             cell,global_urban_boundary,global_urban_state,spot_seed,rng_history,steps,
-                            local_density_g_per_cm3);
+                            local_density_g_per_cm3,
+                            in_ct?&unified_primary_point:nullptr,unified_primary_pre.lo.factor);
                         if(!global_urban_proposal.valid) {
                             record_unified_em_failure(unified_failure_count,unified_failure_records,70,
                                 in_ct?int(ct_material):-1,primary_atomic_number,primary_mass_number,energy_MeV,local_density_g_per_cm3,step_mm);
@@ -484,7 +501,7 @@
                                 float macro_el_ct = 0.0F;
                                 const bool elastic_armed = use_all_elastic;
                                 if (elastic_armed) {
-                                    const float rate=all_elastic.rate(primary_elastic_projectile,((kUniformWaterPrimaryPath || use_unified_water))?25:section_id,cur_e_u);
+                                    const float rate=all_elastic.template transport_total_rate<kPrimaryElasticTotals,kSpeciesElasticTotals>(primary_elastic_projectile,((kUniformWaterPrimaryPath || use_unified_water))?25:section_id,cur_e_u);
                                     if(rate<0) {
                                         sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
                                     sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[4]).fetch_add(1);
@@ -579,7 +596,7 @@
                     float birth_expected_loss_MeV=urban_range_limited?energy_MeV:0.f;
                     if(!urban_range_limited){
                         auto draw=[&](){
-                            if constexpr(kKernelStage==13 || kKernelStage==14 || kLocalElectronCtPath)return unified_em_explicit_loss<kLocalProtonCtPath,true>(
+                            if constexpr(kKernelStage==13 || kKernelStage==14 || kLocalElectronCtPath)return unified_em_explicit_loss<kLocalProtonCtPath,true,kLocalElectronCtPath>(
                                 unified_primary_state,unified_primary_clock,energy_MeV,accepted_loss_path_mm,
                                 unified_primary_rate,unified_primary_distance,enable_energy_straggling,
                                 unified_primary_pre,unified_uniform,&unified_primary_point);
@@ -1189,7 +1206,7 @@
                     // Elastic endpoint: the all-ion bank supplies target-specific TOPAS
                     // samples. Supported recoils are queued; below-cutoff energy is scored locally.
                     if((use_all_elastic) && ct_elastic_this_step && energy_MeV>energy_cutoff_MeV &&
-                       all_elastic.rate(primary_elastic_projectile,((kUniformWaterPrimaryPath || use_unified_water))?25:interaction_section,energy_MeV*inverse_mass_number)==0) {
+                       all_elastic.template transport_total_rate<kPrimaryElasticTotals,kSpeciesElasticTotals>(primary_elastic_projectile,((kUniformWaterPrimaryPath || use_unified_water))?25:interaction_section,energy_MeV*inverse_mass_number)==0) {
                         ct_elastic_this_step=false;
                         sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[10]).fetch_add(1);
                     }
@@ -2734,4 +2751,3 @@
                   << " initial/final-queued=" << copper_cascade_count << '/'
                   << copper_generation_end << '\n';
     }
-

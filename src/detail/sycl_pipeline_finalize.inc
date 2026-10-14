@@ -495,7 +495,6 @@
     free_device(he_isotope_origin_voxel_dose_device);
     free_device(deposited_device);
     free_device(secondary_queue_device);
-    free_device(generic_recoil_reference_sp_device);
     free_device(secondary_count_device);
     free_device(ion_species_energy_device);
     free_device(ion_species_terminal_device);
@@ -565,11 +564,11 @@
     if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam> && JointResponse==0)
         result.primary_first_order_delta_enabled=broadbeam_ct_primary_specialize;
     if constexpr (std::is_same_v<Pipeline, pipelines::CarbonBroadbeam> && JointResponse==0) {
-        result.carbon_primary_first_order_delta_enabled=broadbeam_ct_primary_specialize;
         result.carbon_secondary_first_order_delta_enabled=broadbeam_ct_secondary_specialize;
     }
     if constexpr (BroadBeam && JointResponse==0) {
-        result.ct_primary_first_order_restricted_enabled=broadbeam_ct_primary_specialize;
+        if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam>)
+            result.ct_primary_first_order_restricted_enabled=broadbeam_ct_primary_specialize;
         result.ct_secondary_first_order_restricted_enabled=broadbeam_ct_secondary_specialize;
     }
     if constexpr(BroadBeam) result.ct_broadbeam_step_cap_enabled=enable_ct_grid;

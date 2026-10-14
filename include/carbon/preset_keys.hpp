@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <array>
 namespace carbon {
-inline constexpr std::array<std::string_view,173> preset_keys{
+inline constexpr std::array<std::string_view,159> preset_keys{
     "LET",
     "all_ion_elastic_file",
     "beam_energy_spread",
@@ -117,7 +117,6 @@ inline constexpr std::array<std::string_view,173> preset_keys{
     "multiple_scattering_model",
     "nuclear_model",
     "number_of_histories",
-    "particle_stopping_power_file",
     "primary_atomic_number",
     "primary_mass_number",
     "primary_stopping_power_file",

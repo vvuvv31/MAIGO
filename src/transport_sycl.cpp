@@ -6,6 +6,7 @@
 #include "carbon/host_prefetch.hpp"
 #include "carbon/runtime_timing.hpp"
 #include "carbon/unified_em_view.hpp"
+#include "carbon/urban_ct_loss.hpp"
 #include <fstream>
 #include <charconv>
 #include <sstream>

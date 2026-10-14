@@ -60,6 +60,18 @@ validation is recorded for proton broadbeam/minibeam and carbon broadbeam;
 **carbon minibeam is under verification**. This status does not establish
 water/other-patient acceptance. See [validation scope and measured effects](docs/secondary_straggling.md).
 
+The electron-off proton CT broadbeam primary uses a moment-matched Gamma for
+dense restricted-ionization tails; primary fluctuations remain on. Low-count
+tails and other pipelines retain explicit Poisson marks. See [scope and paired
+results](docs/proton_ct_broadbeam_dense_tail_gamma_20261013.md).
+For the combined CT broadbeam sampling, range-cache and recoil-loss changes,
+see the [direct throughput comparison and dose limits](docs/broadbeam_fluctuation_optimization_20261013.md).
+Carbon CT broadbeam also precomputes elastic totals for primary and fragment
+species; see [scope, paired timings and validation limits](docs/carbon_broadbeam_elastic_totals_20261013.md).
+Electron-off proton/carbon CT minibeams now reuse actual CT material/range
+fields and analytic range inversion; elastic total caches cover proton primary
+and carbon primary/fragments. See [matched full-plan measurements and dose limits](docs/minibeam_ct_cache_optimization_20261013.md).
+
 Each row has the matching `config/<preset>.yaml`. Default CT minibeams are lung
 benchmarks, **not RT07575 head full plans**. Broadbeam caps ion steps at 1.0 mm
 and minibeam at 0.5 mm in both water and CT.

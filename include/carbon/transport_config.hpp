@@ -473,13 +473,10 @@ struct TransportConfig {
     // launches (long single kernels freeze WSL). Intel GPU uses a larger default.
     std::size_t history_chunk_size{0};
     std::uint64_t random_seed{20'260'714};
-    // Reference energy grid for independent nuclear/recoil interpolation only;
+    // Reference energy grid for nuclear/scattering bookkeeping only;
     // water/CT primary stopping comes exclusively from em_package_file.
     std::filesystem::path primary_stopping_power_file{
         "data/stopping/water/carbon.csv"};
-    // Independent reference for unsupported elastic recoils only.
-    std::filesystem::path particle_stopping_power_file{
-        "data/stopping/water/ions.csv"};
     // MeV energy-deposition scorer outputs (absolute MeV → MeV/primary in writers).
     std::filesystem::path output_file{};
     std::filesystem::path fragment_species_output_file{};

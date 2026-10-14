@@ -82,20 +82,22 @@ struct UnifiedEmPoint {
     const EmContinuousDescriptor* continuous{};
     const float* continuous_range{};
     const unsigned* continuous_lengths{};
+    const float* cached_range_values{};
     unsigned continuous_degree{};
     float continuous_coordinate{};
     EmContinuousMaterial material{};
     bool continuous_model()const {return unified_em_continuous_device_only || continuous;}
     // Integral correction is a continuous polynomial in log density, not a
     // collection of material-density transport states.
-    float range_log_ratio(float energy)const {
+    float range_log_ratio(float energy,float* derivative=nullptr)const {
         const auto* p=continuous_range;const unsigned stride=continuous_degree+1;
         unsigned low=0,high=continuous->range_count-2;
         while(low<high){const auto m=(low+high+1)/2;if(p[m*stride]<=energy)low=m;else high=m-1;}
         const auto* a=p+low*stride;const auto* b=a+stride;
         const float w=std::clamp((energy-a[0])/(b[0]-a[0]),0.f,1.f);
         const float x=2*continuous_coordinate-1;
-        const float left=em_chebyshev(a+1,continuous_lengths?continuous_lengths[low]:continuous_degree,x),right=em_chebyshev(b+1,continuous_lengths?continuous_lengths[low+1]:continuous_degree,x);
+        const float left=cached_range_values?cached_range_values[low]:em_chebyshev(a+1,continuous_lengths?continuous_lengths[low]:continuous_degree,x),right=cached_range_values?cached_range_values[low+1]:em_chebyshev(b+1,continuous_lengths?continuous_lengths[low+1]:continuous_degree,x);
+        if(derivative)*derivative=energy>=a[0] && energy<=b[0]?(right-left)/(b[0]-a[0]):0.f;
         return left+w*(right-left);
     }
     template<bool ZeroDensityGuard=false>
@@ -146,9 +148,37 @@ struct UnifiedEmPoint {
         float e=raw(2,scaled_range*density_scale);
         const float lower=segments[record->offsets[0]].lower*.000001f;
         const auto& last=segments[record->offsets[0]+record->counts[0]-1];
-        for(unsigned k=0;k<5;++k){
-            const float residual=corrected_raw_range(e)-scaled_range;
-            e=std::clamp(e-residual*corrected_raw_stopping(e),lower,last.upper);
+        // The measured proton CT primary cache uses two analytic updates;
+        // carbon retains three. Both keep the same residual guard below.
+        const unsigned iterations=cached_range_values?
+            ((record->z==1 && record->a==1)?2u:3u):5u;
+        for(unsigned k=0;k<iterations;++k){
+            if(cached_range_values) {
+                float raw_slope=0,log_slope=0;
+                const float base=raw(1,e,&raw_slope);
+                const float log_ratio=range_log_ratio(e,&log_slope);
+                const float scale=std::exp(log_ratio)/density_scale;
+                // Differentiate the implemented spline times exponential
+                // correction. Preserve its value evaluation.
+                const float value=base*std::exp(log_ratio)/density_scale;
+                const float slope=scale*(raw_slope+base*log_slope);
+                const float residual=value-scaled_range;
+                const float correction=slope>0 && std::isfinite(slope)?residual/slope:residual*corrected_raw_stopping(e);
+                e=std::clamp(e-correction,lower,last.upper);
+            } else {
+                const float residual=corrected_raw_range(e)-scaled_range;
+                e=std::clamp(e-residual*corrected_raw_stopping(e),lower,last.upper);
+            }
+        }
+        // A cached analytic solve must retain a small residual. Unusual
+        // states use the existing five-update evaluator instead.
+        if(cached_range_values && (!std::isfinite(e) ||
+           std::abs(corrected_raw_range(e)-scaled_range)>1e-6f*std::max(std::abs(scaled_range),1e-30f))) {
+            e=raw(2,scaled_range*density_scale);
+            for(unsigned k=0;k<5;++k) {
+                const float residual=corrected_raw_range(e)-scaled_range;
+                e=std::clamp(e-residual*corrected_raw_stopping(e),lower,last.upper);
+            }
         }
         return e;
     }
@@ -399,6 +429,9 @@ struct UnifiedEmDevice {
     const UnifiedEmCtFields* ct_fields{};
     const std::uint16_t* ct_fields_voxels{};
     unsigned ct_fields_count{};
+    const float* ct_range_values{};
+    const unsigned* ct_range_offsets{};
+    int ct_range_ion{-1};
     int species_index(unsigned z,unsigned a)const {
         for(int i=0;i<18;++i)if(species[i].z==z && species[i].a==a)return i;
         return -1;
@@ -416,6 +449,7 @@ struct UnifiedEmDevice {
             if(ct_index!=~0u && ct_fields) {
                 const auto& cached=ct_fields[ct_index*18+ion];
                 p.continuous_coordinate=cached.coordinate;p.material=cached.material;
+                if(ct_range_values && ion==ct_range_ion)p.cached_range_values=ct_range_values+ct_range_offsets[ct_index];
             } else {
                 const float lr=std::log(materials[material].density*density_scale);
                 p.continuous_coordinate=d.log_max>d.log_min?std::clamp((lr-d.log_min)/(d.log_max-d.log_min),0.f,1.f):.5f;
@@ -504,7 +538,7 @@ struct UnifiedEmLoss {float loss{},continuous{},delta{};bool valid{false};unsign
 // PreparedPoint reuses continuous26 views in dedicated CT broadbeam steps.
 // The supplied view belongs to the same step-start state as pre; it must not
 // survive a density/material change. Other paths keep their original evaluator.
-template<bool NonIon=false,bool PreparedPoint=false,class Uniform>
+template<bool NonIon=false,bool PreparedPoint=false,bool NativeNormal=(NonIon && PreparedPoint),bool NativeMath=(NativeNormal && NonIon),bool InverseNormal=NativeNormal,class Uniform>
 UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& cache,float t,float h,float proposal_rate,float distance,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform,const UnifiedEmPoint* prepared_point=nullptr){
     UnifiedEmLoss out;
     const auto lo=[&](){if constexpr(PreparedPoint)return *prepared_point;else return s.lo();}();
@@ -518,7 +552,10 @@ UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& c
     if(fluctuations && mean<t){
         UnifiedEmPointStep fluct_lo=pre.lo,fluct_hi=pre.hi;
         RestrictedFluctuationInput<float> input{t,r.mass,mean,s.mix(fluct_lo.dispersion,fluct_hi.dispersion)*h,s.mix(fluct_lo.universal_dispersion,fluct_hi.universal_dispersion)*h,cut,tmax,s.mix(r.excitation,hi.record->excitation),s.mix(r.e0,hi.record->e0)};
-        RestrictedFluctuationSampler<float,Uniform> sampler(uniform);auto draw=sampler.sample(input,NonIon?false:fluct_lo.ion_fluctuation,float(r.z));
+        // Dense explicit-tail Gamma is scoped to the measured local-electron
+        // proton CT broadbeam primary. Carbon and other paths retain Poisson marks.
+        constexpr bool dense_tail_gamma=NonIon && PreparedPoint && NativeNormal;
+        RestrictedFluctuationSampler<float,Uniform,NativeNormal,NativeMath,InverseNormal,dense_tail_gamma> sampler(uniform);auto draw=sampler.sample(input,NonIon?false:fluct_lo.ion_fluctuation,float(r.z));
         if(!draw.valid){out.failure_stage=1;return out;}
         loss=std::min(t,draw.loss);
     }
@@ -536,7 +573,7 @@ UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,UnifiedEmClock& c
     // delta_moment_draw() rejects it as NaN and the dose is discarded.
     const float delta_variance=std::max(0.f,s.mix(pre.lo.delta_variance,pre.hi.delta_variance)*h);
     out.delta_variance=delta_variance;
-    const float delta=fluctuations?delta_moment_draw(delta_mean,delta_variance,uniform):delta_mean;
+    const float delta=fluctuations?delta_moment_draw<NativeNormal,NativeMath,InverseNormal>(delta_mean,delta_variance,uniform):delta_mean;
     if(!(delta>=0 && std::isfinite(delta))){out.failure_stage=3;return out;}
     out.delta=std::min(t-loss,delta);loss+=out.delta;
     out.loss=loss;out.valid=std::isfinite(loss) && loss>=0 && loss<=t;

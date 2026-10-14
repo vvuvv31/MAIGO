@@ -48,18 +48,31 @@ inline UrbanGlobalProposal urban_global_prepare(
     UrbanMcsView view,int material,int ion,float energy,float true_ceiling,
     Direction3F position,Direction3F direction,UrbanVoxelCell cell,
     bool boundary,UrbanV2TrackState state,std::uint64_t seed,std::uint64_t history,
-    std::uint64_t step,float actual_density=0.f) {
+    std::uint64_t step,float actual_density=0.f,
+    const UnifiedEmPoint* ct_loss=nullptr,float ct_loss_factor=0.f,
+    bool ct_elastic_recoil=false) {
     UrbanGlobalProposal p{};p.state=state;p.cell=cell;p.position=position;p.direction=direction;p.energy=energy;
-    auto context=view.at(material,ion,energy);
+    UrbanLossContext context=view.at(material,ion,energy);
     if(!context.valid() || !cell.valid || !(true_ceiling>0))return p;
     const auto& m=view.materials[material];const auto& s=view.species[ion];
     float density_ratio=1.f;
     if(view.ct_density_scaling && m.section>=0) {
         if(!(actual_density>0) || !sycl::isfinite(actual_density))return p;
         density_ratio=actual_density/m.density;
-        // Approximate fixed-cut range/dEdx scaling. Native-density validation
-        // is required; density effect and cut-energy shifts are not encoded.
-        context.factor*=density_ratio;
+        // A fixed range cut changes the electron production threshold with
+        // density. Reuse continuous26's corrected restricted loss/range;
+        // linear density scaling remains correct for native MSC MFP/radlen.
+        if(ct_elastic_recoil) {
+            // Additional elastic-recoil isotopes use ELRSP001 stopping,
+            // not the continuous26 ion registry. Preserve their separate
+            // native Urban context; never substitute it for a missing
+            // continuous26 context of a supported transported ion.
+            context.factor*=density_ratio;
+        } else {
+            if(!ct_loss)return p;
+            context.ct_point=ct_loss;
+            context.ct_factor=ct_loss_factor;
+        }
         context.density_ratio=density_ratio;
         if(!context.valid())return p;
     }

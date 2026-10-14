@@ -31,6 +31,9 @@
 #pragma once
 #include <cmath>
 #include <algorithm>
+#include "carbon/fluctuation_normal.hpp"
+#include "carbon/fluctuation_normal_quantile.hpp"
+#include "carbon/fluctuation_math.hpp"
 
 namespace carbon {
 template<class Real> struct RestrictedFluctuationInput {
@@ -41,7 +44,7 @@ template<class Real> struct RestrictedFluctuationInput {
 };
 template<class Real> struct RestrictedFluctuationDraw { Real loss{}; bool valid{false}; };
 
-template<class Real, class Uniform> class RestrictedFluctuationSampler {
+template<class Real, class Uniform, bool NativeNormal=false, bool NativeMath=false, bool InverseNormal=false, bool DenseTailGamma=false> class RestrictedFluctuationSampler {
     Uniform& uniform;
     int draws=0;
     bool good=true;
@@ -51,23 +54,26 @@ template<class Real, class Uniform> class RestrictedFluctuationSampler {
         if(!(x>=0 && x<1)){good=false;return Real(.5);}
         return std::max(x,Real(1e-12));
     }
-    Real normal() {Real a=u(),b=u();return std::sqrt(-2*std::log(a))*std::cos(Real(6.283185307179586)*b);}
+    Real normal() {
+        if constexpr(InverseNormal) return fluctuation_normal_quantile<true>(u());
+        else {Real a=u(),b=u();return fluctuation_normal<NativeNormal>(a,b);}
+    }
     Real gamma(Real shape) {
         bool small=shape<1;Real k=small?shape+1:shape;
-        Real d=k-Real(1.0/3),c=1/std::sqrt(9*d);
+        Real d=k-Real(1.0/3),c=1/fluctuation_sqrt<NativeMath>(9*d);
         while(good) {
             Real x=normal(),v=1+c*x;
             if(v<=0)continue;
             v=v*v*v;Real w=u();
-            if(w<1-Real(.0331)*x*x*x*x || std::log(w)<Real(.5)*x*x+d*(1-v+std::log(v)))
-                return d*v*(small?std::pow(u(),1/shape):Real(1));
+            if(w<1-Real(.0331)*x*x*x*x || fluctuation_log<NativeMath>(w)<Real(.5)*x*x+d*(1-v+fluctuation_log<NativeMath>(v)))
+                return d*v*(small?fluctuation_pow<NativeMath>(u(),1/shape):Real(1));
         }
         return 0;
     }
     int poisson(Real mean) {
         // Glandz leaves only small explicit Poisson components (<=8).
         if(!(mean>=0 && mean<=Real(8.001))){good=false;return 0;}
-        Real threshold=std::exp(-mean),product=1;int n=0;
+        Real threshold=fluctuation_exp<NativeMath>(-mean),product=1;int n=0;
         do {++n;product*=u();}while(product>threshold && good);
         return n-1;
     }
@@ -76,7 +82,7 @@ template<class Real, class Uniform> class RestrictedFluctuationSampler {
         return 0;
     }
     Real glandz_gaussian(Real mean,Real variance) {
-        Real sigma=std::sqrt(variance);
+        Real sigma=fluctuation_sqrt<NativeMath>(variance);
         if(mean<Real(.25)*sigma)return 2*u()*mean;
         return truncated_gaussian(mean,sigma);
     }
@@ -84,7 +90,7 @@ template<class Real, class Uniform> class RestrictedFluctuationSampler {
         Real mean=p.mean_MeV,cut=p.cut_MeV;
         if(mean<Real(1e-5))return mean;
         if(mean>=10*cut && p.tmax_MeV<=2*cut) {
-            Real sigma=std::sqrt(p.universal_dispersion),sn=mean/sigma;
+            Real sigma=fluctuation_sqrt<NativeMath>(p.universal_dispersion),sn=mean/sigma;
             return sn>=2 ? truncated_gaussian(mean,sigma) : mean*gamma(sn*sn)/(sn*sn);
         }
         if(cut<=p.e0_MeV)return mean;
@@ -92,11 +98,11 @@ template<class Real, class Uniform> class RestrictedFluctuationSampler {
         Real a1=0,e1=p.excitation_MeV;
         if(cut>e1) {
             a1=mean*Real(.44)/e1;
-            Real fw=a1<42 ? Real(.1)+Real(3.9)*std::sqrt(a1/42) : Real(4);
+            Real fw=a1<42 ? Real(.1)+Real(3.9)*fluctuation_sqrt<NativeMath>(a1/42) : Real(4);
             a1/=fw;e1*=fw;
         }
         Real w1=cut/p.e0_MeV;
-        Real a3=Real(.56)*mean*(cut-p.e0_MeV)/(p.e0_MeV*cut*std::log(w1));
+        Real a3=Real(.56)*mean*(cut-p.e0_MeV)/(p.e0_MeV*cut*fluctuation_log<NativeMath>(w1));
         if(a1<=0)a3/=Real(.56);
         Real loss=0;
         if(a1>8)loss+=glandz_gaussian(a1*e1,a1*e1*e1);
@@ -105,7 +111,7 @@ template<class Real, class Uniform> class RestrictedFluctuationSampler {
             Real emean=0,var=0,p3=a3,alpha=1;
             if(a3>8) {
                 alpha=w1*(8+a3)/(w1*8+a3);
-                Real alpha1=alpha*std::log(alpha)/(alpha-1);
+                Real alpha1=alpha*fluctuation_log<NativeMath>(alpha)/(alpha-1);
                 // Algebraically identical split: retain the bounded explicit
                 // Poisson mean directly instead of subtracting two large counts.
                 Real count=a3*(a3/(8+a3));
@@ -114,7 +120,20 @@ template<class Real, class Uniform> class RestrictedFluctuationSampler {
                 p3=8*(a3/(8+a3));
             }
             Real w3=alpha*p.e0_MeV;
-            if(cut>w3){Real w=(cut-w3)/cut;int n=poisson(p3);for(int i=0;i<n && good;++i)loss+=w3/(1-w*u());}
+            if(cut>w3){
+                const Real w=(cut-w3)/cut;
+                if constexpr(DenseTailGamma) {
+                    if(p3>=4) {
+                        // Scoped CT broadbeam approximation: one aggregate Gamma,
+                        // same first two compound-Poisson moments. Does not
+                        // preserve the zero atom or higher-order tail law.
+                        const Real event_mean=w3*fluctuation_log<NativeMath>(cut/w3)/w;
+                        const Real tail_mean=p3*event_mean,tail_var=p3*w3*cut;
+                        const Real shape=tail_mean*(tail_mean/tail_var);
+                        loss+=tail_mean*gamma(shape)/shape;
+                    } else {int n=poisson(p3);for(int i=0;i<n && good;++i)loss+=w3/(1-w*u());}
+                } else {int n=poisson(p3);for(int i=0;i<n && good;++i)loss+=w3/(1-w*u());}
+            }
             if(var>0)loss+=glandz_gaussian(emean,var);
         }
         return loss*scaling;
@@ -139,7 +158,7 @@ public:
                 var*=Real(.25)*(1+x)*(1/(x*x*x)+(1/b2-Real(.5))/(1/beta2-Real(.5)));
             }
             if(var<=0)return {p.mean_MeV,true};
-            Real sigma=std::sqrt(var),sn=p.mean_MeV/sigma;
+            Real sigma=fluctuation_sqrt<NativeMath>(var),sn=p.mean_MeV/sigma;
             if(sn>=2)loss=truncated_gaussian(p.mean_MeV,sigma);
             else if(sn>Real(.1))loss=p.mean_MeV*gamma(sn*sn)/(sn*sn);
             else loss=2*p.mean_MeV*u();

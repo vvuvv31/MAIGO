@@ -123,6 +123,8 @@
                     decltype(production_path_tag)::value;
                 constexpr bool kCarbonCtPointReuse = kProductionSecondaryPath &&
                     std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>;
+                constexpr bool kCachedElasticTotals = kCarbonCtPointReuse ||
+                    (JointResponse==0 && std::is_same_v<Pipeline,pipelines::CarbonMinibeam>);
                 constexpr int kExactSpecies = -1;
                 constexpr unsigned kSliceSegmentSteps = Pipeline::secondary_segment_steps;
                 return queue.submit([&](sycl::handler& cgh) {
@@ -604,11 +606,14 @@
                                         voxel_bins_x,voxel_bins_y,number_of_bins,urban_water_half_width_mm);
                                 const auto view=urban_device;
                                 const int material=view.material(sec_in_ct?int(sec_ct_material):-1,sec_local_density_g_per_cm3);
+                                if(sec_in_ct && unified_secondary)unified_secondary_point=unified_secondary_state.lo();
                                 sec_urban_proposal=urban_global_prepare(view,material,sec_global_urban_ion,sec_e,
                                     sycl::fmin(sec_step_mm,maximum_step_mm),
                                     {sec_x,sec_y,sec_z},{sec_dx,sec_dy,sec_dz},cell,
                                     sec_global_urban_boundary,sec_urban_persist,2026,frag.rng_stream,sec_steps,
-                                    sec_local_density_g_per_cm3);
+                                    sec_local_density_g_per_cm3,
+                                    sec_in_ct && unified_secondary?&unified_secondary_point:nullptr,
+                                    unified_secondary?unified_secondary_pre.lo.factor:0.f,generic_recoil);
                                 if(!sec_urban_proposal.valid) {
                                     record_unified_em_failure(unified_failure_count,unified_failure_records,100,
                                         sec_in_ct?int(sec_ct_material):-1,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
@@ -685,7 +690,7 @@
                             if(enable_inelastic &&
                                ((kProductionSecondaryPath && !BroadBeam) ? false : use_all_elastic) && !generic_recoil && (sec_in_ct || (kProductionSecondaryPath ? false : use_unified_water))) {
                                 const int p=all_elastic.projectile(transport_z,transport_a);
-                                const float rate=all_elastic.rate(p,(kProductionSecondaryPath ? false : use_unified_water)?25:sec_ct_material,sec_e_u);
+                                const float rate=all_elastic.template species_total_rate<kCachedElasticTotals>(p,(kProductionSecondaryPath ? false : use_unified_water)?25:sec_ct_material,sec_e_u);
                                 if(rate<0) {
                                     sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[2]).fetch_add(1);
                                     sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[7]).fetch_add(1);
@@ -746,14 +751,10 @@
                                 const auto mid_e_u = sycl::fmax(
                                     recoil_stopping.energies[0],
                                     (sec_e - 0.5F * recoil_sp_at_start * sec_step_mm) * frag_inv_a);
-                                if (!(recoil_linear_sp(mid_e_u) > 0.0F)) break;
-                                const auto f = (mid_e_u - minimum_table_energy) *
-                                    inverse_table_step;
-                                const auto i = sycl::clamp(static_cast<int>(sycl::floor(f)), 0,
-                                    static_cast<int>(table_size) - 2);
-                                const auto w = sycl::clamp(f - static_cast<float>(i), 0.0F, 1.0F);
-                                const auto* reference = generic_recoil_reference_sp_device;
-                                const auto stopping = reference[i] + w * (reference[i + 1] - reference[i]);
+                                const auto stopping=recoil_linear_sp(mid_e_u);
+                                if (!(stopping > 0.0F)) break;
+                                // Use the same isotope/material/unit-density
+                                // recoil package as the step-start limiter.
                                 dE = sycl::fmin(stopping * sec_step_mm, sec_e);
                             }
 
@@ -1650,7 +1651,7 @@
                             // interval after EM loss. Treat the zero-rate endpoint as a
                             // null collision; retain post-EM energy, position and MCS.
                             if(secondary_elastic && sec_e>energy_cutoff_MeV &&
-                               all_elastic.rate(all_elastic.projectile(transport_z,transport_a),(kProductionSecondaryPath ? false : use_unified_water)?25:sec_ct_material,sec_e*frag_inv_a)==0) {
+                               all_elastic.template species_total_rate<kCachedElasticTotals>(all_elastic.projectile(transport_z,transport_a),(kProductionSecondaryPath ? false : use_unified_water)?25:sec_ct_material,sec_e*frag_inv_a)==0) {
                                 secondary_elastic=false;
                                 sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[9]).fetch_add(1);
                             }
@@ -2159,4 +2160,3 @@
                        birth_count).wait_and_throw();
         }
     }
-

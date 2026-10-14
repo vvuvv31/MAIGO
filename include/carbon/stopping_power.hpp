@@ -16,11 +16,6 @@ namespace carbon {
 
 class StoppingPowerTable;
 
-[[nodiscard]] std::vector<float> load_ion_species_stopping_power_lut(
-    const std::filesystem::path& path,
-    std::size_t table_size,
-    float scale = 1.0F);
-
 class StoppingPowerTable {
 public:
     StoppingPowerTable(std::vector<double> energies_MeVu,

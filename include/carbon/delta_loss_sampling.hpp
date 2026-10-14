@@ -2,12 +2,15 @@
 #include <cmath>
 #include <algorithm>
 #include <limits>
+#include "carbon/fluctuation_normal.hpp"
+#include "carbon/fluctuation_normal_quantile.hpp"
+#include "carbon/fluctuation_math.hpp"
 namespace carbon {
 // Moment-matched aggregate delta loss. Compound-Poisson cumulants are
 // mean=h*lambda*E[accepted epsilon], variance=h*lambda*E[accepted epsilon^2].
 // Gamma matches two moments; it does not preserve the zero-event atom or higher moments.
 // Returned draw is uncapped; transport caps against remaining kinetic energy.
-template<class Uniform> float delta_moment_draw(float mean,float variance,Uniform& uniform) {
+template<bool NativeNormal=false,bool NativeMath=false,bool InverseNormal=false,class Uniform> float delta_moment_draw(float mean,float variance,Uniform& uniform) {
     if(!(mean>=0 && std::isfinite(mean) && std::isfinite(variance)))return std::numeric_limits<float>::quiet_NaN();
     // A variance formed as a difference of moments can round to a tiny negative
     // under fp32 cancellation (backend/FMA dependent). Absorb only that noise;
@@ -21,14 +24,17 @@ template<class Uniform> float delta_moment_draw(float mean,float variance,Unifor
     float shape=mean*(mean/variance),scale=variance/mean;
     if(!(shape>0 && std::isfinite(shape) && std::isfinite(scale)))return std::numeric_limits<float>::quiet_NaN();
     const bool small=shape<1;
-    const float d=(small?shape+1:shape)-1.f/3.f,c=1/std::sqrt(9*d);
+    const float d=(small?shape+1:shape)-1.f/3.f,c=1/fluctuation_sqrt<NativeMath>(9*d);
     auto u=[&](){float v=uniform();return (v>=0 && v<1)?std::max(v,1e-12f):std::numeric_limits<float>::quiet_NaN();};
     for(int tries=0;tries<256;++tries){
-        const float x=std::sqrt(-2*std::log(u()))*std::cos(6.283185307179586f*u());
+        const float x=[&](){
+            if constexpr(InverseNormal) return fluctuation_normal_quantile<true>(u());
+            else {const float a=u(),b=u();return fluctuation_normal<NativeNormal>(a,b);}
+        }();
         float v=1+c*x;if(v<=0)continue;v=v*v*v;
         const float w=u();
-        if(w<1-.0331f*x*x*x*x || std::log(w)<.5f*x*x+d*(1-v+std::log(v)))
-            return scale*d*v*(small?std::pow(u(),1/shape):1.f);
+        if(w<1-.0331f*x*x*x*x || fluctuation_log<NativeMath>(w)<.5f*x*x+d*(1-v+fluctuation_log<NativeMath>(v)))
+            return scale*d*v*(small?fluctuation_pow<NativeMath>(u(),1/shape):1.f);
     }
     return std::numeric_limits<float>::quiet_NaN();
 }

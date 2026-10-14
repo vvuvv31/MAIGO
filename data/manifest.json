@@ -725,7 +725,6 @@
       "data/stopping/schneider/carbon.metadata.json",
       "data/stopping/water/carbon.csv",
       "data/stopping/water/carbon.metadata.json",
-      "data/stopping/water/ions.csv",
       "inputs/rt07575_head/carbon/beam_model.csv",
       "inputs/rt07575_head/carbon/ct.bin",
       "inputs/rt07575_head/carbon/spots.csv"
@@ -771,7 +770,6 @@
       "data/stopping/schneider/carbon.metadata.json",
       "data/stopping/water/carbon.csv",
       "data/stopping/water/carbon.metadata.json",
-      "data/stopping/water/ions.csv",
       "inputs/lung_minibeam/ct.bin"
     ],
     "carbon_water_broadbeam": [
@@ -801,8 +799,7 @@
       "data/stopping/schneider/carbon.bin",
       "data/stopping/schneider/carbon.metadata.json",
       "data/stopping/water/carbon.csv",
-      "data/stopping/water/carbon.metadata.json",
-      "data/stopping/water/ions.csv"
+      "data/stopping/water/carbon.metadata.json"
     ],
     "carbon_water_minibeam": [
       "data/elastic/copper/carbon/fragments.csv",
@@ -846,7 +843,6 @@
       "data/stopping/schneider/carbon.metadata.json",
       "data/stopping/water/carbon.csv",
       "data/stopping/water/carbon.metadata.json",
-      "data/stopping/water/ions.csv",
       "inputs/water_minibeam/carbon/spots.csv"
     ],
     "proton_ct_broadbeam": [
@@ -875,7 +871,6 @@
       "data/stopping/air/proton.csv",
       "data/stopping/schneider/proton.bin",
       "data/stopping/schneider/proton.metadata.json",
-      "data/stopping/water/ions.csv",
       "data/stopping/water/proton.csv",
       "data/stopping/water/proton.metadata.json",
       "inputs/rt07575_head/proton/beam_model.csv",
@@ -918,7 +913,6 @@
       "data/stopping/copper/proton.csv",
       "data/stopping/schneider/proton.bin",
       "data/stopping/schneider/proton.metadata.json",
-      "data/stopping/water/ions.csv",
       "data/stopping/water/proton.csv",
       "data/stopping/water/proton.metadata.json",
       "inputs/lung_minibeam/ct.bin"
@@ -949,7 +943,6 @@
       "data/nuclear/schneider/secondary/inelastic_rates.metadata.json",
       "data/stopping/schneider/proton.bin",
       "data/stopping/schneider/proton.metadata.json",
-      "data/stopping/water/ions.csv",
       "data/stopping/water/proton.csv",
       "data/stopping/water/proton.metadata.json"
     ],
@@ -990,7 +983,6 @@
       "data/stopping/copper/proton.csv",
       "data/stopping/schneider/proton.bin",
       "data/stopping/schneider/proton.metadata.json",
-      "data/stopping/water/ions.csv",
       "data/stopping/water/proton.csv",
       "data/stopping/water/proton.metadata.json"
     ]

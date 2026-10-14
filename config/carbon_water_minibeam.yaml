@@ -87,7 +87,6 @@ fermi_eyges_max_segment_mm: 0.005
 enable_inelastic: true
 max_secondary_inelastic_generations: 2
 primary_stopping_power_file: data/stopping/water/carbon.csv
-particle_stopping_power_file: data/stopping/water/ions.csv
 max_device_memory_fraction: 0.5
 random_seed: 2026151001
 dose_to_medium: true

@@ -522,7 +522,7 @@ constexpr float kUrbanV2CopperZeff = 29.0F;  // elemental G4_Cu: Zeff == Z exact
 
 // Material data and the current packaged Urban/loss-process context.
 struct UrbanV2Material {
-    UrbanMcsContext loss_context{};
+    UrbanLossContext loss_context{};
     float zeff{29.0F};
     float radlen_mm{0.0F};  // must be set by the wrapper (guarded > 0)
     int projectile_z{6};

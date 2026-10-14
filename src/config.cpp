@@ -565,9 +565,8 @@ void TransportConfig::validate() const {
     if(!material_electron_joint_pilot_file.empty() &&
        (run_mode!=RunMode::research || !independent_projectile ||
         (!enable_minibeam && !broadbeam_independent) ||
-        material_electron_charged_index_file.empty() ||
-        (!broadbeam_independent && maximum_step_mm>.25)))
-        throw std::invalid_argument("Joint pilot requires research projectile-matched minibeam, queue, bank and <=0.25 mm steps");
+        material_electron_charged_index_file.empty()))
+        throw std::invalid_argument("Joint pilot requires research projectile-matched minibeam, queue and bank");
     if(!material_electron_charged_index_file.empty() && !enable_ct_grid &&
        (!is_water_mode() ||
         water_density_g_per_cm3!=1.0 || multiple_scattering_model!="urban_v2"))
@@ -1824,9 +1823,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.random_seed = parse_random_seed(seed->second);
     }
     config.primary_stopping_power_file = parse_path(values, "primary_stopping_power_file", config.primary_stopping_power_file);
-    config.particle_stopping_power_file = parse_path(
-        values, "particle_stopping_power_file",
-        config.particle_stopping_power_file);
 
     config.minibeam_phase_space_at_copper_exit = parse_bool(
         values, "minibeam_phase_space_at_copper_exit",

@@ -135,7 +135,8 @@ inline bool ct_sample(const float x_mm,
                       std::uint8_t& material_out,
                       const float dir_x = 0.0F,
                       const float dir_y = 0.0F,
-                      const float dir_z = 0.0F) noexcept {
+                      const float dir_z = 0.0F,
+                      std::size_t* index_out = nullptr) noexcept {
     if (densities == nullptr || nx == 0 || ny == 0 || nz == 0) {
         return false;
     }
@@ -160,6 +161,7 @@ inline bool ct_sample(const float x_mm,
         return false;
     }
     const auto index = ct_linear_index(ix, iy, iz, nx, ny);
+    if(index_out) *index_out = index;
     density_out = densities[index];
     material_out = materials != nullptr ? materials[index] : static_cast<std::uint8_t>(2);
     return true;
