@@ -63,6 +63,17 @@
 - The release runtime and build target are CUDA-only (`device: cuda`,
   `nvptx64-nvidia-cuda`). Do not restore vendor aliases, CPU fallback or Intel
   kernel-argument pointer adaptation. Preserve CUDA queue/device ordering.
+- CUDA device code must be compiled ahead of time for the GPU that will run it.
+  Every build command must explicitly specify `-DCARBON_CUDA_ARCH=sm_75`
+  (adjust for the destination GPU: RTX 2080 Ti `sm_75`, RTX A6000 `sm_86`,
+  L4 `sm_89`); direct SYCL compiler commands must specify the corresponding
+  `--cuda-gpu-arch`. Do not rely on automatic architecture selection, an empty
+  architecture, or portable PTX-only builds. Every GPU execution, smoke test,
+  regression and performance experiment must set `CUDA_DISABLE_PTX_JIT=1`.
+  Runtime PTX JIT compilation and JIT warm-up runs are prohibited. If a compatible
+  native image is unavailable, stop that run and rebuild ahead of time for the
+  destination GPU; never enable JIT as a fallback. Build time is excluded from
+  cold-start and steady-state throughput measurements.
 - Release assets use the physics-module layout documented in
   `docs/data_layout_20261007.md`; keep `data/manifest.json` and preset dependency
   inventories current. Do not restore dated directory aliases or old-path
