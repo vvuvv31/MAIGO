@@ -2201,10 +2201,6 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
 // displacement is relative to a straight drift along the input direction.
 // p/d/t/He-4 use their independent water tables. C12 and other uncalibrated
 // ions retain the C12-water candidate, with charge/(beta*p) scaling.
-inline void fe_count(std::uint64_t* counts, unsigned slot, std::uint64_t amount=1) noexcept {
-    if (counts) sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
-        sycl::memory_scope::device,sycl::access::address_space::global_space>(counts[slot]).fetch_add(amount);
-}
 
 CorrelatedScatteringStep ion_fermi_eyges_transport_step(
     const Direction3F direction, const float kinetic_energy_before_loss_MeV,
@@ -2216,16 +2212,11 @@ CorrelatedScatteringStep ion_fermi_eyges_transport_step(
     const std::uint32_t random_dimension,
     const float observation_path_mm = -1.0F,
     const float mass_per_u = static_cast<float>(nucleon_rest_mass_MeV),
-    const bool gaussian_only = false,
-    std::uint64_t* counts = nullptr, const bool count_all = false) noexcept {
+    const bool gaussian_only = false) noexcept {
     CorrelatedScatteringStep result{
         direction, Direction3F{0.0F, 0.0F, 0.0F}};
     if (!(path_length_mm > 0.0F && max_segment_mm > 0.0F)) return result;
 
-    if (count_all) {
-        fe_count(counts,0);
-        fe_count(counts,1,static_cast<std::uint64_t>(sycl::ceil(path_length_mm/max_segment_mm)));
-    }
     auto segment_direction = direction;
     auto total_offset = Direction3F{0.0F, 0.0F, 0.0F};
     auto observation_total_offset = Direction3F{0.0F, 0.0F, 0.0F};

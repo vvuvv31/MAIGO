@@ -21,11 +21,9 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
     MaterialBirthTask task{};f::ElectronEnergyPacket packet{},previous{};
     f::voxel_cache_research::Cache voxel_cache;
     std::uint64_t packet_rng=0,previous_rng=0;unsigned packet_steps=0;bool need_task=true;
-    unsigned birth_region=6;unsigned photon_failure_reason=0;
-    std::uint64_t region_counts[12]{};
+    unsigned photon_failure_reason=0;
     auto uniform=[&](){return f::random_draw(packet_rng);};
-    auto joint=[&](){std::uint64_t counts[9]{};auto jt=[&](int k,std::uint64_t n){counts[k]+=n;
-        if constexpr(region_diagnostics){if(k==0)region_counts[6]+=n;if(k==2)region_counts[7]+=n;}};
+    auto joint=[&](){std::uint64_t counts[9]{};auto jt=[&](int k,std::uint64_t n){counts[k]+=n;};
         f::transport_joint_independent(packet,float_joint,geometry,uniform,jt);
         for(unsigned k=0;k<9;++k)if(counts[k])increment(joint_pilot_work+k,counts[k]);
     };
@@ -37,16 +35,7 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
             if constexpr(BroadBeam)task=material_tasks[electron_order?electron_order[slot]:slot];
             else task=material_tasks[slot];
             packet_rng=task.rng;packet=f::ElectronEnergyPacket{};
-            if constexpr(region_diagnostics) {
-                for(auto& c:region_counts)c=0;
-                birth_region=6;
-                const int x=int(sycl::floor((task.position[0]-ct_origin_x)/ct_spacing_x));
-                const int y=int(sycl::floor((task.position[1]-ct_origin_y)/ct_spacing_y));
-                const int z=int(sycl::floor((task.position[2]-ct_origin_z)/ct_spacing_z));
-                if(x>=0&&y>=0&&z>=0&&x<int(ct_nx)&&y<int(ct_ny)&&z<int(ct_nz))
-                    birth_region=broadbeam_birth_regions[(std::size_t(z)*ct_ny+y)*ct_nx+x];
-                region_counts[0]=1;region_counts[10]=static_cast<std::uint64_t>(float(task.weight)*1e6f+.5f);
-            }
+
             voxel_cache.valid=false;
             packet.weight_MeV=float(task.weight);packet.material_table_index=task.table;
             if(task.birth.source<kElectronMaterialCount){
@@ -87,7 +76,7 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
                 const auto r=f::transport_independent_photon(float_photon,geometry,packet.cursor.position,
                     packet.cursor.direction,packet.cursor.energy_MeV,uniform);
                 photon_failure_reason=r.failure_reason;
-                if constexpr(region_diagnostics){++region_counts[8];region_counts[9]+=r.interactions;}
+
                 const std::uint64_t counts[8]={1,r.interactions,r.voxel_crossings,
                     r.status==f::IndependentPhotonStatus::electron,r.status==f::IndependentPhotonStatus::deposited,
                     r.status==f::IndependentPhotonStatus::escaped,r.status==f::IndependentPhotonStatus::coverage_missing,
@@ -103,10 +92,7 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
                     ++packet.electron_children;joint();
                 }else packet.status=ElectronPacketStatus::invalid;
             }else{
-                std::uint64_t counts[8]{};auto ct=[&](int k,std::uint64_t n){
-                    if constexpr(region_diagnostics){if(k<5)region_counts[1+k]+=n;}
-                    counts[k]+=n;
-                };
+                std::uint64_t counts[8]{};auto ct=[&](int k,std::uint64_t n){counts[k]+=n;};
                 packet=f::voxel_cache_research::transport_packet(packet,float_charged,geometry,voxel_cache,uniform,ct);
                 lane_charged_calls+=static_cast<std::uint32_t>(counts[0]);lane_charged_elastic+=static_cast<std::uint32_t>(counts[1]);
                 for(unsigned k=2;k<8;++k)if(counts[k])increment(independent_charged_work+k,counts[k]);
@@ -116,10 +102,7 @@ auto float_event=queue.parallel_for(sycl::range<1>(lanes),[=](sycl::id<1> lane) 
         }
         if(!killed&&packet.status==ElectronPacketStatus::active&&packet_steps<200000u)continue;
         need_task=true;
-        if constexpr(region_diagnostics) {
-            region_counts[11]=1;
-            for(unsigned k=0;k<12;++k)if(region_counts[k])increment(broadbeam_region_work+12*birth_region+k,region_counts[k]);
-        }
+
         const std::uint64_t work[3]={packet.advances,packet.source_restarts,packet.boundary_restarts};
         for(unsigned k=0;k<3;++k)increment(material_queue_work+k,work[k]);
         tally(6,1);

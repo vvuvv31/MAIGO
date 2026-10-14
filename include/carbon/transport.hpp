@@ -18,105 +18,6 @@ namespace carbon {
 
 class SyclTransportContext;
 
-// Read-only snapshots of queued He births, captured after GPU transport.
-// history is the source-history index, NOT a Geant4 parent track ID.
-struct HeliumBirthRecord {
-    std::uint64_t history{};
-    unsigned generation{}, mass_number{};
-    double kinetic_energy_MeV{}, x_mm{}, y_mm{}, z_mm{};
-    double direction_x{}, direction_y{}, direction_z{}, weight{};
-};
-
-// Optional C12 queue-birth snapshot for true-position water replay.  The queue
-// slot is a unique replay-particle id; history remains the original incident
-// history used for normalization and ancestry diagnostics.
-struct C12BirthRecord {
-    std::uint64_t replay_particle_id{}, history{}, rng_stream{};
-    unsigned generation{}, birth_region{};
-    double kinetic_energy_MeV{}, x_mm{}, y_mm{}, z_mm{};
-    double direction_x{}, direction_y{}, direction_z{}, weight{};
-};
-
-// Optional per-primary snapshot at the downstream water entrance.  This is
-// populated only when minibeam_phase_space_output_file is configured.
-//   initial_ray_hits_copper = initial source ray intersects copper.
-//   ever_in_copper = true when any transported segment midpoint was in Copper.
-//   cumulative_cu_true_path_mm = sum of final true-path lengths over segments
-//     whose midpoint was in Copper (urban_v2 uses final t; other models use
-//     the transported geometric length).  Actual touch MUST be determined
-//     from ever_in_copper/cumulative path, never from the initial ray or the
-//     exit energy.
-struct MinibeamPhaseSpaceRecord {
-    std::uint64_t history{};
-    std::int32_t slit{};
-    std::uint8_t copper_elastic{};
-    std::uint8_t valid{};
-    std::uint8_t pad{};
-    float kinetic_energy_MeV{};
-    float x_mm{}, y_mm{};
-    float direction_x{}, direction_y{}, direction_z{};
-    std::uint8_t initial_ray_hits_copper{};
-    std::uint8_t ever_in_copper{};
-    std::uint8_t touch_pad[2]{};
-    float cumulative_cu_true_path_mm{};
-    // urban_v2 step diagnostics (research-only; zero for other models and
-    // for histories that never enter Copper transport).  Branch ids:
-    // 0=zero raw, 1=r2<=minDisplacement2, 2=full accept, 3=reduced,
-    // 4=cancelled.  zero_raw = cu_steps-(below+accept+reduce+cancel).
-    std::uint32_t cu_steps{};
-    std::uint32_t disp_below_min{};
-    std::uint32_t disp_accept{};
-    std::uint32_t disp_reduce{};
-    std::uint32_t disp_cancel{};
-    std::uint32_t cth_eq_one{};
-    float cu_g_sum_mm{};
-    float cu_t_sum_mm{};
-    float cu_delta_sum_mm{};
-    float cu_raw_disp_sum2_mm2{};
-    float cu_acc_disp_sum2_mm2{};
-    // Binding-limit histogram (Phase 5): 1=user/external ceiling, 2=MSC
-    // fMinimal, 3=geometry truncation, 4=range/stopping (no scatter).
-    std::uint32_t limit_user{};
-    std::uint32_t limit_msc{};
-    std::uint32_t limit_geom{};
-    std::uint32_t limit_range{};
-};
-static_assert(sizeof(MinibeamPhaseSpaceRecord) == 112,
-              "minibeam phase-space record layout");
-
-// Optional per-primary snapshots at diagnostic planes inside water. One slot
-// is reserved for every (history, configured plane), so no device-side queue
-// or atomic append is required.
-struct MinibeamWaterPrimaryPlaneRecord {
-    std::uint64_t history{};
-    std::uint64_t particle_id{};
-    std::uint64_t rng_stream{};
-    std::uint32_t plane_index{};
-    std::int16_t atomic_number{};
-    std::int16_t mass_number{};
-    std::uint8_t valid{};
-    std::uint8_t transport_path{};  // 0=primary kernel, 1=secondary queue
-    std::uint8_t pad[2]{};
-    float depth_mm{};
-    float kinetic_energy_MeV{};
-    float weight{};
-    float x_mm{}, y_mm{};
-    float direction_x{}, direction_y{}, direction_z{};
-};
-static_assert(sizeof(MinibeamWaterPrimaryPlaneRecord) == 72,
-              "minibeam water-plane record layout");
-
-struct MinibeamFragmentPhaseSpaceRecord {
-    std::uint64_t history{};
-    std::int32_t atomic_number{};
-    std::int32_t mass_number{};
-    float kinetic_energy_MeV{};
-    float x_mm{}, y_mm{};
-    float direction_x{}, direction_y{}, direction_z{};
-};
-static_assert(sizeof(MinibeamFragmentPhaseSpaceRecord) == 40,
-              "minibeam fragment phase-space record layout");
-
 struct MinibeamDiagnostics {
     static constexpr std::size_t slit_count = 15;
     static constexpr std::size_t touched_energy_bin_count = 12;
@@ -575,8 +476,7 @@ struct TransportResult {
     bool ct_primary_first_order_restricted_enabled{false};
     bool ct_secondary_first_order_restricted_enabled{false};
     bool ct_broadbeam_step_cap_enabled{false};
-    bool fe_sampling_diagnostics_enabled{false};
-    std::array<std::uint64_t, 8> fe_sampling_counts{};
+
     ElectronJointDiagnostics electron_joint_diagnostics{};
     EnergyAccountingLedger energy_ledger{};
     SchneiderNuclearDiagnostics schneider_diagnostics{};
@@ -597,24 +497,7 @@ struct TransportResult {
         IonSpeciesLedgerSchema::metric_count;
     std::vector<double> deposited_energy_MeV;
     std::vector<double> voxel_deposited_energy_MeV;
-    // Primary track length accumulated per scorer voxel (mm).
-    std::vector<double> primary_voxel_track_length_mm;
     std::vector<double> in_fov_deposited_energy_MeV;
-    // Category-major layout: category * number_of_voxels + voxel index.
-    std::vector<double> charged_origin_voxel_deposited_energy_MeV;
-    // Optional minibeam-only voxel decomposition: primary C12 plus eight
-    // charged-secondary species classes split by immediate Copper/water birth.
-    std::vector<double> minibeam_component_voxel_deposited_energy_MeV;
-    // Diagnostic p/d/t/He-4 deposited energy, indexed by
-    // species x (<50, 50--300, >300 MeV/u) x fixed lateral ROI x depth.
-    std::vector<double> minibeam_energy_band_roi_deposited_energy_MeV;
-    // Diagnostic primary-C12 ROI tallies: kind x energy-band x region x depth.
-    // Fluence kind is track length in mm; other kinds are MeV.
-    std::vector<double> minibeam_primary_roi_values;
-    std::array<std::uint64_t, minibeam_spatial_audit_slot_count>
-        minibeam_spatial_audit_counts{};
-    std::vector<double> be_isotope_origin_voxel_deposited_energy_MeV;
-    std::vector<double> he_isotope_origin_voxel_deposited_energy_MeV;
     std::vector<double> primary_deposited_energy_MeV;
     std::vector<double> secondary_carbon_deposited_energy_MeV;
     std::vector<double> secondary_boron_deposited_energy_MeV;
@@ -623,42 +506,6 @@ struct TransportResult {
     std::vector<double> secondary_helium_deposited_energy_MeV;
     std::vector<double> secondary_proton_deposited_energy_MeV;
     std::vector<double> secondary_other_charged_deposited_energy_MeV;
-    // Validation-only depth tallies (empty in production).
-    std::vector<double> primary_fluence_mm;
-    std::vector<double> secondary_carbon_fluence_mm;
-    std::vector<double> secondary_boron_fluence_mm;
-    std::vector<double> secondary_beryllium_fluence_mm;
-    std::vector<double> secondary_lithium_fluence_mm;
-    std::vector<double> secondary_helium_fluence_mm;
-    std::vector<double> secondary_proton_fluence_mm;
-    std::vector<double> secondary_other_charged_fluence_mm;
-    // HadronLET raw dose-weighted moments. Numerator unit:
-    // MeV * MeV/mm/(g/cm3); denominator unit: MeV.
-    // Category-major primary, secondary C, B, Be, Li, He, p, other.
-    // Optional category-major p, d, t, He-3, He-4, N, O, F LET moments.
-    // Optional selected-isotope/element birth spectra. Layout documented
-    // in particle.hpp birth_* constants. Counts are event tallies (not /primary).
-    // Histograms are species × generation × bin (see birth_hist_index).
-    std::vector<std::uint64_t> birth_counts_by_generation;  // cat * gen_bins
-    std::vector<HeliumBirthRecord> helium_birth_records; // opt-in birth spectrum only
-    std::vector<C12BirthRecord> c12_birth_records; // opt-in birth spectrum only
-    std::vector<MinibeamPhaseSpaceRecord> minibeam_phase_space_records;
-    std::vector<MinibeamWaterPrimaryPlaneRecord>
-        minibeam_water_primary_plane_records;
-    std::vector<MinibeamFragmentPhaseSpaceRecord>
-        minibeam_fragment_phase_space_records;
-    // Diagnostic only: tau(start), tau(Simpson), E*tau(Simpson), candidates,
-    // candidate post-EM energy, actual path length. He4, generation eligible.
-    std::array<double, 6> helium4_hazard_audit{};
-    std::vector<double> birth_ke_sum_MeV_by_generation;     // cat * gen_bins
-    std::vector<std::uint64_t> birth_mevu_hist;             // cat*gen*mevu_bins
-    std::vector<std::uint64_t> birth_depth_hist;            // cat*gen*depth_bins
-    std::vector<std::uint64_t> birth_cos_hist;              // cat*gen*cos_bins
-    std::vector<std::uint64_t> birth_parent_mevu_hist;      // cat*gen*parent_mevu
-    std::vector<std::uint64_t> birth_parent_z_hist;         // cat*gen*parent_z
-    // cat*gen*(parent_mevu_bins * product_mevu_bins)
-    std::vector<std::uint64_t> birth_parent_product_mevu_hist;
-    // Same four moments on the optional voxel grid (z-major, x fastest).
     double initial_energy_MeV{0.0};
     double total_deposited_energy_MeV{0.0};
     double escaped_energy_MeV{0.0};

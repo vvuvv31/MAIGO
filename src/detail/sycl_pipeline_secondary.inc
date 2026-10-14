@@ -2,7 +2,6 @@
     double secondary_kernel_seconds = 0.0;
     const bool segment_secondaries = config.secondary_step_chunking;
     constexpr unsigned secondary_tail_threshold = Pipeline::secondary_tail_threshold;
-    constexpr bool secondary_tail_diag = false;
     // Reorder indices only: RNG streams and parent histories belong to particles.
     const bool group_secondaries = config.secondary_species_grouping &&
         enable_inelastic && enable_secondary_transport;
@@ -21,17 +20,7 @@
     }
     std::cout << "[secondary-schedule] group=" << group_secondaries
               << "; particle state and RNG identities preserved\n";
-    std::vector<SecondaryParticle> birth_secondaries_host;
-    std::vector<SecondaryParticle> copper_capture_charged_host;
-    if(!copper_capture_path.empty() && secondary_count_device && secondary_queue_device) {
-        std::uint32_t count=0;
-        queue.copy(secondary_count_device,&count,1).wait_and_throw();
-        if(count>max_secondaries)throw std::runtime_error("Cu capture rejects secondary queue overflow");
-        std::vector<SecondaryParticle> particles(count);
-        if(count)queue.copy(secondary_queue_device,particles.data(),count).wait_and_throw();
-        for(const auto& particle:particles)
-            if(particle.birth_region==minibeam_birth_region_copper)copper_capture_charged_host.push_back(particle);
-    }
+
     if (enable_secondary_transport &&
         secondary_count_device != nullptr && secondary_queue_device != nullptr) {
         uint32_t secondary_count_host = 0;
@@ -44,8 +33,6 @@
             std::uint32_t generation_end = secondary_count_host;
             while (generation_begin < generation_end) {
                 const auto batch_begin = generation_begin;
-                unsigned species0_initial_end = 0;
-                unsigned species1_initial_end = 0;
                 if (group_secondaries) {
                     const auto grouping_start = std::chrono::steady_clock::now();
                     queue.fill(secondary_group_counts, 0u,
@@ -92,10 +79,8 @@
                 auto* ranks = mem_tracker.allocate<unsigned>(state_capacity);
                 auto* block_counts = mem_tracker.allocate<unsigned>((state_capacity + 255) / 256);
                 auto* block_offsets = mem_tracker.allocate<unsigned>((state_capacity + 255) / 256);
-                constexpr unsigned kSecondaryActiveCountSlots =
-                    0 ? 3u : 1u;
                 auto* active_count = mem_tracker.allocate<unsigned>(
-                    segment_secondaries ? kSecondaryActiveCountSlots : 0);
+                    segment_secondaries ? 1u : 0u);
                 if (segment_secondaries) {
                     if (!resume_states || !resume_ready || !active_order || !next_order ||
                         !keep || !ranks || !block_counts || !block_offsets || !active_count)
@@ -109,15 +94,11 @@
                               << sizeof(SecondaryResumeState) << " capacity=" << resume_capacity << "\n";
                 }
                 unsigned resume_active = resume_capacity, segment_rounds = 0;
-                unsigned species0_active = species0_initial_end;
-                unsigned species1_active = species1_initial_end - species0_initial_end;
                 unsigned tail_rounds = 0;
                 double compact_seconds = 0, generation_kernel_seconds = 0, generation_tail_seconds = 0;
                 while (resume_active) {
                 const bool finish_tail = !segment_secondaries || resume_active < secondary_tail_threshold;
                 const auto launch_secondary_round = [&](auto production_path_tag,
-                                                        auto exact_species_tag,
-                                                        unsigned active_begin,
                                                         unsigned active_size) {
                 constexpr bool kProductionSecondaryPath =
                     decltype(production_path_tag)::value;
@@ -125,7 +106,6 @@
                     std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>;
                 constexpr bool kCachedElasticTotals = kCarbonCtPointReuse ||
                     (JointResponse==0 && std::is_same_v<Pipeline,pipelines::CarbonMinibeam>);
-                constexpr int kExactSpecies = -1;
                 constexpr unsigned kSliceSegmentSteps = Pipeline::secondary_segment_steps;
                 return queue.submit([&](sycl::handler& cgh) {
                 const auto secondary_kernel =
@@ -145,19 +125,7 @@
                             return static_cast<int>(frag.a);
                         }();
                         if (transport_z <= 0 || transport_a <= 0) return;
-                        const auto charged_origin_category =
-                            charged_origin_category_from_fragment(
-                                charged_dose_category(transport_z, transport_a));
-                        const auto charged_origin_voxel_offset =
-                            charged_origin_category * number_of_voxels;
-                        const auto minibeam_component_voxel_offset =
-                            minibeam_component_category(
-                                transport_z, transport_a, frag.birth_region) *
-                            number_of_voxels;
-                        const auto be_isotope_category =
-                            be_isotope_origin_category(transport_z, transport_a);
-                        const auto he_isotope_category =
-                            he_isotope_origin_category(transport_z, transport_a);
+
                         if (frag.energy_MeV <= energy_cutoff_MeV) {
                             const auto ledger_species_idx = carbon::get_charged_species_idx(
                                 static_cast<int>(transport_z), static_cast<int>(transport_a));
@@ -188,42 +156,7 @@
                                                      sycl::access::address_space::global_space>
                                         atomic_vox(voxel_dose_device[cur_voxel]);
                                     atomic_vox.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
-                                    if ((kProductionSecondaryPath ? false : enable_charged_origin_voxel_scoring)) {
-                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            atomic_origin(charged_origin_voxel_dose_device[
-                                                charged_origin_voxel_offset + cur_voxel]);
-                                        atomic_origin.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
-                                        score_be_isotope_origin_voxel_device(
-                                            be_isotope_origin_voxel_dose_device,
-                                            be_isotope_category, number_of_voxels, cur_voxel,
-                                            static_cast<DoseAtomicT>(frag.energy_MeV));
-                                        score_he_isotope_origin_voxel_device(
-                                            he_isotope_origin_voxel_dose_device,
-                                            he_isotope_category, number_of_voxels, cur_voxel,
-                                            static_cast<DoseAtomicT>(frag.energy_MeV));
-                                    }
-                                    if ((kProductionSecondaryPath ? false :
-                                         enable_minibeam_component_voxel_scoring)) {
-                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            component(minibeam_component_voxel_dose_device[
-                                                minibeam_component_voxel_offset + cur_voxel]);
-                                        component.fetch_add(static_cast<DoseAtomicT>(frag.energy_MeV));
-                                    }
-                                    if ((kProductionSecondaryPath ? false :
-                                         enable_minibeam_energy_band_roi_scoring)) {
-                                        score_minibeam_energy_band_roi_device(
-                                            minibeam_energy_band_roi_dose_device,
-                                            transport_z, transport_a, frag.energy_MeV,
-                                            cur_voxel, number_of_bins,
-                                            voxel_bins_x,
-                                            voxel_bins_y,
-                                            minibeam_fixed_region_by_x_bin_device,
-                                            frag.energy_MeV);
-                                    }
+
                                     if (in_fov_dose_device != nullptr) {
                                         sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                                          sycl::memory_scope::device,
@@ -325,9 +258,7 @@
                         // Diagnostic species profile: 20 slots x {steps,
                         // short-range steps, deposited uMeV}. Zero production
                         // impact (compiled out when profiling is off).
-                        std::uint64_t sec_prof[60];
-                        if constexpr(CARBON_SECONDARY_STEP_PROFILE)
-                            for(int sec_pi=0;sec_pi<60;++sec_pi)sec_prof[sec_pi]=0;
+
                         UnifiedEmState unified_secondary_state;
                         auto unified_secondary_uniform=[&](){return (rng::random_u32(2026,frag.rng_stream,unified_secondary_counter++,121)>>8)*0x1p-24f;};
                         auto unified_secondary_count=[&](int index,std::uint64_t count=1){
@@ -438,7 +369,7 @@
                             local_sec_steps=saved.local_sec_steps;
 
                                 for(int j=0;j<4;++j)he4_audit[j]=saved.he4_audit[j];
-                            if constexpr(CARBON_SECONDARY_STEP_PROFILE)for(int j=0;j<60;++j)sec_prof[j]=saved.sec_prof[j];
+
                         }
                         unsigned segment_steps=0;bool segment_paused=false;
                         while (sec_e > energy_cutoff_MeV && sec_z >= 0.0F && sec_z < phantom_length_mm &&
@@ -468,15 +399,6 @@
                                 break;
                             }
 
-                            // A requested plane may coincide with the current
-                            // step start (notably the water-exit endpoint after
-                            // an exactly truncated preceding step). Record that
-                            // state before the next EM/MCS draw instead of
-                            // requiring a strict interior crossing or moving
-                            // the diagnostic plane upstream by a few microns.
-
-                            const auto secondary_rate_query_energy_MeV =
-                                sycl::fmax(0.0F, sec_e);
                             const auto sec_e_u = sec_e * frag_inv_a;
                             float sec_local_density_g_per_cm3 = water_density_g_per_cm3;
                             std::uint8_t sec_ct_material = 2U;
@@ -534,7 +456,7 @@
                                 } else unified_secondary_pre=unified_secondary_state.prepare(sec_e);
                                 if(sec_global_urban) {
                                     unified_secondary_rate=unified_secondary_clock.update(unified_secondary_state,sec_e,
-                                        unified_secondary_pre.lo.factor,unified_secondary_pre.hi.factor);
+                                        unified_secondary_pre.lo.factor);
                                     if(!unified_secondary_clock.clock.active)
                                         unified_secondary_clock.clock.arm(-sycl::log(sycl::fmax(unified_secondary_uniform(),0x1p-24f)));
                                     unified_secondary_distance=unified_secondary_clock.clock.distance(unified_secondary_rate);
@@ -629,7 +551,6 @@
                             // semantics and still receive normal MCS.
                             bool secondary_replay_succeeded = false;
                             std::int16_t secondary_target_z = 0;
-                            std::int16_t secondary_target_a = 0;
                             // v3: set when the post-EM sampler finds no
                             // in-domain channel (lookup skipped, never queried).
                             bool skip_schneider_lookup = false;
@@ -769,11 +690,9 @@
                                 auto draw=[&]() {
                                     if constexpr(kCarbonCtPointReuse)
                                         return unified_em_explicit_loss<false,true>(unified_secondary_state,
-                                            unified_secondary_clock,sec_e,sec_step_mm,unified_secondary_rate,
-                                            unified_secondary_distance,enable_secondary_energy_straggling,
+                                            sec_e,sec_step_mm,enable_secondary_energy_straggling,
                                             unified_secondary_pre,unified_secondary_uniform,&unified_secondary_point);
-                                    else return unified_em_loss(unified_secondary_state,unified_secondary_clock,
-                                        sec_e,sec_step_mm,unified_secondary_rate,unified_secondary_distance,
+                                    else return unified_em_loss(unified_secondary_state,sec_e,sec_step_mm,
                                         enable_secondary_energy_straggling,unified_secondary_pre,unified_secondary_uniform);
                                 }();
                                 if(!draw.valid){
@@ -784,40 +703,7 @@
                             }
                             const auto post_em_e = sycl::fmax(0.0F, sec_e - dE);
                              {
-                            if (enable_inelastic &&
-                                he4_hazard_audit_device && transport_z == 2 && transport_a == 4 &&
-                                frag.generation < max_secondary_inelastic_generations &&
-                                schneider_ct_device_ctx.uses_cinel03() && (sec_in_ct || (kProductionSecondaryPath ? false : use_unified_water))) {
-                                const auto p =
-                                    secondary_projectile_lut_index_device(
-                                    schneider_ct_device_ctx.sec_proj_keys,
-                                    schneider_ct_device_ctx.sec_num_projectiles, 2, 4);
-                                const auto section = (kProductionSecondaryPath ? false : use_unified_water) ? 255U : sec_ct_material;
-                                const double start = schneider_hazard_total_rate;
-                                const double middle = sec_local_density_g_per_cm3 *
-                                    schneider_ct_device_ctx.secondary_rates(p, section,
-                                        (sec_e - 0.5F*dE)*frag_inv_a).total;
-                                const double end = sec_local_density_g_per_cm3 *
-                                    schneider_ct_device_ctx.secondary_rates(p, section,
-                                        post_em_e*frag_inv_a).total;
-                                he4_audit[0] += start*sec_step_mm;
-                                he4_audit[1] += (start+4*middle+end)*sec_step_mm/6;
-                                he4_audit[2] += (start*sec_e+4*middle*(sec_e-0.5F*dE)+end*post_em_e)*sec_step_mm/6;
-                                he4_audit[3] += sec_step_mm;
-                                // Sparse inelastic tallies: rare events update the
-                                // global device audit directly instead of living in
-                                // the per-track continuation state.
-                                if (secondary_inelastic) {
-                                    sycl::atomic_ref<double, sycl::memory_order::relaxed,
-                                        sycl::memory_scope::device, sycl::access::address_space::global_space>
-                                        tally_count(he4_hazard_audit_device[3]);
-                                    tally_count.fetch_add(1.0);
-                                    sycl::atomic_ref<double, sycl::memory_order::relaxed,
-                                        sycl::memory_scope::device, sycl::access::address_space::global_space>
-                                        tally_energy(he4_hazard_audit_device[4]);
-                                    tally_energy.fetch_add(static_cast<double>(post_em_e));
-                                }
-                            }
+
                             }
                             auto post_em_x = sec_x + collision_input_dx * sec_step_mm;
                             auto post_em_y = sec_y + collision_input_dy * sec_step_mm;
@@ -879,35 +765,7 @@
                                         sycl::memory_scope::device,sycl::access::address_space::global_space>
                                         a(voxel_dose_device[continuous_step_voxel]);
                                     a.fetch_add(static_cast<DoseAtomicT>(dE));
-                                    if ((kProductionSecondaryPath ? false : enable_charged_origin_voxel_scoring)) {
-                                        sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,
-                                            sycl::memory_scope::device,sycl::access::address_space::global_space>
-                                            origin(charged_origin_voxel_dose_device[charged_origin_voxel_offset+continuous_step_voxel]);
-                                        origin.fetch_add(static_cast<DoseAtomicT>(dE));
-                                        score_be_isotope_origin_voxel_device(be_isotope_origin_voxel_dose_device,
-                                            be_isotope_category,number_of_voxels,continuous_step_voxel,static_cast<DoseAtomicT>(dE));
-                                        score_he_isotope_origin_voxel_device(he_isotope_origin_voxel_dose_device,
-                                            he_isotope_category,number_of_voxels,continuous_step_voxel,static_cast<DoseAtomicT>(dE));
-                                    }
-                                    if ((kProductionSecondaryPath ? false :
-                                         enable_minibeam_component_voxel_scoring)) {
-                                        sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,
-                                            sycl::memory_scope::device,sycl::access::address_space::global_space>
-                                            component(minibeam_component_voxel_dose_device[
-                                                minibeam_component_voxel_offset+continuous_step_voxel]);
-                                        component.fetch_add(static_cast<DoseAtomicT>(dE));
-                                    }
-                                    if ((kProductionSecondaryPath ? false :
-                                         enable_minibeam_energy_band_roi_scoring)) {
-                                        score_minibeam_energy_band_roi_device(
-                                            minibeam_energy_band_roi_dose_device,
-                                            transport_z, transport_a, sec_e,
-                                            continuous_step_voxel,
-                                            number_of_bins,
-                                            voxel_bins_x,
-                                            voxel_bins_y,
-                                            minibeam_fixed_region_by_x_bin_device, dE);
-                                    }
+
                                 }
                             }
                             if (secondary_inelastic) {
@@ -1009,33 +867,7 @@
                                                          sycl::access::address_space::global_space>
                                             atomic_vox(voxel_dose_device[pending_sec_voxel]);
                                         atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                    if ((kProductionSecondaryPath ? false : enable_charged_origin_voxel_scoring)) {
-                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            atomic_origin(charged_origin_voxel_dose_device[
-                                                charged_origin_voxel_offset + pending_sec_voxel]);
-                                        atomic_origin.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                        score_be_isotope_origin_voxel_device(
-                                            be_isotope_origin_voxel_dose_device,
-                                            be_isotope_category, number_of_voxels,
-                                            pending_sec_voxel,
-                                            static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                        score_he_isotope_origin_voxel_device(
-                                            he_isotope_origin_voxel_dose_device,
-                                            he_isotope_category, number_of_voxels,
-                                            pending_sec_voxel,
-                                            static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                    }
-                                    if ((kProductionSecondaryPath ? false :
-                                         enable_minibeam_component_voxel_scoring)) {
-                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            component(minibeam_component_voxel_dose_device[
-                                                minibeam_component_voxel_offset + pending_sec_voxel]);
-                                        component.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                    }
+
                                     }
                                     pending_sec_voxel_MeV = 0.0F;
                                     pending_sec_voxel = cur_voxel;
@@ -1108,19 +940,7 @@
                                         // energy-band scorer; local nuclear
                                         // deposit must be recorded here or the
                                         // ROI diagnostic will not close.
-                                        if ((kProductionSecondaryPath ? false :
-                                             enable_minibeam_energy_band_roi_scoring) &&
-                                            cur_voxel >= 0) {
-                                            score_minibeam_energy_band_roi_device(
-                                                minibeam_energy_band_roi_dose_device,
-                                                transport_z, transport_a, sec_e,
-                                                cur_voxel,
-                                                number_of_bins,
-                                                voxel_bins_x,
-                                                voxel_bins_y,
-                                                minibeam_fixed_region_by_x_bin_device,
-                                                local_deposit);
-                                        }
+
                                         if (deposited_device != nullptr) {
                                             sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                              sycl::memory_scope::device,
@@ -1282,46 +1102,7 @@
                                                 if ((kProductionSecondaryPath ? true : enable_voxel_scoring) && cur_voxel >= 0) {
                                                     pending_sec_voxel_MeV += product.kinetic_energy_MeV;
                                                 }
-                                                if ((kProductionSecondaryPath ? false :
-                                                     enable_minibeam_component_voxel_scoring) &&
-                                                    cur_voxel >= 0) {
-                                                    const auto child_category =
-                                                        minibeam_component_category(
-                                                            product.z, product.a,
-                                                            minibeam_birth_region_water);
-                                                    const auto child_offset =
-                                                        child_category *
-                                                        number_of_voxels;
-                                                    sycl::atomic_ref<DoseAtomicT,
-                                                                     sycl::memory_order::relaxed,
-                                                                     sycl::memory_scope::device,
-                                                                     sycl::access::address_space::global_space>(
-                                                        minibeam_component_voxel_dose_device[
-                                                            child_offset + cur_voxel])
-                                                        .fetch_add(static_cast<DoseAtomicT>(
-                                                            product.kinetic_energy_MeV));
-                                                    sycl::atomic_ref<DoseAtomicT,
-                                                                     sycl::memory_order::relaxed,
-                                                                     sycl::memory_scope::device,
-                                                                     sycl::access::address_space::global_space>(
-                                                        minibeam_component_voxel_dose_device[
-                                                            minibeam_component_voxel_offset + cur_voxel])
-                                                        .fetch_add(static_cast<DoseAtomicT>(
-                                                            -product.kinetic_energy_MeV));
-                                                }
-                                                if ((kProductionSecondaryPath ? false :
-                                                     enable_minibeam_energy_band_roi_scoring) &&
-                                                    cur_voxel >= 0) {
-                                                    score_minibeam_energy_band_roi_device(
-                                                        minibeam_energy_band_roi_dose_device,
-                                                        product.z, product.a,
-                                                        product.kinetic_energy_MeV, cur_voxel,
-                                                        number_of_bins,
-                                                        voxel_bins_x,
-                                                        voxel_bins_y,
-                                                        minibeam_fixed_region_by_x_bin_device,
-                                                        product.kinetic_energy_MeV);
-                                                }
+
                                                 if (deposited_device != nullptr) {
                                                     sycl::atomic_ref<float, sycl::memory_order::relaxed,
                                                                      sycl::memory_scope::device,
@@ -1445,16 +1226,7 @@
                                 if (cur_voxel >= 0) {
                                     if (!source_voxel_continuous_loss) {
                                         pending_sec_voxel_MeV += dE;
-                                        if ((kProductionSecondaryPath ? false :
-                                             enable_minibeam_energy_band_roi_scoring)) {
-                                            score_minibeam_energy_band_roi_device(
-                                                minibeam_energy_band_roi_dose_device,
-                                                transport_z, transport_a, sec_e, cur_voxel,
-                                                number_of_bins,
-                                                voxel_bins_x,
-                                                voxel_bins_y,
-                                                minibeam_fixed_region_by_x_bin_device, dE);
-                                        }
+
                                     }
                                     if (in_fov_dose_device != nullptr && pending_sec_bin >= 0 && pending_sec_bin < static_cast<int>(number_of_bins)) {
                                         sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
@@ -1557,14 +1329,9 @@
                                         schneider_diag_device,
                                         route_slot);
                                     auto observation_path_mm = -1.0F;
-                                    const auto fe_start_x = post_em_x -
-                                        collision_input_dx * sec_step_mm;
-                                    const auto fe_start_y = post_em_y -
-                                        collision_input_dy * sec_step_mm;
-                                    const auto fe_start_z = post_em_z -
-                                        collision_input_dz * sec_step_mm;
-                                    auto observation_plane =
-                                        minibeam_water_primary_plane_count;
+
+
+
 
                                     const auto correlated =
                                         ion_fermi_eyges_transport_step(
@@ -1581,64 +1348,8 @@
                                             2026, frag.rng_stream,
                                             static_cast<std::uint64_t>(sec_steps),
                                             100U, observation_path_mm,
-                                            static_cast<float>(nucleon_rest_mass_MeV), fe_gaussian_only,
-                                            fe_counts,fe_diagnostics);
-                                    if (correlated.observation_valid &&
-                                        observation_plane <
-                                            minibeam_water_primary_plane_count) {
-                                        const auto plane_depth =
-                                            minibeam_water_primary_plane_depths_device[
-                                                observation_plane];
-                                        auto crossing_x = fe_start_x +
-                                            collision_input_dx * observation_path_mm +
-                                            correlated.observation_displacement_mm.x;
-                                        auto crossing_y = fe_start_y +
-                                            collision_input_dy * observation_path_mm +
-                                            correlated.observation_displacement_mm.y;
-                                        const auto crossing_z = fe_start_z +
-                                            collision_input_dz * observation_path_mm +
-                                            correlated.observation_displacement_mm.z;
-                                        if (correlated.observation_direction.z >
-                                            1.0e-6F) {
-                                            const auto residual_path =
-                                                (plane_depth - crossing_z) /
-                                                correlated.observation_direction.z;
-                                            crossing_x += residual_path *
-                                                correlated.observation_direction.x;
-                                            crossing_y += residual_path *
-                                                correlated.observation_direction.y;
-                                        }
-                                        auto& record =
-                                            minibeam_water_primary_plane_records_device[
-                                                frag.parent_history *
-                                                    minibeam_water_primary_plane_count +
-                                                observation_plane];
-                                        const auto step_fraction = sycl::clamp(
-                                            observation_path_mm / sec_step_mm,
-                                            0.0F, 1.0F);
-                                        record.history = frag.parent_history;
-                                        record.transport_path = 1U;
-                                        record.particle_id = frag.rng_stream;
-                                        record.rng_stream = frag.rng_stream;
-                                        record.plane_index =
-                                            static_cast<std::uint32_t>(observation_plane);
-                                        record.atomic_number = static_cast<std::int16_t>(transport_z);
-                                        record.mass_number = static_cast<std::int16_t>(transport_a);
-                                        record.depth_mm = plane_depth;
-                                        record.kinetic_energy_MeV = sycl::fmax(
-                                            0.0F,
-                                            sec_e + (1.0F - step_fraction) * dE);
-                                        record.weight = frag.weight;
-                                        record.x_mm = crossing_x;
-                                        record.y_mm = crossing_y;
-                                        record.direction_x =
-                                            correlated.observation_direction.x;
-                                        record.direction_y =
-                                            correlated.observation_direction.y;
-                                        record.direction_z =
-                                            correlated.observation_direction.z;
-                                        record.valid = 1U;
-                                    }
+                                            static_cast<float>(nucleon_rest_mass_MeV), fe_gaussian_only);
+
                                     sec_x += correlated.displacement_mm.x;
                                     sec_y += correlated.displacement_mm.y;
                                     sec_z += correlated.displacement_mm.z;
@@ -1703,40 +1414,7 @@
                                     const bool inside=(kProductionSecondaryPath ? true : enable_voxel_scoring)&&vx>=0&&vy>=0&&vz>=0&&vx<static_cast<int>(voxel_bins_x)&&vy<static_cast<int>(voxel_bins_y)&&vz<static_cast<int>(number_of_bins);
                                     if(inside){const int v=(vz*voxel_bins_y+vy)*voxel_bins_x+vx;
                                         sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(voxel_dose_device[v]).fetch_add(static_cast<DoseAtomicT>(recoil));
-                                        if ((kProductionSecondaryPath ? false : enable_charged_origin_voxel_scoring)) {
-                                            const auto recoil_origin_category =
-                                                charged_origin_category_from_fragment(
-                                                    charged_dose_category(draw.target_z, draw.target_a));
-                                            sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,
-                                                             sycl::memory_scope::device,
-                                                             sycl::access::address_space::global_space>(
-                                                charged_origin_voxel_dose_device[
-                                                    recoil_origin_category * number_of_voxels + v])
-                                                .fetch_add(static_cast<DoseAtomicT>(recoil));
-                                            score_be_isotope_origin_voxel_device(
-                                                be_isotope_origin_voxel_dose_device,
-                                                be_isotope_origin_category(draw.target_z, draw.target_a),
-                                                number_of_voxels, v,
-                                                static_cast<DoseAtomicT>(recoil));
-                                            score_he_isotope_origin_voxel_device(
-                                                he_isotope_origin_voxel_dose_device,
-                                                he_isotope_origin_category(draw.target_z, draw.target_a),
-                                                number_of_voxels, v,
-                                                static_cast<DoseAtomicT>(recoil));
-                                        }
-                                        if ((kProductionSecondaryPath ? false :
-                                             enable_minibeam_component_voxel_scoring)) {
-                                            const auto recoil_component_category =
-                                                minibeam_component_category(
-                                                    draw.target_z, draw.target_a,
-                                                    minibeam_birth_region_water);
-                                            sycl::atomic_ref<DoseAtomicT,sycl::memory_order::relaxed,
-                                                             sycl::memory_scope::device,
-                                                             sycl::access::address_space::global_space>(
-                                                minibeam_component_voxel_dose_device[
-                                                    recoil_component_category * number_of_voxels + v])
-                                                .fetch_add(static_cast<DoseAtomicT>(recoil));
-                                        }
+
                                     }
                                     sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(deposited_device[frag.parent_history]).fetch_add(recoil);
                                     grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,inside,recoil);
@@ -1748,13 +1426,7 @@
 
                             ++sec_steps;
                             ++local_sec_steps;
-                            if constexpr(CARBON_SECONDARY_STEP_PROFILE) {
-                                const int sec_slot = unified_secondary_species>=0 ? unified_secondary_species : (generic_recoil ? 18 : 19);
-                                sec_prof[sec_slot]+=1;
-                                const float sec_range = unified_secondary ? unified_secondary_state.range(sec_e) : 1.0e30f;
-                                if(sec_range<0.5f)sec_prof[20+sec_slot]+=1;
-                                sec_prof[40+sec_slot]+=static_cast<std::uint64_t>(dE*1e6f);
-                            }
+
                         }
 
                         if constexpr (BroadBeam) {
@@ -1809,31 +1481,14 @@
                             saved.local_sec_steps=local_sec_steps;
 
                                 for(int j=0;j<4;++j)saved.he4_audit[j]=he4_audit[j];
-                            if constexpr(CARBON_SECONDARY_STEP_PROFILE)for(int j=0;j<60;++j)saved.sec_prof[j]=sec_prof[j];
+
                             resume_states[state_idx]=saved;resume_ready[state_idx]=1;keep[active_pos]=1;
                             return; // Suspend: no terminal scoring or audit flush.
                         }
-                        if constexpr(CARBON_SECONDARY_STEP_PROFILE) {
-                            for(int sec_pi=0;sec_pi<60;++sec_pi) if(sec_prof[sec_pi]) {
-                                sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> pa(sec_step_profile_device[sec_pi]);pa.fetch_add(sec_prof[sec_pi]);
-                            }
-                        }
+
                         // Small per-step deposits must not contend directly on
                          {
-                        if (he4_hazard_audit_device && transport_z == 2 && transport_a == 4) {
-                            // Carried slots 0/1/2 keep their device meaning; the
-                            // fourth carried value is the total step length
-                            // (original device slot 5). Device slots 3/4 are the
-                            // sparse inelastic tallies already accumulated at the
-                            // event and must not be flushed again.
-                            constexpr int carried_slots[4] = {0, 1, 2, 5};
-                            for (int i=0; i<4; ++i) {
-                                sycl::atomic_ref<double, sycl::memory_order::relaxed,
-                                    sycl::memory_scope::device, sycl::access::address_space::global_space>
-                                    tally(he4_hazard_audit_device[carried_slots[i]]);
-                                tally.fetch_add(he4_audit[i]);
-                            }
-                        }
+
                         }
                         // Small per-step deposits must not contend directly on
                         // one global species scalar. Preserve original scoring
@@ -1913,49 +1568,14 @@
                                                                  sycl::access::address_space::global_space>
                                                     atomic_vox(voxel_dose_device[pending_sec_voxel]);
                                                 atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                    if ((kProductionSecondaryPath ? false : enable_charged_origin_voxel_scoring)) {
-                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            atomic_origin(charged_origin_voxel_dose_device[
-                                                charged_origin_voxel_offset + pending_sec_voxel]);
-                                        atomic_origin.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                        score_be_isotope_origin_voxel_device(
-                                            be_isotope_origin_voxel_dose_device,
-                                            be_isotope_category, number_of_voxels,
-                                            pending_sec_voxel,
-                                            static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                        score_he_isotope_origin_voxel_device(
-                                            he_isotope_origin_voxel_dose_device,
-                                            he_isotope_category, number_of_voxels,
-                                            pending_sec_voxel,
-                                            static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                    }
-                                    if ((kProductionSecondaryPath ? false :
-                                         enable_minibeam_component_voxel_scoring)) {
-                                        sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                         sycl::memory_scope::device,
-                                                         sycl::access::address_space::global_space>
-                                            component(minibeam_component_voxel_dose_device[
-                                                minibeam_component_voxel_offset + pending_sec_voxel]);
-                                        component.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                    }
+
                                             }
                                             pending_sec_voxel_MeV = 0.0F;
                                             pending_sec_voxel = cur_voxel;
                                         }
                                         if (cur_voxel >= 0) {
                                             pending_sec_voxel_MeV += sec_e;
-                                            if ((kProductionSecondaryPath ? false :
-                                                 enable_minibeam_energy_band_roi_scoring)) {
-                                                score_minibeam_energy_band_roi_device(
-                                                    minibeam_energy_band_roi_dose_device,
-                                                    transport_z, transport_a, sec_e, cur_voxel,
-                                                    number_of_bins,
-                                                    voxel_bins_x,
-                                                    voxel_bins_y,
-                                                    minibeam_fixed_region_by_x_bin_device, sec_e);
-                                            }
+
                                             sec_terminal_scored = true;
                                             if (in_fov_dose_device != nullptr) {
                                                 sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
@@ -2025,39 +1645,12 @@
                                              sycl::access::address_space::global_space>
                                 atomic_vox(voxel_dose_device[pending_sec_voxel]);
                             atomic_vox.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                            if ((kProductionSecondaryPath ? false : enable_charged_origin_voxel_scoring)) {
-                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_origin(charged_origin_voxel_dose_device[
-                                        charged_origin_voxel_offset + pending_sec_voxel]);
-                                atomic_origin.fetch_add(
-                                    static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                score_be_isotope_origin_voxel_device(
-                                    be_isotope_origin_voxel_dose_device,
-                                    be_isotope_category, number_of_voxels,
-                                    pending_sec_voxel,
-                                    static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                                score_he_isotope_origin_voxel_device(
-                                    he_isotope_origin_voxel_dose_device,
-                                    he_isotope_category, number_of_voxels,
-                                    pending_sec_voxel,
-                                    static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                            }
-                            if ((kProductionSecondaryPath ? false :
-                                 enable_minibeam_component_voxel_scoring)) {
-                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    component(minibeam_component_voxel_dose_device[
-                                        minibeam_component_voxel_offset + pending_sec_voxel]);
-                                component.fetch_add(static_cast<DoseAtomicT>(pending_sec_voxel_MeV));
-                            }
+
                         }
                                         };
                 cgh.parallel_for<SecondaryTransportKernel<
                                                                  Pipeline, kProductionSecondaryPath,
-                                                                 kExactSpecies, BroadBeam, JointResponse>>(
+                                                                 BroadBeam, JointResponse>>(
                     sycl::range<1>(active_size), secondary_kernel);
             });
                 };
@@ -2065,23 +1658,20 @@
                 sycl::event slice_events[3];
                 unsigned slice_event_count = 0;
                 const auto submit_secondary_slice = [&](auto production_path_tag,
-                                                        auto exact_species_tag,
-                                                        unsigned active_begin,
                                                         unsigned active_size) {
                     if(active_size==0)return;
                     slice_events[slice_event_count++] = launch_secondary_round(
-                        production_path_tag,exact_species_tag,active_begin,active_size);
+                        production_path_tag,active_size);
                 };
                 if constexpr(BroadBeam) {
                     if constexpr(JointResponse==3 || std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>) {
                         if(broadbeam_ct_secondary_specialize)
-                            submit_secondary_slice(std::true_type{},std::integral_constant<int,-1>{},0,resume_active);
-                        else submit_secondary_slice(std::false_type{},std::integral_constant<int,-1>{},0,resume_active);
+                            submit_secondary_slice(std::true_type{},resume_active);
+                        else submit_secondary_slice(std::false_type{},resume_active);
                     } else
-                    submit_secondary_slice(std::false_type{},std::integral_constant<int,-1>{},0,resume_active);
+                    submit_secondary_slice(std::false_type{},resume_active);
                 } else {
-                submit_secondary_slice(std::false_type{},
-                    std::integral_constant<int,-1>{},0,resume_active);
+                submit_secondary_slice(std::false_type{},resume_active);
                 }
                 // The queue is in order, so waiting on the final slice also
                 // completes every earlier slice in this round.
@@ -2095,13 +1685,7 @@
                     generation_tail_seconds += round_seconds;
                     ++tail_rounds;
                 }
-                if (secondary_tail_diag) {
-                    std::cout << "[secondary-round] begin=" << batch_begin
-                              << " round=" << segment_rounds << " active=" << resume_active
-                              << " blocks256=" << ((resume_active + 255) / 256)
-                              << (finish_tail ? " finish_tail" : " segment")
-                              << " kernel_s=" << round_seconds << "\n";
-                }
+
                 ++segment_rounds;
                 if (finish_tail) break; // No suspended tracks; avoid an empty compaction.
                 const auto compact_start=std::chrono::steady_clock::now();
@@ -2140,23 +1724,6 @@
             }
             std::cout << "[secondary-schedule] grouping_seconds="
                       << secondary_group_seconds << "\n";
-            if (enable_fragment_birth_spectrum) {
-                birth_secondaries_host.resize(generation_end);
-                queue.copy(secondary_queue_device, birth_secondaries_host.data(),
-                           generation_end).wait_and_throw();
-            }
-        }
-    }
-    if (birth_secondaries_host.empty() &&
-        enable_fragment_birth_spectrum &&
-        secondary_count_device != nullptr && secondary_queue_device != nullptr) {
-        std::uint32_t birth_count = 0U;
-        queue.copy(secondary_count_device, &birth_count, 1).wait_and_throw();
-        birth_count = sycl::min(
-            birth_count, static_cast<std::uint32_t>(max_secondaries));
-        if (birth_count > 0U) {
-            birth_secondaries_host.resize(birth_count);
-            queue.copy(secondary_queue_device, birth_secondaries_host.data(),
-                       birth_count).wait_and_throw();
+
         }
     }

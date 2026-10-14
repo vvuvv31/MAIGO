@@ -59,7 +59,6 @@ enable_emittance_source: false
 source_origin_z_mm: 0.0
 dose_output_scale: 1.0
 minibeam: false
-enable_charged_origin_voxel_scoring: false
 transport_profile: broadbeam_fast
 
 broadbeam_electron_tracking: true

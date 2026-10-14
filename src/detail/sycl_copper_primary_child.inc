@@ -695,61 +695,7 @@ while (child_energy > energy_cutoff_MeV &&
                     }
                 }
             }
-            if (minibeam_fragment_phase_space_device != nullptr) {
-            sycl::atomic_ref<
-                std::uint64_t,
-                sycl::memory_order::relaxed,
-                sycl::memory_scope::device,
-                sycl::access::address_space::global_space>
-                absorbed_count(
-                    minibeam_event_counts_device[
-                        21U + child_species_category]);
-            absorbed_count.fetch_add(1U);
-            const auto absorbed_energy_keV =
-                static_cast<std::uint64_t>(
-                    sycl::fmax(0.0F, child_energy) *
-                        1000.0F + 0.5F);
-            sycl::atomic_ref<
-                std::uint64_t,
-                sycl::memory_order::relaxed,
-                sycl::memory_scope::device,
-                sycl::access::address_space::global_space>
-                absorbed_energy(
-                    minibeam_event_counts_device[
-                        30U + child_species_category]);
-            absorbed_energy.fetch_add(
-                absorbed_energy_keV);
-            const auto path_to_downstream_plane =
-                sycl::fmax(
-                    0.0F,
-                    (block_exit_z - child_z) /
-                        child_direction.z);
-            const auto straight_copper_path_um =
-                static_cast<std::uint64_t>(
-                    minibeam_straight_copper_path_to_plane(
-                        child_x, child_y,
-                        child_direction.x,
-                        child_direction.y,
-                        minibeam_cos, minibeam_sin,
-                        minibeam_block_radius,
-                        minibeam_slit_count,
-                        minibeam_slit_width,
-                        minibeam_slit_pitch,
-                        0.5F * minibeam_slit_length,
-                        minibeam_slit_offset,
-                        path_to_downstream_plane) *
-                        1000.0F + 0.5F);
-            sycl::atomic_ref<
-                std::uint64_t,
-                sycl::memory_order::relaxed,
-                sycl::memory_scope::device,
-                sycl::access::address_space::global_space>
-                straight_copper_path(
-                    minibeam_event_counts_device[
-                        39U + child_species_category]);
-            straight_copper_path.fetch_add(
-                straight_copper_path_um);
-            }
+
             child_energy = 0.0F;
             break;
         }
@@ -790,31 +736,7 @@ if (secondary_queue_device != nullptr) {
         child.birth_region =
             minibeam_birth_region_copper;
         secondary_queue_device[output] = child;
-        if (minibeam_fragment_phase_space_device != nullptr) {
-            sycl::atomic_ref<
-                std::uint32_t,
-                sycl::memory_order::relaxed,
-                sycl::memory_scope::device,
-                sycl::access::address_space::global_space>
-                phase_count(
-                    *minibeam_fragment_phase_space_count_device);
-            const auto phase_index =
-                phase_count.fetch_add(1U);
-            if (phase_index < max_secondaries) {
-                MinibeamFragmentPhaseSpaceRecord record{};
-                record.history = global_history;
-                record.atomic_number = product.z;
-                record.mass_number = product.a;
-                record.kinetic_energy_MeV = child_energy;
-                record.x_mm = child_x;
-                record.y_mm = child_y;
-                record.direction_x = child_direction.x;
-                record.direction_y = child_direction.y;
-                record.direction_z = child_direction.z;
-                minibeam_fragment_phase_space_device[
-                    phase_index] = record;
-            }
-        }
+
         queued_energy += child_energy;
         sycl::atomic_ref<
             std::uint64_t,

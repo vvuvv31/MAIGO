@@ -61,7 +61,6 @@
     const auto number_of_histories = config.number_of_histories;
     const auto number_of_bins = config.number_of_bins();
     const auto number_of_voxels = config.number_of_voxels();
-    const auto table_size = stopping_power.values().size();
 
     const bool use_unified_water = config.unified_water_nuclear_transport;
 
@@ -140,11 +139,9 @@
 
     // Water/Schneider charged-particle energy loss has one implementation.
     const float maximum_mean_loss_fraction = BroadBeam ? static_cast<float>(config.broadbeam_maximum_mean_loss_fraction) : .01f;
-    std::cout<<"[em-performance] local_audit="<<CARBON_EM_LOCAL_AUDIT<<"\n";
     UnifiedEmDevice unified_device;
     UnifiedEmMaterial* unified_materials=nullptr;
     UnifiedEmSpecies* unified_species=nullptr;
-    UnifiedEmSectionRange* unified_sections=nullptr;
     unsigned* unified_energy_index=nullptr;
     unsigned* unified_failure_count=nullptr;
     UnifiedEmFailureRecord* unified_failure_records=nullptr;
@@ -153,17 +150,7 @@
     float* delta_mean_device=nullptr;
     EmCubicSegmentCandidate<float>* unified_segments=nullptr;
     std::uint64_t* unified_audit=nullptr;
-    std::uint64_t* unified_empty_bucket_audit=nullptr;
-    std::uint64_t* unified_interval_width_audit=nullptr;
-    UnifiedEmSearchAuditRecord* unified_search_audit_records=nullptr;
-    std::uint32_t* unified_search_audit_count=nullptr;
-    constexpr std::uint32_t kUnifiedSearchAuditCapacity=4000000;
-    std::uint64_t* sec_step_profile_device=nullptr;
-    if(CARBON_SECONDARY_STEP_PROFILE) {
-        sec_step_profile_device=mem_tracker.allocate<std::uint64_t>(60);
-        if(!sec_step_profile_device)throw std::bad_alloc();
-        queue.fill(sec_step_profile_device,std::uint64_t{0},60).wait_and_throw();
-    }
+
     const bool global_urban=!BroadBeam && config.multiple_scattering_model=="urban_v2";
     const bool uses_urban_package=global_urban;
     const bool retain_physics_device = context != nullptr;
@@ -356,17 +343,10 @@
         if(uses_urban_package)std::cout<<"[urban-ionization-clock] native proposal clock limits true transport paths; aggregate energy law unchanged\n";
         std::cout<<"[delta-moments] condensed_partition_v1; aggregate Gamma; nodes="
                  <<package.nodes.size()<<"\n";
-        std::vector<UnifiedEmSectionRange> sections(26);
-        for(unsigned i=0;i<package.materials.size();++i) {
-            auto& range=sections[package.materials[i].section+1];
-            if(range.begin<0)range.begin=i;
-            range.end=i;
-        }
         unified_failure_count=mem_tracker.allocate<unsigned>(1);
         unified_failure_records=mem_tracker.allocate<UnifiedEmFailureRecord>(16);
         if(!unified_failure_count || !unified_failure_records)throw std::bad_alloc();
         queue.fill(unified_failure_count,0u,1).wait_and_throw();
-        unified_sections=upload("sections",sections);
         if (resident && resident->contains("energy_index"))
             unified_energy_index=resident->template get<std::remove_pointer_t<decltype(unified_energy_index)>>("energy_index");
         else {
@@ -377,25 +357,8 @@
         unified_records=upload("records",package.records);unified_nodes=upload("nodes",package.nodes);unified_segments=upload("segments",package.segments);
         unified_audit=mem_tracker.allocate<std::uint64_t>(kUnifiedEmAuditCounters*kUnifiedEmAuditShards);if(!unified_audit)throw std::bad_alloc();
         queue.fill(unified_audit,std::uint64_t{0},kUnifiedEmAuditCounters*kUnifiedEmAuditShards).wait_and_throw();
-        if constexpr(CARBON_EM_EMPTY_BUCKET_AUDIT) {
-            unified_empty_bucket_audit=mem_tracker.allocate<std::uint64_t>(10);
-            if(!unified_empty_bucket_audit)throw std::bad_alloc();
-            queue.fill(unified_empty_bucket_audit,std::uint64_t{0},10).wait_and_throw();
-        }
-        if constexpr(CARBON_EM_INTERVAL_WIDTH_AUDIT) {
-            unified_interval_width_audit=mem_tracker.allocate<std::uint64_t>(15);
-            if(!unified_interval_width_audit)throw std::bad_alloc();
-            queue.fill(unified_interval_width_audit,std::uint64_t{0},15).wait_and_throw();
-        }
-        if constexpr(CARBON_EM_SEARCH_KEY_AUDIT) {
-            unified_search_audit_records=
-                mem_tracker.allocate<UnifiedEmSearchAuditRecord>(kUnifiedSearchAuditCapacity);
-            unified_search_audit_count=mem_tracker.allocate<std::uint32_t>(1);
-            if(!unified_search_audit_records || !unified_search_audit_count)
-                throw std::bad_alloc();
-            queue.fill(unified_search_audit_count,std::uint32_t{0},1).wait_and_throw();
-        }
-        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_sections,unified_energy_index,delta_mean_device
+
+        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_energy_index,delta_mean_device
         };
         if(!package.continuous_descriptors.empty()) {
             unified_device.continuous_descriptors=upload("continuous_descriptors",package.continuous_descriptors);
@@ -407,11 +370,10 @@
             std::cout<<"[em-continuous-density] compositions="<<package.materials.size()
                      <<" density_response_states=0 range_degree="<<package.continuous_degree-1<<"\n";
         }
-        unified_device.shared_prepare_grid=package.shared_prepare_grid;
-        std::cout<<"[em-shared-prepare-grid] certified="<<unified_device.shared_prepare_grid<<"\n";
+        std::cout<<"[em-shared-prepare-grid] certified="<<package.shared_prepare_grid<<"\n";
 
         t_em_device.finish();
-        std::cout<<"[unified-em] all 18 charged ions; water + Schneider density nodes; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending\n";
+        std::cout<<"[unified-em] all 18 charged ions; water + Schneider continuous density; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending\n";
     }
     // One host-table cache per process for the Schneider nuclear packages.
     // Reset only when
@@ -433,8 +395,6 @@
     const bool use_material_electron=use_independent_charged;
     const bool use_material_ct=use_material_electron && config.enable_ct_grid;
     std::uint8_t* broadbeam_electron_mask=nullptr;
-    std::uint8_t* broadbeam_birth_regions=nullptr;
-    std::uint64_t* broadbeam_region_work=nullptr;
     const bool retain_electron_ct=config.material_electron_retain_bank && context;
     bool retained_ct_arrays=false;
 
@@ -523,7 +483,7 @@
         std::cout<<"[electron-variance-reduction] roulette_survival="<<electron_roulette_survival
                  <<" roulette_density_le="<<electron_roulette_density<<"\n";
     if (defer_material_packets) {
-        if((!use_material_electron) || (config.run_mode!=RunMode::research) || (config.enable_charged_origin_voxel_scoring))
+        if((!use_material_electron) || (config.run_mode!=RunMode::research))
             throw std::invalid_argument("Queued electrons require research transport without component scoring");
         material_tasks=mem_tracker.allocate<MaterialBirthTask>(material_task_capacity);
         material_task_counts=mem_tracker.allocate<std::uint64_t>(2);
@@ -1001,7 +961,6 @@
         }
         const auto& loaded_cascade = inputs.get<LoadedCinel03>(input_cache_key(config.minibeam_copper_inclxx_file),
             [&] { return take_cinel03(config.minibeam_copper_inclxx_file); });
-        const auto& package = *loaded_cascade.package;
         const auto& tables = *loaded_cascade.tables;
         upload_float_pair(copper_sp.energies(), copper_sp.values(),
                           minibeam_copper_sp_energies_device,
@@ -1171,8 +1130,7 @@
     const auto voxel_bins_x = config.voxel_bins_x;
     const auto voxel_bins_y = config.voxel_bins_y;
     // Resolve the uniform-water grid exactly as its allocation/header do.
-    // Raw voxel_bins_z/voxel_size_z_mm can both be zero when the grid is
-    // defined by phantom_length_mm and depth_bin_width_mm.
+    // Water Z geometry is explicit; CT dimensions come from the CCTG header.
     const auto voxel_bins_z = number_of_bins;
     const auto voxel_size_x_mm = static_cast<float>(config.voxel_size_x_mm);
     const auto voxel_size_y_mm = static_cast<float>(config.voxel_size_y_mm);
@@ -1202,88 +1160,6 @@
     auto* voxel_dose_device = enable_voxel_scoring
                                   ? mem_tracker.allocate<DoseAtomicT>(number_of_voxels)
                                   : nullptr;
-    const auto enable_primary_voxel_fluence =
-        false;
-    auto* primary_voxel_track_length_device =
-        enable_primary_voxel_fluence
-            ? mem_tracker.allocate<DoseAtomicT>(number_of_voxels)
-            : nullptr;
-    const auto enable_charged_origin_voxel_scoring =
-        false;
-    const auto enable_minibeam_component_voxel_scoring =
-        false;
-    const auto enable_minibeam_energy_band_roi_scoring =
-        false;
-    const auto enable_minibeam_primary_roi_scoring =
-        false;
-    const auto enable_fragment_birth_spectrum =
-        false;
-    auto* he4_hazard_audit_device = enable_fragment_birth_spectrum
-        ? mem_tracker.allocate<double>(6) : nullptr;
-    if (enable_fragment_birth_spectrum) {
-        if (!he4_hazard_audit_device) throw std::bad_alloc();
-        queue.memset(he4_hazard_audit_device, 0, 6 * sizeof(double)).wait_and_throw();
-    }
-    auto* charged_origin_voxel_dose_device =
-        enable_charged_origin_voxel_scoring
-            ? mem_tracker.allocate<DoseAtomicT>(charged_origin_category_count * number_of_voxels)
-            : nullptr;
-    auto* minibeam_component_voxel_dose_device =
-        enable_minibeam_component_voxel_scoring
-            ? mem_tracker.allocate<DoseAtomicT>(
-                  minibeam_component_category_count * number_of_voxels)
-            : nullptr;
-    const auto minibeam_energy_band_roi_value_count =
-        minibeam_energy_band_species_count * minibeam_energy_band_count *
-        minibeam_fixed_region_count * number_of_bins;
-    auto* minibeam_energy_band_roi_dose_device =
-        enable_minibeam_energy_band_roi_scoring
-            ? mem_tracker.allocate<DoseAtomicT>(
-                  minibeam_energy_band_roi_value_count)
-            : nullptr;
-    const auto minibeam_primary_roi_value_count =
-        minibeam_primary_roi_kind_count * minibeam_energy_band_count *
-        minibeam_fixed_region_count * number_of_bins;
-    auto* minibeam_primary_roi_dose_device =
-        enable_minibeam_primary_roi_scoring
-            ? mem_tracker.allocate<DoseAtomicT>(minibeam_primary_roi_value_count)
-            : nullptr;
-    auto* minibeam_spatial_audit_device =
-        enable_minibeam_primary_roi_scoring
-            ? mem_tracker.allocate<std::uint64_t>(minibeam_spatial_audit_slot_count)
-            : nullptr;
-    auto* minibeam_fixed_region_by_x_bin_device =
-        (enable_minibeam_energy_band_roi_scoring ||
-         enable_minibeam_primary_roi_scoring)
-            ? mem_tracker.allocate<std::uint8_t>(voxel_bins_x)
-            : nullptr;
-    if ((enable_minibeam_energy_band_roi_scoring ||
-         enable_minibeam_primary_roi_scoring) &&
-        minibeam_fixed_region_by_x_bin_device != nullptr) {
-        std::vector<std::uint8_t> regions(voxel_bins_x, 255U);
-        for (std::size_t ix = 0; ix < voxel_bins_x; ++ix) {
-            const auto x =
-                -0.5 * static_cast<double>(voxel_bins_x - 1U) *
-                    config.voxel_size_x_mm +
-                static_cast<double>(ix) * config.voxel_size_x_mm;
-            if (std::abs(x) > 18.0) continue;
-            auto folded = std::fmod(x + 1.8, 3.6);
-            if (folded < 0.0) folded += 3.6;
-            const auto absolute = std::abs(folded - 1.8);
-            regions[ix] = absolute < 0.25 ? 0U :
-                (absolute < 0.9 ? 1U : 2U);
-        }
-        queue.copy(regions.data(), minibeam_fixed_region_by_x_bin_device,
-                   voxel_bins_x).wait_and_throw();
-    }
-    auto* be_isotope_origin_voxel_dose_device =
-        enable_charged_origin_voxel_scoring
-            ? mem_tracker.allocate<DoseAtomicT>(be_isotope_origin_category_count * number_of_voxels)
-            : nullptr;
-    auto* he_isotope_origin_voxel_dose_device =
-        enable_charged_origin_voxel_scoring
-            ? mem_tracker.allocate<DoseAtomicT>(he_isotope_origin_category_count * number_of_voxels)
-            : nullptr;
 
     const auto enable_inelastic = config.enable_inelastic;
     if (enable_inelastic && !use_schneider_primary_xs) {
@@ -1297,49 +1173,7 @@
     auto* untracked_nuclear_device = mem_tracker.allocate<float>(number_of_histories);
     auto* other_terminal_energy_device = mem_tracker.allocate<float>(number_of_histories);
     auto* cutoff_stopped_energy_device = mem_tracker.allocate<float>(number_of_histories);
-    const bool phase_at_copper_exit = config.minibeam_phase_space_at_copper_exit;
-    const std::string copper_capture_path, copper_diagnostic_path, copper_history_mask_path;
-    if ((!copper_diagnostic_path.empty() || !copper_history_mask_path.empty()) &&
-        (BroadBeam || config.run_mode != RunMode::research || !config.enable_minibeam ||
-         config.enable_ct_grid || config.enable_tps_source || config.enable_tps_coordinate_system ||
-         config.primary_atomic_number != 1 || config.primary_mass_number != 1 ||
-         config.multiple_scattering_model != "urban_v2"))
-        throw std::invalid_argument("Copper history diagnostics require research proton homogeneous-water Urban minibeam without TPS/replay");
-    const auto copper_history_mask_host = read_copper_history_mask(
-        copper_history_mask_path, number_of_histories, config.random_seed);
-    auto* copper_history_mask_device = copper_history_mask_host.empty() ? nullptr
-        : mem_tracker.allocate<std::uint8_t>(number_of_histories);
-    auto* copper_diagnostic_device = copper_diagnostic_path.empty() ? nullptr
-        : mem_tracker.allocate<CopperHistoryDiagnostic>(number_of_histories);
-    if ((!copper_history_mask_host.empty() && !copper_history_mask_device) ||
-        (!copper_diagnostic_path.empty() && !copper_diagnostic_device)) throw std::bad_alloc();
-    if (copper_history_mask_device) {
-        queue.copy(copper_history_mask_host.data(),copper_history_mask_device,number_of_histories).wait_and_throw();
-        std::cout << "[copper-diagnostic-mask] selected="
-                  << std::count(copper_history_mask_host.begin(),copper_history_mask_host.end(),std::uint8_t{1})
-                  << " of=" << number_of_histories << " source_histories; subset dose is normalized to the full source count; path="
-                  << copper_history_mask_path << '\n';
-    }
-    if (copper_diagnostic_device)
-        queue.memset(copper_diagnostic_device,0,number_of_histories*sizeof(CopperHistoryDiagnostic));
-    auto* copper_capture_entry_device=copper_capture_path.empty() ? nullptr
-        : mem_tracker.allocate<PrimaryMediumEntryState>(number_of_histories);
-    if(!copper_capture_path.empty() && !copper_capture_entry_device)throw std::bad_alloc();
-    const auto enable_minibeam_phase_space = false;
-    auto* minibeam_phase_space_device = enable_minibeam_phase_space
-        ? mem_tracker.allocate<MinibeamPhaseSpaceRecord>(number_of_histories)
-        : nullptr;
-    constexpr std::size_t minibeam_water_primary_plane_count = 0;
-    const auto enable_minibeam_water_primary_planes = false;
-    auto* minibeam_water_primary_plane_depths_device =
-        enable_minibeam_water_primary_planes
-            ? mem_tracker.allocate<float>(minibeam_water_primary_plane_count)
-            : nullptr;
-    auto* minibeam_water_primary_plane_records_device =
-        enable_minibeam_water_primary_planes
-            ? mem_tracker.allocate<MinibeamWaterPrimaryPlaneRecord>(
-                  number_of_histories * minibeam_water_primary_plane_count)
-            : nullptr;
+
     auto* beamline_removed_device = (!BroadBeam && config.enable_minibeam)
         ? mem_tracker.allocate<float>(number_of_histories) : nullptr;
     auto* beamline_primary_survivor_device = (!BroadBeam && config.enable_minibeam)
@@ -1389,12 +1223,7 @@
           (minibeam_fragment_miss_joint_counts_device == nullptr ||
            minibeam_fragment_miss_joint_energy_device == nullptr ||
            minibeam_fragment_miss_joint_depth_device == nullptr ||
-           minibeam_fragment_miss_joint_remaining_device == nullptr)) ||
-         (enable_minibeam_phase_space &&
-          minibeam_phase_space_device == nullptr) ||
-         (enable_minibeam_water_primary_planes &&
-          (minibeam_water_primary_plane_depths_device == nullptr ||
-           minibeam_water_primary_plane_records_device == nullptr)))) ||
+           minibeam_fragment_miss_joint_remaining_device == nullptr)))) ||
         (use_schneider_primary_xs && schneider_inelastic_device == nullptr)) {
         free_device(deposited_device);
         free_device(sampled_incident_device);
@@ -1414,9 +1243,7 @@
         free_device(minibeam_fragment_miss_joint_energy_device);
         free_device(minibeam_fragment_miss_joint_depth_device);
         free_device(minibeam_fragment_miss_joint_remaining_device);
-        free_device(minibeam_phase_space_device);
-        free_device(minibeam_water_primary_plane_depths_device);
-        free_device(minibeam_water_primary_plane_records_device);
+
         throw std::bad_alloc();
     }
 
@@ -1444,28 +1271,7 @@
                        std::uint64_t{0},
                        minibeam_fragment_miss_joint_cell_count);
         }
-        if (minibeam_phase_space_device != nullptr) {
-            queue.memset(minibeam_phase_space_device, 0,
-                         number_of_histories *
-                             sizeof(MinibeamPhaseSpaceRecord));
-        }
-        if (minibeam_water_primary_plane_records_device != nullptr) {
-            std::vector<float> plane_depths(
-                minibeam_water_primary_plane_count);
-            for (std::size_t plane = 0;
-                 plane < minibeam_water_primary_plane_count; ++plane) {
-                plane_depths[plane] = static_cast<float>(
-                    config.minibeam_water_primary_plane_depths_mm[plane]);
-            }
-            queue.copy(
-                plane_depths.data(),
-                minibeam_water_primary_plane_depths_device,
-                minibeam_water_primary_plane_count).wait();
-            queue.memset(
-                minibeam_water_primary_plane_records_device, 0,
-                number_of_histories * minibeam_water_primary_plane_count *
-                    sizeof(MinibeamWaterPrimaryPlaneRecord));
-        }
+
     }
     if (schneider_inelastic_device != nullptr) {
         queue.fill(schneider_inelastic_device, std::uint64_t{0}, 1);
@@ -1540,22 +1346,10 @@
         minibeam_copper_cascade_queue_device
             ? mem_tracker.allocate<std::uint32_t>(1)
             : nullptr;
-    const auto enable_minibeam_fragment_phase_space = false;
-    auto* minibeam_fragment_phase_space_device =
-        enable_minibeam_fragment_phase_space
-            ? mem_tracker.allocate<MinibeamFragmentPhaseSpaceRecord>(
-                  max_secondaries)
-            : nullptr;
-    auto* minibeam_fragment_phase_space_count_device =
-        enable_minibeam_fragment_phase_space
-            ? mem_tracker.allocate<std::uint32_t>(1)
-            : nullptr;
+
     if (need_secondary_buffers) {
         if (!secondary_queue_device || !secondary_count_device ||
             !secondary_overflow_count_device || !secondary_overflow_energy_device
-            || (enable_minibeam_fragment_phase_space &&
-                (!minibeam_fragment_phase_space_device ||
-                 !minibeam_fragment_phase_space_count_device))
             || ((!BroadBeam && config.enable_minibeam) &&
                 config.minibeam_copper_fragment_cascade_generations > 0 &&
                 !minibeam_copper_cascade_count_device)
@@ -1567,9 +1361,7 @@
         if (minibeam_copper_cascade_count_device) {
             queue.fill(minibeam_copper_cascade_count_device, 0U, 1);
         }
-        if (minibeam_fragment_phase_space_count_device) {
-            queue.fill(minibeam_fragment_phase_space_count_device, 0U, 1);
-        }
+
         queue.wait_and_throw();
     }
 
@@ -1579,45 +1371,13 @@
         queue.fill(in_fov_dose_device, DepthAtomicT{0}, number_of_bins).wait_and_throw();
     }
 
-    if ((dose_device == nullptr) || (deposited_device == nullptr) || (escaped_device == nullptr) || (steps_device == nullptr) || ((enable_voxel_scoring) && ((voxel_dose_device == nullptr) || (in_fov_dose_device == nullptr))) || ((enable_primary_voxel_fluence) && (primary_voxel_track_length_device == nullptr)) || ((enable_charged_origin_voxel_scoring) && ((charged_origin_voxel_dose_device == nullptr) || (be_isotope_origin_voxel_dose_device == nullptr) || (he_isotope_origin_voxel_dose_device == nullptr))) || ((enable_minibeam_component_voxel_scoring) && (minibeam_component_voxel_dose_device == nullptr)) || ((enable_minibeam_energy_band_roi_scoring) && ((minibeam_energy_band_roi_dose_device == nullptr) || (minibeam_fixed_region_by_x_bin_device == nullptr))) || ((enable_minibeam_primary_roi_scoring) && ((minibeam_primary_roi_dose_device == nullptr) || (minibeam_fixed_region_by_x_bin_device == nullptr) || (minibeam_spatial_audit_device == nullptr)))) {
+    if ((dose_device == nullptr) || (deposited_device == nullptr) || (escaped_device == nullptr) || (steps_device == nullptr) || ((enable_voxel_scoring) && ((voxel_dose_device == nullptr) || (in_fov_dose_device == nullptr)))) {
         throw std::bad_alloc();
     }
 
     queue.memset(dose_device, 0, number_of_bins * sizeof(DepthAtomicT));
     if (enable_voxel_scoring) {
         queue.memset(voxel_dose_device, 0, number_of_voxels * sizeof(DoseAtomicT));
-    }
-    if (enable_primary_voxel_fluence) {
-        queue.memset(primary_voxel_track_length_device, 0,
-                     number_of_voxels * sizeof(DoseAtomicT));
-    }
-    if (enable_charged_origin_voxel_scoring) {
-        queue.memset(charged_origin_voxel_dose_device, 0,
-                     charged_origin_category_count * number_of_voxels *
-                         sizeof(DoseAtomicT));
-        queue.memset(be_isotope_origin_voxel_dose_device, 0,
-                     be_isotope_origin_category_count * number_of_voxels *
-                         sizeof(DoseAtomicT));
-        queue.memset(he_isotope_origin_voxel_dose_device, 0,
-                     he_isotope_origin_category_count * number_of_voxels *
-                         sizeof(DoseAtomicT));
-    }
-    if (enable_minibeam_component_voxel_scoring) {
-        queue.memset(minibeam_component_voxel_dose_device, 0,
-                     minibeam_component_category_count * number_of_voxels *
-                         sizeof(DoseAtomicT));
-    }
-    if (enable_minibeam_energy_band_roi_scoring) {
-        queue.memset(minibeam_energy_band_roi_dose_device, 0,
-                     minibeam_energy_band_roi_value_count *
-                         sizeof(DoseAtomicT));
-    }
-    if (enable_minibeam_primary_roi_scoring) {
-        queue.memset(minibeam_primary_roi_dose_device, 0,
-                     minibeam_primary_roi_value_count *
-                         sizeof(DoseAtomicT));
-        queue.memset(minibeam_spatial_audit_device, 0,
-                     minibeam_spatial_audit_slot_count * sizeof(std::uint64_t));
     }
 
     std::size_t local_size = Pipeline::primary_workgroup(config.enable_ct_grid);
@@ -1660,8 +1420,7 @@
     const bool primary_fermi_eyges =
         BroadBeam || config.multiple_scattering_model == "fermi_eyges";
     const bool fe_gaussian_only=config.fermi_eyges_gaussian_only;
-    constexpr bool fe_diagnostics=false;
-    constexpr std::uint64_t* fe_counts=nullptr;
+
     const auto c12_fermi_eyges_max_segment_mm =
         static_cast<float>(config.fermi_eyges_max_segment_mm);
     if (primary_fermi_eyges) {
@@ -1759,10 +1518,6 @@
         ? static_cast<float>(config.primary_ion().rest_mass_MeV)
         : static_cast<float>(ion_nucleon_rest_mass_MeV);
     const float primary_copper_scattering_mass_MeV = primary_mass_number * primary_fe_mass_per_u;
-    const auto minimum_table_energy = static_cast<float>(stopping_power.energies().front());
-    const auto inverse_table_step =
-        1.0f / static_cast<float>(stopping_power.energies()[1] - stopping_power.energies()[0]);
-
 
     std::cout << "[input-cache] hits=" << inputs.hits-input_hits_before
               << " misses=" << inputs.misses-input_misses_before << "\n";
@@ -1777,8 +1532,6 @@
             enable_voxel_scoring && enable_multiple_scattering && enable_inelastic &&
             use_schneider_primary_xs && !use_material_ct && !use_material_electron &&
             !defer_material_packets && !use_electron_fp32 && !use_independent_charged &&
-            !enable_charged_origin_voxel_scoring && !enable_minibeam_component_voxel_scoring &&
-            !enable_minibeam_energy_band_roi_scoring && !enable_primary_voxel_fluence &&
             primary_atomic_number==1 && primary_mass_number==1 && inverse_mass_number==1.0F &&
             nonion_primary_package_safe;
         std::cout << "[proton-ct-local-electron-specialize] enabled="
@@ -1790,13 +1543,9 @@
             enable_voxel_scoring && enable_multiple_scattering && enable_inelastic &&
             use_schneider_primary_xs && !use_material_ct && !use_material_electron &&
             !defer_material_packets && !use_electron_fp32 && !use_independent_charged &&
-            !enable_charged_origin_voxel_scoring && !enable_minibeam_component_voxel_scoring &&
-            !enable_minibeam_energy_band_roi_scoring && !enable_primary_voxel_fluence &&
             primary_atomic_number==6 && primary_mass_number==12 && inverse_mass_number==1.0F/12.0F;
         broadbeam_ct_secondary_specialize = enable_ct_grid && enable_voxel_scoring &&
-            ct_secondary_exact_faces && ct_skip_homogeneous_face_clamp && !use_unified_water &&
-            !enable_charged_origin_voxel_scoring && !enable_minibeam_component_voxel_scoring &&
-            !enable_minibeam_energy_band_roi_scoring && !enable_primary_voxel_fluence;
+            ct_secondary_exact_faces && ct_skip_homogeneous_face_clamp && !use_unified_water;
         std::cout << "[carbon-ct-local-electron-specialize] primary="
                   << broadbeam_ct_primary_specialize << " secondary="
                   << broadbeam_ct_secondary_specialize << "\n";
@@ -1806,12 +1555,9 @@
         const bool primary_eligible = enable_ct_grid && !use_unified_water &&
             enable_voxel_scoring && enable_multiple_scattering && enable_inelastic && use_schneider_primary_xs &&
             use_material_electron && use_material_ct && defer_material_packets &&
-             !enable_charged_origin_voxel_scoring &&
-            !enable_minibeam_component_voxel_scoring && !enable_minibeam_energy_band_roi_scoring &&
-            use_electron_fp32 && use_independent_charged && !enable_primary_voxel_fluence;
+            use_electron_fp32 && use_independent_charged;
         const bool secondary_eligible = enable_ct_grid && enable_voxel_scoring && ct_secondary_exact_faces &&
-            ct_skip_homogeneous_face_clamp && !use_unified_water && !enable_charged_origin_voxel_scoring &&
-            !enable_minibeam_component_voxel_scoring && !enable_minibeam_energy_band_roi_scoring;
+            ct_skip_homogeneous_face_clamp && !use_unified_water;
         broadbeam_ct_primary_specialize=primary_eligible;
         broadbeam_ct_secondary_specialize=secondary_eligible;
         std::cout<<"[broadbeam-ct-specialize] primary="<<broadbeam_ct_primary_specialize

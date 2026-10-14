@@ -335,25 +335,6 @@ std::string canonicalize_config(const ConfigValues& values,
     return output.str();
 }
 
-std::vector<double> parse_double_list(const std::string& text, const std::string& key) {
-    std::vector<double> values;
-    std::stringstream stream(text);
-    std::string token;
-    while (std::getline(stream, token, ',')) {
-        token = trim(token);
-        if (token.empty()) {
-            continue;
-        }
-        std::size_t parsed = 0;
-        const auto number = std::stod(token, &parsed);
-        if (parsed != token.size()) {
-            throw std::runtime_error("Invalid number in '" + key + "': " + token);
-        }
-        values.push_back(number);
-    }
-    return values;
-}
-
 }  // namespace
 
 const char* run_mode_name(const RunMode mode) noexcept {
@@ -522,8 +503,7 @@ void TransportConfig::validate() const {
        material_electron_group_size<1 || material_electron_group_size>32 ||
        (material_electron_group_size & (material_electron_group_size-1)))
         throw std::invalid_argument("Invalid electron queue budget/chunk/lanes/group size");
-    if(broadbeam_electron_region_diagnostics && !broadbeam_independent_electrons)
-        throw std::invalid_argument("Electron region diagnostics require enabled CT broadbeam tracking");
+
     if(!std::isfinite(broadbeam_electron_low_density_survival) || broadbeam_electron_low_density_survival<=0 ||
        broadbeam_electron_low_density_survival>1 || !std::isfinite(broadbeam_electron_tissue_survival) ||
        broadbeam_electron_tissue_survival<=0 || broadbeam_electron_tissue_survival>1)
@@ -553,7 +533,7 @@ void TransportConfig::validate() const {
         !std::isfinite(broadbeam_electron_halo_mm) || broadbeam_electron_halo_mm<0 || broadbeam_electron_halo_mm>100))
         throw std::invalid_argument("Broadbeam independent electrons require FP32 Gaussian CT research queue and valid density/halo selection");
     const bool independent_projectile=(primary_atomic_number==1&&primary_mass_number==1)||(primary_atomic_number==6&&primary_mass_number==12);
-    if((!material_electron_charged_index_file.empty()) && ((material_electron_birth_file.empty()) || (material_photon_response_index_file.empty()) || (material_electron_joint_pilot_file.empty()) || (run_mode!=RunMode::research) || (!independent_projectile) || ((!enable_minibeam) && (!broadbeam_independent)) || (enable_charged_origin_voxel_scoring) || (!enable_voxel_scoring)))
+    if((!material_electron_charged_index_file.empty()) && ((material_electron_birth_file.empty()) || (material_photon_response_index_file.empty()) || (material_electron_joint_pilot_file.empty()) || (run_mode!=RunMode::research) || (!independent_projectile) || ((!enable_minibeam) && (!broadbeam_independent)) || (!enable_voxel_scoring)))
         throw std::invalid_argument("Independent charged mode requires projectile-matched birth/joint/photon minibeam research queue; without LET/component/short-range scoring");
     if(!material_photon_response_index_file.empty() &&
        (material_electron_birth_file.empty()))
@@ -592,9 +572,6 @@ void TransportConfig::validate() const {
         }
     }
 
-    if (enable_primary_loss_query_audit && run_mode != RunMode::smoke) {
-        throw std::invalid_argument("enable_primary_loss_query_audit requires smoke mode");
-    }
     if (nuclear_model != "geant4" && nuclear_model != "none") {
         throw std::invalid_argument("nuclear_model must be geant4 or none");
     }
@@ -626,7 +603,6 @@ void TransportConfig::validate() const {
         if(enable_minibeam || run_mode!=RunMode::research ||
            multiple_scattering_model!="fermi_eyges" || !enable_multiple_scattering ||
            !urban_mcs_package_file.empty() ||
-
 
            (enable_ct_grid && !enable_ct_material_mcs))
             throw std::invalid_argument("broadbeam_fast requires research unified EM, FE for all charged species, CT material MCS, no beamline transport; only pinned research C12 CT joint electron response is supported");
@@ -687,37 +663,6 @@ void TransportConfig::validate() const {
     if (enable_voxel_scoring) {
         static_cast<void>(number_of_voxels());
     }
-    if (enable_charged_origin_voxel_scoring && !enable_voxel_scoring) {
-        throw std::invalid_argument(
-            "enable_charged_origin_voxel_scoring requires enable_voxel_scoring=true");
-    }
-    if (enable_minibeam_energy_band_roi_scoring &&
-        (!enable_minibeam || !enable_voxel_scoring ||
-         !enable_charged_origin_voxel_scoring ||
-         charged_origin_voxel_mhd_output_prefix.empty())) {
-        throw std::invalid_argument(
-            "enable_minibeam_energy_band_roi_scoring requires minibeam, "
-            "voxel/component scoring and charged_origin_voxel_mhd_output_prefix");
-    }
-    if (enable_minibeam_primary_roi_scoring &&
-        (!enable_minibeam || !enable_voxel_scoring)) {
-        throw std::invalid_argument(
-            "enable_minibeam_primary_roi_scoring requires minibeam and "
-            "enable_voxel_scoring");
-    }
-    if (!charged_origin_voxel_mhd_output_prefix.empty() &&
-        !enable_charged_origin_voxel_scoring) {
-        throw std::invalid_argument(
-            "charged_origin_voxel_mhd_output_prefix requires "
-            "enable_charged_origin_voxel_scoring=true");
-    }
-
-    if (!primary_voxel_fluence_mhd_output_file.empty() &&
-        !enable_voxel_scoring) {
-        throw std::invalid_argument(
-            "primary_voxel_fluence_mhd_output_file requires "
-            "enable_voxel_scoring=true");
-    }
 
     if (enable_flat_source &&
         (flat_source_half_width_x_mm <= 0.0 || flat_source_half_width_y_mm <= 0.0)) {
@@ -758,33 +703,6 @@ void TransportConfig::validate() const {
             emittance_correlation_y < -1.0 || emittance_correlation_y > 1.0) {
             throw std::invalid_argument(
                 "emittance correlations must be in [-1, 1]");
-        }
-    }
-    if ((!minibeam_water_primary_plane_output_file.empty() ||
-         !minibeam_water_primary_plane_depths_mm.empty()) &&
-        !enable_minibeam) {
-        throw std::invalid_argument(
-            "minibeam water-plane diagnostics require minibeam=true");
-    }
-    if (minibeam_water_primary_plane_output_file.empty() !=
-        minibeam_water_primary_plane_depths_mm.empty()) {
-        throw std::invalid_argument(
-            "minibeam_water_primary_plane_output_file and "
-            "minibeam_water_primary_plane_depths_mm must be configured together");
-    }
-    if (minibeam_water_primary_plane_depths_mm.size() > 16) {
-        throw std::invalid_argument(
-            "minibeam water-plane diagnostics support at most 16 depths");
-    }
-    for (std::size_t index = 0;
-         index < minibeam_water_primary_plane_depths_mm.size(); ++index) {
-        const auto depth = minibeam_water_primary_plane_depths_mm[index];
-        if (!(depth > 0.0 && depth < phantom_length_mm) ||
-            (index != 0 &&
-             !(depth > minibeam_water_primary_plane_depths_mm[index - 1]))) {
-            throw std::invalid_argument(
-                "minibeam water-plane depths must be strictly increasing and "
-                "inside the water phantom");
         }
     }
     if (enable_minibeam) {
@@ -1486,8 +1404,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         parse_number(values, "dose_output_scale", config.dose_output_scale);
     config.enable_voxel_scoring =
         parse_bool(values, "enable_voxel_scoring", config.enable_voxel_scoring);
-    if (parse_bool(values,"enable_charged_origin_voxel_scoring",false))
-        throw std::invalid_argument("Additional research scorers are not part of the eight presets");
     config.voxel_bins_x = parse_number(values, "voxel_bins_x", config.voxel_bins_x);
     config.voxel_bins_y = parse_number(values, "voxel_bins_y", config.voxel_bins_y);
     config.voxel_bins_z = parse_number(values, "voxel_bins_z", config.voxel_bins_z);
@@ -1823,23 +1739,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.random_seed = parse_random_seed(seed->second);
     }
     config.primary_stopping_power_file = parse_path(values, "primary_stopping_power_file", config.primary_stopping_power_file);
-
-    config.minibeam_phase_space_at_copper_exit = parse_bool(
-        values, "minibeam_phase_space_at_copper_exit",
-        config.minibeam_phase_space_at_copper_exit);
-    if (config.minibeam_phase_space_at_copper_exit &&
-        (!config.enable_minibeam ||
-         config.minibeam_phase_space_output_file.empty() || config.run_mode == RunMode::production)) {
-        throw std::invalid_argument("Copper-exit phase scoring requires a research/smoke minibeam and a phase output file");
-    }
-    {
-        const auto it = values.find(
-            "minibeam_water_primary_plane_depths_mm");
-        if (it != values.end()) {
-            config.minibeam_water_primary_plane_depths_mm = parse_double_list(
-                it->second, "minibeam_water_primary_plane_depths_mm");
-        }
-    }
 
     // Dose (Gy) scorers. Empty string disables that Gy file (MeV scorers unchanged).
 

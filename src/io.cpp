@@ -424,19 +424,11 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"broadbeam_independent_electrons\": " << (config.broadbeam_independent_electrons ? "true" : "false") << ",\n"
            << "  \"broadbeam_electron_density_threshold\": " << config.broadbeam_electron_density_threshold << ",\n"
            << "  \"broadbeam_electron_halo_mm\": " << config.broadbeam_electron_halo_mm << ",\n"
-           << "  \"broadbeam_electron_region_diagnostics\": " << (config.broadbeam_electron_region_diagnostics?"true":"false") << ",\n"
            << "  \"broadbeam_electron_low_density_survival\": " << config.broadbeam_electron_low_density_survival << ",\n"
            << "  \"broadbeam_electron_tissue_survival\": " << config.broadbeam_electron_tissue_survival << ",\n"
            << "  \"broadbeam_electron_birth_order\": " << (config.broadbeam_electron_birth_order?"true":"false") << ",\n";
     output << "  \"transport_profile\": \"" << config.transport_profile << "\",\n"
            << "  \"fermi_eyges_gaussian_only\": " << (config.fermi_eyges_gaussian_only ? "true" : "false") << ",\n";
-    output << "  \"fe_sampling_diagnostics_enabled\": " << (result.fe_sampling_diagnostics_enabled ? "true" : "false") << ",\n"
-           << "  \"fe_sampling_counts\": [";
-    for (std::size_t i=0;i<result.fe_sampling_counts.size();++i) {
-        if(i) output << ", ";
-        output << result.fe_sampling_counts[i];
-    }
-    output << "],\n";
     if(!config.material_electron_charged_index_file.empty()) {
         const auto& d=result.electron_joint_diagnostics;
         output<<"  \"material_electron_response\": {\"status\": \"unvalidated_main_kernel_integration\", "

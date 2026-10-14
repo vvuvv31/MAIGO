@@ -70,7 +70,6 @@
 #include <typeindex>
 #include <type_traits>
 #include <tuple>
-#include <type_traits>
 #include <vector>
 
 namespace carbon {
@@ -87,18 +86,17 @@ struct PrimaryMediumEntryState {
 };
 static_assert(sizeof(PrimaryMediumEntryState) == 64);
 
-template<class Pipeline, bool ProductionPath = false, int ExactSpecies = -1, bool BroadBeam = false, int JointResponse = 0>
+template<class Pipeline, bool ProductionPath = false, bool BroadBeam = false, int JointResponse = 0>
 class SecondaryTransportKernel;
 
 #include "detail/sycl_dose_atomic.inc"
-#include "detail/sycl_profile.inc"
 #include "detail/sycl_transport_context_impl.inc"
 #include "detail/sycl_transport_context_methods.inc"
 #include "detail/sycl_ion_ledger_device.inc"
 
 namespace {
 
-#include "detail/sycl_minibeam_copper_diagnostic.inc"
+#include "detail/sycl_copper_primary_task.inc"
 
 constexpr std::size_t minibeam_event_counter_count = 170;
 constexpr std::size_t copper_fragment_post_loss_null_slot = 169;
@@ -449,7 +447,7 @@ struct alignas(16) SecondaryResumeStateT {
     // directly to the global device audit at event time and are not carried
     // across continuation launches.
     std::array<double,4> he4_audit{};
-    std::array<std::uint64_t,CARBON_SECONDARY_STEP_PROFILE?60:0> sec_prof{};
+
 };
 static_assert(sizeof(SecondaryResumeStateT<false>) % 16 == 0);
 static_assert(sizeof(SecondaryResumeStateT<true>) % 16 == 0);
@@ -481,23 +479,9 @@ inline void record_unified_em_failure(unsigned* count,UnifiedEmFailureRecord* re
 }
 // The eight diagnostic counters are spread across logical threads so a warp's
 // same-index increments do not serialize on one global address. Counter i lane
-// s lives at global[i*kShards+s]; flush writes shard 0, and shipment merges all
-// shards back into the eight original counters without changing their values.
+// s lives at global[i*kShards+s]; readback sums the shards into eight counters.
 inline constexpr unsigned kUnifiedEmAuditShards = CARBON_EM_AUDIT_SHARDS;
 inline constexpr unsigned kUnifiedEmAuditCounters = 8;
-inline void flush_unified_em_audit(std::uint64_t* global,
-                                  const std::array<std::uint64_t,8>& local) {
-#pragma unroll
-    for(int i=0;i<8;++i) {
-        if(local[i]) {
-            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
-                sycl::memory_scope::device,sycl::access::address_space::global_space>
-                count(global[static_cast<std::size_t>(i)*kUnifiedEmAuditShards]);
-            count.fetch_add(local[i]);
-        }
-    }
-}
-
 #include "detail/sycl_device_math.inc"
 #include "detail/sycl_urban_global.inc"
 
@@ -633,63 +617,6 @@ inline void schneider_float_add_device(float* floats, SchneiderFloatSlot slot, f
                      sycl::access::address_space::global_space>
         ref(floats[static_cast<std::uint32_t>(slot)]);
     ref.fetch_add(value);
-}
-
-inline void score_minibeam_energy_band_roi_device(
-    DoseAtomicT* scores, const int z, const int a,
-    const float kinetic_energy_MeV, const int voxel,
-    const std::size_t number_of_depth_bins, const std::size_t voxel_bins_x,
-    const std::size_t voxel_bins_y, const std::uint8_t* region_by_x_bin,
-    const float deposited_energy_MeV) {
-    if (scores == nullptr || voxel < 0 || a <= 0 ||
-        !(deposited_energy_MeV > 0.0F)) return;
-    const auto species = minibeam_energy_band_species_category(z, a);
-    if (species >= minibeam_energy_band_species_count) return;
-    const auto plane = voxel_bins_x * voxel_bins_y;
-    const auto depth = static_cast<std::size_t>(voxel) / plane;
-    if (depth >= number_of_depth_bins) return;
-    const auto x_bin = static_cast<std::size_t>(voxel) % voxel_bins_x;
-    if (region_by_x_bin == nullptr) return;
-    const auto region = static_cast<std::size_t>(region_by_x_bin[x_bin]);
-    if (region >= minibeam_fixed_region_count) return;
-    const auto energy_per_u = kinetic_energy_MeV / static_cast<float>(a);
-    const std::size_t energy_band = energy_per_u < 50.0F ? 0U :
-        (energy_per_u <= 300.0F ? 1U : 2U);
-    const auto index =
-        (((species * minibeam_energy_band_count + energy_band) *
-           minibeam_fixed_region_count + region) * number_of_depth_bins) + depth;
-    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                     sycl::memory_scope::device,
-                     sycl::access::address_space::global_space>
-        atomic(scores[index]);
-    atomic.fetch_add(static_cast<DoseAtomicT>(deposited_energy_MeV));
-}
-
-inline void score_minibeam_primary_roi_device(
-    DoseAtomicT* scores, const std::size_t kind,
-    const float kinetic_energy_MeV, const int mass_number, const int voxel,
-    const std::size_t number_of_depth_bins, const std::size_t voxel_bins_x,
-    const std::size_t voxel_bins_y, const std::uint8_t* region_by_x_bin,
-    const float value) {
-    if (scores == nullptr || voxel < 0 || kind >= minibeam_primary_roi_kind_count ||
-        !(value > 0.0F)) return;
-    const auto plane = voxel_bins_x * voxel_bins_y;
-    const auto depth = static_cast<std::size_t>(voxel) / plane;
-    if (depth >= number_of_depth_bins) return;
-    const auto x_bin = static_cast<std::size_t>(voxel) % voxel_bins_x;
-    if (region_by_x_bin == nullptr) return;
-    const auto region = static_cast<std::size_t>(region_by_x_bin[x_bin]);
-    if (region >= minibeam_fixed_region_count) return;
-    const std::size_t energy_band = primary_energy_band(kinetic_energy_MeV, mass_number);
-    if (energy_band >= minibeam_energy_band_count) return;
-    const auto index =
-        (((kind * minibeam_energy_band_count + energy_band) *
-           minibeam_fixed_region_count + region) * number_of_depth_bins) + depth;
-    sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                     sycl::memory_scope::device,
-                     sycl::access::address_space::global_space>
-        atomic(scores[index]);
-    atomic.fetch_add(static_cast<DoseAtomicT>(value));
 }
 
 inline void schneider_energy_add_device(std::uint64_t* diag, SchneiderDiagSlot slot,

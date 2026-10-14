@@ -52,7 +52,6 @@ elastic_recoil_stopping_file: data/elastic/schneider/proton/recoil_stopping.bin
 secondary_local_deposit_cutoff_MeV: 0.1
 dose_output_scale: 1.0
 minibeam: false
-enable_charged_origin_voxel_scoring: false
 transport_profile: broadbeam_fast
 primary_atomic_number: 1
 primary_mass_number: 1

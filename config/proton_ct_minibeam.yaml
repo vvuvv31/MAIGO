@@ -84,9 +84,7 @@ minibeam_copper_ion_stopping_power_file: data/stopping/copper/ions_proton.csv
 minibeam_copper_ion_cross_section_file: data/nuclear/copper/ion_cross_sections.csv
 minibeam_air_urban_package_file: data/scattering/urban/air.bin
 minibeam_copper_straggling_model: g4_universal_delta
-minibeam_phase_space_at_copper_exit: false
 minibeam_air_ionization_rate_file: data/ionization/air/proton_rate.csv
-enable_charged_origin_voxel_scoring: false
 minibeam_copper_primary_native_mean_loss: false
 minibeam_primary_specialization: false
 minibeam_primary_pipeline: compact

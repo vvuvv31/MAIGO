@@ -18,98 +18,6 @@
                        [](DoseAtomicT val) { return static_cast<double>(val); });
     }
 
-    std::vector<double> primary_voxel_track_length_host;
-    if (enable_primary_voxel_fluence) {
-        std::vector<DoseAtomicT> device_host(number_of_voxels);
-        queue.copy(primary_voxel_track_length_device, device_host.data(),
-                   number_of_voxels).wait_and_throw();
-        primary_voxel_track_length_host.resize(number_of_voxels);
-        std::transform(device_host.begin(), device_host.end(),
-                       primary_voxel_track_length_host.begin(),
-                       [](DoseAtomicT val) { return static_cast<double>(val); });
-    }
-
-    std::vector<double> charged_origin_voxel_dose_host;
-    std::vector<double> minibeam_component_voxel_dose_host;
-    std::vector<double> minibeam_energy_band_roi_dose_host;
-    std::array<double, 6> he4_hazard_audit_host{};
-    if (he4_hazard_audit_device)
-        queue.copy(he4_hazard_audit_device, he4_hazard_audit_host.data(), 6).wait_and_throw();
-    if (enable_charged_origin_voxel_scoring) {
-        const auto value_count =
-            charged_origin_category_count * number_of_voxels;
-        std::vector<DoseAtomicT> device_host(value_count);
-        queue.copy(charged_origin_voxel_dose_device, device_host.data(),
-                   value_count).wait_and_throw();
-        charged_origin_voxel_dose_host.resize(value_count);
-        std::transform(device_host.begin(), device_host.end(),
-                       charged_origin_voxel_dose_host.begin(),
-                       [](DoseAtomicT val) { return static_cast<double>(val); });
-    }
-    if (enable_minibeam_component_voxel_scoring) {
-        const auto value_count =
-            minibeam_component_category_count * number_of_voxels;
-        std::vector<DoseAtomicT> device_host(value_count);
-        queue.copy(minibeam_component_voxel_dose_device, device_host.data(),
-                   value_count).wait_and_throw();
-        minibeam_component_voxel_dose_host.resize(value_count);
-        std::transform(device_host.begin(), device_host.end(),
-                       minibeam_component_voxel_dose_host.begin(),
-                       [](DoseAtomicT val) { return static_cast<double>(val); });
-    }
-    if (enable_minibeam_energy_band_roi_scoring) {
-        std::vector<DoseAtomicT> device_host(
-            minibeam_energy_band_roi_value_count);
-        queue.copy(minibeam_energy_band_roi_dose_device, device_host.data(),
-                   minibeam_energy_band_roi_value_count).wait_and_throw();
-        minibeam_energy_band_roi_dose_host.resize(
-            minibeam_energy_band_roi_value_count);
-        std::transform(device_host.begin(), device_host.end(),
-                       minibeam_energy_band_roi_dose_host.begin(),
-                       [](DoseAtomicT val) { return static_cast<double>(val); });
-    }
-    std::vector<double> minibeam_primary_roi_dose_host;
-    if (enable_minibeam_primary_roi_scoring) {
-        std::vector<DoseAtomicT> device_host(minibeam_primary_roi_value_count);
-        queue.copy(minibeam_primary_roi_dose_device, device_host.data(),
-                   minibeam_primary_roi_value_count).wait_and_throw();
-        minibeam_primary_roi_dose_host.resize(minibeam_primary_roi_value_count);
-        std::transform(device_host.begin(), device_host.end(),
-                       minibeam_primary_roi_dose_host.begin(),
-                       [](DoseAtomicT val) { return static_cast<double>(val); });
-    }
-    std::array<std::uint64_t, minibeam_spatial_audit_slot_count>
-        minibeam_spatial_audit_host{};
-    if (enable_minibeam_primary_roi_scoring) {
-        queue.copy(minibeam_spatial_audit_device, minibeam_spatial_audit_host.data(),
-                   minibeam_spatial_audit_slot_count).wait_and_throw();
-    }
-
-    std::vector<double> be_isotope_origin_voxel_dose_host;
-    if (enable_charged_origin_voxel_scoring) {
-        const auto value_count =
-            be_isotope_origin_category_count * number_of_voxels;
-        std::vector<DoseAtomicT> device_host(value_count);
-        queue.copy(be_isotope_origin_voxel_dose_device, device_host.data(),
-                   value_count).wait_and_throw();
-        be_isotope_origin_voxel_dose_host.resize(value_count);
-        std::transform(device_host.begin(), device_host.end(),
-                       be_isotope_origin_voxel_dose_host.begin(),
-                       [](DoseAtomicT val) { return static_cast<double>(val); });
-    }
-    std::vector<double> he_isotope_origin_voxel_dose_host;
-    if (enable_charged_origin_voxel_scoring) {
-        const auto value_count =
-            he_isotope_origin_category_count * number_of_voxels;
-        std::vector<DoseAtomicT> device_host(value_count);
-        queue.copy(he_isotope_origin_voxel_dose_device, device_host.data(),
-                   value_count).wait_and_throw();
-        he_isotope_origin_voxel_dose_host.resize(value_count);
-        std::transform(device_host.begin(), device_host.end(),
-                       he_isotope_origin_voxel_dose_host.begin(),
-                       [](DoseAtomicT val) { return static_cast<double>(val); });
-    }
-
     std::vector<double> in_fov_dose_host;
     if (enable_voxel_scoring && in_fov_dose_device != nullptr) {
         std::vector<DepthAtomicT> in_fov_device_host(number_of_bins);
@@ -160,21 +68,7 @@
     std::vector<std::uint64_t> minibeam_fragment_miss_joint_energy_host;
     std::vector<std::uint64_t> minibeam_fragment_miss_joint_depth_host;
     std::vector<std::uint64_t> minibeam_fragment_miss_joint_remaining_host;
-    std::vector<MinibeamPhaseSpaceRecord> minibeam_phase_space_host;
-    std::vector<CopperHistoryDiagnostic> copper_diagnostic_host;
-    std::vector<PrimaryMediumEntryState> copper_capture_entry_host;
-    if(copper_capture_entry_device) {
-        copper_capture_entry_host.resize(number_of_histories);
-        queue.copy(copper_capture_entry_device,copper_capture_entry_host.data(),number_of_histories).wait_and_throw();
-    }
-    if (copper_diagnostic_device) {
-        copper_diagnostic_host.resize(number_of_histories);
-        queue.copy(copper_diagnostic_device,copper_diagnostic_host.data(),number_of_histories).wait_and_throw();
-    }
-    std::vector<MinibeamWaterPrimaryPlaneRecord>
-        minibeam_water_primary_plane_records_host;
-    std::vector<MinibeamFragmentPhaseSpaceRecord>
-        minibeam_fragment_phase_space_host;
+
     if (beamline_removed_device != nullptr) {
         beamline_removed_host.resize(number_of_histories);
         beamline_primary_survivor_host.resize(number_of_histories);
@@ -238,31 +132,7 @@
                        minibeam_fragment_miss_joint_remaining_host.data(),
                        minibeam_fragment_miss_joint_cell_count);
         }
-        if (minibeam_phase_space_device != nullptr) {
-            minibeam_phase_space_host.resize(number_of_histories);
-            queue.copy(minibeam_phase_space_device,
-                       minibeam_phase_space_host.data(), number_of_histories);
-        }
-        if (minibeam_water_primary_plane_records_device != nullptr) {
-            minibeam_water_primary_plane_records_host.resize(
-                number_of_histories * minibeam_water_primary_plane_count);
-            queue.copy(
-                minibeam_water_primary_plane_records_device,
-                minibeam_water_primary_plane_records_host.data(),
-                minibeam_water_primary_plane_records_host.size());
-        }
-        if (minibeam_fragment_phase_space_device != nullptr) {
-            std::uint32_t count = 0;
-            queue.copy(minibeam_fragment_phase_space_count_device, &count, 1)
-                .wait_and_throw();
-            count = std::min<std::uint32_t>(
-                count, static_cast<std::uint32_t>(max_secondaries));
-            minibeam_fragment_phase_space_host.resize(count);
-            if (count != 0) {
-                queue.copy(minibeam_fragment_phase_space_device,
-                           minibeam_fragment_phase_space_host.data(), count);
-            }
-        }
+
     }
         if(uses_urban_package) {
             std::vector<std::uint64_t> counts(2*urban_species_host.size());
@@ -288,81 +158,10 @@
             throw std::runtime_error("Unified EM missing domain or sampling failure; dose rejected");
         }
         mem_tracker.free(unified_failure_count);mem_tracker.free(unified_failure_records);
-        if constexpr(CARBON_SECONDARY_STEP_PROFILE) {
-            std::uint64_t secprof[60]{};queue.copy(sec_step_profile_device,secprof,60).wait_and_throw();
-            std::cout<<"[secondary-step-profile] slot steps short depMeV\n";
-            for(int sec_si=0;sec_si<20;++sec_si)
-                std::cout<<"[secondary-step-profile] "<<sec_si<<" "<<secprof[sec_si]<<" "<<secprof[20+sec_si]<<" "<<(static_cast<double>(secprof[40+sec_si])*1e-6)<<"\n";
-        }
-        if constexpr(CARBON_EM_EMPTY_BUCKET_AUDIT) {
-            std::uint64_t counts[10]{};
-            queue.copy(unified_empty_bucket_audit,counts,10).wait_and_throw();
-            constexpr const char* names[5]={"node","raw0","raw1","raw2","raw3"};
-            for(unsigned kind=0;kind<5;++kind) {
-                const auto total=counts[2*kind];
-                const auto empty=counts[2*kind+1];
-                const double fraction=total?static_cast<double>(empty)/static_cast<double>(total):0.0;
-                std::cout<<"[em-empty-bucket-audit] kind="<<names[kind]
-                         <<" total="<<total<<" empty="<<empty
-                         <<" fraction="<<fraction<<"\n";
-            }
-        }
-        if constexpr(CARBON_EM_INTERVAL_WIDTH_AUDIT) {
-            std::uint64_t widths[15]{};
-            queue.copy(unified_interval_width_audit,widths,15).wait_and_throw();
-            constexpr const char* names[3]={"node","raw0","raw1"};
-            for(unsigned kind=0;kind<3;++kind) {
-                std::uint64_t total=0;
-                for(unsigned w=0;w<5;++w)total+=widths[kind*5+w];
-                std::cout<<"[em-interval-width-audit] kind="<<names[kind]<<" total="<<total;
-                for(unsigned w=0;w<4;++w)
-                    std::cout<<" w"<<w<<"="<<widths[kind*5+w];
-                std::cout<<" w>=4="<<widths[kind*5+4]<<"\n";
-            }
-        }
-        if constexpr(CARBON_EM_SEARCH_KEY_AUDIT) {
-            std::uint32_t observed=0;
-            queue.copy(unified_search_audit_count,&observed,1).wait_and_throw();
-            const auto sampled=std::min(observed,kUnifiedSearchAuditCapacity);
-            std::vector<UnifiedEmSearchAuditRecord> records(sampled);
-            queue.copy(unified_search_audit_records,records.data(),sampled).wait_and_throw();
-            const auto group_key=[](const auto& r){
-                return std::tuple{r.kind,r.launch,r.warp,r.step,r.ordinal};
-            };
-            std::sort(records.begin(),records.end(),[&](const auto& a,const auto& b){
-                return std::tuple{group_key(a),a.key}<std::tuple{group_key(b),b.key};
-            });
-            std::uint64_t groups[5]{},lanes[5]{},unique[5]{},shared4[5]{};
-            for(std::size_t begin=0;begin<records.size();) {
-                std::size_t end=begin+1;
-                while(end<records.size() && group_key(records[end])==group_key(records[begin]))++end;
-                std::uint64_t u=1;
-                for(std::size_t i=begin+1;i<end;++i)if(records[i].key!=records[i-1].key)++u;
-                const auto kind=records[begin].kind;
-                ++groups[kind];lanes[kind]+=end-begin;unique[kind]+=u;
-                if(u<=4)++shared4[kind];
-                begin=end;
-            }
-            constexpr const char* names[5]={"node","raw0","raw1","raw2","raw3"};
-            std::cout<<"[em-search-key-audit] observed="<<observed
-                     <<" sampled="<<sampled<<"\n";
-            for(unsigned kind=0;kind<5;++kind) {
-                std::cout<<"[em-search-key-audit] kind="<<names[kind]
-                         <<" groups="<<groups[kind]<<" lanes="<<lanes[kind]
-                         <<" unique="<<unique[kind]
-                         <<" mean_unique="<<(groups[kind]?double(unique[kind])/groups[kind]:0.0)
-                         <<" groups_unique_le4="<<shared4[kind]<<"\n";
-            }
-        }
-        mem_tracker.free(delta_mean_device);mem_tracker.free(unified_energy_index);mem_tracker.free(unified_sections);mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
+
+        mem_tracker.free(delta_mean_device);mem_tracker.free(unified_energy_index);mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
         mem_tracker.free(unified_nodes);mem_tracker.free(unified_segments);mem_tracker.free(unified_audit);
-        if constexpr(CARBON_EM_EMPTY_BUCKET_AUDIT) mem_tracker.free(unified_empty_bucket_audit);
-        if constexpr(CARBON_EM_INTERVAL_WIDTH_AUDIT) mem_tracker.free(unified_interval_width_audit);
-        if constexpr(CARBON_EM_SEARCH_KEY_AUDIT) {
-            mem_tracker.free(unified_search_audit_records);
-            mem_tracker.free(unified_search_audit_count);
-        }
-        if constexpr(CARBON_SECONDARY_STEP_PROFILE) mem_tracker.free(sec_step_profile_device);
+
     }
     std::uint64_t schneider_inelastic_host = 0;
     if (schneider_inelastic_device != nullptr) {
@@ -483,16 +282,7 @@
     free_device(primary_terminal_counts_device);
     free_device(in_fov_dose_device);
     free_device(voxel_dose_device);
-    free_device(primary_voxel_track_length_device);
-    free_device(charged_origin_voxel_dose_device);
-    free_device(minibeam_component_voxel_dose_device);
-    free_device(minibeam_energy_band_roi_dose_device);
-    free_device(minibeam_primary_roi_dose_device);
-    free_device(minibeam_spatial_audit_device);
-    free_device(minibeam_fixed_region_by_x_bin_device);
-    free_device(be_isotope_origin_voxel_dose_device);
-    free_device(he4_hazard_audit_device);
-    free_device(he_isotope_origin_voxel_dose_device);
+
     free_device(deposited_device);
     free_device(secondary_queue_device);
     free_device(secondary_count_device);
@@ -501,14 +291,7 @@
     free_device(untracked_nuclear_device);
     free_device(other_terminal_energy_device);
     free_device(cutoff_stopped_energy_device);
-    free_device(copper_diagnostic_device);
-    free_device(copper_capture_entry_device);
-    free_device(copper_history_mask_device);
-    free_device(minibeam_phase_space_device);
-    free_device(minibeam_water_primary_plane_depths_device);
-    free_device(minibeam_water_primary_plane_records_device);
-    free_device(minibeam_fragment_phase_space_device);
-    free_device(minibeam_fragment_phase_space_count_device);
+
     free_device(minibeam_copper_cascade_queue_device);
     free_device(minibeam_copper_cascade_count_device);
     free_device(beamline_removed_device);
@@ -551,7 +334,6 @@
     }
     free_device(ct_xs_device);
     free_device(broadbeam_electron_mask);
-    free_device(broadbeam_birth_regions);free_device(broadbeam_region_work);
     free_device(schneider_inelastic_device);
     free_device(schneider_diag_device);
     free_device(schneider_float_device);
@@ -572,11 +354,7 @@
         result.ct_secondary_first_order_restricted_enabled=broadbeam_ct_secondary_specialize;
     }
     if constexpr(BroadBeam) result.ct_broadbeam_step_cap_enabled=enable_ct_grid;
-    result.fe_sampling_diagnostics_enabled=fe_diagnostics;
-    if (fe_counts) {
-        queue.copy(fe_counts,result.fe_sampling_counts.data(),8).wait_and_throw();
-        free_device(fe_counts);
-    }
+
     result.primary_elastic_interactions=elastic_counts_host[0];
     result.secondary_elastic_interactions=elastic_counts_host[1];
     result.elastic_post_em_null_collisions=elastic_counts_host[9]+elastic_counts_host[10];
@@ -630,92 +408,8 @@
     result.primary_deposited_energy_MeV = dose_host;
     result.deposited_energy_MeV = std::move(dose_host);
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
-    result.primary_voxel_track_length_mm =
-        std::move(primary_voxel_track_length_host);
-    result.charged_origin_voxel_deposited_energy_MeV =
-        std::move(charged_origin_voxel_dose_host);
-    result.minibeam_component_voxel_deposited_energy_MeV =
-        std::move(minibeam_component_voxel_dose_host);
-    result.minibeam_energy_band_roi_deposited_energy_MeV =
-        std::move(minibeam_energy_band_roi_dose_host);
-    result.minibeam_primary_roi_values =
-        std::move(minibeam_primary_roi_dose_host);
-    result.minibeam_spatial_audit_counts = minibeam_spatial_audit_host;
-    result.be_isotope_origin_voxel_deposited_energy_MeV =
-        std::move(be_isotope_origin_voxel_dose_host);
-    result.he_isotope_origin_voxel_deposited_energy_MeV =
-        std::move(he_isotope_origin_voxel_dose_host);
-    result.helium4_hazard_audit = he4_hazard_audit_host;
+
     result.in_fov_deposited_energy_MeV = std::move(in_fov_dose_host);
-    if (enable_fragment_birth_spectrum) {
-        constexpr std::size_t categories = light_isotope_category_count;
-        constexpr std::size_t generations = birth_generation_bin_count;
-        result.birth_counts_by_generation.assign(categories * generations, 0);
-        result.birth_ke_sum_MeV_by_generation.assign(categories * generations, 0.0);
-        result.birth_mevu_hist.assign(birth_hist_plane_size(birth_mevu_bin_count), 0);
-        result.birth_depth_hist.assign(birth_hist_plane_size(number_of_bins), 0);
-        result.birth_cos_hist.assign(birth_hist_plane_size(birth_cos_bin_count), 0);
-        result.birth_parent_mevu_hist.assign(
-            birth_hist_plane_size(birth_parent_mevu_bin_count), 0);
-        result.birth_parent_z_hist.assign(
-            birth_hist_plane_size(birth_parent_z_bin_count), 0);
-        result.birth_parent_product_mevu_hist.assign(birth_joint_plane_size(), 0);
-
-        const auto parent_mevu_bin = birth_parent_mevu_bin(
-            config.initial_total_energy_MeV(), config.primary_mass_number);
-        const auto parent_z_bin = birth_parent_z_bin(config.primary_atomic_number);
-        for (std::size_t birth_index = 0;
-             birth_index < birth_secondaries_host.size(); ++birth_index) {
-            const auto& fragment = birth_secondaries_host[birth_index];
-            if (fragment.z == 2 && (fragment.a == 3 || fragment.a == 4 || fragment.a == 6)) {
-                result.helium_birth_records.push_back({
-                    fragment.parent_history, static_cast<unsigned>(fragment.generation),
-                    static_cast<unsigned>(fragment.a), fragment.energy_MeV,
-                    fragment.pos_x_mm, fragment.pos_y_mm, fragment.pos_z_mm,
-                    fragment.dir_x, fragment.dir_y, fragment.dir_z, fragment.weight});
-            }
-            if (fragment.z == 6 && fragment.a == 12) {
-                result.c12_birth_records.push_back({
-                    birth_index, fragment.parent_history, fragment.rng_stream,
-                    static_cast<unsigned>(fragment.generation),
-                    static_cast<unsigned>(fragment.birth_region),
-                    fragment.energy_MeV, fragment.pos_x_mm, fragment.pos_y_mm,
-                    fragment.pos_z_mm, fragment.dir_x, fragment.dir_y,
-                    fragment.dir_z, fragment.weight});
-            }
-            const auto generation = birth_generation_bin(
-                static_cast<std::uint8_t>(fragment.generation));
-            const auto category =
-                light_isotope_category(fragment.z, fragment.a);
-            if (category >= categories || fragment.a <= 0) {
-                continue;
-            }
-            const auto summary_index = category * generations + generation;
-            const auto mevu_bin =
-                birth_mevu_bin(fragment.energy_MeV, fragment.a);
-            const auto depth_bin = std::min(
-                number_of_bins - 1,
-                static_cast<std::size_t>(std::max(
-                    0.0F, fragment.pos_z_mm / depth_bin_width_mm)));
-            const auto cos_bin = birth_cos_bin(fragment.dir_z);
-            ++result.birth_counts_by_generation[summary_index];
-            result.birth_ke_sum_MeV_by_generation[summary_index] +=
-                fragment.energy_MeV;
-            ++result.birth_mevu_hist[birth_hist_index(
-                category, generation, mevu_bin, birth_mevu_bin_count)];
-            ++result.birth_depth_hist[birth_hist_index(
-                category, generation, depth_bin, number_of_bins)];
-            ++result.birth_cos_hist[birth_hist_index(
-                category, generation, cos_bin, birth_cos_bin_count)];
-            ++result.birth_parent_mevu_hist[birth_hist_index(
-                category, generation, parent_mevu_bin, birth_parent_mevu_bin_count)];
-            ++result.birth_parent_z_hist[birth_hist_index(
-                category, generation, parent_z_bin, birth_parent_z_bin_count)];
-
-            ++result.birth_parent_product_mevu_hist[birth_joint_index(
-                category, generation, parent_mevu_bin, mevu_bin)];
-        }
-    }
 
     result.initial_energy_MeV =
         std::accumulate(sampled_incident_host.begin(), sampled_incident_host.end(), 0.0);
@@ -899,31 +593,7 @@
                       .copper_touched_primary_energy_histogram[bin];
             }
         }
-        if (!minibeam_phase_space_host.empty()) {
-            result.minibeam_phase_space_records =
-                std::move(minibeam_phase_space_host);
-            for (const auto& record : result.minibeam_phase_space_records) {
-                if (!record.valid) continue;
-                result.minibeam.x_sum_mm += record.x_mm;
-                result.minibeam.x_squared_sum_mm2 +=
-                    static_cast<double>(record.x_mm) * record.x_mm;
-                result.minibeam.y_sum_mm += record.y_mm;
-                result.minibeam.y_squared_sum_mm2 +=
-                    static_cast<double>(record.y_mm) * record.y_mm;
-                result.minibeam.direction_x_sum += record.direction_x;
-                result.minibeam.direction_x_squared_sum +=
-                    static_cast<double>(record.direction_x) *
-                    record.direction_x;
-                result.minibeam.direction_y_sum += record.direction_y;
-                result.minibeam.direction_y_squared_sum +=
-                    static_cast<double>(record.direction_y) *
-                    record.direction_y;
-            }
-        }
-        result.minibeam_water_primary_plane_records =
-            std::move(minibeam_water_primary_plane_records_host);
-        result.minibeam_fragment_phase_space_records =
-            std::move(minibeam_fragment_phase_space_host);
+
     }
     result.secondary_queue_overflow = overflow_count_host;
     result.secondary_queue_overflow_energy_MeV = static_cast<double>(overflow_energy_host);
@@ -1051,23 +721,6 @@
         schneider_inelastic_host;
     result.total_steps = std::accumulate(steps_host.begin(), steps_host.end(), std::uint64_t{0});
 
-    if (!copper_diagnostic_path.empty())
-        write_copper_history_diagnostic(copper_diagnostic_path,copper_diagnostic_host,
-            beamline_primary_survivor_host,deposited_host,steps_host,copper_history_mask_host);
-    if(!copper_capture_path.empty()) {
-        const std::filesystem::path directory(copper_capture_path);
-        std::filesystem::create_directories(directory);
-        write_copper_capture_records(directory/"input.bin",copper_diagnostic_host);
-        write_copper_capture_records(directory/"water_primary.bin",copper_capture_entry_host);
-        write_copper_capture_records(directory/"removed.bin",beamline_removed_host);
-        write_copper_capture_records(directory/"air_loss.bin",beamline_air_loss_host);
-        write_copper_capture_records(directory/"water_charged.bin",copper_capture_charged_host);
-        std::cout << "[copper-response-capture] source_histories=" << number_of_histories
-                  << " charged_at_water=" << copper_capture_charged_host.size()
-                  << " entry_bytes=" << sizeof(PrimaryMediumEntryState)
-                  << " charged_bytes=" << sizeof(SecondaryParticle)
-                  << '\n';
-    }
     result.elapsed_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     result.primary_kernel_seconds = primary_kernel_seconds;

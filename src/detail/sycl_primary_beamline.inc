@@ -42,8 +42,7 @@
                 // Offline history-cohort attribution. Inactive source slots have
                 // zero incident energy, retain original history/RNG identity, and
                 // generate no descendants. This is not a production pruning mode.
-                if (copper_history_mask_device && !copper_history_mask_device[global_history])
-                    energy_MeV = 0.0F;
+
                 const auto sampled_initial_energy_MeVu = energy_MeV * inverse_mass_number;
                 // Store the energy actually transported after source sampling/cutoff.
                 // This does not consume RNG or change the source distribution.
@@ -228,60 +227,9 @@
                         minibeam_slit_width, minibeam_slit_pitch,
                         0.5F * minibeam_slit_length,
                         minibeam_slit_thickness, minibeam_slit_offset);
-                auto minibeam_primary_elastic = false;
-                auto minibeam_source_slit = 0;
 
-                // Versioned touch state (history scope): flushed to the
-                // phase-space record after transport. ever_in_copper and the Cu
-                // true-path accumulator below are the actual-touch observables.
+                // Track actual copper contact for the beamline energy ledger.
                 auto beamline_ever_in_copper_hist = false;
-                auto beamline_cu_true_path_hist_mm = 0.0F;
-                // urban_v2 step diagnostics (research-only aggregates).
-                std::uint32_t beamline_cu_steps_hist = 0;
-                std::uint32_t beamline_disp_below_hist = 0;
-                std::uint32_t beamline_disp_accept_hist = 0;
-                std::uint32_t beamline_disp_reduce_hist = 0;
-                std::uint32_t beamline_disp_cancel_hist = 0;
-                std::uint32_t beamline_cth_one_hist = 0;
-                std::uint32_t beamline_limit_user_hist = 0;
-                std::uint32_t beamline_limit_msc_hist = 0;
-                std::uint32_t beamline_limit_geom_hist = 0;
-                std::uint32_t beamline_limit_range_hist = 0;
-                float beamline_g_sum_hist_mm = 0.0F;
-                float beamline_t_sum_hist_mm = 0.0F;
-                float beamline_delta_sum_hist_mm = 0.0F;
-                float beamline_raw2_sum_hist_mm2 = 0.0F;
-                float beamline_acc2_sum_hist_mm2 = 0.0F;
-                CopperHistoryDiagnostic copper_history_diag{};
-                if (copper_diagnostic_device) {
-                    copper_history_diag.entry_x=position_x_mm;
-                    copper_history_diag.entry_y=position_y_mm;
-                    copper_history_diag.entry_z=position_z_mm;
-                    copper_history_diag.entry_energy=energy_MeV;
-                    copper_history_diag.entry_dx=direction_x;
-                    copper_history_diag.entry_dy=direction_y;
-                    copper_history_diag.entry_dz=direction_z;
-                    const auto u=minibeam_cos*position_x_mm+minibeam_sin*position_y_mm;
-                    float distance=1.0e30F;
-                    for (int slit=-minibeam_slit_count/2;slit<=minibeam_slit_count/2;++slit)
-                        distance=sycl::fmin(distance,sycl::fabs(u-minibeam_slit_offset-
-                            slit*minibeam_slit_pitch)-.5F*minibeam_slit_width);
-                    copper_history_diag.wall_distance=distance;
-                    copper_history_diag.cohort=copper_diagnostic_cohort(distance);
-                }
-                if (enable_minibeam && direction_z > 1.0e-8F) {
-                    const auto slit_entrance_distance =
-                        (minibeam_block_entrance_z - position_z_mm) /
-                        direction_z;
-                    const auto slit_entrance_x =
-                        position_x_mm + slit_entrance_distance * direction_x;
-                    const auto slit_entrance_y =
-                        position_y_mm + slit_entrance_distance * direction_y;
-                    const auto slit_u = minibeam_cos * slit_entrance_x +
-                        minibeam_sin * slit_entrance_y - minibeam_slit_offset;
-                    minibeam_source_slit = nearest_minibeam_slit(
-                        slit_u, minibeam_slit_pitch);
-                }
 
                 if (minibeam_copper_transport && (minibeam_hits_copper || minibeam_air_urban) &&
                     direction_z > 1.0e-8F) {
@@ -325,7 +273,7 @@
                            direction_z > 1.0e-8F &&
                            position_z_mm < block_exit_z - 1.0e-6F &&
                            beamline_step < maximum_beamline_steps) {
-                        if (copper_diagnostic_device) ++copper_history_diag.loop_iterations;
+
                         // Limit the transported path, not only its axial
                         // projection. This keeps the Poisson tail truncation
                         // and every material interaction bounded for oblique
@@ -390,7 +338,7 @@
                             continue;
                         }
                         if (minibeam_air_urban) { air_urban_boundary=true; beamline_ever_in_copper_hist=true; }
-                        if (copper_diagnostic_device) ++copper_history_diag.copper_proposals;
+
                         const auto energy_u = energy_MeV * inverse_mass_number;
                         const auto stopping = minibeam_linear_table(
                             minibeam_copper_sp_energies_device,
@@ -639,47 +587,7 @@
                         }
                         if (in_copper) {
                             beamline_ever_in_copper_hist = true;
-                            beamline_cu_true_path_hist_mm += true_loss_path_mm;
-                            {
-                                ++beamline_cu_steps_hist;
-                                const auto& sc = correlated_scattering;
-                                beamline_g_sum_hist_mm +=
-                                    sc.proposal_valid ? sc.final_geom_path_mm
-                                                      : transport_path;
-                                beamline_t_sum_hist_mm +=
-                                    sc.proposal_valid ? sc.final_true_path_mm
-                                                      : transport_path;
-                                beamline_delta_sum_hist_mm +=
-                                    sc.proposal_valid ? sc.stable_delta_mm
-                                                      : 0.0F;
-                                beamline_raw2_sum_hist_mm2 +=
-                                    sc.raw_displacement_r_mm *
-                                    sc.raw_displacement_r_mm;
-                                beamline_acc2_sum_hist_mm2 +=
-                                    sc.displacement_mm.x *
-                                        sc.displacement_mm.x +
-                                    sc.displacement_mm.y *
-                                        sc.displacement_mm.y +
-                                    sc.displacement_mm.z *
-                                        sc.displacement_mm.z;
-                                switch (sc.displacement_branch) {
-                                    case 1: ++beamline_disp_below_hist; break;
-                                    case 2: ++beamline_disp_accept_hist; break;
-                                    case 3: ++beamline_disp_reduce_hist; break;
-                                    case 4: ++beamline_disp_cancel_hist; break;
-                                    default: break;
-                                }
-                                if (sc.cth_rounded_to_one) {
-                                    ++beamline_cth_one_hist;
-                                }
-                                switch (sc.limit_reason) {
-                                    case 1: ++beamline_limit_user_hist; break;
-                                    case 2: ++beamline_limit_msc_hist; break;
-                                    case 3: ++beamline_limit_geom_hist; break;
-                                    case 4: ++beamline_limit_range_hist; break;
-                                    default: break;
-                                }
-                            }
+
                         }
                         const auto collision_energy_u = energy_MeV * inverse_mass_number;
                         const auto elastic_index = minibeam_elastic_nearest(
@@ -707,8 +615,7 @@
                                 spot_seed, rng_history, beamline_step, 61) *
                                 total_nuclear_rate;
                             if (choose < elastic_rate) {
-                                if (copper_diagnostic_device) ++copper_history_diag.copper_elastic;
-                                minibeam_primary_elastic = true;
+
                                 const auto sample_index = minibeam_elastic_local_sample(
                                     minibeam_copper_elastic_device,
                                     minibeam_copper_elastic_count, collision_energy_u,
@@ -728,7 +635,7 @@
                                 direction_y = outcome.proj_dir_y;
                                 direction_z = outcome.proj_dir_z;
                             } else {
-                                if (copper_diagnostic_device) ++copper_history_diag.copper_inelastic;
+
                                 sycl::atomic_ref<
                                     std::uint64_t, sycl::memory_order::relaxed,
                                     sycl::memory_scope::device,
@@ -808,59 +715,7 @@
                         minibeam_air_urban && !beamline_ever_in_copper_hist ? 0.0F :
                         sycl::fmax(0.0F, removed_energy);
                 }
-                if (copper_diagnostic_device) {
-                    copper_history_diag.terminal_x=position_x_mm;
-                    copper_history_diag.terminal_y=position_y_mm;
-                    copper_history_diag.terminal_z=position_z_mm;
-                    copper_history_diag.terminal_energy=energy_MeV;
-                    copper_history_diag.outcome=copper_history_diag.copper_inelastic ? 2U :
-                        energy_MeV<=energy_cutoff_MeV ? 1U : direction_z<=1.0e-8F ? 3U :
-                        copper_history_diag.loop_iterations>=100000 ? 4U :
-                        position_z_mm>=minibeam_block_exit_z-1.0e-6F ? 5U : 6U;
-                    copper_diagnostic_device[global_history]=copper_history_diag;
-                }
-                // Snapshot only: no RNG draws or transport-state changes.
-                auto record_primary_phase = [&]() {
-                    MinibeamPhaseSpaceRecord record{};
-                    record.history = global_history;
-                    record.slit = minibeam_source_slit;
-                    record.copper_elastic = minibeam_primary_elastic ? 1U : 0U;
-                    record.valid = 1U;
-                    // Record the initial ray and actual copper traversal separately.
-                    record.initial_ray_hits_copper =
-                        minibeam_hits_copper ? 1U : 0U;
-                    record.ever_in_copper =
-                        beamline_ever_in_copper_hist ? 1U : 0U;
-                    record.cumulative_cu_true_path_mm =
-                        beamline_cu_true_path_hist_mm;
-                    record.cu_steps = beamline_cu_steps_hist;
-                    record.disp_below_min = beamline_disp_below_hist;
-                    record.disp_accept = beamline_disp_accept_hist;
-                    record.disp_reduce = beamline_disp_reduce_hist;
-                    record.disp_cancel = beamline_disp_cancel_hist;
-                    record.cth_eq_one = beamline_cth_one_hist;
-                    record.cu_g_sum_mm = beamline_g_sum_hist_mm;
-                    record.cu_t_sum_mm = beamline_t_sum_hist_mm;
-                    record.cu_delta_sum_mm = beamline_delta_sum_hist_mm;
-                    record.cu_raw_disp_sum2_mm2 = beamline_raw2_sum_hist_mm2;
-                    record.cu_acc_disp_sum2_mm2 = beamline_acc2_sum_hist_mm2;
-                    record.limit_user = beamline_limit_user_hist;
-                    record.limit_msc = beamline_limit_msc_hist;
-                    record.limit_geom = beamline_limit_geom_hist;
-                    record.limit_range = beamline_limit_range_hist;
-                    record.kinetic_energy_MeV = energy_MeV;
-                    record.x_mm = position_x_mm;
-                    record.y_mm = position_y_mm;
-                    record.direction_x = direction_x;
-                    record.direction_y = direction_y;
-                    record.direction_z = direction_z;
-                    minibeam_phase_space_device[global_history] = record;
-                };
-                if (phase_at_copper_exit && minibeam_phase_space_device != nullptr &&
-                    energy_MeV > energy_cutoff_MeV && direction_z > 1.0e-8F &&
-                    sycl::fabs(position_z_mm-minibeam_block_exit_z) < 1.0e-3F) {
-                    record_primary_phase();
-                }
+
                 if (minibeam_air_urban && energy_MeV>energy_cutoff_MeV) {
                     if (!advance_air_to_plane(0.0F)) energy_MeV=0.0F;
                 }
@@ -917,12 +772,6 @@
                     }
                 }
 
-                if (!phase_at_copper_exit && minibeam_phase_space_device != nullptr &&
-                    energy_MeV > energy_cutoff_MeV &&
-                    position_z_mm >= 0.0F && position_z_mm < phantom_length_mm) {
-                    record_primary_phase();
-                }
-
                 entry = {rng_history, spot_seed, global_history, spot_initial_energy_MeV, energy_MeV, sampled_initial_energy_MeVu, position_x_mm, position_y_mm, position_z_mm, direction_x, direction_y, direction_z};
-                if(copper_capture_entry_device)copper_capture_entry_device[global_history]=entry;
+
                 }

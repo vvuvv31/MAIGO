@@ -52,7 +52,6 @@ elastic_recoil_stopping_file: /mnt/sdb/wuwei/MAIGO_clean/data/proton_therapy_202
 secondary_local_deposit_cutoff_MeV: 0.1
 dose_output_scale: 1.0
 minibeam: false
-enable_charged_origin_voxel_scoring: false
 enable_neutron_transport: false
 transport_profile: broadbeam_fast
 primary_atomic_number: 1

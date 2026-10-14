@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <array>
 namespace carbon {
-inline constexpr std::array<std::string_view,159> preset_keys{
+inline constexpr std::array<std::string_view,157> preset_keys{
     "LET",
     "all_ion_elastic_file",
     "beam_energy_spread",
@@ -39,7 +39,6 @@ inline constexpr std::array<std::string_view,159> preset_keys{
     "emittance_sigma_x_prime",
     "emittance_sigma_y_mm",
     "emittance_sigma_y_prime",
-    "enable_charged_origin_voxel_scoring",
     "enable_ct_grid",
     "enable_ct_material_mcs",
     "enable_emittance_source",
@@ -104,7 +103,6 @@ inline constexpr std::array<std::string_view,159> preset_keys{
     "minibeam_copper_radiation_length_g_per_cm2",
     "minibeam_copper_stopping_power_file",
     "minibeam_copper_straggling_scale",
-    "minibeam_phase_space_at_copper_exit",
     "minibeam_primary_pipeline",
     "minibeam_primary_specialization",
     "minibeam_radius_mm",

@@ -123,17 +123,12 @@
             const auto ct_runtime_enable_inelastic = enable_inelastic;
             const auto ct_runtime_use_schneider_primary_xs = use_schneider_primary_xs;
             const auto ct_runtime_use_material_electron = use_material_electron;
-            const auto ct_runtime_use_material_ct = use_material_ct;
             const auto ct_runtime_defer_material_packets = defer_material_packets;
             const auto ct_runtime_primary_atomic_number = primary_atomic_number;
             const auto ct_runtime_primary_mass_number = primary_mass_number;
             const auto ct_runtime_inverse_mass_number = inverse_mass_number;
-            const auto ct_runtime_enable_charged_origin_voxel_scoring = enable_charged_origin_voxel_scoring;
-            const auto ct_runtime_enable_minibeam_component_voxel_scoring = enable_minibeam_component_voxel_scoring;
-            const auto ct_runtime_enable_minibeam_energy_band_roi_scoring = enable_minibeam_energy_band_roi_scoring;
-            const auto ct_runtime_use_electron_fp32 = use_electron_fp32;
-            const auto ct_runtime_use_independent_charged = use_independent_charged;
-            const auto ct_runtime_enable_primary_voxel_fluence = enable_primary_voxel_fluence;
+
+
             return queue.parallel_for<PrimaryTransportKernel<
                 Pipeline, kUniformWaterPrimaryPath, kKernelStage, BroadBeam, JointResponse>>(
             sycl::nd_range<1>{sycl::range<1>{chunk_global}, sycl::range<1>{local_size}},
@@ -148,18 +143,13 @@
                 const auto enable_inelastic = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_inelastic;
                 const auto use_schneider_primary_xs = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_schneider_primary_xs;
                 const auto use_material_electron = kLocalElectronCtPath ? false : (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_material_electron;
-                const auto use_material_ct = kLocalElectronCtPath ? false : (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_material_ct;
                 const auto defer_material_packets = kLocalElectronCtPath ? false : (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_defer_material_packets;
                 const auto primary_atomic_number = kCtQueuedPrimaryPath ? 1 : (kFoldZ ? kFoldZ : ct_runtime_primary_atomic_number);
                 const auto primary_mass_number = kCtQueuedPrimaryPath ? 1 : (kFoldA ? kFoldA : ct_runtime_primary_mass_number);
                 const auto inverse_mass_number = kCtQueuedPrimaryPath ? 1.0F : (kFoldA ? 1.0F / static_cast<float>(kFoldA) : ct_runtime_inverse_mass_number);
                 const bool enable_minibeam = BroadBeam ? false : primary_minibeam_enabled;
-                const auto enable_charged_origin_voxel_scoring = kBroadBeamCtPath ? false : ct_runtime_enable_charged_origin_voxel_scoring;
-                const auto enable_minibeam_component_voxel_scoring = kBroadBeamCtPath ? false : ct_runtime_enable_minibeam_component_voxel_scoring;
-                const auto enable_minibeam_energy_band_roi_scoring = kBroadBeamCtPath ? false : ct_runtime_enable_minibeam_energy_band_roi_scoring;
-                const auto use_electron_fp32 = kLocalElectronCtPath ? false : kBroadBeamCtPath ? true : ct_runtime_use_electron_fp32;
-                const auto use_independent_charged = kLocalElectronCtPath ? false : kBroadBeamCtPath ? true : ct_runtime_use_independent_charged;
-                const auto enable_primary_voxel_fluence = kBroadBeamCtPath ? false : ct_runtime_enable_primary_voxel_fluence;
+
+
                 const auto lane = item.get_global_linear_id();
                 if (lane >= chunk_count) {
                     return;
@@ -189,7 +179,6 @@
                 const auto spot_seed = entry.spot_seed;
                 const auto spot_initial_energy_MeV = entry.spot_initial_energy_MeV;
                 auto energy_MeV = entry.energy_MeV;
-                const auto sampled_initial_energy_MeVu = entry.sampled_initial_energy_MeVu;
                 auto position_x_mm = entry.position_x_mm;
                 auto position_y_mm = entry.position_y_mm;
                 auto position_z_mm = entry.position_z_mm;
@@ -236,8 +225,6 @@
                 int pending_primary_bin = 0;
                 double pending_primary_voxel_MeV = 0.0;
                 std::size_t pending_primary_voxel = 0;
-                auto last_primary_stopping_power_MeV_per_mm = 0.0F;
-                auto last_primary_density_g_per_cm3 = 0.0F;
 
                 float nuclear_tau_remaining = 0.0F;
                 HadronicRateCache primary_hadronic_cache;
@@ -247,7 +234,7 @@
                 bool unified_primary_escaped_ct = false;
                 UnifiedEmClock unified_primary_clock;
                 UnifiedEmState unified_primary_state;
-                std::array<std::uint64_t,8> unified_primary_audit{};
+
                 std::uint64_t unified_primary_counter=0;
                 const int unified_primary_species=unified_device.species_index(primary_atomic_number,primary_mass_number);
 
@@ -256,12 +243,6 @@
 
                 const std::uint32_t max_primary_steps = maximum_primary_steps;
                 while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
-                    // The rate/target hazard is evaluated from the energy at
-                    // the beginning of this step.  The replay event is
-                    // queried after the continuous EM loss below, so retain
-                    // both values for the compact replay ledger.
-                    const auto primary_rate_query_energy_MeV =
-                        sycl::fmax(0.0F, energy_MeV);
                     const auto escaped_z =
                         position_z_mm < 0.0F || position_z_mm >= phantom_length_mm;
                     if (escaped_z) break;
@@ -271,8 +252,6 @@
                         water_urban_escaped_geometry=true;break;
                     }
 
-                    const auto absolute_direction_x = sycl::fabs(direction_x);
-                    const auto absolute_direction_y = sycl::fabs(direction_y);
                     const auto absolute_direction_z = sycl::fabs(direction_z);
 
                     auto bin = direction_z < 0.0F
@@ -319,13 +298,8 @@
                                              static_cast<std::size_t>(voxel_y) * voxel_bins_x +
                                              static_cast<std::size_t>(voxel_x);
 
-                    const auto energy_MeVu = energy_MeV * inverse_mass_number;
-                    auto floating_index = (energy_MeVu - minimum_table_energy) * inverse_table_step;
-                    auto index = static_cast<int>(sycl::floor(floating_index));
-                    index = sycl::max(0, sycl::min(index, static_cast<int>(table_size) - 2));
-                    const auto fraction =
-                        sycl::clamp(floating_index - static_cast<float>(index), 0.0F, 1.0F);
 
+                    const auto energy_MeVu = energy_MeV * inverse_mass_number;
                     auto local_density_g_per_cm3 = water_density_g_per_cm3;
                     std::uint8_t ct_material = 2;
                     auto in_ct = false;
@@ -358,7 +332,6 @@
                         break;
                     }
 
-                    float stopping_power_MeV_per_mm = 0.0F;
                     float step_mm = 0.0F;
                     UnifiedEmStep unified_primary_pre;
                     UnifiedEmPoint unified_primary_point;
@@ -366,8 +339,7 @@
                     auto unified_uniform=[&](){return (rng::random_u32(spot_seed,rng_history,unified_primary_counter++,120)>>8)*0x1p-24f;};
                     auto unified_count=[&](int index,std::uint64_t count=1){
                         if(count==0)return; // zero-increment diagnostics must not touch globals
-                        if constexpr(CARBON_EM_LOCAL_AUDIT) unified_primary_audit[index]+=count;
-                            else {
+                        {
                                 sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[static_cast<std::size_t>(index)*kUnifiedEmAuditShards+lane%kUnifiedEmAuditShards]);a.fetch_add(count);
                             }
                     };
@@ -397,14 +369,11 @@
                             const auto point_pre=unified_primary_point.template prepare<kLocalElectronCtPath,kLocalProtonCtPath,kLocalProtonCtPath>(energy_MeV);
                             unified_primary_pre={point_pre,point_pre};
                         }else unified_primary_pre=unified_primary_state.prepare(energy_MeV);
-                        stopping_power_MeV_per_mm = unified_primary_state.mix(
-                            unified_primary_pre.lo.stopping + unified_primary_pre.lo.delta_stopping,
-                            unified_primary_pre.hi.stopping + unified_primary_pre.hi.delta_stopping);
                         // Match ionIoni proposal segmentation while retaining aggregate loss.
                         // Debit only the true path accepted after geometry/nuclear competition.
                         if((kUniformWaterPrimaryPath || global_urban)) {
                             unified_primary_rate=unified_primary_clock.update(unified_primary_state,energy_MeV,
-                                unified_primary_pre.lo.factor,unified_primary_pre.hi.factor);
+                                unified_primary_pre.lo.factor);
                             if(!unified_primary_clock.clock.active)
                                 unified_primary_clock.clock.arm(-sycl::log(sycl::fmax(unified_uniform(),0x1p-24f)));
                             unified_primary_distance=unified_primary_clock.clock.distance(unified_primary_rate);
@@ -576,34 +545,17 @@
                     // Diagnostic only: CT face clamping above guarantees the
                     // segment stays in its starting CT voxel. Do not score a
                     // laterally escaped segment into a clamped edge voxel.
-                    if ((enable_primary_voxel_fluence) &&
-                        (!((!kUniformWaterPrimaryPath && enable_ct_grid)) || in_ct)) {
-                        sycl::atomic_ref<
-                            DoseAtomicT, sycl::memory_order::relaxed,
-                            sycl::memory_scope::device,
-                            sycl::access::address_space::global_space>
-                            atomic_track_length(
-                                primary_voxel_track_length_device[voxel_index]);
-                        atomic_track_length.fetch_add(
-                            static_cast<DoseAtomicT>(accepted_loss_path_mm));
-                    }
 
                     float deposited_MeV = 0.0F;
                     if (urban_range_limited) deposited_MeV = energy_MeV;
-                    float em_continuous_sampled_MeV =
-                        urban_range_limited ? energy_MeV : 0.0F;
-                    float em_delta_sampled_MeV = 0.0F;
                     float birth_expected_loss_MeV=urban_range_limited?energy_MeV:0.f;
                     if(!urban_range_limited){
                         auto draw=[&](){
                             if constexpr(kKernelStage==13 || kKernelStage==14 || kLocalElectronCtPath)return unified_em_explicit_loss<kLocalProtonCtPath,true,kLocalElectronCtPath>(
-                                unified_primary_state,unified_primary_clock,energy_MeV,accepted_loss_path_mm,
-                                unified_primary_rate,unified_primary_distance,enable_energy_straggling,
+                                unified_primary_state,energy_MeV,accepted_loss_path_mm,enable_energy_straggling,
                                 unified_primary_pre,unified_uniform,&unified_primary_point);
                             else return unified_em_loss<kPrimaryStage==7>(
-                                unified_primary_state, unified_primary_clock,
-                                energy_MeV, accepted_loss_path_mm,
-                                unified_primary_rate, unified_primary_distance,
+                                unified_primary_state, energy_MeV, accepted_loss_path_mm,
                                 enable_energy_straggling, unified_primary_pre,
                                 unified_uniform);
                         }();
@@ -619,23 +571,13 @@
                             unified_count(0);break;}
                         deposited_MeV=draw.loss;unified_count(1);unified_count(3,draw.proposed);unified_count(4,draw.accepted);
                         unified_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
-                        em_continuous_sampled_MeV = draw.continuous;
-                        em_delta_sampled_MeV = draw.delta;
                         birth_expected_loss_MeV=draw.mean+draw.delta_mean;
                     }
-                    const float em_loss_before_scale_MeV = deposited_MeV;
                     if (enable_minibeam) {
                         deposited_MeV = sycl::fmin(
                             energy_MeV,
                             deposited_MeV);
                     }
-                    const float em_scale_factor =
-                        em_loss_before_scale_MeV > 0.0F
-                            ? deposited_MeV / em_loss_before_scale_MeV : 0.0F;
-                    const float em_continuous_after_scale_MeV =
-                        em_continuous_sampled_MeV * em_scale_factor;
-                    const float em_delta_after_scale_MeV =
-                        em_delta_sampled_MeV * em_scale_factor;
                     auto local_voxel_deposit_MeV = deposited_MeV;
                     auto same_voxel_electron_packet_MeV = 0.0F;
                     auto delta_tail_escaped_scorer_MeV = 0.0F;
@@ -668,7 +610,8 @@
                             (static_cast<std::uint64_t>(steps)<<32) ^ 0x6a09e667f3bcc909ULL;
                         auto uniform=[&]() -> double {return float(electron_fp32::random_draw(packet_rng));};
                         count(0,1);
-                        const double density_u=uniform();
+                        // Preserve the existing RNG draw even though its value is unused.
+                        static_cast<void>(uniform());
                         (void)uniform(); // Preserve the independent birth CDF draw and RNG order.
                         const auto birth_cdf_bits=packet_rng;
                         const double along=uniform();
@@ -808,24 +751,7 @@
                                              sycl::access::address_space::global_space>
                                 atomic_voxel_dose(voxel_dose_device[pending_primary_voxel]);
                             atomic_voxel_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
-                            if ((enable_charged_origin_voxel_scoring)) {
-                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_primary_origin(
-                                        charged_origin_voxel_dose_device[pending_primary_voxel]);
-                                atomic_primary_origin.fetch_add(
-                                    static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
-                            }
-                            if ((enable_minibeam_component_voxel_scoring)) {
-                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                                 sycl::memory_scope::device,
-                                                 sycl::access::address_space::global_space>
-                                    atomic_primary_component(
-                                        minibeam_component_voxel_dose_device[pending_primary_voxel]);
-                                atomic_primary_component.fetch_add(
-                                    static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
-                            }
+
                         }
                         pending_primary_voxel_MeV = 0.0;
 
@@ -840,27 +766,7 @@
                     if ((enable_voxel_scoring) && voxel_index >= 0) {
                         pending_primary_voxel_MeV += local_voxel_deposit_MeV;
                         pending_primary_voxel_MeV += same_voxel_electron_packet_MeV;
-                        if (enable_minibeam_primary_roi_scoring) {
-                            const auto score_c12 = [&](std::size_t kind, float value) {
-                                score_minibeam_primary_roi_device(
-                                    minibeam_primary_roi_dose_device, kind, energy_MeV,
-                                    primary_mass_number, voxel_index, number_of_bins, voxel_bins_x,
-                                    voxel_bins_y, minibeam_fixed_region_by_x_bin_device,
-                                    value);
-                            };
-                            score_c12(minibeam_primary_roi_local_total_deposit,
-                                      local_voxel_deposit_MeV +
-                                          same_voxel_electron_packet_MeV);
-                            score_c12(minibeam_primary_roi_continuous_sampled,
-                                      em_continuous_sampled_MeV);
-                            score_c12(minibeam_primary_roi_delta_sampled,
-                                      em_delta_sampled_MeV);
-                            score_c12(minibeam_primary_roi_continuous_after_scale,
-                                      em_continuous_after_scale_MeV);
-                            score_c12(minibeam_primary_roi_delta_after_scale,
-                                      em_delta_after_scale_MeV);
-                            score_c12(minibeam_primary_roi_fluence, step_mm);
-                        }
+
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
                             pending_primary_bin < static_cast<int>(number_of_bins)) {
                             sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
@@ -879,8 +785,6 @@
                         deposited_MeV - delta_tail_escaped_scorer_MeV-water_physical_escape_MeV-
                             material_untracked_MeV-response_scored_separately_MeV);
                     grid_split(false, delta_tail_escaped_scorer_MeV);
-                    last_primary_stopping_power_MeV_per_mm = stopping_power_MeV_per_mm;
-                    last_primary_density_g_per_cm3 = local_density_g_per_cm3;
 
                     const float seg_dir_x = direction_x;
                     const float seg_dir_y = direction_y;
@@ -913,37 +817,7 @@
                         } else if (primary_fermi_eyges
                         ) {
                             auto observation_path_mm = -1.0F;
-                            auto observation_plane =
-                                minibeam_water_primary_plane_count;
-                            if (minibeam_water_primary_plane_records_device !=
-                                    nullptr &&
-                                seg_dir_z > 0.0F) {
-                                const auto straight_end_z =
-                                    position_z_mm + seg_dir_z * step_mm;
-                                for (std::size_t plane = 0;
-                                     plane < minibeam_water_primary_plane_count;
-                                     ++plane) {
-                                    auto& candidate =
-                                        minibeam_water_primary_plane_records_device[
-                                            global_history *
-                                                minibeam_water_primary_plane_count +
-                                            plane];
-                                    const auto plane_depth_mm =
-                                        minibeam_water_primary_plane_depths_device[
-                                            plane];
-                                    if (!candidate.valid &&
-                                        position_z_mm < plane_depth_mm &&
-                                        straight_end_z >= plane_depth_mm) {
-                                        observation_plane = plane;
-                                        observation_path_mm = sycl::clamp(
-                                            (plane_depth_mm - position_z_mm) /
-                                                seg_dir_z,
-                                            1.0e-6F,
-                                            step_mm - 1.0e-6F);
-                                        break;
-                                    }
-                                }
-                            }
+
                             const auto correlated =
                                 ion_fermi_eyges_transport_step(
                                     Direction3F{direction_x, direction_y,
@@ -955,64 +829,8 @@
                                     radiation_length_g_per_cm2, spot_seed,
                                     rng_history,
                                     static_cast<std::uint64_t>(steps), 40U,
-                                    observation_path_mm, primary_fe_mass_per_u, fe_gaussian_only,
-                                    fe_counts,fe_diagnostics);
-                            if (correlated.observation_valid &&
-                                observation_plane <
-                                    minibeam_water_primary_plane_count) {
-                                const auto plane_depth_mm =
-                                    minibeam_water_primary_plane_depths_device[
-                                        observation_plane];
-                                auto crossing_x = position_x_mm +
-                                    seg_dir_x * observation_path_mm +
-                                    correlated.observation_displacement_mm.x;
-                                auto crossing_y = position_y_mm +
-                                    seg_dir_y * observation_path_mm +
-                                    correlated.observation_displacement_mm.y;
-                                const auto crossing_z = position_z_mm +
-                                    seg_dir_z * observation_path_mm +
-                                    correlated.observation_displacement_mm.z;
-                                if (correlated.observation_direction.z >
-                                    1.0e-6F) {
-                                    const auto residual_path =
-                                        (plane_depth_mm - crossing_z) /
-                                        correlated.observation_direction.z;
-                                    crossing_x += residual_path *
-                                        correlated.observation_direction.x;
-                                    crossing_y += residual_path *
-                                        correlated.observation_direction.y;
-                                }
-                                auto& record =
-                                    minibeam_water_primary_plane_records_device[
-                                        global_history *
-                                            minibeam_water_primary_plane_count +
-                                        observation_plane];
-                                const auto step_fraction = sycl::clamp(
-                                    observation_path_mm / step_mm, 0.0F, 1.0F);
-                                record.history = global_history;
-                                record.particle_id = global_history;
-                                record.rng_stream = rng_history;
-                                record.plane_index =
-                                    static_cast<std::uint32_t>(observation_plane);
-                                record.atomic_number = static_cast<std::int16_t>(
-                                    primary_atomic_number);
-                                record.mass_number = static_cast<std::int16_t>(
-                                    primary_mass_number);
-                                record.depth_mm = plane_depth_mm;
-                                record.kinetic_energy_MeV = sycl::fmax(
-                                    0.0F, energy_MeV -
-                                        step_fraction * deposited_MeV);
-                                record.weight = 1.0F;
-                                record.x_mm = crossing_x;
-                                record.y_mm = crossing_y;
-                                record.direction_x =
-                                    correlated.observation_direction.x;
-                                record.direction_y =
-                                    correlated.observation_direction.y;
-                                record.direction_z =
-                                    correlated.observation_direction.z;
-                                record.valid = 1U;
-                            }
+                                    observation_path_mm, primary_fe_mass_per_u, fe_gaussian_only);
+
                             direction_x = correlated.direction.x;
                             direction_y = correlated.direction.y;
                             direction_z = correlated.direction.z;
@@ -1032,138 +850,6 @@
                         const auto p=urban_voxel_snap_endpoint(global_urban_proposal.cell,step_mm,
                             {position_x_mm,position_y_mm,position_z_mm});
                         position_x_mm=p.x;position_y_mm=p.y;position_z_mm=p.z;
-                    }
-
-                    if (enable_minibeam_primary_roi_scoring &&
-                        minibeam_spatial_audit_device != nullptr &&
-                        voxel_index >= 0 && step_mm > 0.0F) {
-                        const float x0 = position_x_mm - seg_dir_x * step_mm -
-                            water_scattering_displacement.x;
-                        const float y0 = position_y_mm - seg_dir_y * step_mm -
-                            water_scattering_displacement.y;
-                        const float z0 = position_z_mm - seg_dir_z * step_mm -
-                            water_scattering_displacement.z;
-                        auto voxel_at = [&](float x, float y, float z) {
-                            const int ix = static_cast<int>(sycl::floor(
-                                (x - voxel_min_x_mm) * inverse_voxel_size_x_mm));
-                            const int iy = static_cast<int>(sycl::floor(
-                                (y - voxel_min_y_mm) * inverse_voxel_size_y_mm));
-                            const int iz = static_cast<int>(
-                                sycl::floor(z / voxel_size_z_mm));
-                            if (ix < 0 || iy < 0 || iz < 0 ||
-                                ix >= static_cast<int>(voxel_bins_x) ||
-                                iy >= static_cast<int>(voxel_bins_y) ||
-                                iz >= static_cast<int>(number_of_bins)) {
-                                return -1;
-                            }
-                            return (iz * static_cast<int>(voxel_bins_y) + iy) *
-                                static_cast<int>(voxel_bins_x) + ix;
-                        };
-                        const int v_straight = voxel_at(
-                            x0 + seg_dir_x * step_mm,
-                            y0 + seg_dir_y * step_mm,
-                            z0 + seg_dir_z * step_mm);
-                        const int v_end = voxel_at(
-                            position_x_mm, position_y_mm, position_z_mm);
-                        auto roi_of = [&](int voxel) -> int {
-                            if (voxel < 0 ||
-                                minibeam_fixed_region_by_x_bin_device == nullptr) {
-                                return -1;
-                            }
-                            return static_cast<int>(
-                                minibeam_fixed_region_by_x_bin_device[
-                                    static_cast<std::size_t>(voxel) %
-                                    voxel_bins_x]);
-                        };
-                        const int roi0 = roi_of(voxel_index);
-                        const int roi_straight = roi_of(v_straight);
-                        const int roi_end = roi_of(v_end);
-                        auto add_slot = [&](std::size_t slot, std::uint64_t value) {
-                            sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                             sycl::memory_scope::device,
-                                             sycl::access::address_space::global_space>
-                                a(minibeam_spatial_audit_device[slot]);
-                            a.fetch_add(value);
-                        };
-                        add_slot(0, 1);
-                        if (v_straight != voxel_index) add_slot(1, 1);
-                        if (roi_straight != roi0 && roi_straight >= 0 && roi0 >= 0)
-                            add_slot(2, 1);
-                        if (v_end != voxel_index) add_slot(3, 1);
-                        if (roi_end != roi0 && roi_end >= 0 && roi0 >= 0)
-                            add_slot(4, 1);
-                        const auto mev = static_cast<std::uint64_t>(
-                            deposited_MeV * 1.0e6f + 0.5f);
-                        add_slot(5, mev);
-                        if (roi_straight != roi0 && roi_straight >= 0 && roi0 >= 0)
-                            add_slot(6, mev);
-                        if (roi_end != roi0 && roi_end >= 0 && roi0 >= 0)
-                            add_slot(7, mev);
-                    }
-
-                    if ((!(enable_multiple_scattering) ||
-                         !primary_fermi_eyges) &&
-                        minibeam_water_primary_plane_records_device != nullptr &&
-                        seg_dir_z > 0.0F) {
-                        const auto previous_z_mm = position_z_mm -
-                            seg_dir_z * step_mm -
-                            water_scattering_displacement.z;
-                        const auto previous_x_mm = position_x_mm -
-                            seg_dir_x * step_mm -
-                            water_scattering_displacement.x;
-                        const auto previous_y_mm = position_y_mm -
-                            seg_dir_y * step_mm -
-                            water_scattering_displacement.y;
-                        for (std::size_t plane = 0;
-                             plane < minibeam_water_primary_plane_count;
-                             ++plane) {
-                            const auto plane_depth_mm =
-                                minibeam_water_primary_plane_depths_device[plane];
-                            if (!(previous_z_mm < plane_depth_mm &&
-                                  position_z_mm >= plane_depth_mm)) {
-                                continue;
-                            }
-                            auto& record =
-                                minibeam_water_primary_plane_records_device[
-                                    global_history *
-                                        minibeam_water_primary_plane_count +
-                                    plane];
-                            if (record.valid) continue;
-                            const auto fraction = sycl::clamp(
-                                (plane_depth_mm - previous_z_mm) /
-                                    (position_z_mm - previous_z_mm),
-                                0.0F, 1.0F);
-                            record.history = global_history;
-                            record.particle_id = global_history;
-                            record.rng_stream = rng_history;
-                            record.plane_index =
-                                static_cast<std::uint32_t>(plane);
-                            record.atomic_number = static_cast<std::int16_t>(
-                                primary_atomic_number);
-                            record.mass_number = static_cast<std::int16_t>(
-                                primary_mass_number);
-                            record.depth_mm = plane_depth_mm;
-                            // The transport step moves along seg_dir and applies
-                            // its angular kick at the end.  Keep every plane
-                            // field at the same interpolated crossing rather
-                            // than mixing the crossing position with the
-                            // post-kick direction and step-start energy.
-                            record.kinetic_energy_MeV = sycl::fmax(
-                                0.0F, energy_MeV - fraction * deposited_MeV);
-                            record.weight = 1.0F;
-                            record.x_mm = previous_x_mm +
-                                fraction * (seg_dir_x * step_mm +
-                                            water_scattering_displacement.x);
-                            record.y_mm = previous_y_mm +
-                                fraction * (seg_dir_y * step_mm +
-                                            water_scattering_displacement.y);
-                            const auto record_direction = Direction3F{
-                                seg_dir_x, seg_dir_y, seg_dir_z};
-                            record.direction_x = record_direction.x;
-                            record.direction_y = record_direction.y;
-                            record.direction_z = record_direction.z;
-                            record.valid = 1U;
-                        }
                     }
 
                     if (!(kUniformWaterPrimaryPath || global_urban) && ((!kUniformWaterPrimaryPath && enable_ct_grid)) && in_ct && ct_clamp_res.hit_face && !inelastic_this_step && !ct_elastic_this_step) {
@@ -1527,32 +1213,7 @@
                                 if ((enable_voxel_scoring) && voxel_index >= 0) {
                                     pending_primary_voxel_MeV += product.kinetic_energy_MeV;
                                 }
-                                if ((
-                                     enable_minibeam_component_voxel_scoring) &&
-                                    voxel_index >= 0) {
-                                    const auto child_category =
-                                        minibeam_component_category(
-                                            product.z, product.a,
-                                            minibeam_birth_region_water);
-                                    sycl::atomic_ref<DoseAtomicT,
-                                                     sycl::memory_order::relaxed,
-                                                     sycl::memory_scope::device,
-                                                     sycl::access::address_space::global_space>(
-                                        minibeam_component_voxel_dose_device[
-                                            child_category * number_of_voxels +
-                                            voxel_index])
-                                        .fetch_add(static_cast<DoseAtomicT>(
-                                            product.kinetic_energy_MeV));
-                                    sycl::atomic_ref<DoseAtomicT,
-                                                     sycl::memory_order::relaxed,
-                                                     sycl::memory_scope::device,
-                                                     sycl::access::address_space::global_space>(
-                                        minibeam_component_voxel_dose_device[
-                                            minibeam_primary_component_category *
-                                                number_of_voxels + voxel_index])
-                                        .fetch_add(static_cast<DoseAtomicT>(
-                                            -product.kinetic_energy_MeV));
-                                }
+
                                 history_deposited_MeV += product.kinetic_energy_MeV;
                                 grid_deposit_split_device(
                                     grid_deposited_in_device,
@@ -1603,8 +1264,6 @@
 
                     ++steps;
                 }
-
-                if(CARBON_EM_LOCAL_AUDIT)flush_unified_em_audit(unified_audit,unified_primary_audit);
 
                 const bool inside_phantom = !unified_primary_escaped_ct &&
                     !water_urban_escaped_geometry &&
@@ -1684,24 +1343,7 @@
                                          sycl::access::address_space::global_space>
                             atomic_voxel_dose(voxel_dose_device[pending_primary_voxel]);
                         atomic_voxel_dose.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
-                        if ((enable_charged_origin_voxel_scoring)) {
-                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                             sycl::memory_scope::device,
-                                             sycl::access::address_space::global_space>
-                                atomic_primary_origin(
-                                    charged_origin_voxel_dose_device[pending_primary_voxel]);
-                            atomic_primary_origin.fetch_add(
-                                static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
-                        }
-                        if ((enable_minibeam_component_voxel_scoring)) {
-                            sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
-                                             sycl::memory_scope::device,
-                                             sycl::access::address_space::global_space>
-                                atomic_primary_component(
-                                    minibeam_component_voxel_dose_device[pending_primary_voxel]);
-                            atomic_primary_component.fetch_add(
-                                static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
-                        }
+
                     }
 
                 }
@@ -1863,33 +1505,14 @@
                     }));
                 }
 
-                    auto launch_float_response=[&](auto region_tag) {
-                        constexpr bool region_diagnostics=decltype(region_tag)::value;
+                {
 #include "detail/sycl_independent_electron_fp32.inc"
-                    };
-                    launch_float_response(std::false_type{});
+                }
 
             }
         }
     }
-    if(broadbeam_region_work) {
-        std::array<std::uint64_t,7*12> rows{};
-        queue.copy(broadbeam_region_work,rows.data(),rows.size()).wait_and_throw();
-        std::array<std::uint64_t,12> total{};
-        const char* names[]={"tasks","charged_calls","elastic","hard_proposals","hard_collisions","faces","joint_calls","joint_advances","photon_calls","photon_interactions","weight_microMeV","completed"};
-        for(unsigned r=0;r<7;++r) {
-            std::cout<<"[electron-birth-region-work] region="<<r;
-            for(unsigned k=0;k<12;++k){std::cout<<' '<<names[k]<<'='<<rows[12*r+k];total[k]+=rows[12*r+k];}
-            std::cout<<'\n';
-        }
-        std::array<std::uint64_t,9> joint{};std::array<std::uint64_t,8> charged{},photon{};
-        queue.copy(joint_pilot_work,joint.data(),9);queue.copy(independent_charged_work,charged.data(),8);queue.copy(independent_photon_work,photon.data(),8).wait_and_throw();
-        if(total[0]!=electron_tasks_total || total[11]!=electron_tasks_total || total[1]!=charged[0] || total[2]!=charged[1] ||
-           total[3]!=charged[2] || total[4]!=charged[3] || total[5]!=charged[4] || total[6]!=joint[0] || total[7]!=joint[2] ||
-           total[8]!=photon[0] || total[9]!=photon[1] || rows[6*12])
-            throw std::runtime_error("Electron birth-region diagnostic closure failed");
-        std::cout<<"[electron-birth-region-audit] closure=pass attribution=queued_birth includes_descendants=1\n";
-    }
+
     if(joint_pilot_work) {
         std::array<std::uint64_t,9> work{};queue.copy(joint_pilot_work,work.data(),9).wait_and_throw();
         sycl::free(joint_pilot_work,queue);
@@ -2715,29 +2338,6 @@
                     species_energy.fetch_add(static_cast<std::uint64_t>(
                         sycl::fmax(0.0F, energy) * 1000.0F + 0.5F));
 
-                    if (minibeam_fragment_phase_space_device != nullptr) {
-                        sycl::atomic_ref<
-                            std::uint32_t, sycl::memory_order::relaxed,
-                            sycl::memory_scope::device,
-                            sycl::access::address_space::global_space>
-                            phase_count(
-                                *minibeam_fragment_phase_space_count_device);
-                        const auto phase_index = phase_count.fetch_add(1U);
-                        if (phase_index < max_secondaries) {
-                            MinibeamFragmentPhaseSpaceRecord record{};
-                            record.history = cascade.parent_history;
-                            record.atomic_number = cascade.z;
-                            record.mass_number = cascade.a;
-                            record.kinetic_energy_MeV = energy;
-                            record.x_mm = x;
-                            record.y_mm = y;
-                            record.direction_x = direction.x;
-                            record.direction_y = direction.y;
-                            record.direction_z = direction.z;
-                            minibeam_fragment_phase_space_device[phase_index] =
-                                record;
-                        }
-                    }
                 }).wait_and_throw();
             copper_generation_begin = copper_generation_end;
             std::uint32_t next_end = 0;

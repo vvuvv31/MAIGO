@@ -1,5 +1,4 @@
 // SyclTransportContext::Impl for the Unified EM transport TU.
-// Method definitions are emitted only when CARBON_DEFINE_SYCL_CONTEXT=1.
 
 // Parsed, immutable Schneider/CINEL03 host tables shared across shards in one
 // process. Keyed by source identity, input paths, sizes and modification times.

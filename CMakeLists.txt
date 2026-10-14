@@ -52,16 +52,12 @@ add_library(carbon_core
 )
 target_include_directories(carbon_core PUBLIC include PRIVATE src)
 target_compile_definitions(carbon_core PUBLIC
-    CARBON_HAS_SYCL=1 CARBON_EM_AUDIT_SHARDS=64
-    CARBON_SECONDARY_SEGMENT_STEPS=16 CARBON_EM_EMPTY_BUCKET_AUDIT=0
-    CARBON_EM_SEARCH_KEY_AUDIT=0 CARBON_EM_INTERVAL_WIDTH_AUDIT=0
-    CARBON_EM_LOCAL_AUDIT=0 CARBON_SECONDARY_STEP_PROFILE=0)
+    CARBON_EM_AUDIT_SHARDS=64 CARBON_SECONDARY_SEGMENT_STEPS=16)
 foreach(pipeline PROTON_BROADBEAM PROTON_MINIBEAM CARBON_BROADBEAM CARBON_MINIBEAM GENERIC)
     message(STATUS "Transport pipeline ${pipeline}: ${CARBON_ENABLE_${pipeline}}")
     target_compile_definitions(carbon_core PRIVATE
         CARBON_ENABLE_${pipeline}=$<BOOL:${CARBON_ENABLE_${pipeline}}>)
 endforeach()
-set_property(SOURCE src/transport_sycl.cpp APPEND PROPERTY COMPILE_DEFINITIONS CARBON_DEFINE_SYCL_CONTEXT=1)
 target_compile_options(carbon_core PRIVATE -Wall -Wextra -Wpedantic -fsycl -fsycl-targets=${CARBON_SYCL_TARGETS})
 target_link_options(carbon_core PUBLIC -fsycl -fsycl-targets=${CARBON_SYCL_TARGETS})
 target_compile_options(carbon_core PRIVATE "SHELL:-Xsycl-target-backend=nvptx64-nvidia-cuda --cuda-gpu-arch=${CARBON_CUDA_ARCH}")

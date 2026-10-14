@@ -208,7 +208,7 @@ struct TransportConfig {
     bool broadbeam_independent_electrons{false};
     double broadbeam_electron_density_threshold{0.1};
     double broadbeam_electron_halo_mm{5.0};
-    static constexpr bool broadbeam_electron_region_diagnostics=false;
+
     // Unbiased variance reduction for low-density (density<=threshold) CT
     // broadbeam electrons. Survival<1 plays deterministic per-task Russian
     // roulette on low-density births (weight/=survival, signed ledger keeps
@@ -226,15 +226,7 @@ struct TransportConfig {
     // Keep at 1.0 unless an independent open-field calibration is available.
     double dose_output_scale{1.0};
     bool enable_voxel_scoring{false};
-    static constexpr bool enable_charged_origin_voxel_scoring=false;
-    // Lightweight minibeam diagnostic. Scores p/d/t/He-4 deposited energy by
-    // step-start MeV/u, canonical fixed peak/shoulder/valley ROI and depth.
-    // It is independent of the production dose and defaults off.
-    static constexpr bool enable_minibeam_energy_band_roi_scoring=false;
-    // Independent primary-C12 ROI diagnostic: local ion deposit, condensed
-    // electron landing/cross-ROI/escape, and track-length fluence. Off by
-    // default and must not change production dose.
-    static constexpr bool enable_minibeam_primary_roi_scoring=false;
+
     // Dense scorer geometry in patient coordinates. X-Y is the axial plane;
     // Z is the inferior-superior slice direction. For CT runs these values are
     // read from the CCTG v3 header; explicit values are consistency assertions.
@@ -248,8 +240,7 @@ struct TransportConfig {
     double voxel_size_y_mm{5.0};
     double voxel_size_z_mm{0.0};
     bool enable_energy_straggling{true};
-    // Smoke-only read-only primary query histogram; no RNG or physics changes.
-    static constexpr bool enable_primary_loss_query_audit=false;
+
     // Charged secondaries use mean Unified EM losses by default.
     bool enable_secondary_energy_straggling{false};
     // GPU generation-wise species ordering. Production YAML opts in explicitly.
@@ -470,7 +461,7 @@ struct TransportConfig {
     bool auto_device_tuning{false};
     // Primary kernel launch chunk (histories per GPU submit). 0 = auto:
     // CUDA defaults to a small chunk so WSL/Windows can reclaim the GPU between
-    // launches (long single kernels freeze WSL). Intel GPU uses a larger default.
+    // launches (long single kernels freeze WSL).
     std::size_t history_chunk_size{0};
     std::uint64_t random_seed{20'260'714};
     // Reference energy grid for nuclear/scattering bookkeeping only;
@@ -480,47 +471,19 @@ struct TransportConfig {
     // MeV energy-deposition scorer outputs (absolute MeV → MeV/primary in writers).
     std::filesystem::path output_file{};
     std::filesystem::path fragment_species_output_file{};
-    // Optional selected-species birth-spectrum diagnostics (CSV prefix). Empty
-    // disables all birth-spectrum buffers and atomics.
-    // Writes: <path>_summary.csv, <path>_mevu.csv, <path>_depth.csv,
-    // <path>_costheta.csv, <path>_parent_mevu.csv, <path>_parent_z.csv
-    std::filesystem::path fragment_birth_spectrum_output_file{};
-    // Optional primary C-12 water-entrance phase space. Empty disables the
-    // device/host buffers and leaves production transport unchanged.
-    std::filesystem::path minibeam_phase_space_output_file{};
-    // Diagnostic plane selector; default preserves the water-entry scorer.
-    bool minibeam_phase_space_at_copper_exit{false};
-    // Optional primary C-12 crossing snapshots at fixed water depths. Both
-    // fields must be configured; empty defaults have zero production cost.
-    std::filesystem::path minibeam_water_primary_plane_output_file{};
-    std::vector<double> minibeam_water_primary_plane_depths_mm{};
-    // Diagnostic fragment-only water-entry replay. Records tagged `fragment`
-    // are injected into the normal secondary transport queue at generation 0;
-    // no primary histories are launched. number_of_histories remains the
-    // Optional charged fragments created in Copper and accepted into the
-    // water secondary queue.  Kept separate from the one-record-per-primary
-    // phase space because one source history can produce many fragments.
-    std::filesystem::path minibeam_fragment_phase_space_output_file{};
     std::filesystem::path voxel_dose_output_file{};
-    std::filesystem::path charged_origin_voxel_output_file{
-        "out/gpu_charged_origin_voxel_dose.csv"};
+
     // Dose scorers (total Gy over all histories). Empty path disables that dose
     // file; MeV scorers always write when their paths are set. Defaults write Gy
     // alongside MeV.
     std::filesystem::path dose_output_file{};
     std::filesystem::path fragment_species_dose_output_file{};
     std::filesystem::path voxel_dose_Gy_output_file{};
-    std::filesystem::path charged_origin_voxel_dose_Gy_output_file{
-        "out/gpu_charged_origin_voxel_dose_Gy.csv"};
-    // Optional dense CT dose-to-medium maps for primary ion and charged
-    // secondary origin categories. The writer appends _<category>.mhd/raw.
-    std::filesystem::path charged_origin_voxel_mhd_output_prefix{};
+
     // Dense MetaImage MHD/RAW (total Gy). Empty disables. Skips sparse CSV I/O
     // cost when voxel_dose_Gy_output_file is also empty.
     std::filesystem::path voxel_dose_mhd_output_file{};
-    // Diagnostic-only primary track-length fluence map (/mm2). Empty disables
-    // both the device buffer and output, so production transport is unchanged.
-    std::filesystem::path primary_voxel_fluence_mhd_output_file{};
+
     std::string device{"cuda"};
 
     [[nodiscard]] double initial_total_energy_MeV() const noexcept {
