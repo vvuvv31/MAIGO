@@ -30,3 +30,7 @@
 冻结对照 `/tmp/maigo_no_neutral_before_20261007/carbon_mc`；仅将其质子水 minibeam 的 `enable_neutron_transport` 改为 `false`，其余对照预设不变。原始源码、二进制、开启中子的配置和中子包备份位于同一外部临时目录。对照/候选 SHA256 见 `no_neutral_control_20261007.json`，回归见 `validation_no_neutral_20261007/summary.json`。
 
 本次是关闭中子追踪基线下的实现回归，不是新 TOPAS 剂量验收或性能测量；碳离子 minibeam 剂量精度验收仍待完成。
+
+当前复现构建请显式使用 `BUILD_JOBS=6 bash scripts/build.sh -DCARBON_CUDA_ARCH=sm_75`
+（根据自己显卡设置：2080 Ti=`sm_75`，A6000=`sm_86`，L4=`sm_89`），
+运行前设置 `export CUDA_DISABLE_PTX_JIT=1`。上述历史构建记录保留原命令。

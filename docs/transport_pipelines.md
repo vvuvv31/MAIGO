@@ -100,10 +100,13 @@ supports all eight presets and custom proton/C12 configurations.
 | `CARBON_ENABLE_CARBON_MINIBEAM` | Carbon water/CT minibeam |
 | `CARBON_ENABLE_GENERIC` | Custom proton/C12 configurations selecting `generic` |
 
-For proton broadbeam optimization, use a separate build directory:
+For proton broadbeam optimization, use a separate build directory. Explicitly
+specify `-DCARBON_CUDA_ARCH=sm_75` (根据自己显卡设置: RTX 2080 Ti `sm_75`,
+RTX A6000 `sm_86`, L4 `sm_89`) and disable runtime PTX JIT:
 
 ```bash
 BUILD_DIR=build-proton-broadbeam bash scripts/build.sh \
+  -DCARBON_CUDA_ARCH=sm_75 \
   -DCARBON_ENABLE_PROTON_BROADBEAM=ON \
   -DCARBON_ENABLE_PROTON_MINIBEAM=OFF \
   -DCARBON_ENABLE_CARBON_BROADBEAM=OFF \
@@ -111,6 +114,7 @@ BUILD_DIR=build-proton-broadbeam bash scripts/build.sh \
   -DCARBON_ENABLE_GENERIC=OFF
 
 export LD_LIBRARY_PATH="/home/wuwei/sycl_workspace/llvm/build/install/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export CUDA_DISABLE_PTX_JIT=1
 ./build-proton-broadbeam/carbon_mc --config config/proton_ct_broadbeam.yaml
 ```
 

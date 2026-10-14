@@ -102,7 +102,7 @@ git clone --branch clean --single-branch https://github.com/vvuvv31/MAIGO.git MA
 cd MAIGO_clean
 export MAIGO_ROOT="$PWD"
 
-# Local RTX 2080 Ti example; select the GPU that will run this binary.
+# -DCARBON_CUDA_ARCH=sm_75: 根据自己显卡设置 / adjust for your GPU.
 cmake -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CXX_COMPILER="$CXX" \
@@ -118,13 +118,24 @@ build/carbon_mc --help
 | RTX A6000 | `sm_86` |
 | RTX 2080 Ti | `sm_75` |
 
-An explicit architecture produces GPU-specific code ahead of time and reduces
-driver JIT work on first execution. Leaving `CARBON_CUDA_ARCH` empty uses the
-portable PTX path, which can cause a substantial first-launch compilation delay.
-Building on a GPU-equipped machine does not automatically select its architecture:
-set this option explicitly. The local RTX 2080 Ti build uses `sm_75`; use `sm_89`
-for L4 and `sm_86` for RTX A6000. Use a separate build directory when changing
-the compiler or GPU architecture.
+Always specify `-DCARBON_CUDA_ARCH=sm_75` **(根据自己显卡设置 / adjust for your
+GPU)** in build commands. Both CMake and the wrapper default to `sm_75`, and
+CMake rejects an empty architecture. Use `sm_89` for L4 and `sm_86` for RTX
+A6000. The architecture refers to the GPU that will run the binary, which may
+be different from the GPU on the build machine. Use a separate build directory
+when changing the compiler or GPU architecture.
+
+These builds compile device code ahead of time. Before running, explicitly
+prohibit driver PTX JIT fallback:
+
+```bash
+export CUDA_DISABLE_PTX_JIT=1
+```
+
+Keep this variable set in every execution shell or job script. With JIT disabled,
+a missing compatible machine-code image causes an error instead of compiling at
+runtime; rebuild for the destination GPU. This does not remove normal startup,
+package loading or module loading costs.
 
 All five transport families are enabled by default: proton broadbeam, proton
 minibeam, carbon broadbeam, carbon minibeam and generic proton/C12. To compile
@@ -215,11 +226,13 @@ restore can satisfy by itself.
 
 ### 6. Run a scene or continuous batches
 
-Run from the repository root, keeping the SYCL runtime library path configured.
+Run from the repository root, keeping the SYCL runtime library path configured
+and `CUDA_DISABLE_PTX_JIT=1` set.
 After supplying the matching inputs, start with a small execution check:
 
 ```bash
 cd "$MAIGO_ROOT"
+export CUDA_DISABLE_PTX_JIT=1
 build/carbon_mc --config config/proton_ct_broadbeam.yaml --histories 10000
 ```
 

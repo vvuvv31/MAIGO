@@ -39,3 +39,7 @@
 第一轮回归 `validation_release4_20261007/` 是删除整个闲置助手文件前的检查；以最终回归记录为准。已有历史报告未改写。
 
 这是匹配 GPU 实现回归，不是新 TOPAS 剂量验收或性能测量；碳 minibeam 剂量精度验收仍待完成。
+
+当前复现构建请显式使用 `BUILD_JOBS=6 bash scripts/build.sh -DCARBON_CUDA_ARCH=sm_75`
+（根据自己显卡设置：2080 Ti=`sm_75`，A6000=`sm_86`，L4=`sm_89`），
+运行前设置 `export CUDA_DISABLE_PTX_JIT=1`。上述历史构建记录保留原命令。

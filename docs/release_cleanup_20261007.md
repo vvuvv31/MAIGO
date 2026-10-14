@@ -82,3 +82,7 @@ Evidence:
 These checks establish matched implementation consistency, not new TOPAS gamma,
 full-plan dose acceptance or throughput. Carbon minibeam dose accuracy remains
 deferred; current continuous26 calibration approximations are unchanged.
+
+当前复现构建请显式使用 `BUILD_JOBS=6 bash scripts/build.sh -DCARBON_CUDA_ARCH=sm_75`
+（根据自己显卡设置：2080 Ti=`sm_75`，A6000=`sm_86`，L4=`sm_89`），
+运行前设置 `export CUDA_DISABLE_PTX_JIT=1`。上述历史构建记录保留原命令。

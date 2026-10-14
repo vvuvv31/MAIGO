@@ -6,5 +6,6 @@ compiler_root="$(dirname -- "$(dirname -- "$compiler")")"
 export LD_LIBRARY_PATH="$compiler_root/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 build_directory="${BUILD_DIR:-$project_root/build}"
 if [[ "$build_directory" != /* ]]; then build_directory="$project_root/$build_directory"; fi
-cmake -S "$project_root" -B "$build_directory" -DCMAKE_CXX_COMPILER="$compiler" -DCMAKE_BUILD_TYPE=Release "$@"
+# RTX 2080 Ti default; pass -DCARBON_CUDA_ARCH=sm_86/sm_89 for other GPUs.
+cmake -S "$project_root" -B "$build_directory" -DCMAKE_CXX_COMPILER="$compiler" -DCMAKE_BUILD_TYPE=Release -DCARBON_CUDA_ARCH=sm_75 "$@"
 cmake --build "$build_directory" --target carbon_mc -j "${BUILD_JOBS:-6}"

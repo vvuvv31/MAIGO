@@ -65,7 +65,8 @@ HU0 110 MeV 质子微束的局部剂量异常来自狭缝边界计算的不一�
 ```bash
 g++ -std=c++20 -O2 -I include scripts/check_minibeam_geometry.cpp -o /tmp/check_minibeam_geometry
 /tmp/check_minibeam_geometry
-./scripts/build.sh
+./scripts/build.sh -DCARBON_CUDA_ARCH=sm_75 # 根据自己显卡设置
+export CUDA_DISABLE_PTX_JIT=1
 ```
 
 完整离线 campaign 的驱动器为 `causal_fix/run_full_fixed.cpp`，参数是 `causal_fix/full_fixed_case`。每批按整轮 12.1M 粒子归一化，累加 100 批，再平均两个独立重复；绝不能将归一化计划剂量乘以批次数。分析脚本为 `causal_fix/analyze_full.py`；本次使用缓存的剂量统计后，由 `causal_fix/gamma_parallel.py` 完成并行 3D 通过率计算，`causal_fix/check_remaining_noise.py` 估算剩余统计误差；输入文件、二进制与原参考哈希见 provenance.json 和 full_results.json。

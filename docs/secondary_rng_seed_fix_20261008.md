@@ -51,7 +51,8 @@
 ```bash
 g++ -std=c++20 -O2 -I include scripts/check_secondary_rng.cpp -o /tmp/check_secondary_rng
 /tmp/check_secondary_rng
-./scripts/build.sh
+./scripts/build.sh -DCARBON_CUDA_ARCH=sm_75 # 根据自己显卡设置
+export CUDA_DISABLE_PTX_JIT=1
 ```
 
 本轮文件位于 `out/hu0_proton_minibeam_3cm_20261008/residual_fix/`：`rng_fix_provenance.json` 记录二进制/源/配置哈希；`run_rng_fixed.cpp` 与 `rng_fixed_case/` 是原种子完整 GPU campaign；`rng_results.json`、`full_runtime_audits.json` 和 `presets_validation/runtime_summary.json` 保存结果与审计。`collect_rng_fixed.py` 顺序运行剂量、3D gamma 和统计诊断；`matched_repeat_results.json` 记录额外种子对照及其 RNG 独立性限制。
