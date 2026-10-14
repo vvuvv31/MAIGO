@@ -186,7 +186,6 @@ struct TransportConfig {
     // EM transport with secondary nuclear reactions disabled; no other value
     // and no default fallback exist (empty refuses startup).
     std::string secondary_out_of_scope_nuclear_policy{};
-    std::filesystem::path ct_schneider_radiation_length_file{"data/materials/schneider/radiation_lengths.json"};
     // Nonempty selects the exact proton packed+prevalidated runtime artifact.
     // Electron/photon packages are loaded only after an explicit opt-in.
     bool enable_electron_transport{false};
@@ -233,9 +232,6 @@ struct TransportConfig {
     std::size_t voxel_bins_x{60};
     std::size_t voxel_bins_y{60};
     std::size_t voxel_bins_z{0};
-    double voxel_origin_x_mm{0.0};
-    double voxel_origin_y_mm{0.0};
-    double voxel_origin_z_mm{0.0};
     double voxel_size_x_mm{5.0};
     double voxel_size_y_mm{5.0};
     double voxel_size_z_mm{0.0};
@@ -454,11 +450,6 @@ struct TransportConfig {
     // Secondary particle queue capacity. Default matches the validated
     // production value; larger cards may raise it for big merged shards.
     std::size_t secondary_queue_capacity{32000000};
-    // When true, query the selected SYCL device before transport and adapt the
-    // explicit USM budget (from total global memory) and cap the secondary
-    // queue capacity to what that budget can hold. Read-only; never overrides
-    // an explicit positive device_memory_budget_gib.
-    bool auto_device_tuning{false};
     // Primary kernel launch chunk (histories per GPU submit). 0 = auto:
     // CUDA defaults to a small chunk so WSL/Windows can reclaim the GPU between
     // launches (long single kernels freeze WSL).
@@ -468,20 +459,7 @@ struct TransportConfig {
     // water/CT primary stopping comes exclusively from em_package_file.
     std::filesystem::path primary_stopping_power_file{
         "data/stopping/water/carbon.csv"};
-    // MeV energy-deposition scorer outputs (absolute MeV → MeV/primary in writers).
-    std::filesystem::path output_file{};
-    std::filesystem::path fragment_species_output_file{};
-    std::filesystem::path voxel_dose_output_file{};
-
-    // Dose scorers (total Gy over all histories). Empty path disables that dose
-    // file; MeV scorers always write when their paths are set. Defaults write Gy
-    // alongside MeV.
-    std::filesystem::path dose_output_file{};
-    std::filesystem::path fragment_species_dose_output_file{};
-    std::filesystem::path voxel_dose_Gy_output_file{};
-
-    // Dense MetaImage MHD/RAW (total Gy). Empty disables. Skips sparse CSV I/O
-    // cost when voxel_dose_Gy_output_file is also empty.
+    // Dense MetaImage MHD/RAW (total Gy). Empty disables.
     std::filesystem::path voxel_dose_mhd_output_file{};
 
     std::string device{"cuda"};

@@ -117,28 +117,6 @@ UnifiedEmPackage parse_unified_em(const std::filesystem::path& path) {
 
 UnifiedEmPackage UnifiedEmPackage::load(const std::filesystem::path& path) {
     if(std::endian::native!=std::endian::little)throw std::runtime_error("EMCNT001 requires little endian");
-    auto package=parse_unified_em(path);
-    package.shared_prepare_grid=unified_em_has_shared_prepare_grid(package);
-    return package;
-}
-// Certify every adjacent material pair that select() can interpolate.
-// The inverse-range and hard-rate grids are intentionally not shared.
-bool unified_em_has_shared_prepare_grid(const UnifiedEmPackage& p) {
-    for (std::size_t m=0;m+1<p.materials.size();++m) {
-        if(p.materials[m].section!=p.materials[m+1].section)continue;
-        for(std::size_t ion=0;ion<p.species.size();++ion) {
-            const auto& a=p.records[m*p.species.size()+ion];
-            const auto& b=p.records[(m+1)*p.species.size()+ion];
-            if(a.a!=b.a || a.ratio!=b.ratio || a.node_count!=b.node_count)return false;
-            for(unsigned i=0;i<a.node_count;++i)
-                if(p.nodes[a.node_offset+i].energy!=p.nodes[b.node_offset+i].energy)return false;
-            for(unsigned k=0;k<2;++k) {
-                if(a.counts[k]!=b.counts[k])return false;
-                for(unsigned i=0;i<a.counts[k];++i)
-                    if(p.segments[a.offsets[k]+i].lower!=p.segments[b.offsets[k]+i].lower)return false;
-            }
-        }
-    }
-    return true;
+    return parse_unified_em(path);
 }
 } // namespace carbon

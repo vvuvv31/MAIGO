@@ -1,4 +1,5 @@
 #include "carbon/delta_moments_data.hpp"
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cmath>
@@ -8,11 +9,10 @@
 #include <stdexcept>
 #include <string>
 namespace carbon {
-std::vector<float> load_delta_moments(const std::filesystem::path& file,
+void validate_delta_moments(const std::filesystem::path& file,
                                     std::size_t nodes){
     if(!std::filesystem::exists(file))
-        throw std::runtime_error("Missing delta moments table: "+file.string()+
-            "; run python3 tools/build_delta_moments.py (no water/older-data fallback)");
+        throw std::runtime_error("Missing delta moments table: "+file.string());
     if(std::endian::native!=std::endian::little)
         throw std::runtime_error("Delta moments require little-endian float data");
     if(nodes==0 || nodes>std::numeric_limits<std::uint32_t>::max() ||
@@ -23,11 +23,18 @@ std::vector<float> load_delta_moments(const std::filesystem::path& file,
     if(std::filesystem::file_size(file)!=16+std::uint64_t{8}*nodes ||
        !in || std::string_view(magic,8)!="EMDMOMT2" || header[0]!=2 || header[1]!=nodes)
         throw std::runtime_error("Delta moments header mismatch");
-    std::vector<float> data(2*nodes);
-    in.read(reinterpret_cast<char*>(data.data()),data.size()*sizeof(float));
-    if(!in)throw std::runtime_error("Delta moments truncated");
-    for(float value:data)if(!(value>=0 && std::isfinite(value)))
-        throw std::runtime_error("Delta moments contain invalid values");
-    return data;
+    // This sidecar remains a validated dependency. Its values are not used
+    // by continuous26 transport, so validate in bounded chunks without caching.
+    std::array<float,4096> values;
+    std::size_t remaining=2*nodes;
+    while(remaining) {
+        const auto count=std::min(remaining,values.size());
+        in.read(reinterpret_cast<char*>(values.data()),count*sizeof(float));
+        if(!in)throw std::runtime_error("Delta moments truncated");
+        for(std::size_t i=0;i<count;++i)
+            if(!(values[i]>=0 && std::isfinite(values[i])))
+                throw std::runtime_error("Delta moments contain invalid values");
+        remaining-=count;
+    }
 }
 } // namespace carbon

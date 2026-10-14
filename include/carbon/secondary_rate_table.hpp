@@ -51,10 +51,6 @@ struct SecondaryRateDomainEntry {
 static_assert(sizeof(SecondaryRateDomainEntry) == 24,
               "SecondaryRateDomainEntry must be 24 bytes");
 
-// Reads only magic + version from a SCHN2RAT binary (no full load).
-// Throws on missing file, bad magic, or short header.
-std::uint32_t secondary_rate_binary_version(const std::filesystem::path& binary_path);
-
 class SecondaryRateTable {
 public:
     SecondaryRateTable() = default;
@@ -75,8 +71,6 @@ public:
 
     [[nodiscard]] double mass_partial_rate(std::size_t proj_idx, std::size_t section_id, std::size_t target_idx, std::size_t energy_idx) const;
     [[nodiscard]] double mass_total_rate(std::size_t proj_idx, std::size_t section_id, std::size_t energy_idx) const;
-
-    [[nodiscard]] double interpolate_mass_total(std::size_t proj_idx, std::size_t section_id, double energy_mevu) const;
 
     [[nodiscard]] const std::vector<SecondaryProjectileKey>& projectiles() const noexcept { return projectiles_; }
     [[nodiscard]] const std::vector<double>& mass_partial_rates() const noexcept { return mass_partial_rates_; }

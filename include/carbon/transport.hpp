@@ -4,7 +4,6 @@
 #include "carbon/particle.hpp"
 #include "carbon/stopping_power.hpp"
 #include "carbon/transport_config.hpp"
-#include "carbon/transport_profile.hpp"
 #include "carbon/schneider_ct_device_context.hpp"
 
 #include <array>
@@ -19,9 +18,7 @@ namespace carbon {
 class SyclTransportContext;
 
 struct MinibeamDiagnostics {
-    static constexpr std::size_t slit_count = 15;
     static constexpr std::size_t touched_energy_bin_count = 12;
-    static constexpr std::size_t fragment_energy_bin_count = 20;
     bool enabled{false};
     std::uint64_t incident_histories{0};
     std::uint64_t direct_air_slit_histories{0};
@@ -29,11 +26,8 @@ struct MinibeamDiagnostics {
     std::uint64_t copper_nuclear_interactions{0};
     std::uint64_t copper_generated_direct_secondaries{0};
     std::uint64_t copper_charged_survivors{0};
-    std::uint64_t copper_neutral_survivors{0};
     std::uint64_t water_entrance_primary{0};
     double beamline_removed_energy_MeV{0.0};
-    double copper_charged_survivor_energy_MeV{0.0};
-    double copper_neutral_survivor_energy_MeV{0.0};
     double direct_air_primary_energy_MeV{0.0};
     double copper_touched_primary_energy_MeV{0.0};
     // C, B, Be, Li, He, p, d, t, other.
@@ -77,18 +71,11 @@ struct MinibeamDiagnostics {
     std::array<std::uint64_t, 9>
         copper_fragment_cascade_lookup_misses_by_species{};
     static constexpr std::size_t fragment_lookup_energy_bin_count = 16;
-    static constexpr double fragment_lookup_energy_bin_width_MeVu = 25.0;
     std::array<std::uint64_t, fragment_lookup_energy_bin_count>
         copper_fragment_cascade_lookup_misses_by_energy{};
-    // Sparse joint miss audit.  Index order is
-    // [Copper generation][exact Z/A][lookup reason][5 MeV/u energy bin].
-    // The final Z/A slot is overflow (printed as Z=0,A=0); the final energy
-    // bin includes overflow. Fixed-point sums use keV and micrometres.
-    static constexpr std::size_t fragment_miss_za_a_count = 13;
     static constexpr std::size_t fragment_miss_za_count = 7 * 13 + 1;
     static constexpr std::size_t fragment_miss_reason_count = 6;
     static constexpr std::size_t fragment_miss_joint_energy_bin_count = 128;
-    static constexpr double fragment_miss_joint_energy_bin_width_MeVu = 5.0;
     static constexpr std::size_t fragment_miss_joint_cell_count =
         copper_cascade_generation_count * fragment_miss_za_count *
         fragment_miss_reason_count * fragment_miss_joint_energy_bin_count;
@@ -103,33 +90,10 @@ struct MinibeamDiagnostics {
     double copper_fragment_cascade_closure_mismatch_MeV{0.0};
     double copper_fragment_cascade_mass_energy_mismatch_MeV{0.0};
     std::uint64_t copper_fragment_cascade_baryon_mismatch{0};
-    std::array<std::uint64_t, slit_count>
-        water_entrance_primary_by_slit{};
-    std::array<std::uint64_t, slit_count>
-        collimator_entrance_primary_by_slit{};
-    std::array<std::uint64_t, slit_count>
-        direct_air_primary_by_slit{};
     std::array<std::uint64_t, touched_energy_bin_count>
         copper_touched_primary_energy_histogram{};
-    // Water-entrance kinetic-energy spectra in 50 MeV bins. The final bin
-    // includes overflow. These diagnostics expose the short-range tail that
-    // controls the first few millimetres of minibeam dose.
-    std::array<std::uint64_t, fragment_energy_bin_count>
-        copper_deuteron_energy_histogram{};
-    std::array<std::uint64_t, fragment_energy_bin_count>
-        copper_triton_energy_histogram{};
-    std::array<std::uint64_t, fragment_energy_bin_count>
-        copper_helium_energy_histogram{};
     double energy_sum_MeV{0.0};
     double energy_squared_sum_MeV2{0.0};
-    double x_sum_mm{0.0};
-    double x_squared_sum_mm2{0.0};
-    double y_sum_mm{0.0};
-    double y_squared_sum_mm2{0.0};
-    double direction_x_sum{0.0};
-    double direction_x_squared_sum{0.0};
-    double direction_y_sum{0.0};
-    double direction_y_squared_sum{0.0};
 };
 
 // Diagnostic-only track-local reduction. No values feed particle transport or
@@ -202,22 +166,12 @@ inline void secondary_step_voxel_commit(float& pending_voxel_MeV,
     if (enable_voxel_scoring && cur_voxel >= 0) pending_voxel_MeV += amount_MeV;
 }
 
-struct BraggPeakMetrics {
-    double peak_depth_mm{0.0};
-    double peak_dose_MeV{0.0};
-    double r80_distal_mm{std::numeric_limits<double>::quiet_NaN()};
-    double r50_distal_mm{std::numeric_limits<double>::quiet_NaN()};
-    bool found_r80{false};
-    bool found_r50{false};
-};
-
 struct EnergyAccountingLedger {
     double E_transported_secondaries{0.0};
     // Split nuclear-vertex ledger (populated on the Schneider CT path; the
     // broad `untracked` sink must NOT be used to absorb these terms and then
     // be called physical closure).
     double E_charged_birth{0.0};
-    double E_charged_terminal_deposit{0.0};
     double E_neutral_product_kinetic{0.0};
     double E_reaction_q_residual{0.0};
     double E_unsupported_charged{0.0};
@@ -463,7 +417,7 @@ static_assert(sizeof(SchneiderUnsupportedTrack) == 24, "unsupported-track layout
 
 struct ElectronJointDiagnostics {
     std::uint64_t queries{},domain_misses{},invalid_marches{};
-    double redistributed_MeV{},escaped_MeV{},domain_retained_MeV{};
+    double redistributed_MeV{},escaped_MeV{};
     std::uint64_t ordered_path_replays{};
 };
 
@@ -538,9 +492,6 @@ struct TransportResult {
                species_ledger_species_count *
                    IonSpeciesLedgerSchema::terminal_reason_count>
         ion_species_terminal_reason_counts{};
-    std::uint64_t sampled_reaction_packages{0};
-    std::uint64_t generated_direct_secondaries{0};
-    std::uint64_t queued_secondaries{0};
     std::uint64_t secondary_queue_overflow{0};
     double generated_direct_secondary_energy_MeV{0.0};
     double queued_secondary_energy_MeV{0.0};
@@ -553,19 +504,11 @@ struct TransportResult {
     double elastic_queued_charged_energy_MeV{0.0};
     std::uint64_t elastic_queue_overflow{0};
     double elastic_queue_overflow_energy_MeV{0.0};
-    std::uint64_t transported_secondaries{0};
-    std::uint64_t secondary_transport_steps{0};
     double secondary_deposited_energy_MeV{0.0};
     double secondary_escaped_energy_MeV{0.0};
     std::uint64_t cascade_interactions{0};
-    std::uint64_t cascade_selection_exact{0};
-    std::uint64_t cascade_selection_expanded{0};
-    std::uint64_t cascade_selection_nearest{0};
-    std::uint64_t cascade_selection_no_coverage{0};
     double cascade_selection_energy_distance_sum_MeVu{0.0};
     double cascade_selection_energy_distance_max_MeVu{0.0};
-    std::uint64_t generated_cascade_products{0};
-    std::uint64_t queued_cascade_secondaries{0};
     std::uint64_t cascade_queue_overflow{0};
     double queued_cascade_energy_MeV{0.0};
     double cascade_nuclear_energy_MeV{0.0};
@@ -576,26 +519,10 @@ struct TransportResult {
     double electron_kernel_seconds{0.0};
     std::string backend;
     MinibeamDiagnostics minibeam;
-    // Populated only when built with CARBON_TRANSPORT_PROFILE=1.
-    TransportProfile profile;
 
     // Closure includes deposited, escaped and explicitly untracked energy.
     [[nodiscard]] double physical_relative_energy_balance_error() const noexcept;
 };
-
-[[nodiscard]] double choose_step_mm(double energy_MeV,
-                                    double stopping_power_MeV_per_mm,
-                                    double maximum_step_mm,
-                                    double maximum_relative_energy_loss);
-
-[[nodiscard]] std::vector<double> compute_idd_from_3d_voxel_dose(
-    const std::vector<double>& voxel_dose_MeV,
-    std::size_t nx, std::size_t ny, std::size_t nz);
-
-[[nodiscard]] BraggPeakMetrics compute_bragg_peak_metrics(
-    const std::vector<double>& idd_energy_MeV,
-    double bin_width_z_mm,
-    double z_min_mm = 0.0);
 
 class SyclTransportContext {
 public:

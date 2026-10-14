@@ -79,11 +79,6 @@ inline LoadedCinel03 take_cinel03(const std::filesystem::path& path) {
     return cinel03_prefetch().take(path.string(), [&] { return load_cinel03(path); });
 }
 
-struct LoadedUnifiedEm {
-    std::shared_ptr<const UnifiedEmPackage> package;
-    std::shared_ptr<const std::vector<float>> delta_means;
-};
-
 struct UnifiedEmRequest {
     std::filesystem::path package_file;
     std::filesystem::path delta_file;
@@ -91,17 +86,16 @@ struct UnifiedEmRequest {
     [[nodiscard]] std::string key() const {
         return input_cache_key(package_file) + "|" + input_cache_key(delta_file);
     }
-    [[nodiscard]] LoadedUnifiedEm load() const {
+    [[nodiscard]] std::shared_ptr<const UnifiedEmPackage> load() const {
         auto package = std::make_shared<const UnifiedEmPackage>(
             UnifiedEmPackage::load(package_file));
-        auto delta = std::make_shared<const std::vector<float>>(load_delta_moments(
-            delta_file, package->nodes.size()));
-        return {std::move(package), std::move(delta)};
+        validate_delta_moments(delta_file, package->nodes.size());
+        return package;
     }
 };
 
-inline HostPrefetch<LoadedUnifiedEm>& unified_em_prefetch() {
-    static HostPrefetch<LoadedUnifiedEm> registry;
+inline HostPrefetch<std::shared_ptr<const UnifiedEmPackage>>& unified_em_prefetch() {
+    static HostPrefetch<std::shared_ptr<const UnifiedEmPackage>> registry;
     return registry;
 }
 
@@ -109,7 +103,7 @@ inline void prefetch_unified_em(const UnifiedEmRequest& request) {
     unified_em_prefetch().start(request.key(), [request] { return request.load(); });
 }
 
-inline LoadedUnifiedEm take_unified_em(const UnifiedEmRequest& request) {
+inline std::shared_ptr<const UnifiedEmPackage> take_unified_em(const UnifiedEmRequest& request) {
     return unified_em_prefetch().take(request.key(), [&] { return request.load(); });
 }
 

@@ -101,18 +101,6 @@ void read_records(std::ifstream& input, std::vector<Record>& records,
     }
 }
 
-template <typename Record>
-void write_records(std::ofstream& output, const std::vector<Record>& records,
-                   std::uint32_t* crc_accumulator = nullptr) {
-    const auto bytes = static_cast<std::streamsize>(records.size() * sizeof(Record));
-    if (bytes > 0) {
-        output.write(reinterpret_cast<const char*>(records.data()), bytes);
-        if (crc_accumulator != nullptr) {
-            *crc_accumulator = compute_crc32(records.data(), static_cast<std::size_t>(bytes), *crc_accumulator);
-        }
-    }
-}
-
 bool unit_direction(float x, float y, float z) noexcept {
     const auto norm = static_cast<double>(x) * x + static_cast<double>(y) * y +
                        static_cast<double>(z) * z;
@@ -144,48 +132,6 @@ auto energy_node_key(const Cinel03EnergyNode& node) noexcept {
                       static_cast<int>(node.projectile_a),
                       static_cast<int>(node.target_element_z),
                       node.collision_energy_MeV_per_u};
-}
-
-auto interaction_node_key(const Cinel03InteractionRecord& event) noexcept {
-    return std::tuple{static_cast<int>(event.projectile_z),
-                      static_cast<int>(event.projectile_a),
-                      static_cast<int>(event.target_element_z),
-                      event.collision_energy_MeV_per_u};
-}
-
-void build_energy_index(
-    const std::vector<Cinel03InteractionRecord>& interactions,
-    std::vector<Cinel03EnergyNode>& energy_nodes,
-    std::vector<std::uint64_t>& event_offsets,
-    std::vector<std::uint64_t>& event_indices) {
-    energy_nodes.clear();
-    event_offsets.clear();
-    event_indices.resize(interactions.size());
-    std::iota(event_indices.begin(), event_indices.end(), 0U);
-    std::stable_sort(
-        event_indices.begin(), event_indices.end(),
-        [&interactions](const std::uint64_t lhs, const std::uint64_t rhs) {
-            const auto& l = interactions[static_cast<std::size_t>(lhs)];
-            const auto& r = interactions[static_cast<std::size_t>(rhs)];
-            return interaction_node_key(l) < interaction_node_key(r);
-        });
-
-    std::size_t cursor = 0;
-    while (cursor < event_indices.size()) {
-        const auto& first =
-            interactions[static_cast<std::size_t>(event_indices[cursor])];
-        energy_nodes.push_back(Cinel03EnergyNode{
-            first.projectile_z, first.projectile_a, first.target_element_z, 0,
-            first.collision_energy_MeV_per_u});
-        event_offsets.push_back(static_cast<std::uint64_t>(cursor));
-        const auto key = interaction_node_key(first);
-        while (cursor < event_indices.size() &&
-               interaction_node_key(
-                   interactions[static_cast<std::size_t>(event_indices[cursor])]) == key) {
-            ++cursor;
-        }
-    }
-    event_offsets.push_back(static_cast<std::uint64_t>(event_indices.size()));
 }
 
 void validate_energy_index(
@@ -276,9 +222,6 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
     }
 
     InelasticPackageV3Table table;
-    table.minimum_energy_MeV_per_u_ = header.minimum_energy_MeV_per_u;
-    table.energy_bin_width_MeV_per_u_ = header.energy_bin_width_MeV_per_u;
-    table.minimum_events_per_bin_ = header.minimum_events_per_bin;
 
     const auto uuid_end = std::find(
         std::begin(header.campaign_uuid), std::end(header.campaign_uuid), '\0');
@@ -459,74 +402,6 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
     return table;
 }
 
-void InelasticPackageV3Table::to_binary(const std::filesystem::path& path) const {
-    std::ofstream output(path, std::ios::binary | std::ios::trunc);
-    if (!output) {
-        throw std::runtime_error("Cannot create CINPKG04 package: " + path.string());
-    }
-
-    Cinel03PackageHeader header{};
-    std::memcpy(header.magic, package_magic.data(), 8);
-    header.version = package_version;
-    header.header_size = sizeof(header);
-    header.endian_marker = endian_marker;
-    header.index_record_size = sizeof(Cinel03CellIndex);
-    header.interaction_record_size = sizeof(Cinel03InteractionRecord);
-    header.product_record_size = sizeof(Cinel03ProductRecord);
-    header.flags = required_flags | cinel03_global_energy_index_flag | cinel03_crc32_checksum_flag;
-    header.cell_count = cells_.size();
-    header.interaction_count = interactions_.size();
-    header.product_count = products_.size();
-    header.minimum_energy_MeV_per_u = minimum_energy_MeV_per_u_;
-    header.energy_bin_width_MeV_per_u = energy_bin_width_MeV_per_u_;
-    header.minimum_events_per_bin = minimum_events_per_bin_;
-    header.energy_node_count = energy_nodes_.size();
-
-    std::size_t uuid_len = std::min<std::size_t>(campaign_uuid_.size(), sizeof(header.campaign_uuid) - 1);
-    std::memcpy(header.campaign_uuid, campaign_uuid_.data(), uuid_len);
-    header.campaign_uuid[uuid_len] = '\0';
-
-    const std::uint64_t total_file_size =
-        sizeof(Cinel03PackageHeader) +
-        cells_.size() * sizeof(Cinel03CellIndex) +
-        interactions_.size() * sizeof(Cinel03InteractionRecord) +
-        products_.size() * sizeof(Cinel03ProductRecord) +
-        energy_nodes_.size() * sizeof(Cinel03EnergyNode) +
-        event_offsets_.size() * sizeof(std::uint64_t) +
-        event_indices_.size() * sizeof(std::uint64_t);
-    header.file_size = total_file_size;
-
-    // Compute CRC32 over all payload tables
-    std::uint32_t payload_crc = 0;
-    if (!cells_.empty()) {
-        payload_crc = compute_crc32(cells_.data(), cells_.size() * sizeof(Cinel03CellIndex), payload_crc);
-    }
-    if (!interactions_.empty()) {
-        payload_crc = compute_crc32(interactions_.data(), interactions_.size() * sizeof(Cinel03InteractionRecord), payload_crc);
-    }
-    if (!products_.empty()) {
-        payload_crc = compute_crc32(products_.data(), products_.size() * sizeof(Cinel03ProductRecord), payload_crc);
-    }
-    if (!energy_nodes_.empty()) {
-        payload_crc = compute_crc32(energy_nodes_.data(), energy_nodes_.size() * sizeof(Cinel03EnergyNode), payload_crc);
-    }
-    if (!event_offsets_.empty()) {
-        payload_crc = compute_crc32(event_offsets_.data(), event_offsets_.size() * sizeof(std::uint64_t), payload_crc);
-    }
-    if (!event_indices_.empty()) {
-        payload_crc = compute_crc32(event_indices_.data(), event_indices_.size() * sizeof(std::uint64_t), payload_crc);
-    }
-    header.checksum_crc32 = payload_crc;
-
-    output.write(reinterpret_cast<const char*>(&header), sizeof(header));
-    write_records(output, cells_);
-    write_records(output, interactions_);
-    write_records(output, products_);
-    write_records(output, energy_nodes_);
-    write_records(output, event_offsets_);
-    write_records(output, event_indices_);
-}
-
 const std::vector<Cinel03CellIndex>& InelasticPackageV3Table::cells() const noexcept {
     return cells_;
 }
@@ -596,169 +471,7 @@ InelasticPackageV3Table::ChannelDomain InelasticPackageV3Table::channel_domain(
     return domain;
 }
 
-Cinel03LookupResult InelasticPackageV3Table::lookup_event(
-    const int projectile_z, const int projectile_a, const int target_element_z,
-    const float energy, const float u_bracket, const float u_event,
-    const float max_allowed_gap_MeV_per_u) const noexcept {
-    Cinel03LookupResult out{};
-    out.query_energy_MeV_per_u = energy;
-    if (!std::isfinite(energy) || !std::isfinite(u_bracket) || !std::isfinite(u_event) ||
-        energy_nodes_.empty() || event_offsets_.size() != energy_nodes_.size() + 1U) {
-        out.status = Cinel03LookupStatus::MissingProjectile;
-        return out;
-    }
-
-    const auto proj_begin = std::lower_bound(
-        energy_nodes_.begin(), energy_nodes_.end(),
-        std::tuple{projectile_z, projectile_a, -1000, -1.0F},
-        [](const Cinel03EnergyNode& node, const auto& key) {
-            return energy_node_key(node) < key;
-        });
-    const auto proj_end = std::upper_bound(
-        proj_begin, energy_nodes_.end(),
-        std::tuple{projectile_z, projectile_a, 1000, 1.0e30F},
-        [](const auto& key, const Cinel03EnergyNode& node) {
-            return key < energy_node_key(node);
-        });
-    if (proj_begin >= proj_end) {
-        out.status = Cinel03LookupStatus::MissingProjectile;
-        return out;
-    }
-    const auto tgt_begin = std::lower_bound(
-        proj_begin, proj_end, target_element_z,
-        [](const Cinel03EnergyNode& node, const int tz) {
-            return node.target_element_z < tz;
-        });
-    const auto tgt_end = std::upper_bound(
-        tgt_begin, proj_end, target_element_z,
-        [](const int tz, const Cinel03EnergyNode& node) {
-            return tz < node.target_element_z;
-        });
-    if (tgt_begin >= tgt_end) {
-        out.status = Cinel03LookupStatus::MissingTarget;
-        return out;
-    }
-
-    const auto channel_first = static_cast<std::size_t>(tgt_begin - energy_nodes_.begin());
-    const auto channel_last = static_cast<std::size_t>(tgt_end - energy_nodes_.begin());
-    const float channel_min = tgt_begin->collision_energy_MeV_per_u;
-    const float channel_max = (tgt_end - 1)->collision_energy_MeV_per_u;
-    if (!(energy >= channel_min)) {
-        out.status = Cinel03LookupStatus::BelowEnergyDomain;
-        out.selected_energy_MeV_per_u = channel_min;
-        out.absolute_energy_mismatch_MeV_per_u = channel_min - energy;
-        return out;
-    }
-    if (energy > channel_max) {
-        out.status = Cinel03LookupStatus::AboveEnergyDomain;
-        out.selected_energy_MeV_per_u = channel_max;
-        out.absolute_energy_mismatch_MeV_per_u = energy - channel_max;
-        return out;
-    }
-
-    const auto e1_it = std::lower_bound(
-        tgt_begin, tgt_end, energy,
-        [](const Cinel03EnergyNode& node, const float value) {
-            return node.collision_energy_MeV_per_u < value;
-        });
-    auto e1 = static_cast<std::size_t>(e1_it - energy_nodes_.begin());
-    if (e1 >= channel_last) {
-        e1 = channel_last - 1;
-    }
-    auto e0 = e1;
-    if (e1 > channel_first && energy_nodes_[e1].collision_energy_MeV_per_u > energy) {
-        e0 = e1 - 1;
-    }
-    const float e0_energy = energy_nodes_[e0].collision_energy_MeV_per_u;
-    const float e1_energy = energy_nodes_[e1].collision_energy_MeV_per_u;
-
-    std::size_t chosen_node = e0;
-    if (e1_energy > e0_energy) {
-        const float gap = e1_energy - e0_energy;
-        if (gap > max_allowed_gap_MeV_per_u) {
-            out.status = Cinel03LookupStatus::EnergyGapTooLarge;
-            out.selected_energy_MeV_per_u =
-                (energy - e0_energy <= e1_energy - energy) ? e0_energy : e1_energy;
-            out.absolute_energy_mismatch_MeV_per_u =
-                (energy - e0_energy <= e1_energy - energy) ? (energy - e0_energy) : (e1_energy - energy);
-            return out;
-        }
-        const float p_up = (energy - e0_energy) / gap;
-        const float ub = u_bracket < 0.0F ? 0.0F : (u_bracket >= 1.0F ? 0.9999999F : u_bracket);
-        chosen_node = (ub < p_up) ? e1 : e0;
-    }
-
-    const auto first_event = event_offsets_[chosen_node];
-    const auto last_event = event_offsets_[chosen_node + 1];
-    if (first_event >= last_event || last_event > event_indices_.size()) {
-        out.status = Cinel03LookupStatus::EmptyNode;
-        out.energy_node_index = static_cast<std::uint32_t>(chosen_node);
-        out.selected_energy_MeV_per_u = energy_nodes_[chosen_node].collision_energy_MeV_per_u;
-        out.absolute_energy_mismatch_MeV_per_u =
-            std::abs(energy - out.selected_energy_MeV_per_u);
-        return out;
-    }
-    const auto count = last_event - first_event;
-    const float ue = u_event < 0.0F ? 0.0F : (u_event >= 1.0F ? 0.9999999F : u_event);
-    auto pick = static_cast<std::uint64_t>(static_cast<double>(ue) * static_cast<double>(count));
-    if (pick >= count) {
-        pick = count - 1;
-    }
-    const auto event_index = event_indices_[static_cast<std::size_t>(first_event + pick)];
-    if (event_index >= interactions_.size()) {
-        out.status = Cinel03LookupStatus::EmptyNode;
-        out.energy_node_index = static_cast<std::uint32_t>(chosen_node);
-        return out;
-    }
-    out.event_index = static_cast<std::uint32_t>(event_index);
-    out.energy_node_index = static_cast<std::uint32_t>(chosen_node);
-    out.status = Cinel03LookupStatus::Hit;
-    out.selected_energy_MeV_per_u = energy_nodes_[chosen_node].collision_energy_MeV_per_u;
-    out.absolute_energy_mismatch_MeV_per_u = std::abs(energy - out.selected_energy_MeV_per_u);
-    return out;
-}
-
 Cinel03DeviceTables InelasticPackageV3Table::make_device_tables() const {
-    auto parent_local_direction = [](const Cinel03InteractionRecord& event) {
-        auto normalize = [](std::array<float, 3> value, const char* label) {
-            const auto norm = std::sqrt(value[0] * value[0] + value[1] * value[1] +
-                                        value[2] * value[2]);
-            if (!std::isfinite(norm) || norm <= 1.0e-12F) {
-                throw std::runtime_error(std::string("Cannot normalize ") + label);
-            }
-            return std::array<float, 3>{value[0] / norm, value[1] / norm,
-                                        value[2] / norm};
-        };
-        const auto axis = normalize(
-            {event.collision_direction_x, event.collision_direction_y,
-             event.collision_direction_z}, "collision direction");
-        const auto global = normalize(
-            {event.parent_direction_x, event.parent_direction_y,
-             event.parent_direction_z}, "parent direction");
-        const std::array<float, 3> reference =
-            std::abs(axis[0]) < 0.9F ? std::array<float, 3>{1.0F, 0.0F, 0.0F}
-                                     : std::array<float, 3>{0.0F, 1.0F, 0.0F};
-        const auto projection = reference[0] * axis[0] +
-                                reference[1] * axis[1] +
-                                reference[2] * axis[2];
-        const auto local_x = normalize(
-            {reference[0] - projection * axis[0],
-             reference[1] - projection * axis[1],
-             reference[2] - projection * axis[2]},
-            "projectile-local x axis");
-        const std::array<float, 3> local_y{
-            axis[1] * local_x[2] - axis[2] * local_x[1],
-            axis[2] * local_x[0] - axis[0] * local_x[2],
-            axis[0] * local_x[1] - axis[1] * local_x[0]};
-        return std::array<float, 3>{
-            global[0] * local_x[0] + global[1] * local_x[1] +
-                global[2] * local_x[2],
-            global[0] * local_y[0] + global[1] * local_y[1] +
-                global[2] * local_y[2],
-            global[0] * axis[0] + global[1] * axis[1] +
-                global[2] * axis[2]};
-    };
-
     if (interactions_.size() > std::numeric_limits<std::uint32_t>::max() ||
         products_.size() > std::numeric_limits<std::uint32_t>::max() ||
         energy_nodes_.size() > std::numeric_limits<std::uint32_t>::max() ||
@@ -781,7 +494,6 @@ Cinel03DeviceTables InelasticPackageV3Table::make_device_tables() const {
                                      std::to_string(offset) + ", count=" + std::to_string(count) +
                                      ", total_products=" + std::to_string(products_.size()));
         }
-        const auto local = parent_local_direction(event);
         tables.interactions.push_back(Cinel03DeviceInteraction{
             event.collision_energy_MeV_per_u,
             event.process_local_deposit_MeV,
@@ -796,7 +508,6 @@ Cinel03DeviceTables InelasticPackageV3Table::make_device_tables() const {
             event.parent_rest_mass,
             event.parent_excitation,
             event.parent_weight,
-            local[0], local[1], local[2],
             event.target_element_z,
             event.target_a});
     }
@@ -824,123 +535,8 @@ Cinel03DeviceTables InelasticPackageV3Table::make_device_tables() const {
     return tables;
 }
 
-Cinel03FixedReplayView InelasticPackageV3Table::fixed_replay(
-    const std::uint64_t event_index,
-    const Cinel03DeviceTables& compact) const noexcept {
-    if (event_index >= interactions_.size() || event_index >= compact.interactions.size()) {
-        return {};
-    }
-    const auto& serialized = interactions_[static_cast<std::size_t>(event_index)];
-    const auto& device = compact.interactions[static_cast<std::size_t>(event_index)];
-    const auto serialized_offset = product_offsets_[static_cast<std::size_t>(event_index)];
-    const auto compact_offset = device.product_offset;
-
-    return Cinel03FixedReplayView{
-        &serialized,
-        &device,
-        serialized.direct_product_count == 0U ? nullptr : &products_[serialized_offset],
-        device.direct_product_count == 0U ? nullptr : &compact.products[compact_offset],
-        device.direct_product_count};
-}
-
-const Cinel03ProductRecord* InelasticPackageV3Table::products_for(
-    const Cinel03InteractionRecord& interaction) const noexcept {
-    const auto index = static_cast<std::size_t>(&interaction - interactions_.data());
-    if (index >= product_offsets_.size() || interaction.direct_product_count == 0U) {
-        return nullptr;
-    }
-    return &products_[product_offsets_[index]];
-}
-
-std::uint32_t InelasticPackageV3Table::product_offset(
-    const Cinel03InteractionRecord& interaction) const noexcept {
-    const auto index = static_cast<std::size_t>(&interaction - interactions_.data());
-    if (index >= product_offsets_.size()) {
-        return 0;
-    }
-    return product_offsets_[index];
-}
-
-float InelasticPackageV3Table::minimum_energy_MeV_per_u() const noexcept {
-    return minimum_energy_MeV_per_u_;
-}
-float InelasticPackageV3Table::energy_bin_width_MeV_per_u() const noexcept {
-    return energy_bin_width_MeV_per_u_;
-}
-std::uint64_t InelasticPackageV3Table::minimum_events_per_bin() const noexcept {
-    return minimum_events_per_bin_;
-}
 const std::string& InelasticPackageV3Table::campaign_uuid() const noexcept {
     return campaign_uuid_;
-}
-
-void InelasticPackageV3Table::set_metadata(
-    float min_energy_MeV_per_u, float bin_width_MeV_per_u,
-    std::uint64_t min_events_per_bin, const std::string& uuid) {
-    minimum_energy_MeV_per_u_ = min_energy_MeV_per_u;
-    energy_bin_width_MeV_per_u_ = bin_width_MeV_per_u;
-    minimum_events_per_bin_ = min_events_per_bin;
-    campaign_uuid_ = uuid;
-}
-
-void InelasticPackageV3Table::add_event(
-    const Cinel03InteractionRecord& interaction,
-    const std::vector<Cinel03ProductRecord>& products) {
-    interactions_.push_back(interaction);
-    product_offsets_.push_back(static_cast<std::uint32_t>(products_.size()));
-    for (const auto& p : products) {
-        products_.push_back(p);
-    }
-}
-
-void InelasticPackageV3Table::finalize() {
-    // Build cells and energy nodes
-    cells_.clear();
-    energy_nodes_.clear();
-    event_offsets_.clear();
-    event_indices_.clear();
-
-    if (interactions_.empty()) {
-        return;
-    }
-
-    build_energy_index(interactions_, energy_nodes_, event_offsets_, event_indices_);
-
-    // Build contiguous cells based on energy bins
-    std::size_t offset = 0;
-    while (offset < interactions_.size()) {
-        const auto& first = interactions_[offset];
-        const auto p_z = first.projectile_z;
-        const auto p_a = first.projectile_a;
-        const auto t_z = first.target_element_z;
-        const auto e_bin = static_cast<std::uint32_t>(
-            std::floor((first.collision_energy_MeV_per_u - minimum_energy_MeV_per_u_) /
-                       energy_bin_width_MeV_per_u_));
-        const auto begin_offset = offset;
-
-        while (offset < interactions_.size()) {
-            const auto& cur = interactions_[offset];
-            const auto cur_bin = static_cast<std::uint32_t>(
-                std::floor((cur.collision_energy_MeV_per_u - minimum_energy_MeV_per_u_) /
-                           energy_bin_width_MeV_per_u_));
-            if (cur.projectile_z != p_z || cur.projectile_a != p_a ||
-                cur.target_element_z != t_z || cur_bin != e_bin) {
-                break;
-            }
-            ++offset;
-        }
-
-        Cinel03CellIndex cell{};
-        cell.projectile_z = p_z;
-        cell.projectile_a = p_a;
-        cell.target_element_z = t_z;
-        cell.energy_bin = e_bin;
-        cell.interaction_offset = begin_offset;
-        cell.interaction_count = offset - begin_offset;
-        cell.energy_lower_MeV_per_u = minimum_energy_MeV_per_u_ + e_bin * energy_bin_width_MeV_per_u_;
-        cell.energy_upper_MeV_per_u = cell.energy_lower_MeV_per_u + energy_bin_width_MeV_per_u_;
-        cells_.push_back(cell);
-    }
 }
 
 } // namespace carbon

@@ -9,6 +9,7 @@ KEYS += ['enable_neutron_transport', 'neutron_birth_output_file', 'neutron_birth
 KEYS += ['enable_charged_origin_voxel_scoring', 'minibeam_phase_space_at_copper_exit']
 KEYS += ['phantom_length_mm', 'depth_bin_width_mm', 'minibeam_copper_proton_straggling_model']
 KEYS += ['physics_profile','spots_lateral_yz_skew','spots_lateral_yz_skew_auto_pivot','spots_lateral_yz_skew_pivot_mm','spots_lateral_yz_rotation_deg','spots_lateral_yz_rotation_pivot_y_mm','mass_number','stopping_power_file','nuclear_cross_section_file','reaction_package_file','tps_particle_type']
+KEYS += ['ct_schneider_radiation_length_file']
 FLAGS=['--plan-manifest','--sequential-spots','--scorer-let','--dose-output','--straggling-scale']
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--binary',type=Path,default=ROOT/'build/carbon_mc');p.add_argument('--output',type=Path,required=True);a=p.parse_args()

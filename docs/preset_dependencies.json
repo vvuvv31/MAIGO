@@ -38,8 +38,6 @@
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
-        "data/materials/schneider/radiation_lengths.json",
-        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/nuclear/schneider/carbon/bundle.json",
         "data/nuclear/schneider/carbon/final_states.bin",
         "data/nuclear/schneider/carbon/final_states.channels.json",
@@ -115,8 +113,6 @@
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
-        "data/materials/schneider/radiation_lengths.json",
-        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/nuclear/copper/carbon/cascade.cinpkg",
         "data/nuclear/copper/carbon/primary_rate.csv",
         "data/nuclear/copper/ion_cross_sections.csv",
@@ -184,8 +180,6 @@
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
-        "data/materials/schneider/radiation_lengths.json",
-        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/materials/water/material.json",
         "data/nuclear/schneider/carbon/bundle.json",
         "data/nuclear/schneider/carbon/final_states.bin",
@@ -257,8 +251,6 @@
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
-        "data/materials/schneider/radiation_lengths.json",
-        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/materials/water/material.json",
         "data/nuclear/copper/carbon/cascade.cinpkg",
         "data/nuclear/copper/carbon/primary_rate.csv",
@@ -325,8 +317,6 @@
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
-        "data/materials/schneider/radiation_lengths.json",
-        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/nuclear/schneider/proton/bundle.json",
         "data/nuclear/schneider/proton/final_states.bin",
         "data/nuclear/schneider/proton/final_states.channels.json",
@@ -399,8 +389,6 @@
         "data/em/ions/delta_moments.metadata.json",
         "data/ionization/air/proton_rate.csv",
         "data/materials/schneider/hu_to_material.txt",
-        "data/materials/schneider/radiation_lengths.json",
-        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/nuclear/copper/ion_cross_sections.csv",
         "data/nuclear/copper/proton/cascade.cinpkg",
         "data/nuclear/copper/proton/cascade.metadata.json",
@@ -466,8 +454,6 @@
         "data/em/ions/delta_moments.bin",
         "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
-        "data/materials/schneider/radiation_lengths.json",
-        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/materials/water/material.json",
         "data/nuclear/schneider/proton/bundle.json",
         "data/nuclear/schneider/proton/final_states.bin",
@@ -536,8 +522,6 @@
         "data/em/ions/delta_moments.metadata.json",
         "data/ionization/air/proton_rate.csv",
         "data/materials/schneider/hu_to_material.txt",
-        "data/materials/schneider/radiation_lengths.json",
-        "data/materials/schneider/radiation_lengths.metadata.json",
         "data/materials/water/material.json",
         "data/nuclear/copper/ion_cross_sections.csv",
         "data/nuclear/copper/proton/cascade.cinpkg",
@@ -593,12 +577,6 @@
     },
     "data/materials/schneider/hu_to_material.txt": {
       "bytes": 37352
-    },
-    "data/materials/schneider/radiation_lengths.json": {
-      "bytes": 6544
-    },
-    "data/materials/schneider/radiation_lengths.metadata.json": {
-      "bytes": 712
     },
     "data/nuclear/schneider/carbon/bundle.json": {
       "bytes": 1887
@@ -781,6 +759,6 @@
       "bytes": 88565
     }
   },
-  "total_unique_bytes": 4758368697,
+  "total_unique_bytes": 4758361441,
   "electron_registry": "docs/electron_packages_manifest.json"
 }

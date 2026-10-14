@@ -89,20 +89,6 @@ template<class Uniform> inline MollerPair sample_moller_pair(
     pair.valid=std::isfinite(pair.secondary_cosine)&&std::isfinite(pair.primary_cosine);
     return pair;
 }
-// Modified Tsai universal photon angle in G4ModifiedTsai. The recoil
-// electron direction must be computed from this SAME photon angle; sampling
-// the two marginal angles independently would discard the correlation.
-template<class Uniform> inline float sample_modified_tsai_cosine(float energy,Uniform& uniform) {
-    if(!std::isfinite(energy)||!(energy>0.f))return NAN;
-    const float maximum=2.f*(1.f+energy/.51099895f);
-    for(unsigned retry=0;retry<16384;++retry){
-        const float a=uniform(),b=uniform(),c=uniform();
-        if(!(a>0.f&&a<1.f&&b>0.f&&b<1.f&&c>0.f&&c<1.f))return NAN;
-        const float u=-std::log(a*b)*(c<.25f?1.6f:1.6f/3.f);
-        if(u<=maximum)return std::clamp(1.f-2.f*(u/maximum)*(u/maximum),-1.f,1.f);
-    }
-    return NAN;
-}
 inline float brems_primary_cosine(float energy,float photon_energy,float photon_cosine) {
     if(!(energy>0.f&&photon_energy>=0.f&&photon_energy<=energy)||
        !std::isfinite(photon_cosine)||std::abs(photon_cosine)>1.f)return NAN;

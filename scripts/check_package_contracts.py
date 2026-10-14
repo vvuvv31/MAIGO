@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Check explicit primary channel support."""
+"""Check explicit primary channel support and delta-sidecar validation."""
 import argparse
 import copy
 import json
 import os
+import struct
 import subprocess
 import tempfile
 from pathlib import Path
@@ -24,6 +25,7 @@ def main():
     reports.append(dict(check='explicit_carbon_and_proton_support',passed=True))
     env={k:v for k,v in os.environ.items() if not k.startswith('CARBON_')}
     env['LD_LIBRARY_PATH']='/home/wuwei/sycl_workspace/llvm/build/install/lib'
+    env['CUDA_DISABLE_PTX_JIT']='1'
     with tempfile.TemporaryDirectory(prefix='maigo_package_contracts_') as temporary:
         temporary=Path(temporary)
         cfg=yaml.safe_load((ROOT/'config/carbon_water_broadbeam.yaml').read_text())
@@ -32,7 +34,8 @@ def main():
         package=Path(cfg['ct_schneider_primary_cinel03_file'])
         local_package=temporary/package.name;local_package.symlink_to(package)
         cfg['ct_schneider_primary_cinel03_file']=str(local_package)
-        bundle=json.loads(Path(cfg['ct_schneider_physics_bundle_file']).read_text())
+        original_bundle=cfg['ct_schneider_physics_bundle_file']
+        bundle=json.loads(Path(original_bundle).read_text())
         bundle['primary_package']['channels_file']=channels.name
         local_bundle=temporary/'bundle.json';local_bundle.write_text(json.dumps(bundle))
         cfg['ct_schneider_physics_bundle_file']=str(local_bundle)
@@ -45,6 +48,34 @@ def main():
             if name=='nonboolean_support':payload['channels'][0]['has_support']='true'
             if name=='false_support':payload['channels'][0]['has_support']=False
             (temporary/channels.name).write_text(json.dumps(payload))
+            result=subprocess.run([str(args.binary.resolve()),'--config',str(file),'--histories','1'],cwd=ROOT,
+                env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+            assert result.returncode!=0 and expected in result.stdout and '[unified-em-audit]' not in result.stdout,(name,result.stdout)
+            reports.append(dict(check=name,passed=True))
+        (temporary/channels.name).write_text(json.dumps(carbon))
+        cfg['ct_schneider_primary_cinel03_file']=str(package)
+        cfg['ct_schneider_physics_bundle_file']=original_bundle
+        delta=bytearray(Path(cfg['em_delta_moments_file']).read_bytes())
+        assert delta[:8]==b'EMDMOMT2' and len(delta)>16+4096*4
+        local_delta=temporary/'delta.bin'
+        cfg['em_delta_moments_file']=str(local_delta)
+        file.write_text(yaml.safe_dump(cfg,sort_keys=False))
+        for name,offset,replacement,expected in [
+                ('delta_magic',0,b'INVALID!','Delta moments header mismatch'),
+                ('delta_version',8,struct.pack('<I',3),'Delta moments header mismatch'),
+                ('delta_nodes',12,struct.pack('<I',0),'Delta moments header mismatch'),
+                ('delta_negative_tail',len(delta)-4,struct.pack('<f',-1),'Delta moments contain invalid values'),
+                ('delta_nan_tail',len(delta)-4,struct.pack('<f',float('nan')),'Delta moments contain invalid values'),
+                ('delta_inf_tail',len(delta)-4,struct.pack('<f',float('inf')),'Delta moments contain invalid values'),
+                ('delta_truncated',len(delta)-4,None,'Delta moments header mismatch'),
+                ('delta_missing',0,None,'No such file or directory')]:
+            if name=='delta_missing':
+                local_delta.unlink()
+            elif replacement is None:
+                local_delta.write_bytes(delta[:offset])
+            else:
+                payload=delta.copy();payload[offset:offset+len(replacement)]=replacement
+                local_delta.write_bytes(payload)
             result=subprocess.run([str(args.binary.resolve()),'--config',str(file),'--histories','1'],cwd=ROOT,
                 env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
             assert result.returncode!=0 and expected in result.stdout and '[unified-em-audit]' not in result.stdout,(name,result.stdout)

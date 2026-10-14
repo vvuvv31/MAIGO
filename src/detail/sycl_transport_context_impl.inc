@@ -92,8 +92,6 @@ struct SyclTransportContext::Impl {
         bool valid{false};
         std::string signature;
         std::shared_ptr<const UnifiedEmPackage> package;
-        std::shared_ptr<const std::vector<float>> delta_means;
-        std::size_t package_node_count{0};
     };
     struct CachedElectronCt {
         std::string geometry_key,fp32_key;
@@ -120,18 +118,6 @@ struct SyclTransportContext::Impl {
     CachedSchneiderDevice schneider_device;
     SchneiderHostCache schneider_host_cache;
     ImmutableInputCache immutable_inputs;
-    std::uint64_t physics_cache_hits{0};
-    std::uint64_t physics_cache_misses{0};
-
-    void clear_physics_cache() noexcept {
-        schneider_device=CachedSchneiderDevice{};
-        resident_em.reset();resident_urban.reset();resident_air.reset();resident_copper_ions.reset();resident_ct_fields.reset();
-        immutable_inputs = ImmutableInputCache{};
-        unified_em_cache = CachedUnifiedEm{};
-        schneider_host_cache = SchneiderHostCache{};
-        physics_cache_hits = 0;
-        physics_cache_misses = 0;
-    }
 
     std::string device_name;
     sycl::queue queue;

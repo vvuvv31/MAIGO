@@ -11,9 +11,6 @@ struct Cache {
     Position lower{},upper{};
     ChargedDensityModel model{};
     std::array<float,2> majorant{};
-#ifdef CARBON_ELECTRON_VOXEL_CACHE_DIAGNOSTICS
-    unsigned face_hits{},material_hits{},refreshes{};
-#endif
 };
 inline ChargedFace cached_face(const ElectronCtGeometry& geometry,Position start,
     std::array<float,3> direction,Cache& cache) {
@@ -31,9 +28,6 @@ inline ChargedFace cached_face(const ElectronCtGeometry& geometry,Position start
         if(safe&&std::abs(norm-1)<=32*std::numeric_limits<float>::epsilon()){
             ChargedFace out;out.valid=true;out.distance=std::numeric_limits<float>::infinity();
             out.position=start;out.voxel=cache.voxel;out.section=cache.model.section;out.density=cache.model.density;
-#ifdef CARBON_ELECTRON_VOXEL_CACHE_DIAGNOSTICS
-            ++cache.face_hits;
-#endif
             return out;
         }
     }
@@ -42,9 +36,6 @@ inline ChargedFace cached_face(const ElectronCtGeometry& geometry,Position start
 inline bool prepare_material(ChargedBankView bank,const ElectronCtGeometry& geometry,
     const ChargedFace& face,Cache& cache){
     if(cache.valid&&face.voxel==cache.voxel){
-#ifdef CARBON_ELECTRON_VOXEL_CACHE_DIAGNOSTICS
-        ++cache.material_hits;
-#endif
         return true;
     }
     cache.valid=false;
@@ -60,9 +51,6 @@ inline bool prepare_material(ChargedBankView bank,const ElectronCtGeometry& geom
         cache.upper[k]=geometry.origin[k]+(cell+1)*geometry.spacing[k];
     }
     cache.valid=true;
-#ifdef CARBON_ELECTRON_VOXEL_CACHE_DIAGNOSTICS
-    ++cache.refreshes;
-#endif
     return true;
 }
 template<class Uniform,class Model>inline ChargedStep transport_step_face(const Model& model,

@@ -48,15 +48,6 @@ struct Draw {
     std::uint64_t bits{};
     // Strictly open FP32 variate for log/flight/angle arithmetic.
     operator float()const {return (float(bits>>41)+0.5f)*0x1p-23f;}
-    // Exact integer interval remapping. Keep the low-probability CDF support
-    // when a density-node draw is reused for conditional collision sampling.
-    Draw remap(std::uint64_t lo,std::uint64_t hi)const {
-        if(hi<=lo || bits<lo || bits>=hi)return {UINT64_MAX};
-        std::uint64_t a=bits-lo,d=hi-lo,q=0;
-        for(unsigned i=0;i<64;++i){const bool high=a>(UINT64_MAX>>1);a<<=1;q<<=1;
-            if(high||a>=d){a-=d;q|=1;}}
-        return {q};
-    }
 };
 inline bool operator<(Draw u,Probability p){return p.threshold==UINT64_MAX || u.bits<p.threshold;}
 inline bool operator>=(Draw u,Probability p){return !(u<p);}

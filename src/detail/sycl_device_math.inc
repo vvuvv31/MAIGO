@@ -33,17 +33,6 @@ struct Direction3F {
     float z;
 };
 
-inline float advance_representable(const float position,
-                                   const float direction,
-                                   const float distance) noexcept {
-    const auto advanced = position + direction * distance;
-    if (advanced != position || direction == 0.0F) {
-        return advanced;
-    }
-    constexpr auto infinity = std::numeric_limits<float>::infinity();
-    return sycl::nextafter(position, direction > 0.0F ? infinity : -infinity);
-}
-
 Direction3F rotate_local_direction(const float local_x,
                                    const float local_y,
                                    const float local_z,
@@ -193,42 +182,6 @@ inline float condensed_total_loss_variance_MeV2_device(
            (path_length_mm / 10.0F) * sycl::fmax(0.0F, relativistic_multiplier);
 }
 
-inline float condensed_total_loss_variance_with_mass_MeV2_device(
-    const float kinetic_energy_MeV,
-    const float rest_mass_MeV,
-    const float effective_charge,
-    const float path_length_mm,
-    const float density_g_per_cm3,
-    const float z_over_a_rel_water = 1.0F) noexcept {
-    if (kinetic_energy_MeV <= 0.0F || rest_mass_MeV <= 0.0F ||
-        effective_charge <= 0.0F || path_length_mm <= 0.0F ||
-        density_g_per_cm3 <= 0.0F) {
-        return 0.0F;
-    }
-    constexpr float electron_mass_MeV = 0.51099895F;
-    constexpr float bethe_K_MeV_cm2_per_g = 0.307075F;
-    constexpr float water_Z_over_A = 0.55509F;
-    const auto gamma = 1.0F + kinetic_energy_MeV / rest_mass_MeV;
-    const auto beta_squared =
-        sycl::fmax(0.0F, 1.0F - 1.0F / (gamma * gamma));
-    if (beta_squared <= 0.0F) {
-        return 0.0F;
-    }
-    const auto mass_ratio = electron_mass_MeV / rest_mass_MeV;
-    const auto maximum_transfer_MeV =
-        2.0F * electron_mass_MeV * beta_squared * gamma * gamma /
-        (1.0F + 2.0F * gamma * mass_ratio + mass_ratio * mass_ratio);
-    const auto relativistic_multiplier =
-        (maximum_transfer_MeV / beta_squared - 0.5F * maximum_transfer_MeV) /
-        (2.0F * electron_mass_MeV);
-    const auto z_over_a = water_Z_over_A *
-                          sycl::clamp(z_over_a_rel_water, 0.5F, 1.5F);
-    return bethe_K_MeV_cm2_per_g * electron_mass_MeV * effective_charge *
-           effective_charge * z_over_a * density_g_per_cm3 *
-           (path_length_mm / 10.0F) *
-           sycl::fmax(0.0F, relativistic_multiplier);
-}
-
 Direction3F scatter_direction(const Direction3F direction,
                               const float projected_rms_angle_rad,
                               const std::uint64_t seed,
@@ -299,63 +252,6 @@ struct CorrelatedScatteringStep {
     // Loss range at step start (theRangeTableForLoss semantics).
     float current_range_mm{0.0F};
 };
-
-// Stable geometric->true conversion shared by host diagnostics and the device
-// sampler (R3).  Computes t and delta=(t-g) directly on the conversion branch
-// in double precision, then narrows.  Never forms float(t)-float(g).
-struct UrbanV2TruePath {
-    float true_path_mm;
-    float delta_mm;
-};
-
-inline UrbanV2TruePath copper_urban_v2_true_path_and_delta(
-    const float geom_path_mm, const float transport_mfp_mm,
-    const float range_mm) noexcept {
-    UrbanV2TruePath out{geom_path_mm, 0.0F};
-    constexpr double kTauSmall = 1.0e-16;
-    constexpr double kTLimitMinFix2 = 1.0e-6;  // mm
-    if (!(geom_path_mm > 0.0F) || !(transport_mfp_mm > 0.0F)) {
-        return out;
-    }
-    const double g = static_cast<double>(geom_path_mm);
-    const double lam = static_cast<double>(transport_mfp_mm);
-    if (!(g >= kTLimitMinFix2) || !(g > lam * kTauSmall)) {
-        return out;
-    }
-    const double ratio = g / lam;
-    double t;
-    double delta;
-    if (ratio < 1.0e-3) {
-        // Taylor of -lam*(log1p(-r)+r) = g*r*(1/2+r/3+r^2/4+...).
-        // Pure arithmetic: no log1p call, no cancellation, portable to
-        // device double without relying on a double log1p overload.
-        const double series =
-            0.5 + ratio * (1.0 / 3.0 + ratio * (0.25 + ratio * 0.2));
-        delta = g * ratio * series;
-        t = g + delta;
-    } else if (ratio < 1.0) {
-        // delta = -lam*(log1p(-r)+r) == t-g, evaluated without cancellation.
-        const double log_term =
-            static_cast<double>(sycl::log1p(static_cast<float>(-ratio)));
-        t = -lam * log_term;
-        delta = -lam * (log_term + ratio);
-        if (!(delta > 0.0)) delta = 0.0;
-    } else {
-        t = static_cast<double>(range_mm > 0.0F ? range_mm : geom_path_mm);
-        delta = t - g;
-        if (!(delta > 0.0)) delta = 0.0;
-    }
-    double t_clamped = t;
-    if (t_clamped < g) t_clamped = g;
-    if (range_mm > 0.0F && t_clamped > static_cast<double>(range_mm)) {
-        t_clamped = static_cast<double>(range_mm);
-        delta = t_clamped - g;
-        if (!(delta > 0.0)) delta = 0.0;
-    }
-    out.true_path_mm = static_cast<float>(t_clamped);
-    out.delta_mm = static_cast<float>(delta);
-    return out;
-}
 
 // Stable small-angle sample (Fix B).  one_minus_cth is computed DIRECTLY
 // from each sampling expression, never as 1-cth after the float cth has
@@ -473,22 +369,6 @@ inline CopperUrbanCoefficients copper_urban_coefficients(
     result.coeffc3 = 2.3683e-1F - z13 * (1.8111F - z13 * 3.2774e-1F);
     result.coeffc4 = 1.7888e-2F + z13 * (1.9659e-2F - z13 * 2.6664e-3F);
     return result;
-}
-
-inline float copper_urban_theta0(
-    const float path_length_mm, const float kin_energy_MeV,
-    const float radiation_length_mm, const int projectile_charge,
-    const int mass_number,
-    const CopperUrbanCoefficients& coefficients) noexcept {
-    const auto mass =
-        static_cast<float>(mass_number) * static_cast<float>(nucleon_rest_mass_MeV);
-    const auto invbetacp = (kin_energy_MeV + mass) /
-                           (kin_energy_MeV * (kin_energy_MeV + 2.0F * mass));
-    const auto y = path_length_mm / radiation_length_mm;
-    const auto theta0 = 13.6F * static_cast<float>(projectile_charge) *
-                        sycl::sqrt(y) * invbetacp;
-    return theta0 * (coefficients.coeffth1 +
-                     coefficients.coeffth2 * sycl::log(y));
 }
 
 // ---------------------------------------------------------------------------
@@ -712,27 +592,6 @@ struct UrbanV2TrackState {
     float tlimitmin_mm{1.0e-7F};
     bool first_step{true};
 };
-
-// Copper cache numbers, derived at runtime from Zeff with the exact
-// InitialiseModelCache formulas (no transcribed magic constants).
-struct UrbanV2CopperCache {
-    float doverrb;
-    float factmin;
-    float stepmina;
-    float stepminb;
-    float z23;
-};
-
-inline UrbanV2CopperCache copper_urban_v2_cache() noexcept {
-    constexpr float zeff = kUrbanV2CopperZeff;
-    UrbanV2CopperCache c{};
-    c.doverrb = 1.15F - 9.76e-4F * zeff;
-    c.factmin = 0.001F;  // dispAlg96 == true
-    c.stepmina = 27.725F / (1.0F + 0.203F * zeff);
-    c.stepminb = 6.152F / (1.0F + 0.111F * zeff);
-    c.z23 = sycl::pow(zeff, 2.0F / 3.0F);
-    return c;
-}
 
 // t -> g conversion WITH par capture (ComputeGeomPathLength mirror) AND the
 // stable branch-consistent delta (fix B4: delta belongs to the taken
@@ -1191,22 +1050,6 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step_with_range(
     out.exit_path = 3;
     state.first_step = false;
     return out;
-}
-
-inline UrbanV2LimitProposal copper_urban_v2_limit_step(
-    const float t_input_true_mm, const float epre_mev,
-    const UrbanV2Material& mat, const float safety_start_mm,
-    const bool at_geom_boundary, UrbanV2TrackState& state,
-    const std::uint64_t seed, const std::uint64_t history_id,
-    const std::uint64_t outer_step,
-    const std::uint32_t segment_index) noexcept {
-    bool range_supported = false;
-    const float range = urban_v2_current_range_mm(
-        mat, epre_mev, range_supported);
-    if (!range_supported) return {};
-    return copper_urban_v2_limit_step_with_range(
-        t_input_true_mm, epre_mev, mat, safety_start_mm, at_geom_boundary,
-        state, range, seed, history_id, outer_step, segment_index);
 }
 
 // Research-only Urban v2 for the Copper collimator.  Fixes the confirmed

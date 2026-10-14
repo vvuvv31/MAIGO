@@ -38,8 +38,6 @@ def inventory(root):
         expanded = set(dependencies.values())
         if cfg.get('enable_ct_grid') or cfg.get('unified_water_material_file'):
             expanded.add(cfg.get('ct_schneider_file', 'data/materials/schneider/hu_to_material.txt'))
-            expanded.add(cfg.get('ct_schneider_radiation_length_file',
-                                 'data/materials/schneider/radiation_lengths.json'))
         for name in packages:
             package = electron['packages'][name]
             expanded.update(str(Path(package['root'])/p) for p in package['manifest']['files'])

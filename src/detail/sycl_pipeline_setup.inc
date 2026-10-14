@@ -147,7 +147,6 @@
     UnifiedEmFailureRecord* unified_failure_records=nullptr;
     UnifiedEmRecord* unified_records=nullptr;
     UnifiedEmNode* unified_nodes=nullptr;
-    float* delta_mean_device=nullptr;
     EmCubicSegmentCandidate<float>* unified_segments=nullptr;
     std::uint64_t* unified_audit=nullptr;
 
@@ -290,33 +289,26 @@
             input_cache_key(config.em_package_file)+"|"+
             input_cache_key(unified_em_request(config).delta_file);
         std::shared_ptr<const UnifiedEmPackage> unified_package;
-        std::shared_ptr<const std::vector<float>> unified_delta_means;
         bool unified_em_cache_hit=false;
         if(context!=nullptr){
             auto& cached=context->impl_->unified_em_cache;
             if(cached.valid && cached.signature==unified_em_signature){
-                unified_package=cached.package;unified_delta_means=cached.delta_means;
-                unified_em_cache_hit=true;++context->impl_->physics_cache_hits;
+                unified_package=cached.package;
+                unified_em_cache_hit=true;
             }
         }
         if(!unified_package){
-            // Package and delta moments are parsed together (possibly already
-            // on a prefetch thread); the second stage reports zero here.
-            auto loaded=runtime_call("unified_em_package_load_verify",[&]{return take_unified_em(unified_em_request(config));});
-            unified_package=std::move(loaded.package);
-            unified_delta_means=runtime_call("delta_moments_load_verify",[&]{return std::move(loaded.delta_means);});
+            // The prefetch result includes package and delta-sidecar validation.
+            unified_package=runtime_call("unified_em_package_load_verify",[&]{return take_unified_em(unified_em_request(config));});
             if(context!=nullptr){
                 auto& cached=context->impl_->unified_em_cache;
                 cached.valid=true;cached.signature=unified_em_signature;
-                cached.package=unified_package;cached.delta_means=unified_delta_means;
-                cached.package_node_count=unified_package->nodes.size();
-                ++context->impl_->physics_cache_misses;
+                cached.package=unified_package;
             }
         }
         const auto& package=*unified_package;
         if(package.materials.size()!=26 || package.continuous_descriptors.size()!=468)
             throw std::invalid_argument("GPU transport requires the continuous26-composition EMCNT001 package; archived density-state packages are host diagnostics only");
-        const auto& delta_means=*unified_delta_means;
         bool primary_record_found = false;
         for (const auto& record : package.records) {
             if (record.z == static_cast<unsigned>(config.primary_atomic_number) &&
@@ -339,7 +331,6 @@
         std::cout<<"[physics-cache] unified_em="<<(unified_em_cache_hit?"hit":"miss")
                  <<" nodes="<<package.nodes.size()<<"\n";
         RuntimeScope t_em_device("setup_em_device_upload");
-        delta_mean_device=upload("delta_means",delta_means);
         if(uses_urban_package)std::cout<<"[urban-ionization-clock] native proposal clock limits true transport paths; aggregate energy law unchanged\n";
         std::cout<<"[delta-moments] condensed_partition_v1; aggregate Gamma; nodes="
                  <<package.nodes.size()<<"\n";
@@ -358,7 +349,7 @@
         unified_audit=mem_tracker.allocate<std::uint64_t>(kUnifiedEmAuditCounters*kUnifiedEmAuditShards);if(!unified_audit)throw std::bad_alloc();
         queue.fill(unified_audit,std::uint64_t{0},kUnifiedEmAuditCounters*kUnifiedEmAuditShards).wait_and_throw();
 
-        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,static_cast<unsigned>(package.materials.size()),unified_energy_index,delta_mean_device
+        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,unified_energy_index
         };
         if(!package.continuous_descriptors.empty()) {
             unified_device.continuous_descriptors=upload("continuous_descriptors",package.continuous_descriptors);
@@ -370,7 +361,6 @@
             std::cout<<"[em-continuous-density] compositions="<<package.materials.size()
                      <<" density_response_states=0 range_degree="<<package.continuous_degree-1<<"\n";
         }
-        std::cout<<"[em-shared-prepare-grid] certified="<<package.shared_prepare_grid<<"\n";
 
         t_em_device.finish();
         std::cout<<"[unified-em] all 18 charged ions; water + Schneider continuous density; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending\n";
@@ -724,7 +714,7 @@
                             const unsigned i=id[0],t=i/18,ion=i%18;
                             const auto state=source.select(section[t],rho[t],ion);
                             UnifiedEmCtFields value;value.valid=state.valid;
-                            if(state.valid){const auto p=state.lo();value.material=p.material;value.coordinate=p.continuous_coordinate;}
+                            if(state.valid){const auto p=state.point();value.material=p.material;value.coordinate=p.continuous_coordinate;}
                             fields[i]=value;
                         }).wait_and_throw();
                         std::vector<EmContinuousDescriptor> descriptors(468);
@@ -737,7 +727,7 @@
                             const unsigned t=id[0];
                             const auto state=source.select(section[t],rho[t],range_ion);
                             if(!state.valid)return;
-                            const auto p=state.lo();const float x=2*p.continuous_coordinate-1;
+                            const auto p=state.point();const float x=2*p.continuous_coordinate-1;
                             for(unsigned j=0;j<p.continuous->range_count;++j)
                                 range_values[range_offsets[t]+j]=em_chebyshev(p.continuous_range+j*(p.continuous_degree+1)+1,p.continuous_lengths?p.continuous_lengths[j]:p.continuous_degree,x);
                         }).wait_and_throw();

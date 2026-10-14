@@ -12,12 +12,12 @@
 #include <sycl/sycl.hpp>
 namespace carbon {
 // Coarse exponent buckets only narrow the search; original knots and arithmetic stay intact.
-inline constexpr unsigned unified_em_index_stride=5*257;
+inline constexpr unsigned unified_em_index_stride=4*257;
 inline std::vector<unsigned> build_unified_em_index(const UnifiedEmPackage& package) {
     std::vector<unsigned> index(package.records.size()*unified_em_index_stride);
     for(unsigned r=0;r<package.records.size();++r) {
         const auto& record=package.records[r];
-        for(unsigned kind=0;kind<5;++kind) {
+        for(unsigned kind=0;kind<4;++kind) {
             unsigned cursor=0,count=kind==0?record.node_count:record.counts[kind-1];
             auto lower=[&](unsigned i){return kind==0?package.nodes[record.node_offset+i].energy:
                 package.segments[record.offsets[kind-1]+i].lower;};
@@ -40,14 +40,12 @@ struct UnifiedEmPointStep {
     bool ion_fluctuation{};
     float delta_stopping{},delta_variance{},stopping_slope{},delta_slope{},delta_partition_rate{};
 };
-struct UnifiedEmStep { UnifiedEmPointStep lo,hi; };
 struct UnifiedEmPoint {
     const UnifiedEmRecord* record{};
     const UnifiedEmNode* nodes{};
     const EmCubicSegmentCandidate<float>* segments{};
     float density_scale{1};
     const unsigned* index{};
-    const float* delta_means{};
     const EmContinuousDescriptor* continuous{};
     const float* continuous_range{};
     const unsigned* continuous_lengths{};
@@ -228,42 +226,26 @@ struct UnifiedEmPoint {
         float e=kinetic/record->a;
         return e>=nodes[0].energy && e<=nodes[record->node_count-1].energy;
     }
-    UnifiedEmNode at(float e,float* delta_mean=nullptr,float* delta_variance=nullptr,float* delta_slope=nullptr, unsigned* found=nullptr, unsigned shared=~0u)const {
-        unsigned lo=shared;
-        if(shared==~0u) {
-        lo=0;unsigned hi=record->node_count-2;bounds(0,e,lo,hi);
+    UnifiedEmNode at(float e)const {
+        unsigned lo=0,hi=record->node_count-2;bounds(0,e,lo,hi);
         while(lo<hi){auto m=(lo+hi+1)/2;if(nodes[m].energy<=e)lo=m;else hi=m-1;}
-        }
-        if(found)*found=lo;
         const auto& a=nodes[lo];const auto& b=nodes[lo+1];
         float w=std::clamp((e-a.energy)/(b.energy-a.energy),0.f,1.f);
         auto mix=[&](float x,float y){return x+w*(y-x);};
-        if(delta_mean)*delta_mean=delta_means?mix(delta_means[2*lo],delta_means[2*lo+2]):0.f;
-        // Stored moments are guaranteed >= 0; clamp the interpolated variance so
-        // fp32 rounding of x + w*(y-x) cannot hand a tiny negative to the sampler.
-        if(delta_variance)*delta_variance=delta_means?std::max(0.f,mix(delta_means[2*lo+1],delta_means[2*lo+3])):0.f;
-        if(delta_slope)*delta_slope=delta_means?(delta_means[2*lo+2]-delta_means[2*lo])/(b.energy-a.energy)/record->a:0.f;
         return {e,mix(a.full,b.full),mix(a.restricted,b.restricted),mix(a.stopping,b.stopping),mix(a.range,b.range),mix(a.lambda,b.lambda),mix(a.factor,b.factor),mix(a.correction,b.correction),mix(a.dispersion,b.dispersion),mix(a.universal_dispersion,b.universal_dispersion),mix(a.q2,b.q2),a.model,a.fluctuation};
     }
-    float raw(int kind,float x,float* slope=nullptr, unsigned* found=nullptr, unsigned shared=~0u)const {
+    float raw(int kind,float x,float* slope=nullptr)const {
         const auto* v=segments+record->offsets[kind];unsigned lo=0,hi=record->counts[kind]-1;
         if(x<v[0].lower){
-            if(kind==3){if(slope)*slope=0;return 0;}
             float w=std::max(0.f,x/v[0].lower);
             if(slope)*slope=x>0?v[0].y0*(kind==2?2*w/v[0].lower:1/(2*std::sqrt(w)*v[0].lower)):0.f;
             return v[0].y0*(kind==2?w*w:std::sqrt(w));
         }
-        if(shared!=~0u)lo=shared;
-        else {
         bounds(kind+1,x,lo,hi);
         while(lo<hi){auto m=(lo+hi+1)/2;if(v[m].lower<=x)lo=m;else hi=m-1;}
-        }
-        if(found)*found=lo;
         if(slope)*slope=v[lo].derivative(x);
         return v[lo].value(x);
     }
-    float factor(float kinetic)const {return at(kinetic/record->a).factor;}
-    float range(float kinetic)const {return corrected_raw_range(kinetic*record->ratio)/(factor(kinetic)*record->ratio);}
     float rate(float kinetic,float pre_factor)const {return continuous_rate(kinetic,pre_factor);}
     // Continuous26 birth partition needs only two means, not the range,
     // fluctuations or energy derivatives of a transport step.
@@ -275,7 +257,7 @@ struct UnifiedEmPoint {
     }
     template<bool ZeroDensityGuard=false,bool FirstOrderDelta=false,bool FirstOrderRestricted=false>
     UnifiedEmPointStep prepare(float kinetic)const {
-        const auto& r=*record;float delta=0,variance=0,delta_slope=0;const auto n=at(kinetic/r.a,&delta,&variance,&delta_slope);
+        const auto& r=*record;float delta=0,variance=0,delta_slope=0;const auto n=at(kinetic/r.a);
         // Eligible local-electron CT paths may use step-start restricted
         // stopping. Range inversion and charge-dependent native corrections
         // remain unchanged; only the within-step linear slope is omitted.
@@ -323,12 +305,6 @@ struct UnifiedEmPoint {
                 return loss+m.correction*density_scale*h; }
             },r.linear_limit).energy_loss;
     }
-    float mean(float kinetic,float length)const {return mean(kinetic,length,prepare(kinetic));}
-    // Native restricted-only table probe, before condensed delta integration.
-    float native_mean(float kinetic,float length)const {
-        auto pre=prepare(kinetic);pre.stopping_slope=0;pre.delta_stopping=0;
-        return mean(kinetic,length,pre);
-    }
 };
 struct UnifiedEmDevice;
 // Exact material fields evaluated on the GPU at a CT's actual density bits.
@@ -340,34 +316,27 @@ struct UnifiedEmCtFields {
 };
 struct alignas(16) UnifiedEmState {
     const UnifiedEmDevice* tables{};
-    const UnifiedEmRecord* host_record{};
-    unsigned lo_mat{}, hi_mat{};
+    unsigned material_index{};
     int ion{-1};
-    float weight{}, density{}, lo_scale{1}, hi_scale{1};
+    float density{}, density_scale{1};
     int section{-2};
     bool valid{false};
     unsigned ct_fields_index{~0u};
-    UnifiedEmPoint lo() const;
-    UnifiedEmPoint hi() const;
-    const UnifiedEmRecord* record() const { return tables ? lo().record : host_record; }
-    float mix(float a,float)const{return a;}
-    bool covers(float t)const{return valid && lo().covers(t);}
-    float range(float t)const{return lo().range(t);}
-    float mean(float t,float h)const{return lo().mean(t,h);}
-    UnifiedEmStep prepare(float t)const;
-    template<bool NonIon=false> float mean(float t,float h,const UnifiedEmStep& pre)const {
-        return lo().template mean<NonIon>(t,h,pre.lo);
+    UnifiedEmPoint point() const;
+    const UnifiedEmRecord* record() const { return tables ? point().record : nullptr; }
+    bool covers(float t)const{return valid && point().covers(t);}
+    UnifiedEmPointStep prepare(float t)const;
+    template<bool NonIon=false> float mean(float t,float h,const UnifiedEmPointStep& pre)const {
+        return point().template mean<NonIon>(t,h,pre);
     }
-    float cut()const{return lo().material.cut;}
-    float peak()const{const auto* a=record();const auto b=hi();return mix(a->peak,b.record->peak)*a->a;}
+    float cut()const{return point().material.cut;}
+    float peak()const{const auto* a=record();return a->peak*a->a;}
     float step_from_range(float r)const {
         const auto* rec=record();
         float f=rec->step_fraction,x=rec->final_range;
         return r>x?f*r+x*(1-f)*(2-x/r):r;
     }
-    float step(float t)const {return step_from_range(range(t));}
-    float step(const UnifiedEmStep& pre)const {return step_from_range(mix(pre.lo.range,pre.hi.range));}
-    float rate(float t,float f0,float f1)const{return mix(lo().rate(t,f0),hi().rate(t,f1));}
+    float step(const UnifiedEmPointStep& pre)const {return step_from_range(pre.range);}
 };
 struct UnifiedEmDevice {
     const UnifiedEmMaterial* materials{};
@@ -375,9 +344,7 @@ struct UnifiedEmDevice {
     const UnifiedEmRecord* records{};
     const UnifiedEmNode* nodes{};
     const EmCubicSegmentCandidate<float>* segments{};
-    unsigned material_count{};
     const unsigned* energy_index{};
-    const float* delta_means{};
     const EmContinuousDescriptor* continuous_descriptors{};
     const float* continuous_scalars{};
     const float* continuous_ranges{};
@@ -397,8 +364,7 @@ struct UnifiedEmDevice {
                          )const {
         auto* r=records+material*18+ion;
         UnifiedEmPoint p{r,nodes+r->node_offset,segments,density_scale,
-            energy_index?energy_index+(material*18+ion)*unified_em_index_stride:nullptr,
-            delta_means?delta_means+2*r->node_offset:nullptr
+            energy_index?energy_index+(material*18+ion)*unified_em_index_stride:nullptr
             };
 
         p.continuous=continuous_descriptors+material*18+ion;
@@ -421,8 +387,8 @@ struct UnifiedEmDevice {
 
         const unsigned m=section+1;const auto& d=continuous_descriptors[m*18+ion];const float lr=std::log(density);
         if(lr<d.log_min-2e-6f || lr>d.log_max+2e-6f)return state;
-        state.tables=this;state.lo_mat=state.hi_mat=m;state.ion=ion;
-        state.lo_scale=state.hi_scale=density/materials[m].density;state.weight=0;
+        state.tables=this;state.material_index=m;state.ion=ion;
+        state.density_scale=density/materials[m].density;
         state.density=density;state.section=section;state.valid=true;return state;
     }
     UnifiedEmState select_ct(int section,float density,int ion,std::size_t voxel)const {
@@ -432,34 +398,30 @@ struct UnifiedEmDevice {
         const unsigned index=ct_fields_voxels[voxel];
         if(index>=ct_fields_count || !ct_fields[index*18+ion].valid)return state;
         const unsigned m=section+1;
-        state.tables=this;state.lo_mat=state.hi_mat=m;state.ion=ion;
-        state.lo_scale=state.hi_scale=density/materials[m].density;
+        state.tables=this;state.material_index=m;state.ion=ion;
+        state.density_scale=density/materials[m].density;
         state.density=density;state.section=section;state.valid=true;state.ct_fields_index=index;
         return state;
     }
 };
-inline UnifiedEmPoint UnifiedEmState::lo() const {
-    return tables?tables->point(lo_mat,ion,lo_scale,ct_fields_index
-        ):UnifiedEmPoint{};
-}
-inline UnifiedEmPoint UnifiedEmState::hi() const {
-    return tables?tables->point(hi_mat,ion,hi_scale,ct_fields_index
+inline UnifiedEmPoint UnifiedEmState::point() const {
+    return tables?tables->point(material_index,ion,density_scale,ct_fields_index
         ):UnifiedEmPoint{};
 }
 // Searches are shared only inside this preparation, never cached across steps.
-inline UnifiedEmStep UnifiedEmState::prepare(float t)const {
-    const auto p=lo().prepare(t);return {p,p};
+inline UnifiedEmPointStep UnifiedEmState::prepare(float t)const {
+    return point().prepare(t);
 }
 struct UnifiedEmClock {
     DiscreteDeltaClockCandidate<float> clock;
-    float threshold=std::numeric_limits<float>::max(),rate0{},rate1{},last_density{};
+    float threshold=std::numeric_limits<float>::max(),rate{},last_density{};
     int last_section=-2;
     float update(const UnifiedEmState& s,float kinetic,float f0){
         if(last_section!=s.section || last_density!=s.density){threshold=std::numeric_limits<float>::max();last_section=s.section;last_density=s.density;}
         float peak=s.peak();
-        if(kinetic<=peak){if(kinetic*1.25f<threshold){rate0=s.lo().rate(kinetic,f0);rate1=rate0;threshold=(rate0+rate1)>0?kinetic:0;}}
-        else if(kinetic<threshold){threshold=std::max(peak,kinetic*.8f);rate0=s.lo().rate(threshold,f0);rate1=rate0;}
-        return s.mix(rate0,rate1);
+        if(kinetic<=peak){if(kinetic*1.25f<threshold){rate=s.point().rate(kinetic,f0);threshold=(rate+rate)>0?kinetic:0;}}
+        else if(kinetic<threshold){threshold=std::max(peak,kinetic*.8f);rate=s.point().rate(threshold,f0);}
+        return rate;
     }
 };
 struct UnifiedEmLoss {float loss{},continuous{},delta{};bool valid{false};unsigned proposed{},accepted{};std::uint8_t failure_stage{0};float mean{},delta_mean{},delta_variance{};};
@@ -467,39 +429,36 @@ struct UnifiedEmLoss {float loss{},continuous{},delta{};bool valid{false};unsign
 // The supplied view belongs to the same step-start state as pre; it must not
 // survive a density/material change. Other paths keep their original evaluator.
 template<bool NonIon=false,bool PreparedPoint=false,bool NativeNormal=(NonIon && PreparedPoint),bool NativeMath=(NativeNormal && NonIon),bool InverseNormal=NativeNormal,class Uniform>
-UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,float t,float h,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform,const UnifiedEmPoint* prepared_point=nullptr){
+UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,float t,float h,bool fluctuations,const UnifiedEmPointStep& pre,Uniform& uniform,const UnifiedEmPoint* prepared_point=nullptr){
     UnifiedEmLoss out;
-    const auto lo=[&](){if constexpr(PreparedPoint)return *prepared_point;else return s.lo();}();
-    const auto hi=s.hi();const auto& r=*lo.record;
-    const float mean=[&](){if constexpr(PreparedPoint)return lo.template mean<NonIon>(t,h,pre.lo);else return s.template mean<NonIon>(t,h,pre);}();
+    const auto lo=[&](){if constexpr(PreparedPoint)return *prepared_point;else return s.point();}();
+    const auto& r=*lo.record;
+    const float mean=[&](){if constexpr(PreparedPoint)return lo.template mean<NonIon>(t,h,pre);else return s.template mean<NonIon>(t,h,pre);}();
     float tau=t/r.mass,ratio=.51099891f/r.mass;
     out.mean=mean;
     float tmax=2*.51099891f*tau*(tau+2)/(1+2*(tau+1)*ratio+ratio*ratio);
     const float material_cut=[&](){if constexpr(PreparedPoint)return lo.material.cut;else return s.cut();}();
     float cut=std::min(material_cut,tmax);float loss=mean;
     if(fluctuations && mean<t){
-        UnifiedEmPointStep fluct_lo=pre.lo,fluct_hi=pre.hi;
-        RestrictedFluctuationInput<float> input{t,r.mass,mean,s.mix(fluct_lo.dispersion,fluct_hi.dispersion)*h,s.mix(fluct_lo.universal_dispersion,fluct_hi.universal_dispersion)*h,cut,tmax,s.mix(r.excitation,hi.record->excitation),s.mix(r.e0,hi.record->e0)};
+        const auto& fluct=pre;
+        RestrictedFluctuationInput<float> input{t,r.mass,mean,fluct.dispersion*h,fluct.universal_dispersion*h,cut,tmax,r.excitation,r.e0};
         // Dense explicit-tail Gamma is scoped to the measured local-electron
         // proton CT broadbeam primary. Carbon and other paths retain Poisson marks.
         constexpr bool dense_tail_gamma=NonIon && PreparedPoint && NativeNormal;
-        RestrictedFluctuationSampler<float,Uniform,NativeNormal,NativeMath,InverseNormal,dense_tail_gamma> sampler(uniform);auto draw=sampler.sample(input,NonIon?false:fluct_lo.ion_fluctuation,float(r.z));
+        RestrictedFluctuationSampler<float,Uniform,NativeNormal,NativeMath,InverseNormal,dense_tail_gamma> sampler(uniform);auto draw=sampler.sample(input,NonIon?false:fluct.ion_fluctuation,float(r.z));
         if(!draw.valid){out.failure_stage=1;return out;}
         loss=std::min(t,draw.loss);
     }
     if(t-loss<=r.lowest_kinetic)loss=t;
     out.continuous=loss;
     // Aggregate delta draw; native restricted fluctuation remains independent.
-    const float delta0=s.mix(pre.lo.delta_stopping,pre.hi.delta_stopping);
-    const float delta_slope=s.mix(pre.lo.delta_slope,pre.hi.delta_slope);
+    const float delta0=pre.delta_stopping;
+    const float delta_slope=pre.delta_slope;
     const float delta_mean=std::max(0.f,delta0-.5f*(mean+delta0*h)*delta_slope)*h;
     out.delta_mean=delta_mean;
     if(!(delta_mean>=0 && std::isfinite(delta_mean))){out.failure_stage=2;return out;}
-    // Loader guarantees every stored moment is >= 0, so a negative interpolated
-    // variance is pure fp32 rounding (non-FMA contraction rounds a mathematically
-    // non-negative mix below zero). Clamp as delta_mean already is; otherwise
-    // delta_moment_draw() rejects it as NaN and the dose is discarded.
-    const float delta_variance=std::max(0.f,s.mix(pre.lo.delta_variance,pre.hi.delta_variance)*h);
+    // Keep the existing non-negative variance guard before sampling.
+    const float delta_variance=std::max(0.f,pre.delta_variance*h);
     out.delta_variance=delta_variance;
     const float delta=fluctuations?delta_moment_draw<NativeNormal,NativeMath,InverseNormal>(delta_mean,delta_variance,uniform):delta_mean;
     if(!(delta>=0 && std::isfinite(delta))){out.failure_stage=3;return out;}
@@ -509,7 +468,7 @@ UnifiedEmLoss unified_em_explicit_loss(const UnifiedEmState& s,float t,float h,b
     return out;
 }
 template<bool NonIon=false,class Uniform>
-UnifiedEmLoss unified_em_loss(const UnifiedEmState& s,float t,float h,bool fluctuations,const UnifiedEmStep& pre,Uniform& uniform){
+UnifiedEmLoss unified_em_loss(const UnifiedEmState& s,float t,float h,bool fluctuations,const UnifiedEmPointStep& pre,Uniform& uniform){
     return unified_em_explicit_loss<NonIon>(s,t,h,fluctuations,pre,uniform);
 }
 } // namespace carbon

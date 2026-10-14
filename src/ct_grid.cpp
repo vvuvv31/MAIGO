@@ -232,18 +232,6 @@ SchneiderMaterialTable SchneiderMaterialTable::from_topas_file(
     return table;
 }
 
-std::uint8_t SchneiderMaterialTable::section_id(const int hu) const noexcept {
-    if (hu < sections[0].hu_min_inclusive) {
-        return 0;
-    }
-    for (std::size_t i = 0; i < section_count; ++i) {
-        if (hu >= sections[i].hu_min_inclusive && hu < sections[i].hu_max_exclusive) {
-            return static_cast<std::uint8_t>(i);
-        }
-    }
-    return static_cast<std::uint8_t>(section_count - 1);
-}
-
 CtGrid CtGrid::from_binary(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     if (!input) {
@@ -292,45 +280,6 @@ CtGrid CtGrid::from_binary(const std::filesystem::path& path) {
         throw std::runtime_error("Truncated CT grid file: " + path.string());
     }
     return grid;
-}
-
-void CtGrid::write_binary(const std::filesystem::path& path) const {
-    if (density_g_per_cm3.size() != number_of_voxels() ||
-        material_id.size() != number_of_voxels()) {
-        throw std::invalid_argument("CT grid array size mismatch");
-    }
-    if (mass_sp_za_rel.size() != 25 || mass_sp_I_eV.size() != 25)
-        throw std::invalid_argument("CT v3 requires exactly25 Schneider compositions");
-    std::ofstream output(path, std::ios::binary);
-    if (!output) {
-        throw std::runtime_error("Cannot write CT grid: " + path.string());
-    }
-    const auto magic = magic_value;
-    const auto version = version_value;
-    output.write(reinterpret_cast<const char*>(&magic), sizeof(magic));
-    output.write(reinterpret_cast<const char*>(&version), sizeof(version));
-    output.write(reinterpret_cast<const char*>(&nx), sizeof(nx));
-    output.write(reinterpret_cast<const char*>(&ny), sizeof(ny));
-    output.write(reinterpret_cast<const char*>(&nz), sizeof(nz));
-    output.write(reinterpret_cast<const char*>(&origin_x_mm), sizeof(origin_x_mm));
-    output.write(reinterpret_cast<const char*>(&origin_y_mm), sizeof(origin_y_mm));
-    output.write(reinterpret_cast<const char*>(&origin_z_mm), sizeof(origin_z_mm));
-    output.write(reinterpret_cast<const char*>(&spacing_x_mm), sizeof(spacing_x_mm));
-    output.write(reinterpret_cast<const char*>(&spacing_y_mm), sizeof(spacing_y_mm));
-    output.write(reinterpret_cast<const char*>(&spacing_z_mm), sizeof(spacing_z_mm));
-    output.write(reinterpret_cast<const char*>(density_g_per_cm3.data()),
-                 static_cast<std::streamsize>(density_g_per_cm3.size() * sizeof(float)));
-    output.write(reinterpret_cast<const char*>(material_id.data()),
-                 static_cast<std::streamsize>(material_id.size() * sizeof(std::uint8_t)));
-
-    const auto& za = mass_sp_za_rel;
-    const auto& I = mass_sp_I_eV;
-    const auto n_factors = static_cast<std::uint32_t>(za.size());
-    output.write(reinterpret_cast<const char*>(&n_factors), sizeof(n_factors));
-    output.write(reinterpret_cast<const char*>(za.data()),
-                 static_cast<std::streamsize>(za.size() * sizeof(float)));
-    output.write(reinterpret_cast<const char*>(I.data()),
-                 static_cast<std::streamsize>(I.size() * sizeof(float)));
 }
 
 }  // namespace carbon

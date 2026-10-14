@@ -56,9 +56,9 @@ int main(int argc,char** argv) {
         catch(const std::runtime_error&) { rejected=true; }
         if(!rejected)throw std::runtime_error("Retired or duplicate TPS column accepted");
     }
-    const float face=carbon::clamp_step_to_ct_faces(.5f,.9f,.5f,.5f,1.f,0.f,0.f,0.f,0.f,0.f,1.f,1.f,1.f,nullptr,2,2,2);
+    const float face=carbon::clamp_step_to_ct_faces(.5f,.9f,.5f,.5f,1.f,0.f,0.f,0.f,0.f,0.f,1.f,1.f,1.f,2,2,2);
     if(std::fabs(face-.1f)>1e-6f)throw std::runtime_error("Face geometry");
-    const float bad=carbon::clamp_step_to_ct_faces(.5f,.9f,.5f,.5f,1.f,0.f,0.f,0.f,0.f,0.f,1.f,1.f,1.f,nullptr,0,0,0);
+    const float bad=carbon::clamp_step_to_ct_faces(.5f,.9f,.5f,.5f,1.f,0.f,0.f,0.f,0.f,0.f,1.f,1.f,1.f,0,0,0);
     if(!std::isnan(bad))throw std::runtime_error("Missing grid silently accepted");
     std::cout<<"Strict identity/mass/TPS/geometry checks passed\n";
 }

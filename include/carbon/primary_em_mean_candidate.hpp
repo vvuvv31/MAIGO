@@ -25,7 +25,6 @@ template<class Real> struct EmCubicSegmentCandidate {
 
 template<class Real> struct PrimaryRestrictedMeanCandidate {
     Real energy_loss{};
-    bool range_branch{false};
     bool stopped{false};
 };
 
@@ -38,15 +37,15 @@ PrimaryRestrictedMeanCandidate<Real> primary_restricted_mean_candidate(
     Real kinetic,Real step,Real prestep_restricted_stopping,Real range,
     InverseRange&& inverse_range,Correction&& correction,Real linear_limit=Real(.02)) {
     if(step<=0)return {};
-    if(step>=range)return {kinetic,false,true};
+    if(step>=range)return {kinetic,true};
     Real loss=prestep_restricted_stopping*step;
     bool use_range=loss>linear_limit*kinetic;
     if(use_range){Real de=kinetic-inverse_range(range-step);if(de>0)loss=de;}
-    if(loss>=kinetic)return {kinetic,use_range,true};
+    if(loss>=kinetic)return {kinetic,true};
     Real midpoint=std::max(kinetic-loss*Real(.5),kinetic*Real(.5));
     Real corrected=correction(midpoint,loss,step);
     if(corrected>kinetic || 2*corrected<loss)corrected=loss;
     corrected=std::max(Real(0),corrected);
-    return {std::min(kinetic,corrected),use_range,corrected>=kinetic};
+    return {std::min(kinetic,corrected),corrected>=kinetic};
 }
 } // namespace carbon

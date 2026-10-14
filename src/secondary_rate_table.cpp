@@ -340,24 +340,6 @@ SecondaryRateTable SecondaryRateTable::from_binary(
     return table;
 }
 
-std::uint32_t secondary_rate_binary_version(const std::filesystem::path& binary_path) {
-    std::ifstream file(binary_path, std::ios::binary);
-    if (!file) {
-        throw std::runtime_error("Cannot open secondary rate binary file: " + binary_path.string());
-    }
-    char magic[8]{};
-    std::uint32_t version{0};
-    file.read(magic, 8);
-    file.read(reinterpret_cast<char*>(&version), sizeof(version));
-    if (!file || file.gcount() != static_cast<std::streamsize>(sizeof(version))) {
-        throw std::runtime_error("Truncated header in secondary rate binary: " + binary_path.string());
-    }
-    if (std::memcmp(magic, "SCHN2RAT", 8) != 0) {
-        throw std::runtime_error("Invalid magic in secondary rate binary: " + binary_path.string());
-    }
-    return version;
-}
-
 int SecondaryRateTable::projectile_index(int proj_z, int proj_a) const noexcept {
     for (std::size_t i = 0; i < projectiles_.size(); ++i) {
         if (projectiles_[i].z == proj_z && projectiles_[i].a == proj_a) {
@@ -397,46 +379,6 @@ double SecondaryRateTable::mass_total_rate(std::size_t proj_idx, std::size_t sec
     const std::size_t stride_proj = kSecondaryNumSections * num_energies_;
     const std::size_t stride_sec = num_energies_;
     return mass_total_rates_[proj_idx * stride_proj + section_id * stride_sec + energy_idx];
-}
-
-double SecondaryRateTable::interpolate_mass_total(std::size_t proj_idx, std::size_t section_id, double energy_mevu) const {
-    if (proj_idx >= num_projectiles_ || section_id >= kSecondaryNumSections) {
-        throw std::out_of_range("SecondaryRateTable::interpolate_mass_total: index out of range");
-    }
-    // v3 (binary version 3): host mirror of the device mask. The channel
-    // domain is applied per target BEFORE interpolation; the total is the
-    // sum of masked partials. Strict zero outside the global grid; no clamp,
-    // no extrapolation.
-    if (!(energy_mevu >= energy_min_mevu_) || !(energy_mevu <= energy_max_mevu_)) {
-        return 0.0;
-    }
-    const double node_flt = (energy_mevu - energy_min_mevu_) / energy_step_mevu_;
-    std::size_t idx0 = static_cast<std::size_t>(node_flt);
-    if (idx0 >= num_energies_ - 1) {
-        idx0 = num_energies_ - 2;
-    }
-    const std::size_t idx1 = idx0 + 1;
-    const double alpha = node_flt - static_cast<double>(idx0);
-    double sum = 0.0;
-    for (std::size_t t = 0; t < kSecondaryNumTargets; ++t) {
-        const SecondaryRateDomainEntry& dom = channel_domain(proj_idx, t);
-        if (dom.has_support == 0 || energy_mevu < dom.energy_min_mevu ||
-            energy_mevu > dom.energy_max_mevu) {
-            continue;
-        }
-        const double y0 = mass_partial_rate(proj_idx, section_id, t, idx0);
-        const double y1 = mass_partial_rate(proj_idx, section_id, t, idx1);
-        double v = (1.0 - alpha) * y0 + alpha * y1;
-        if (v < 0.0) {
-            v = 0.0;
-        }
-        sum += v;
-    }
-    // Hazard/sampler unity with the device (float-sliver guard).
-    if (!(sum > 1e-12)) {
-        return 0.0;
-    }
-    return sum;
 }
 
 }  // namespace carbon

@@ -5,8 +5,6 @@ namespace carbon::pipelines {
 // Independent compile-time pipeline. Generic secondary projectile species remain supported.
 struct ProtonMinibeam {
     static constexpr const char* name = "proton_minibeam";
-    static constexpr int source_z = 1;
-    static constexpr int source_a = 1;
     static constexpr bool broadbeam = false;
     static constexpr unsigned secondary_segment_steps = kSecondarySegmentSteps;
     static constexpr unsigned secondary_tail_threshold = 8192U;

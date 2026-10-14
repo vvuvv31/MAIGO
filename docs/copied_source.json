@@ -3,7 +3,6 @@
   "files": [
     "include/carbon/all_ion_elastic.hpp",
     "include/carbon/batch_run.hpp",
-    "include/carbon/broadbeam_electron_distance.hpp",
     "include/carbon/broadbeam_electron_region.hpp",
     "include/carbon/charged_species.hpp",
     "include/carbon/cinel03_event_rotation.hpp",
@@ -56,7 +55,6 @@
     "include/carbon/inelastic_package_v3.hpp",
     "include/carbon/input_dependencies.hpp",
     "include/carbon/io.hpp",
-    "include/carbon/longitudinal_ray.hpp",
     "include/carbon/material_nuclear_rates.hpp",
     "include/carbon/min_json.hpp",
     "include/carbon/minibeam_collimator.hpp",
@@ -85,7 +83,6 @@
     "include/carbon/tps_source.hpp",
     "include/carbon/transport.hpp",
     "include/carbon/transport_config.hpp",
-    "include/carbon/transport_profile.hpp",
     "include/carbon/unified_em_package.hpp",
     "include/carbon/unified_em_view.hpp",
     "include/carbon/urban_mcs_package.hpp",
@@ -121,7 +118,6 @@
     "src/stopping_power.cpp",
     "src/tps_source.cpp",
     "src/transport_metrics.cpp",
-    "src/transport_profile.cpp",
     "src/transport_sycl.cpp",
     "src/unified_em_package.cpp",
     "src/urban_mcs_package.cpp"

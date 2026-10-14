@@ -128,7 +128,6 @@
             const auto ct_runtime_primary_mass_number = primary_mass_number;
             const auto ct_runtime_inverse_mass_number = inverse_mass_number;
 
-
             return queue.parallel_for<PrimaryTransportKernel<
                 Pipeline, kUniformWaterPrimaryPath, kKernelStage, BroadBeam, JointResponse>>(
             sycl::nd_range<1>{sycl::range<1>{chunk_global}, sycl::range<1>{local_size}},
@@ -148,7 +147,6 @@
                 const auto primary_mass_number = kCtQueuedPrimaryPath ? 1 : (kFoldA ? kFoldA : ct_runtime_primary_mass_number);
                 const auto inverse_mass_number = kCtQueuedPrimaryPath ? 1.0F : (kFoldA ? 1.0F / static_cast<float>(kFoldA) : ct_runtime_inverse_mass_number);
                 const bool enable_minibeam = BroadBeam ? false : primary_minibeam_enabled;
-
 
                 const auto lane = item.get_global_linear_id();
                 if (lane >= chunk_count) {
@@ -298,7 +296,6 @@
                                              static_cast<std::size_t>(voxel_y) * voxel_bins_x +
                                              static_cast<std::size_t>(voxel_x);
 
-
                     const auto energy_MeVu = energy_MeV * inverse_mass_number;
                     auto local_density_g_per_cm3 = water_density_g_per_cm3;
                     std::uint8_t ct_material = 2;
@@ -333,7 +330,7 @@
                     }
 
                     float step_mm = 0.0F;
-                    UnifiedEmStep unified_primary_pre;
+                    UnifiedEmPointStep unified_primary_pre;
                     UnifiedEmPoint unified_primary_point;
                     float unified_primary_rate=0,unified_primary_distance=std::numeric_limits<float>::infinity();
                     auto unified_uniform=[&](){return (rng::random_u32(spot_seed,rng_history,unified_primary_counter++,120)>>8)*0x1p-24f;};
@@ -361,19 +358,19 @@
                         if constexpr(kKernelStage==13 || kKernelStage==14 || kLocalElectronCtPath){
                             // Reuse the material view through this step's loss
                             // draw, without adding cross-step/resume state.
-                            unified_primary_point=unified_primary_state.lo();
+                            unified_primary_point=unified_primary_state.point();
                             // Carbon CT primary retains within-step loss slopes:
                             // omitting them produces a coherent beam-direction
                             // dose bias in low-density lung. Proton broadbeam
                             // keeps its separately scoped step-start approximation.
                             const auto point_pre=unified_primary_point.template prepare<kLocalElectronCtPath,kLocalProtonCtPath,kLocalProtonCtPath>(energy_MeV);
-                            unified_primary_pre={point_pre,point_pre};
+                            unified_primary_pre=point_pre;
                         }else unified_primary_pre=unified_primary_state.prepare(energy_MeV);
                         // Match ionIoni proposal segmentation while retaining aggregate loss.
                         // Debit only the true path accepted after geometry/nuclear competition.
                         if((kUniformWaterPrimaryPath || global_urban)) {
                             unified_primary_rate=unified_primary_clock.update(unified_primary_state,energy_MeV,
-                                unified_primary_pre.lo.factor);
+                                unified_primary_pre.factor);
                             if(!unified_primary_clock.clock.active)
                                 unified_primary_clock.clock.arm(-sycl::log(sycl::fmax(unified_uniform(),0x1p-24f)));
                             unified_primary_distance=unified_primary_clock.clock.distance(unified_primary_rate);
@@ -383,8 +380,8 @@
                         }
                         step_mm=sycl::fmin(unified_primary_state.step(unified_primary_pre),unified_primary_distance);
                         // Bound combined mean loss, not the old restricted range alone.
-                        const float delta_sp=unified_primary_state.mix(unified_primary_pre.lo.delta_stopping,unified_primary_pre.hi.delta_stopping);
-                        if(delta_sp>0) step_mm=sycl::fmin(step_mm,maximum_mean_loss_fraction*energy_MeV/sycl::fmax(1e-12f,delta_sp+unified_primary_state.mix(unified_primary_pre.lo.stopping,unified_primary_pre.hi.stopping)));
+                        const float delta_sp=unified_primary_pre.delta_stopping;
+                        if(delta_sp>0) step_mm=sycl::fmin(step_mm,maximum_mean_loss_fraction*energy_MeV/sycl::fmax(1e-12f,delta_sp+unified_primary_pre.stopping));
                     }
 
                     // Non-Urban CT steps must honor the configured physical
@@ -430,13 +427,13 @@
                         global_urban_material=urban_device.material(in_ct?int(ct_material):-1,local_density_g_per_cm3);
                         // Lifetime includes proposal, nuclear shortening and
                         // final Urban sampling below; never stored in a queue.
-                        if(in_ct)unified_primary_point=unified_primary_state.lo();
+                        if(in_ct)unified_primary_point=unified_primary_state.point();
                         global_urban_proposal=urban_global_prepare(urban_device,global_urban_material,global_urban_ion,
                             energy_MeV,sycl::fmin(step_mm,maximum_step_mm),
                             {position_x_mm,position_y_mm,position_z_mm},{direction_x,direction_y,direction_z},
                             cell,global_urban_boundary,global_urban_state,spot_seed,rng_history,steps,
                             local_density_g_per_cm3,
-                            in_ct?&unified_primary_point:nullptr,unified_primary_pre.lo.factor);
+                            in_ct?&unified_primary_point:nullptr,unified_primary_pre.factor);
                         if(!global_urban_proposal.valid) {
                             record_unified_em_failure(unified_failure_count,unified_failure_records,70,
                                 in_ct?int(ct_material):-1,primary_atomic_number,primary_mass_number,energy_MeV,local_density_g_per_cm3,step_mm);
@@ -667,11 +664,11 @@
                                     } else if(state.covers(parent)) {
                                         float restricted,delta;
                                         if constexpr(kKernelStage==13 || kKernelStage==14 || kLocalElectronCtPath)
-                                            state.lo().birth_stopping(parent,restricted,delta);
+                                            state.point().birth_stopping(parent,restricted,delta);
                                         else {
                                             const auto point=state.prepare(parent);
-                                            restricted=state.mix(point.lo.stopping,point.hi.stopping);
-                                            delta=state.mix(point.lo.delta_stopping,point.hi.delta_stopping);
+                                            restricted=point.stopping;
+                                            delta=point.delta_stopping;
                                         }
                                         const float total=restricted+delta;
                                         birth.valid=sycl::isfinite(total)&&total>0.f&&restricted>=0.f&&delta>=0.f;

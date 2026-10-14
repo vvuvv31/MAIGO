@@ -2,13 +2,9 @@
 #include "carbon/electron_material_registry.hpp"
 #include "carbon/immutable_input_cache.hpp"
 #include "carbon/ct_grid.hpp"
-#include "carbon/min_json.hpp"
-#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <fstream>
-#include <initializer_list>
-#include <iterator>
 #include <string_view>
 
 namespace carbon {
@@ -39,32 +35,6 @@ inline std::string electron_bank_input_key(const std::filesystem::path& index,
     std::string extra;
     if(in>>extra)throw std::runtime_error("Trailing electron bank index fields");
     if(magic=="MAIEC026")for(const char* file:{"scalar26.bin","penelope26.bin","atomic26.bin","brems26.bin","rates26.bin","proton26.bin","carbon26.bin"})key+="|"+input_cache_key(index.parent_path()/file);
-    return key;
-}
-
-// Include companion payload identities, not only the small manifest. Reading
-// metadata/statting files is cheap; the validated payload loader runs on misses.
-inline std::string companion_input_key(const std::filesystem::path& manifest,
-                                      std::initializer_list<std::string_view> fields) {
-    auto key=input_cache_key(manifest);
-    std::ifstream in(manifest);
-    if(!in)throw std::runtime_error("Cannot read input manifest: "+manifest.string());
-    const auto root=minjson::Parser(std::string(std::istreambuf_iterator<char>(in),{})).parse();
-    const auto visit=[&](auto&& self,const minjson::Value& v)->void {
-        for(const auto& [name,child]:v.obj) {
-            if(std::find(fields.begin(),fields.end(),name)!=fields.end()) {
-                if(child.type!=minjson::Value::Type::String || child.str.empty())
-                    throw std::invalid_argument("Invalid companion input path");
-                const std::filesystem::path relative(child.str);
-                if(relative.is_absolute())throw std::invalid_argument("Absolute companion input path");
-                for(const auto& part:relative)if(part=="..")
-                    throw std::invalid_argument("Companion input path traversal");
-                key+="|"+input_cache_key(manifest.parent_path()/relative);
-            } else self(self,child);
-        }
-        for(const auto& child:v.arr)self(self,child);
-    };
-    visit(visit,root);
     return key;
 }
 

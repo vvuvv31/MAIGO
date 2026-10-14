@@ -12,43 +12,6 @@
 
 namespace carbon {
 
-namespace {
-
-double integrate_linear_inverse_stopping_power(
-    const double e0, const double e1, const double s0, const double s1) {
-    const auto delta_e = e1 - e0;
-    if (delta_e <= 0.0) return 0.0;
-    const auto slope = (s1 - s0) / delta_e;
-    if (std::abs(slope) < 1.0e-14 * std::max({1.0, std::abs(s0), std::abs(s1)})) {
-        return delta_e / std::max(s0, 1.0e-300);
-    }
-    return std::log(s1 / s0) / slope;
-}
-
-}  // namespace
-
-double ion_effective_charge(int atomic_number, double energy_MeVu) {
-    if (atomic_number <= 0 || energy_MeVu <= 0.0) {
-        throw std::invalid_argument("Effective charge requires positive Z and energy per nucleon");
-    }
-    constexpr double nucleon_mass_MeV = 931.49410242;
-    const auto gamma = 1.0 + energy_MeVu / nucleon_mass_MeV;
-    const auto beta_squared = std::max(0.0, 1.0 - 1.0 / (gamma * gamma));
-    const auto beta = std::sqrt(beta_squared);
-    const auto charge = static_cast<double>(atomic_number);
-    return charge *
-           (1.0 - std::exp(-125.0 * beta * std::pow(charge, -2.0 / 3.0)));
-}
-
-double stopping_power_scale_from_reference_ion(
-    int atomic_number, int reference_atomic_number, double energy_MeVu) {
-    const auto ion_charge = ion_effective_charge(atomic_number, energy_MeVu);
-    const auto reference_charge =
-        ion_effective_charge(reference_atomic_number, energy_MeVu);
-    const auto ratio = ion_charge / reference_charge;
-    return ratio * ratio;
-}
-
 StoppingPowerTable::StoppingPowerTable(std::vector<double> energies_MeVu,
                                        std::vector<double> stopping_powers_MeV_per_mm)
     : energies_MeVu_(std::move(energies_MeVu)),
@@ -64,16 +27,7 @@ StoppingPowerTable::StoppingPowerTable(std::vector<double> energies_MeVu,
             throw std::invalid_argument("Stopping-power energies must be strictly increasing");
         }
     }
-    cumulative_ranges_mm_.assign(energies_MeVu_.size(), 0.0);
-    cumulative_ranges_mm_.front() = energies_MeVu_.front() /
-                                     stopping_powers_MeV_per_mm_.front();
-    for (std::size_t index = 1; index < energies_MeVu_.size(); ++index) {
-        cumulative_ranges_mm_[index] = cumulative_ranges_mm_[index - 1] +
-            integrate_linear_inverse_stopping_power(
-                energies_MeVu_[index - 1], energies_MeVu_[index],
-                stopping_powers_MeV_per_mm_[index - 1],
-                stopping_powers_MeV_per_mm_[index]);
-    }
+
 }
 
 StoppingPowerTable StoppingPowerTable::from_csv(const std::filesystem::path& path) {
@@ -125,72 +79,6 @@ double StoppingPowerTable::interpolate(double energy_MeVu) const noexcept {
     return stopping_powers_MeV_per_mm_[lower_index] +
            fraction * (stopping_powers_MeV_per_mm_[upper_index] -
                        stopping_powers_MeV_per_mm_[lower_index]);
-}
-
-double StoppingPowerTable::csda_range_mm(const double energy_MeVu,
-                                         const int mass_number) const {
-    if (!std::isfinite(energy_MeVu) || energy_MeVu < 0.0) {
-        throw std::invalid_argument("CSDA energy must be finite and nonnegative");
-    }
-    if (mass_number <= 0) {
-        throw std::invalid_argument("CSDA mass number must be positive");
-    }
-    double range_a1 = 0.0;
-    if (energy_MeVu <= energies_MeVu_.front()) {
-        range_a1 = energy_MeVu / stopping_powers_MeV_per_mm_.front();
-    } else if (energy_MeVu >= energies_MeVu_.back()) {
-        range_a1 = cumulative_ranges_mm_.back() +
-            (energy_MeVu - energies_MeVu_.back()) /
-                stopping_powers_MeV_per_mm_.back();
-    } else {
-        const auto upper = std::upper_bound(
-            energies_MeVu_.begin(), energies_MeVu_.end(), energy_MeVu);
-        const auto index = static_cast<std::size_t>(upper - energies_MeVu_.begin() - 1);
-        const auto s0 = stopping_powers_MeV_per_mm_[index];
-        const auto s1 = stopping_powers_MeV_per_mm_[index + 1];
-        range_a1 = cumulative_ranges_mm_[index] +
-            integrate_linear_inverse_stopping_power(
-                energies_MeVu_[index], energy_MeVu, s0,
-                s0 + (s1 - s0) * (energy_MeVu - energies_MeVu_[index]) /
-                                  (energies_MeVu_[index + 1] - energies_MeVu_[index]));
-    }
-    return static_cast<double>(mass_number) * range_a1;
-}
-
-double StoppingPowerTable::csda_energy_after_distance_MeVu(
-    const double initial_energy_MeVu, const double distance_mm, const int mass_number) const {
-    if (!std::isfinite(distance_mm) || distance_mm < 0.0) {
-        throw std::invalid_argument("CSDA distance must be finite and nonnegative");
-    }
-    const auto initial_range = csda_range_mm(initial_energy_MeVu, mass_number);
-    if (distance_mm >= initial_range) return 0.0;
-    const auto target_a1 = (initial_range - distance_mm) / mass_number;
-    if (target_a1 <= cumulative_ranges_mm_.front()) {
-        return target_a1 * stopping_powers_MeV_per_mm_.front();
-    }
-    if (target_a1 >= cumulative_ranges_mm_.back()) {
-        return energies_MeVu_.back() +
-            (target_a1 - cumulative_ranges_mm_.back()) *
-                stopping_powers_MeV_per_mm_.back();
-    }
-    const auto upper = std::upper_bound(
-        cumulative_ranges_mm_.begin(), cumulative_ranges_mm_.end(), target_a1);
-    const auto index = static_cast<std::size_t>(upper - cumulative_ranges_mm_.begin() - 1);
-    const auto e0 = energies_MeVu_[index];
-    const auto e1 = energies_MeVu_[index + 1];
-    const auto s0 = stopping_powers_MeV_per_mm_[index];
-    const auto slope = (stopping_powers_MeV_per_mm_[index + 1] - s0) / (e1 - e0);
-    const auto integral = target_a1 - cumulative_ranges_mm_[index];
-    const auto delta_e = std::abs(slope) <
-            1.0e-14 * std::max({1.0, std::abs(s0),
-                                std::abs(stopping_powers_MeV_per_mm_[index + 1])})
-        ? s0 * integral
-        : s0 * std::expm1(slope * integral) / slope;
-    return e0 + std::clamp(delta_e, 0.0, e1 - e0);
-}
-
-const std::vector<double>& StoppingPowerTable::cumulative_ranges_mm() const noexcept {
-    return cumulative_ranges_mm_;
 }
 
 double StoppingPowerTable::minimum_energy_MeVu() const noexcept { return energies_MeVu_.front(); }

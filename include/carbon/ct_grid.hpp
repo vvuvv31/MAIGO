@@ -1,7 +1,5 @@
 #pragma once
 
-#include "carbon/transport_profile.hpp"
-
 #include <array>
 #include <cmath>
 #include <cstdint>
@@ -40,7 +38,6 @@ struct SchneiderMaterialTable {
     std::array<SchneiderMaterialSection, section_count> sections{};
 
     static SchneiderMaterialTable from_topas_file(const std::filesystem::path& path);
-    [[nodiscard]] std::uint8_t section_id(int hu) const noexcept;
 };
 
 // Patient CT volume stored in conventional medical-image coordinates:
@@ -91,19 +88,10 @@ struct CtGrid {
         return static_cast<float>(nz) * spacing_z_mm;
     }
 
-    [[nodiscard]] bool has_mass_sp_factors() const noexcept {
-        return mass_sp_za_rel.size() == 25 && mass_sp_I_eV.size() == 25;
-    }
-
-    [[nodiscard]] bool uses_schneider_mass_sp() const noexcept {
-        return file_version == version_value && has_mass_sp_factors();
-    }
-
     static CtGrid from_binary(const std::filesystem::path& path);
     // Current CCTG binary, decoded once into an immutable shared grid.
     static std::shared_ptr<const CtGrid> load(const std::filesystem::path& path);
 
-    void write_binary(const std::filesystem::path& path) const;
 };
 
 inline std::size_t ct_linear_index(const std::uint32_t ix,
@@ -477,10 +465,6 @@ inline float ct_dda_homogeneous_span(CtDdaState state,
     return t_exit > 0.0F ? t_exit : max_step;
 }
 
-// Optional path_out records which face-clamp branch ran (for profiling only).
-// Pass nullptr in production paths; the null check is free after inlining when
-// constant-propagated.
-//
 // Uses Amanatides–Woo DDA so a particle sitting on a CT face advances into the
 // next voxel instead of returning a near-zero step (eliminates boundary thrash).
 inline float clamp_step_to_ct_faces(const float step_mm,
@@ -496,13 +480,9 @@ inline float clamp_step_to_ct_faces(const float step_mm,
                                     const float spacing_x,
                                     const float spacing_y,
                                     const float spacing_z,
-                                    CtClampPath* path_out,
                                     const std::uint32_t nx,
                                     const std::uint32_t ny,
                                     const std::uint32_t nz) noexcept {
-    if (path_out != nullptr) {
-        *path_out = CtClampPath::three_axis;
-    }
     if (nx == 0 || ny == 0 || nz == 0)
         return std::numeric_limits<float>::quiet_NaN();
     {
@@ -554,19 +534,15 @@ inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
                                               const std::uint8_t* materials,
                                               const float density_here,
                                               const std::uint8_t material_here,
-                                              const bool skip_homogeneous = true,
-                                              CtClampPath* path_out = nullptr) noexcept {
+                                              const bool skip_homogeneous = true) noexcept {
     if (!skip_homogeneous || densities == nullptr) {
         return clamp_step_to_ct_faces(step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x,
                                       origin_y, origin_z, spacing_x, spacing_y, spacing_z,
-                                      path_out, nx, ny, nz);
+                                      nx, ny, nz);
     }
     if (step_mm <= 1.0e-6F) {
         // Keep energy-limited micro-steps unchanged; DDA only prevents zero face
         // clamps (handled below when step is finite).
-        if (path_out != nullptr) {
-            *path_out = CtClampPath::short_step_skip;
-        }
         return step_mm;
     }
     // Energy-limited steps much smaller than a voxel: skip face calc.
@@ -575,9 +551,6 @@ inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
             ? (spacing_x < spacing_z ? spacing_x : spacing_z)
             : (spacing_y < spacing_z ? spacing_y : spacing_z);
     if (step_mm < 0.2F * min_sp) {
-        if (path_out != nullptr) {
-            *path_out = CtClampPath::short_step_skip;
-        }
         return step_mm;
     }
 
@@ -586,7 +559,7 @@ inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
                      spacing_x, spacing_y, spacing_z, nx, ny, nz, state)) {
         return clamp_step_to_ct_faces(step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x,
                                       origin_y, origin_z, spacing_x, spacing_y, spacing_z,
-                                      path_out, nx, ny, nz);
+                                      nx, ny, nz);
     }
 
     // Fast path: endpoint still inside same homogeneous region → free step.
@@ -601,9 +574,6 @@ inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
             (dens1 > density_here ? dens1 - density_here : density_here - dens1) /
             (density_here > 1.0e-3F ? density_here : 1.0e-3F);
         if (mat1 == material_here && rel < 0.02F) {
-            if (path_out != nullptr) {
-                *path_out = CtClampPath::homogeneous_skip;
-            }
             return step_mm;
         }
     }
@@ -611,10 +581,6 @@ inline float clamp_step_to_ct_faces_if_needed(const float step_mm,
     // Walk DDA until material/density changes; stop at that face.
     const auto span = ct_dda_homogeneous_span(state, step_mm, nx, ny, nz, densities,
                                               materials, density_here, material_here);
-    if (path_out != nullptr) {
-        *path_out = (span >= step_mm) ? CtClampPath::homogeneous_skip
-                                      : CtClampPath::three_axis;
-    }
     return span < step_mm ? span : step_mm;
 }
 
@@ -643,22 +609,18 @@ inline float clamp_step_to_ct_faces_near_z_if_needed(
     const std::uint8_t* materials,
     const float density_here,
     const std::uint8_t material_here,
-    const bool skip_homogeneous = true,
-    CtClampPath* path_out = nullptr) noexcept {
+    const bool skip_homogeneous = true) noexcept {
     if (!skip_homogeneous || std::fabs(dz) < 0.999F || densities == nullptr) {
         return clamp_step_to_ct_faces_if_needed(
             step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x, origin_y, origin_z,
             spacing_x, spacing_y, spacing_z, nx, ny, nz, densities, materials,
-            density_here, material_here, skip_homogeneous, path_out);
+            density_here, material_here, skip_homogeneous);
     }
     const auto min_sp =
         spacing_x < spacing_y
             ? (spacing_x < spacing_z ? spacing_x : spacing_z)
             : (spacing_y < spacing_z ? spacing_y : spacing_z);
     if (step_mm > 1.0e-6F && step_mm < 0.2F * min_sp) {
-        if (path_out != nullptr) {
-            *path_out = CtClampPath::short_step_skip;
-        }
         return step_mm;
     }
 
@@ -668,7 +630,7 @@ inline float clamp_step_to_ct_faces_near_z_if_needed(
         return clamp_step_to_ct_faces_if_needed(
             step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x, origin_y, origin_z,
             spacing_x, spacing_y, spacing_z, nx, ny, nz, densities, materials,
-            density_here, material_here, skip_homogeneous, path_out);
+            density_here, material_here, skip_homogeneous);
     }
 
     // Lateral motion within this step would leave the x/y column → general DDA.
@@ -678,13 +640,13 @@ inline float clamp_step_to_ct_faces_near_z_if_needed(
         return clamp_step_to_ct_faces_if_needed(
             step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x, origin_y, origin_z,
             spacing_x, spacing_y, spacing_z, nx, ny, nz, densities, materials,
-            density_here, material_here, skip_homogeneous, path_out);
+            density_here, material_here, skip_homogeneous);
     }
     if (state.step_y != 0 && state.t_max_y <= t_limit + 1.0e-6F) {
         return clamp_step_to_ct_faces_if_needed(
             step_mm, x_mm, y_mm, z_mm, dx, dy, dz, origin_x, origin_y, origin_z,
             spacing_x, spacing_y, spacing_z, nx, ny, nz, densities, materials,
-            density_here, material_here, skip_homogeneous, path_out);
+            density_here, material_here, skip_homogeneous);
     }
 
     if (skip_homogeneous) {
@@ -700,25 +662,15 @@ inline float clamp_step_to_ct_faces_near_z_if_needed(
                 std::fabs(density_end - density_here) /
                 (density_here > 1.0e-3F ? density_here : 1.0e-3F);
             if (material_end == material_here && rel < 0.02F) {
-                if (path_out != nullptr) {
-                    *path_out = CtClampPath::near_z_homogeneous;
-                }
                 return step_mm;
             }
         }
         // Walk only along +z (column-locked) for the homogeneous span.
         const auto span = ct_dda_homogeneous_span(state, step_mm, nx, ny, nz, densities,
                                                   materials, density_here, material_here);
-        if (path_out != nullptr) {
-            *path_out = (span >= step_mm) ? CtClampPath::near_z_homogeneous
-                                          : CtClampPath::near_z_face;
-        }
         return span < step_mm ? span : step_mm;
     }
 
-    if (path_out != nullptr) {
-        *path_out = CtClampPath::near_z_face;
-    }
     return state.t_max_z < step_mm ? state.t_max_z : step_mm;
 }
 

@@ -122,10 +122,6 @@ struct DeviceMemoryTracker {
         }
     }
 
-    std::size_t active_allocation_count() const noexcept {
-        return allocations.size();
-    }
-
     const std::vector<void*>& active_allocations() const noexcept {
         return allocations;
     }

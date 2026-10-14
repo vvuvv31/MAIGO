@@ -6,7 +6,6 @@
 
 namespace carbon {
 inline constexpr auto kElectronContinuationEnd=std::numeric_limits<std::uint64_t>::max();
-struct NoExpectedScore {template<class P,class W>void operator()(const P&,W)const{}};
 // W is statistical energy, distinct from the sampled particle kinetic energy.
 // Exactly one terminal bucket owns W; pending particles retain their full state.
 enum class ElectronPacketStatus { active, deposited, escaped, coverage_missing, invalid };

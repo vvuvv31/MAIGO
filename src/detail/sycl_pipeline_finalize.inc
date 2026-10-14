@@ -159,7 +159,7 @@
         }
         mem_tracker.free(unified_failure_count);mem_tracker.free(unified_failure_records);
 
-        mem_tracker.free(delta_mean_device);mem_tracker.free(unified_energy_index);mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
+        mem_tracker.free(unified_energy_index);mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
         mem_tracker.free(unified_nodes);mem_tracker.free(unified_segments);mem_tracker.free(unified_audit);
 
     }
@@ -364,7 +364,7 @@
     result.elastic_queue_overflow=elastic_counts_host[11];
     result.schneider_miss_log = std::move(schneider_miss_host);
     result.electron_joint_diagnostics={electron_joint_diag_host[0],electron_joint_diag_host[1],electron_joint_diag_host[2],
-        static_cast<double>(electron_joint_diag_host[3])*1e-6,static_cast<double>(electron_joint_diag_host[4])*1e-6,static_cast<double>(electron_joint_diag_host[5])*1e-6,electron_joint_diag_host[6]};
+        static_cast<double>(electron_joint_diag_host[3])*1e-6,static_cast<double>(electron_joint_diag_host[4])*1e-6,electron_joint_diag_host[6]};
     result.material_electron_photon_untracked_MeV=double(material_untracked_host[0])*1e-6;
     result.material_electron_untracked_MeV=double(material_untracked_host[0]+material_untracked_host[1])*1e-6;
     result.electron_variance_reduction_weight_gain_MeV=electron_vr_gain_host;
@@ -396,11 +396,7 @@
         result.backend += "+ct-material-mcs";
     }
     if (enable_ct_grid) result.backend += "+ct-grid-unified-em+ct-dda";
-    if constexpr (k_dose_atomic_fp32) {
-        result.backend += "+fp32-dose";
-    } else {
-        result.backend += "+fp64-dose";
-    }
+    result.backend += "+fp32-dose";
     if (enable_voxel_scoring) {
         result.backend += "+voxel-scoring+scorer-decoupled";
     }

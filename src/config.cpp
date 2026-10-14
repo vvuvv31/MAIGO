@@ -1349,10 +1349,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.ct_schneider_physics_bundle_file = resolve_input_path_from_config(
             config.ct_schneider_physics_bundle_file, path);
     }
-    if (!config.ct_schneider_radiation_length_file.empty()) {
-        config.ct_schneider_radiation_length_file = resolve_input_path_from_config(
-            config.ct_schneider_radiation_length_file, path);
-    }
     config.material_electron_charged_index_file=parse_path(values,"material_electron_charged_index_file",config.material_electron_charged_index_file);
     config.material_electron_birth_file=parse_path(values,"material_electron_birth_file",config.material_electron_birth_file);
     config.material_photon_response_index_file=parse_path(values,"material_photon_response_index_file",config.material_photon_response_index_file);
@@ -1459,9 +1455,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
             "voxel_size_y_mm", config.voxel_size_y_mm, grid.spacing_y_mm);
         set_or_check_spacing(
             "voxel_size_z_mm", config.voxel_size_z_mm, grid.spacing_z_mm);
-        config.voxel_origin_x_mm = grid.origin_x_mm;
-        config.voxel_origin_y_mm = grid.origin_y_mm;
-        config.voxel_origin_z_mm = grid.origin_z_mm;
 
         const auto ct_z_extent_mm = static_cast<double>(grid.extent_z_mm());
         config.depth_bin_width_mm = config.voxel_size_z_mm;
@@ -1756,14 +1749,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
                     "dose_to_medium_type/name require dose_to_medium");
             }
             const auto enabled = parse_bool(values, "dose_to_medium", false);
-            // The high-level scorer owns the production output set. Suppress
-            // debug CSV sinks for the production MHD output set.
-            config.output_file.clear();
-            config.fragment_species_output_file.clear();
-            config.fragment_species_dose_output_file.clear();
-            config.voxel_dose_output_file.clear();
-            config.dose_output_file.clear();
-            config.voxel_dose_Gy_output_file.clear();
             config.voxel_dose_mhd_output_file.clear();
             if (enabled) {
                 if (!config.enable_voxel_scoring) {

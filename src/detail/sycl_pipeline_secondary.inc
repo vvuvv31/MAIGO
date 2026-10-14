@@ -436,7 +436,7 @@
                             }
 
                             float sec_step_mm = maximum_step_mm;
-                            UnifiedEmStep unified_secondary_pre;
+                            UnifiedEmPointStep unified_secondary_pre;
                             UnifiedEmPoint unified_secondary_point;
                             float unified_secondary_rate=0,unified_secondary_distance=std::numeric_limits<float>::infinity();
                             if(unified_secondary){
@@ -449,22 +449,22 @@
                                     unified_secondary_count(0);break;}
                                 if constexpr(kCarbonCtPointReuse) {
                                     // Same-step view only; never retained across continuation.
-                                    unified_secondary_point=unified_secondary_state.lo();
+                                    unified_secondary_point=unified_secondary_state.point();
                                     const auto point_pre=unified_secondary_point.template prepare<
                                         JointResponse == 0, JointResponse == 0, JointResponse == 0>(sec_e);
-                                    unified_secondary_pre={point_pre,point_pre};
+                                    unified_secondary_pre=point_pre;
                                 } else unified_secondary_pre=unified_secondary_state.prepare(sec_e);
                                 if(sec_global_urban) {
                                     unified_secondary_rate=unified_secondary_clock.update(unified_secondary_state,sec_e,
-                                        unified_secondary_pre.lo.factor);
+                                        unified_secondary_pre.factor);
                                     if(!unified_secondary_clock.clock.active)
                                         unified_secondary_clock.clock.arm(-sycl::log(sycl::fmax(unified_secondary_uniform(),0x1p-24f)));
                                     unified_secondary_distance=unified_secondary_clock.clock.distance(unified_secondary_rate);
                                 }
                                 sec_step_mm=sycl::fmin(unified_secondary_state.step(unified_secondary_pre),unified_secondary_distance);
                                 // Bound combined mean loss, not the old restricted range alone.
-                                const float delta_sp=unified_secondary_state.mix(unified_secondary_pre.lo.delta_stopping,unified_secondary_pre.hi.delta_stopping);
-                                if(delta_sp>0) sec_step_mm=sycl::fmin(sec_step_mm,maximum_mean_loss_fraction*sec_e/sycl::fmax(1e-12f,delta_sp+unified_secondary_state.mix(unified_secondary_pre.lo.stopping,unified_secondary_pre.hi.stopping)));
+                                const float delta_sp=unified_secondary_pre.delta_stopping;
+                                if(delta_sp>0) sec_step_mm=sycl::fmin(sec_step_mm,maximum_mean_loss_fraction*sec_e/sycl::fmax(1e-12f,delta_sp+unified_secondary_pre.stopping));
                             }
 
                             if constexpr(BroadBeam) if((kProductionSecondaryPath ? true : enable_ct_grid) && !sec_global_urban)
@@ -500,7 +500,7 @@
                                     ct_spacing_x, ct_spacing_y, ct_spacing_z, ct_nx, ct_ny,
                                     ct_nz, ct_density_device, ct_material_device,
                                     sec_local_density_g_per_cm3, sec_ct_material,
-                                    (kProductionSecondaryPath ? true : ct_skip_homogeneous_face_clamp), nullptr);
+                                    (kProductionSecondaryPath ? true : ct_skip_homogeneous_face_clamp));
                             }
                             // Do not enlarge a real face distance to the legacy
                             // minimum step: that would cross the material again.
@@ -528,14 +528,14 @@
                                         voxel_bins_x,voxel_bins_y,number_of_bins,urban_water_half_width_mm);
                                 const auto view=urban_device;
                                 const int material=view.material(sec_in_ct?int(sec_ct_material):-1,sec_local_density_g_per_cm3);
-                                if(sec_in_ct && unified_secondary)unified_secondary_point=unified_secondary_state.lo();
+                                if(sec_in_ct && unified_secondary)unified_secondary_point=unified_secondary_state.point();
                                 sec_urban_proposal=urban_global_prepare(view,material,sec_global_urban_ion,sec_e,
                                     sycl::fmin(sec_step_mm,maximum_step_mm),
                                     {sec_x,sec_y,sec_z},{sec_dx,sec_dy,sec_dz},cell,
                                     sec_global_urban_boundary,sec_urban_persist,2026,frag.rng_stream,sec_steps,
                                     sec_local_density_g_per_cm3,
                                     sec_in_ct && unified_secondary?&unified_secondary_point:nullptr,
-                                    unified_secondary?unified_secondary_pre.lo.factor:0.f,generic_recoil);
+                                    unified_secondary?unified_secondary_pre.factor:0.f,generic_recoil);
                                 if(!sec_urban_proposal.valid) {
                                     record_unified_em_failure(unified_failure_count,unified_failure_records,100,
                                         sec_in_ct?int(sec_ct_material):-1,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
@@ -1298,9 +1298,6 @@
                                     secondary_inelastic, secondary_replay_succeeded,
                                     enable_multiple_scattering, sec_e,
                                     energy_cutoff_MeV)) {
-                                [[maybe_unused]] constexpr float two_pi = 6.2831853071795864769F;
-                                [[maybe_unused]] float theta_scat = 0.0F;
-                                [[maybe_unused]] float phi_scat = 0.0F;
                                 // Secondary MCS material selection shares the
                                 // primary helper: Schneider CT voxels use the
                                 // section X0, everywhere else falls back to
@@ -1329,9 +1326,6 @@
                                         schneider_diag_device,
                                         route_slot);
                                     auto observation_path_mm = -1.0F;
-
-
-
 
                                     const auto correlated =
                                         ion_fermi_eyges_transport_step(
@@ -1654,31 +1648,16 @@
                     sycl::range<1>(active_size), secondary_kernel);
             });
                 };
-                double round_seconds = 0.0;
-                sycl::event slice_events[3];
-                unsigned slice_event_count = 0;
-                const auto submit_secondary_slice = [&](auto production_path_tag,
-                                                        unsigned active_size) {
-                    if(active_size==0)return;
-                    slice_events[slice_event_count++] = launch_secondary_round(
-                        production_path_tag,active_size);
-                };
-                if constexpr(BroadBeam) {
-                    if constexpr(JointResponse==3 || std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>) {
+                auto round_event = [&]() {
+                    if constexpr(BroadBeam &&
+                        (JointResponse==3 || std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>)) {
                         if(broadbeam_ct_secondary_specialize)
-                            submit_secondary_slice(std::true_type{},resume_active);
-                        else submit_secondary_slice(std::false_type{},resume_active);
-                    } else
-                    submit_secondary_slice(std::false_type{},resume_active);
-                } else {
-                submit_secondary_slice(std::false_type{},resume_active);
-                }
-                // The queue is in order, so waiting on the final slice also
-                // completes every earlier slice in this round.
-                if (slice_event_count != 0)
-                    slice_events[slice_event_count - 1].wait_and_throw();
-                for (unsigned s=0; s<slice_event_count; ++s)
-                    round_seconds += event_duration_seconds(slice_events[s]);
+                            return launch_secondary_round(std::true_type{},resume_active);
+                    }
+                    return launch_secondary_round(std::false_type{},resume_active);
+                }();
+                round_event.wait_and_throw();
+                const double round_seconds = event_duration_seconds(round_event);
                 secondary_kernel_seconds += round_seconds;
                 generation_kernel_seconds += round_seconds;
                 if (finish_tail) {

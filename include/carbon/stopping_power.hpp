@@ -10,10 +10,6 @@
 
 namespace carbon {
 
-[[nodiscard]] double ion_effective_charge(int atomic_number, double energy_MeVu);
-[[nodiscard]] double stopping_power_scale_from_reference_ion(
-    int atomic_number, int reference_atomic_number, double energy_MeVu);
-
 class StoppingPowerTable;
 
 class StoppingPowerTable {
@@ -24,15 +20,6 @@ public:
     static StoppingPowerTable from_csv(const std::filesystem::path& path);
 
     [[nodiscard]] double interpolate(double energy_MeVu) const noexcept;
-    // CSDA range in mm from zero energy to energy_MeVu. The table abscissa is
-    // kinetic energy per nucleon (MeV/u); values are total-ion stopping power
-    // (MeV/mm), so mass_number is required for the A*dE_u/S(E_u) integral.
-    [[nodiscard]] double csda_range_mm(double energy_MeVu, int mass_number) const;
-    // Invert the CSDA range after a physical path length in mm. Energy is
-    // returned in MeV/u and is clamped to zero when the path exhausts range.
-    [[nodiscard]] double csda_energy_after_distance_MeVu(
-        double initial_energy_MeVu, double distance_mm, int mass_number) const;
-    [[nodiscard]] const std::vector<double>& cumulative_ranges_mm() const noexcept;
     [[nodiscard]] double minimum_energy_MeVu() const noexcept;
     [[nodiscard]] double maximum_energy_MeVu() const noexcept;
     [[nodiscard]] const std::vector<double>& energies() const noexcept;
@@ -41,12 +28,9 @@ public:
 private:
     std::vector<double> energies_MeVu_;
     std::vector<double> stopping_powers_MeV_per_mm_;
-    std::vector<double> cumulative_ranges_mm_;
 };
 
-// Flat-array CSDA helpers for future SYCL kernels. Arrays use the same contract
-// as StoppingPowerTable: energy is MeV/u, stopping power is total-ion MeV/mm,
-// cumulative range is A=1 mm, and mass_number supplies the overall A factor.
+// Species-indexed stopping-power calibration ratios on the reference energy grid.
 class IonStoppingPowerTables {
 public:
     static constexpr std::size_t mass_stride = 32;

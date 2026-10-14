@@ -32,9 +32,6 @@ public:
     std::vector<float> continuous_scalars, continuous_ranges;
     unsigned continuous_degree{}, continuous_scalar_count{};
     std::vector<unsigned> continuous_lengths;
-    // Immutable certificate computed once when the package is parsed.
-    bool shared_prepare_grid{false};
     static UnifiedEmPackage load(const std::filesystem::path&);
 };
-bool unified_em_has_shared_prepare_grid(const UnifiedEmPackage&);
 } // namespace carbon

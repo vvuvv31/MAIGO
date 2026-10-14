@@ -68,13 +68,6 @@ public:
     [[nodiscard]] double mass_partial_rate(std::size_t section_id, std::size_t target_idx, std::size_t energy_idx) const;
     [[nodiscard]] double mass_total_rate(std::size_t section_id, std::size_t energy_idx) const;
 
-    [[nodiscard]] double interpolate_mass_partial(std::size_t section_id, std::size_t target_idx, double energy_mevu) const;
-    [[nodiscard]] double interpolate_mass_total(std::size_t section_id, double energy_mevu) const;
-    // v3 interpolation of a single partial ASSUMING the caller already
-    // verified domain membership (used by interpolate_mass_partial above).
-    [[nodiscard]] double interpolate_masked_partial(std::size_t section_id, std::size_t target_idx,
-                                                    double energy_mevu) const;
-
     [[nodiscard]] const std::vector<double>& mass_partial_rates() const noexcept { return mass_partial_rates_; }
     [[nodiscard]] const std::vector<double>& mass_total_rates() const noexcept { return mass_total_rates_; }
     // Per-target valid domain, 13 entries (required by v3).

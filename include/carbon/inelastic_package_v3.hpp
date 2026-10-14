@@ -173,9 +173,6 @@ struct Cinel03DeviceInteraction {
     float parent_rest_mass{0.0F};
     float parent_excitation{0.0F};
     float parent_weight{1.0F};
-    float parent_local_dir_x{0.0F};
-    float parent_local_dir_y{0.0F};
-    float parent_local_dir_z{1.0F};
     std::int16_t target_element_z{0};
     std::int16_t target_a{0};
 };
@@ -202,42 +199,7 @@ struct Cinel03DeviceTables {
     std::vector<std::uint32_t> event_offsets{};
     std::vector<std::uint32_t> event_indices{};
 
-    [[nodiscard]] std::size_t device_bytes() const noexcept {
-        return interactions.size() * sizeof(Cinel03DeviceInteraction) +
-               products.size() * sizeof(Cinel03DeviceProduct) +
-               energy_nodes.size() * sizeof(Cinel03EnergyNode) +
-               event_offsets.size() * sizeof(std::uint32_t) +
-               event_indices.size() * sizeof(std::uint32_t);
-    }
 };
-
-struct Cinel03FixedReplayView {
-    const Cinel03InteractionRecord* serialized_interaction{nullptr};
-    const Cinel03DeviceInteraction* compact_interaction{nullptr};
-    const Cinel03ProductRecord* serialized_products{nullptr};
-    const Cinel03DeviceProduct* compact_products{nullptr};
-    std::uint32_t product_count{0};
-};
-
-inline bool cinel03_node_less(
-    const Cinel03EnergyNode& node,
-    int pz, int pa, int tz, float energy) noexcept
-{
-    if (node.projectile_z != pz) return node.projectile_z < pz;
-    if (node.projectile_a != pa) return node.projectile_a < pa;
-    if (node.target_element_z != tz) return node.target_element_z < tz;
-    return node.collision_energy_MeV_per_u < energy;
-}
-
-inline bool cinel03_key_less(
-    int pz, int pa, int tz, float energy,
-    const Cinel03EnergyNode& node) noexcept
-{
-    if (pz != node.projectile_z) return pz < node.projectile_z;
-    if (pa != node.projectile_a) return pa < node.projectile_a;
-    if (tz != node.target_element_z) return tz < node.target_element_z;
-    return energy < node.collision_energy_MeV_per_u;
-}
 
 // Target Element Registry for Schneider Materials
 // Elements in Schneider CT materials: H (1), C (6), N (7), O (8), Na (11),
@@ -245,13 +207,6 @@ inline bool cinel03_key_less(
 inline constexpr std::array<int, 13> kSchneiderTargetElements{
     1, 6, 7, 8, 11, 12, 15, 16, 17, 18, 19, 20, 22
 };
-
-[[nodiscard]] inline bool is_registered_schneider_target_element(int z) noexcept {
-    for (int elem_z : kSchneiderTargetElements) {
-        if (elem_z == z) return true;
-    }
-    return false;
-}
 
 [[nodiscard]] inline bool is_valid_elemental_target(int z) noexcept {
     return z >= 1 && z <= 100;
@@ -458,7 +413,6 @@ public:
     static constexpr std::uint64_t invalid = std::numeric_limits<std::uint64_t>::max();
 
     static InelasticPackageV3Table from_binary(const std::filesystem::path& path);
-    void to_binary(const std::filesystem::path& path) const;
 
     [[nodiscard]] const std::vector<Cinel03CellIndex>& cells() const noexcept;
     [[nodiscard]] const std::vector<Cinel03InteractionRecord>& interactions() const noexcept;
@@ -479,41 +433,11 @@ public:
     [[nodiscard]] ChannelDomain channel_domain(
         int projectile_z, int projectile_a, int target_element_z) const noexcept;
 
-    // Strict host lookup with the exact device semantics (exact target, bounded
-    // domain, stochastic bracketing). u_bracket/u_event must be in [0,1].
-    [[nodiscard]] Cinel03LookupResult lookup_event(
-        int projectile_z, int projectile_a, int target_element_z,
-        float collision_energy_MeV_per_u,
-        float u_bracket, float u_event,
-        float max_allowed_gap_MeV_per_u = kCinel03MaxAllowedNodeGapMeVperU) const noexcept;
-
     [[nodiscard]] Cinel03DeviceTables make_device_tables() const;
 
-    [[nodiscard]] Cinel03FixedReplayView fixed_replay(
-        std::uint64_t event_index, const Cinel03DeviceTables& compact) const noexcept;
-
-    [[nodiscard]] const Cinel03ProductRecord* products_for(
-        const Cinel03InteractionRecord& interaction) const noexcept;
-
-    [[nodiscard]] std::uint32_t product_offset(
-        const Cinel03InteractionRecord& interaction) const noexcept;
-
-    [[nodiscard]] float minimum_energy_MeV_per_u() const noexcept;
-    [[nodiscard]] float energy_bin_width_MeV_per_u() const noexcept;
-    [[nodiscard]] std::uint64_t minimum_events_per_bin() const noexcept;
     [[nodiscard]] const std::string& campaign_uuid() const noexcept;
 
-    // Builder / Mutator for synthetic test packages
-    void set_metadata(float min_energy_MeV_per_u, float bin_width_MeV_per_u,
-                      std::uint64_t min_events_per_bin, const std::string& uuid);
-    void add_event(const Cinel03InteractionRecord& interaction,
-                   const std::vector<Cinel03ProductRecord>& products);
-    void finalize();
-
 private:
-    float minimum_energy_MeV_per_u_{0.0F};
-    float energy_bin_width_MeV_per_u_{1.0F};
-    std::uint64_t minimum_events_per_bin_{0};
     std::string campaign_uuid_{};
     std::vector<Cinel03CellIndex> cells_{};
     std::vector<Cinel03InteractionRecord> interactions_{};

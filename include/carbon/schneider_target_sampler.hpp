@@ -11,12 +11,6 @@
 
 namespace carbon {
 
-struct SchneiderTargetSample {
-    int target_z{0};
-    std::size_t target_index{0};
-    float target_probability{0.0F};
-};
-
 struct SchneiderTargetSamplerDeviceTable {
     // v3 only: raw partials [section][target][energy] + per-target domain.
     // Apply masks at query energy; interpolated node totals would leak
@@ -33,28 +27,10 @@ struct SchneiderTargetSamplerDeviceTable {
     float inverse_energy_step{2.0F};
 };
 
-struct SchneiderTargetDiagnostics {
-    std::uint64_t interactions_by_section[25]{};
-    std::uint64_t interactions_by_target_z[32]{}; // indexed by Z <= 31
-    std::uint64_t interactions_by_energy_bin[450]{}; // 1 MeV/u bins up to 450
-    std::uint64_t lookup_success_count{0};
-    std::uint64_t lookup_failure_count{0};
-    std::uint64_t replayed_events_count{0};
-    std::uint64_t unsupported_target_count{0};
-};
-
 class SchneiderTargetSampler {
 public:
     SchneiderTargetSampler() = default;
     explicit SchneiderTargetSampler(const SchneiderRateTable& rate_table);
-
-    [[nodiscard]] SchneiderTargetSample sample_target(
-        std::size_t section_id, float energy_MeV_per_u, float u01) const;
-
-    [[nodiscard]] std::array<float, 13> target_probabilities(
-        std::size_t section_id, float energy_MeV_per_u) const;
-
-    [[nodiscard]] float total_mass_rate(std::size_t section_id, float energy_MeV_per_u) const;
 
     [[nodiscard]] const std::vector<float>& partial_rates() const noexcept { return partial_rates_; }
     [[nodiscard]] const std::vector<float>& domain_emin() const noexcept { return domain_emin_; }

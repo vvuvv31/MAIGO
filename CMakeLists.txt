@@ -45,7 +45,6 @@ add_library(carbon_core
     src/stopping_power.cpp
     src/tps_source.cpp
     src/transport_metrics.cpp
-    src/transport_profile.cpp
     src/transport_sycl.cpp
     src/unified_em_package.cpp
     src/urban_mcs_package.cpp
