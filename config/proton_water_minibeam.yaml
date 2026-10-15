@@ -1,5 +1,4 @@
-enable_electron_transport: false
-# proton_water_minibeam: Water_75eV; current26 EM/electrons, FP32 dose.
+# proton_water_minibeam: Water_75eV; continuous26 ion EM, local ionization, FP32 dose.
 transport_pipeline: proton_minibeam
 run_mode: research
 unified_water_material_file: data/materials/water/material.json
@@ -96,14 +95,5 @@ minibeam_primary_specialization: true
 minibeam_primary_pipeline: compact
 multiple_scattering_model: urban_v2
 urban_mcs_package_file: data/scattering/urban/ct_copper.bin
-material_electron_group_size: 32
-material_electron_queue_chunk: 262144
-material_electron_queue_lanes: 16384
-material_electron_queue_budget_MiB: 576
-material_electron_retain_bank: true
-material_electron_birth_file: data/em/electrons/shared/birth26.bin
-material_electron_joint_pilot_file: data/em/electrons/shared/joint.bin
-material_photon_response_index_file: data/em/electrons/shared/photon.index
-material_electron_charged_index_file: data/em/electrons/shared/charged.index
 primary_atomic_number: 1
 primary_mass_number: 1

@@ -1,5 +1,4 @@
-enable_electron_transport: false
-# carbon_water_broadbeam: Water_75eV; current26 EM/electrons, FP32 dose.
+# carbon_water_broadbeam: Water_75eV; continuous26 ion EM, local ionization, FP32 dose.
 transport_pipeline: carbon_broadbeam
 run_mode: research
 unified_water_material_file: data/materials/water/material.json
@@ -54,15 +53,3 @@ secondary_step_chunking: true
 transport_profile: broadbeam_fast
 fermi_eyges_gaussian_only: true
 ct_schneider_primary_cinel03_file: data/nuclear/schneider/carbon/final_states.bin
-
-broadbeam_electron_tracking: true
-broadbeam_electron_density_threshold: 0.1
-broadbeam_electron_halo_mm: 5.0
-
-material_electron_birth_file: data/em/electrons/shared/birth26.bin
-
-material_electron_joint_pilot_file: data/em/electrons/shared/joint.bin
-
-material_electron_charged_index_file: data/em/electrons/shared/charged.index
-
-material_photon_response_index_file: data/em/electrons/shared/photon.index

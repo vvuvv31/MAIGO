@@ -8,7 +8,6 @@
 |---|---|
 | `data/materials/{water,schneider}` | 水材料描述、HU 映射、材料辐射长度 |
 | `data/em/ions` | continuous26 离子 EM、delta moments、生成辅助 composition bases |
-| `data/em/electrons/{shared,proton,carbon}` | strict26 共享电子/光子与入射离子参数 |
 | `data/nuclear/schneider/{proton,carbon,secondary}` | 主/次级核反应率、final states、bundle 和 sidecars |
 | `data/nuclear/copper/{proton,carbon}` | 铜中的主粒子反应率与级联；共享离子截面在上层 |
 | `data/elastic/{schneider,copper}` | 各粒子校准的弹性散射、反冲 stopping |
@@ -19,16 +18,16 @@
 | `inputs/lung_minibeam` | 两个 CT minibeam 共用的独立肺部 benchmark |
 | `inputs/water_minibeam/carbon` | 碳水 minibeam 的 TPS spots |
 
-质子和碳离子的铜 fragment stopping 表分别为 `ions_proton.csv`、`ions_carbon.csv`，没有合并。电子包内部 operator 文件名、package ID 和参数硬链接保持原样；这些硬链接属于当前包结构。未创建旧目录的兼容链接或旧路径查找逻辑。
+质子和碳离子的铜 fragment stopping 表分别为 `ions_proton.csv`、`ions_carbon.csv`，没有合并。显式电子／光子包已从当前依赖中移除。未创建旧目录的兼容链接或旧路径查找逻辑。
 
 149 个原始文件均有迁移记录，其中 5 个历史生成/清理记录移入 `docs/data_provenance/`；其余 144 个保留为安装资源。另外新增 `data/manifest.json`。辅助生成资源仍被保留，manifest 不宣称其每一个文件都是运行必需输入。
 
-历史验证报告和历史绝对生成路径保留原样。当前配置、源码固定路径、核反应 companion 文件名、bundle 引用、电子 registry、校验脚本和安装清单已同步迁移。
+历史验证报告和历史绝对生成路径保留原样。当前配置、源码固定路径、核反应 companion 文件名、bundle 引用、校验脚本和安装清单已同步迁移。
 
 ## 发布清单
 
 - `data/manifest.json`：安装资源的路径、字节数、SHA256 和八预设依赖列表；路径相对仓库根目录，manifest 不包含自己的 digest。
-- `docs/preset_dependencies.json`：显式配置、固定默认路径、电子 payload/参数链接、bundle 成员和 companion metadata 的展开清单。
+- `docs/preset_dependencies.json`：显式配置、固定默认路径、bundle 成员和 companion metadata 的展开清单。
 - `docs/copied_inputs.json`：当前 `data/` 和 `inputs/` 文件清单。
 - `docs/data_layout_migration_20261007.json`：全部新旧路径及原始 digest。
 - `docs/data_layout_before_20261007.json`：迁移前安装资源与冻结对照二进制的 digest。
@@ -37,7 +36,6 @@
 
 ```bash
 python3 scripts/check_data_manifest.py
-python3 scripts/check_electron_packages.py
 ```
 
 只有有意修改数据之后才使用 `check_data_manifest.py --write` 重建清单。运行时不增加每批次 digest 检查。

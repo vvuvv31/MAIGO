@@ -4,9 +4,8 @@
 
 A standalone GPU runtime for the eight current MAIGO presets. The source and
 runtime inputs were copied independently from MAIGO_minibeam; there are no
-symlinks back to it. Shared electron projectile aliases are hardlinks **within
-this directory**, not to the original repository. The original working tree
-was not changed by this refactor.
+symlinks back to it. Ionization energy is deposited locally; explicit
+electron/photon transport and its package-loading interfaces have been removed.
 
 ## Build and run
 
@@ -252,7 +251,7 @@ has not yet been tested. See [Intel Arc validation notes](docs/intel_arc_support
 
 The [v2026.10.14 Release](https://github.com/vvuvv31/MAIGO/releases/tag/v2026.10.14)
 contains the physics assets for the **four CT presets**, including optional
-electron/photon packages. It is not an eight-preset water/CT asset bundle.
+historical electron/photon packages that the current runtime does not use. It is not an eight-preset water/CT asset bundle.
 The complete gzip archive is split into two ordered parts to satisfy GitHub's
 attachment size limit. Download both parts and their helper files into one
 folder outside the repository:
@@ -286,9 +285,8 @@ python3 /content/drive/MyDrive/gpumc/restore.py \
 
 Run from local disk after restoring. For water presets, provide their additional
 assets listed in [preset dependencies](docs/preset_dependencies.json).
-Electron transport is default off; package availability does not enable it.
-Only explicit `enable_electron_transport: true` loads the required complete,
-projectile-matched electron/photon packages.
+The current runtime needs no electron/photon packages. Older release archives
+may contain them; omit `data/em/electrons/` when installing new runtime assets.
 
 ### 5. Supply matching case inputs
 
@@ -387,11 +385,11 @@ Pipeline layout is documented in [transport pipelines](docs/transport_pipelines.
 
 ## Release presets and physics
 
-| Preset | Source/ion path | Default electron path |
+| Preset | Source/ion path | Ionization deposition |
 |---|---|---|
-| proton_water_broadbeam | Flat source → Gaussian FE → Water_75eV | Empty uniform-water selection; local deposition |
+| proton_water_broadbeam | Flat source → Gaussian FE → Water_75eV | Local deposition |
 | carbon_water_broadbeam | Carbon source → Gaussian FE → Water_75eV | Same policy |
-| proton_ct_broadbeam | RT07575 head TPS CSV → Gaussian FE → proton CT kernel | Local electron energy; tracking disabled |
+| proton_ct_broadbeam | RT07575 head TPS CSV → Gaussian FE → proton CT kernel | Local deposition |
 | carbon_ct_broadbeam | RT07575 head TPS CSV → Gaussian FE → C12 CT kernel | Same policy |
 | proton_water_minibeam | Flat source → compact copper/air → Urban water | Local deposition; nuclear neutrals untracked |
 | carbon_water_minibeam | TPS CSV → compact copper/air → Urban water | Local deposition |
@@ -426,16 +424,11 @@ Each row has the matching `config/<preset>.yaml`. Default CT minibeams are lung
 benchmarks, **not RT07575 head full plans**. Broadbeam caps ion steps at 1.0 mm
 and minibeam at 0.5 mm in both water and CT.
 Minibeam copper retains its separate 0.05 mm cap. All use continuous26 ion EM;
-Electron/photon transport is optional for all presets and custom configurations.
-It defaults to off; only `enable_electron_transport: true` loads the configured
-strict26 birth, charged, photon and spatial-joint packages. Package paths alone
-do not enable transport, and disabled paths need not exist. When off, ionization
-electron energy is deposited locally. Enabled transport still requires complete,
-projectile-matched packages. CT broadbeam also uses
-`broadbeam_electron_tracking: true` to select its tracking region. The optional broadbeam
-electron selection uses density≤0.1 g/cm³ plus a 5 mm halo; charged nuclear-secondary
-ionization is local. Uniform broadbeam water has no selected region and does not load electron banks. Enabled minibeam water uses
-independent electron steps; Schneider materials preserve spatial joint.
+ionization loss is deposited locally in the medium. Explicit electron/photon
+transport, birth/joint response packages, queues and configuration keys are
+removed. Continuous26 ion EM, primary fluctuations, aggregate delta loss and
+the ionization segmentation clock remain unchanged. Copper delta energy keeps
+its existing beamline sink convention. See [removal scope](docs/no_electron_transport_20261015.md).
 
 `src/main.cpp` handles startup, `cli.cpp` parses the small CLI, `run_session.cpp`
 owns source preparation/context reuse/output, `batch_run.cpp` allocates the
@@ -483,7 +476,6 @@ Verify installed assets before packaging:
 
 ```bash
 python3 scripts/check_data_manifest.py
-python3 scripts/check_electron_packages.py
 ```
 
 After an intentional asset change, regenerate the manifest with
@@ -510,7 +502,7 @@ retired interfaces and zero-only nuclear output layouts. See
 Primary nuclear channel metadata requires explicit boolean `has_support`.
 Nuclear neutrals are not transported; their energy remains in explicit sinks.
 Neutron packages, birth captures, transport settings and dose outputs are removed.
-Optional electromagnetic electron/photon transport is retained. See
+Explicit electromagnetic electron/photon transport was subsequently removed. See
 `docs/no_neutral_20261007.md` for removal scope and matched regression evidence. The proton water minibeam
 therefore no longer includes the former neutron-dose contribution.
 TPS isocenter input uses only the supported `tps_isocenter_z_mm` key.

@@ -4,8 +4,9 @@
   "files": [
     {
       "file": "README.md",
-      "installed_sha256": "6fe0acd3e97f51e88b1c7d2a78abcff79ca2a39464c5c604bcbf8d0d8c122e71",
-      "status": "authored_or_curated"
+      "installed_sha256": "9ba806bf23468be303dfffc925d227bef428e3302f24cf34630c5016918aab7c",
+      "status": "authored_or_curated",
+      "maintenance_note": "2026-10-15: remove retired explicit electron/photon transport tooling."
     },
     {
       "file": "build_native.sh",
@@ -14,8 +15,9 @@
     },
     {
       "file": "build_topas_extensions.sh",
-      "installed_sha256": "3eaf08e49d25266a69d23159a84d58367f71fe9730a015e4eddd39c6423bd74b",
-      "status": "authored_or_curated"
+      "installed_sha256": "68b89f5a87fa86df6209644243d85ec15eb49a39e2c5f61f609e878f19057dd7",
+      "status": "authored_or_curated",
+      "maintenance_note": "2026-10-15: remove retired explicit electron/photon transport tooling."
     },
     {
       "file": "copper_ion_transport/CMakeLists.txt",
@@ -54,8 +56,9 @@
     },
     {
       "file": "coverage.json",
-      "installed_sha256": "7ba8311a7fb5e91b14e91118e0c60470e1f43760609891b3d2f53ff9e94137ff",
-      "status": "authored_or_curated"
+      "installed_sha256": "f3b8fa01a2dd45a7de3bd9fcb5a104431530e86f9501c01e0bc2dad337cd25c2",
+      "status": "authored_or_curated",
+      "maintenance_note": "2026-10-15: remove retired explicit electron/photon transport tooling."
     },
     {
       "file": "native/CMakeLists.txt",
@@ -89,200 +92,6 @@
       "status": "copied"
     },
     {
-      "file": "reference/electron_compositions/composition00/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition00/topas.txt",
-      "source_sha256": "0fdecfe13b328d0e7a45a8a3b5bd6997b2e452a69f4323cda4ef35b5df30af97",
-      "installed_sha256": "0fdecfe13b328d0e7a45a8a3b5bd6997b2e452a69f4323cda4ef35b5df30af97",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition01/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition01/topas.txt",
-      "source_sha256": "31aae77f80b6e25e986a1e9c5514fa62ba750ca82fee91a07e62788da1c6cd7b",
-      "installed_sha256": "31aae77f80b6e25e986a1e9c5514fa62ba750ca82fee91a07e62788da1c6cd7b",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition02/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition02/topas.txt",
-      "source_sha256": "53cfb70816a5997d38eb016020e6c741cfe57234fad15bd16ceff1a19f2a7d90",
-      "installed_sha256": "53cfb70816a5997d38eb016020e6c741cfe57234fad15bd16ceff1a19f2a7d90",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition03/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition03/topas.txt",
-      "source_sha256": "db536ad8b2ab693b90e60c5eec95e9323a19eb304d8710361827a1bbccb5d134",
-      "installed_sha256": "db536ad8b2ab693b90e60c5eec95e9323a19eb304d8710361827a1bbccb5d134",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition04/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition04/topas.txt",
-      "source_sha256": "da9a91edf5dcfb445e097916f18c0a715ceb5cde92779d851b88a53be73fd68e",
-      "installed_sha256": "da9a91edf5dcfb445e097916f18c0a715ceb5cde92779d851b88a53be73fd68e",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition05/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition05/topas.txt",
-      "source_sha256": "64b9d041fbaa14cda438be532a37b41df18618b2cda316d9445f4df5f06dfc59",
-      "installed_sha256": "64b9d041fbaa14cda438be532a37b41df18618b2cda316d9445f4df5f06dfc59",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition06/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition06/topas.txt",
-      "source_sha256": "73a8121dca107f4d1f15b7f78cfd3044d36ab492d17616ed64bb132e80846bb2",
-      "installed_sha256": "73a8121dca107f4d1f15b7f78cfd3044d36ab492d17616ed64bb132e80846bb2",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition07/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition07/topas.txt",
-      "source_sha256": "e67b654dd61c62b11083cd94537a002c01d332ca3093f69d15833be7583c2b80",
-      "installed_sha256": "e67b654dd61c62b11083cd94537a002c01d332ca3093f69d15833be7583c2b80",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition08/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition08/topas.txt",
-      "source_sha256": "d2d32bb1dde258747a81a15caf67eddba7ccd648af72ffc99e908605f0262c2b",
-      "installed_sha256": "d2d32bb1dde258747a81a15caf67eddba7ccd648af72ffc99e908605f0262c2b",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition09/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition09/topas.txt",
-      "source_sha256": "d17d9f781cf2081b418a222dd1d2e2a4529db5dfed9c873927bb96728801edeb",
-      "installed_sha256": "d17d9f781cf2081b418a222dd1d2e2a4529db5dfed9c873927bb96728801edeb",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition10/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition10/topas.txt",
-      "source_sha256": "470b737d31f0c6063cf1e6a0481dd6a27e8680790d2e4decf25ae358de87b16d",
-      "installed_sha256": "470b737d31f0c6063cf1e6a0481dd6a27e8680790d2e4decf25ae358de87b16d",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition11/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition11/topas.txt",
-      "source_sha256": "3f6b647ac4d24c679764f788fa7440d09a89637ca93c8eb6f1967fe7d1db986e",
-      "installed_sha256": "3f6b647ac4d24c679764f788fa7440d09a89637ca93c8eb6f1967fe7d1db986e",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition12/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition12/topas.txt",
-      "source_sha256": "3dfc54ffd117184d97329f402c66eb57a8e1350b023dc7f33a1c3e5e20901e28",
-      "installed_sha256": "3dfc54ffd117184d97329f402c66eb57a8e1350b023dc7f33a1c3e5e20901e28",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition13/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition13/topas.txt",
-      "source_sha256": "b575b4e449b1679867dd87dc42aca286aeae53357c32be7b9510c3c15825bb81",
-      "installed_sha256": "b575b4e449b1679867dd87dc42aca286aeae53357c32be7b9510c3c15825bb81",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition14/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition14/topas.txt",
-      "source_sha256": "d91c75561d4570523dc037fe1c9823f17edc7ff3ee2edf600257d98329e7986d",
-      "installed_sha256": "d91c75561d4570523dc037fe1c9823f17edc7ff3ee2edf600257d98329e7986d",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition15/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition15/topas.txt",
-      "source_sha256": "b73858188ad43c6d0e946210c87af2af357ef7eb8f68007f3e0d549cbd4a7efb",
-      "installed_sha256": "b73858188ad43c6d0e946210c87af2af357ef7eb8f68007f3e0d549cbd4a7efb",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition16/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition16/topas.txt",
-      "source_sha256": "f3df08749c9bf01b4727881d9b1765b24ea594470fa3636197494fcef41a50ef",
-      "installed_sha256": "f3df08749c9bf01b4727881d9b1765b24ea594470fa3636197494fcef41a50ef",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition17/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition17/topas.txt",
-      "source_sha256": "877f8799629f5ffea8e8b4894ace457b89e6630babbd705516d64d5d3be1b55c",
-      "installed_sha256": "877f8799629f5ffea8e8b4894ace457b89e6630babbd705516d64d5d3be1b55c",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition18/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition18/topas.txt",
-      "source_sha256": "6519ea160975e8441d19d5713e1e80221f162b2e0065d545af5c8486a15141ba",
-      "installed_sha256": "6519ea160975e8441d19d5713e1e80221f162b2e0065d545af5c8486a15141ba",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition19/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition19/topas.txt",
-      "source_sha256": "7be32fcd073322872732c654c0357d9e5d62592f8384e141177b303ca155e1fe",
-      "installed_sha256": "7be32fcd073322872732c654c0357d9e5d62592f8384e141177b303ca155e1fe",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition20/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition20/topas.txt",
-      "source_sha256": "d13f0b2525a4d241b357dbfefe65fda1ed08478d7af160316e22a354022d1ef9",
-      "installed_sha256": "d13f0b2525a4d241b357dbfefe65fda1ed08478d7af160316e22a354022d1ef9",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition21/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition21/topas.txt",
-      "source_sha256": "4c18b8db21e7ba3db7373006c58229a571bbfb4ccd1caaff7e3f29fa95b2f01e",
-      "installed_sha256": "4c18b8db21e7ba3db7373006c58229a571bbfb4ccd1caaff7e3f29fa95b2f01e",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition22/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition22/topas.txt",
-      "source_sha256": "fdf0d7be398430c73b5df941a65bab30fdc91d3a51980fff776db229d0f8f741",
-      "installed_sha256": "fdf0d7be398430c73b5df941a65bab30fdc91d3a51980fff776db229d0f8f741",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition23/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition23/topas.txt",
-      "source_sha256": "6f35c7e85d801adf21463b0830a0eed12a6d2750fba4999457df8e9a15c9cf99",
-      "installed_sha256": "6f35c7e85d801adf21463b0830a0eed12a6d2750fba4999457df8e9a15c9cf99",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition24/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition24/topas.txt",
-      "source_sha256": "c8593051774948b1544da12a061768506287515e7b38654d0940e0d6dc6ec597",
-      "installed_sha256": "c8593051774948b1544da12a061768506287515e7b38654d0940e0d6dc6ec597",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_compositions/composition25/topas.txt",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/out/electron_composition26_20261006/rates_v5/composition25/topas.txt",
-      "source_sha256": "85606a348f8816ddf16da3ce008dd7f66ccde40ad4543e390fec4cb4e852159d",
-      "installed_sha256": "85606a348f8816ddf16da3ce008dd7f66ccde40ad4543e390fec4cb4e852159d",
-      "status": "copied"
-    },
-    {
-      "file": "reference/electron_joint.txt",
-      "installed_sha256": "57637ba762cf305b3dd21f86647402331a6ef4f095080c8f72a0bb2478de9d9a",
-      "status": "authored_or_curated"
-    },
-    {
-      "file": "reference/electron_packages.json",
-      "source": "/mnt/sdb/wuwei/MAIGO_clean/docs/electron_packages_manifest.json",
-      "source_sha256": "8aad43ed4b6b814999a4bcf36c59445c885076c960f1f984498901042ee42cc2",
-      "installed_sha256": "8aad43ed4b6b814999a4bcf36c59445c885076c960f1f984498901042ee42cc2",
-      "status": "copied"
-    },
-    {
       "file": "reference/hu_to_material.txt",
       "source": "/mnt/sdb/wuwei/MAIGO_clean/data/materials/schneider/hu_to_material.txt",
       "source_sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139",
@@ -295,11 +104,6 @@
       "source_sha256": "2e7e2dc974d1161739d65311f124bc1a44ed38ace10b8b5992778544fa6e6875",
       "installed_sha256": "2e7e2dc974d1161739d65311f124bc1a44ed38ace10b8b5992778544fa6e6875",
       "status": "copied"
-    },
-    {
-      "file": "reference/joint_index.json",
-      "installed_sha256": "0a2a820106ff71cf4480566901238013e6522f090f9b6b74b31bb820f7269159",
-      "status": "authored_or_curated"
     },
     {
       "file": "reference/joint_materials/material000/topas.txt",
@@ -728,112 +532,6 @@
     {
       "file": "requirements.txt",
       "installed_sha256": "329ac74cdf8febf48a3d3b7638abb261ad704f01ff94abd5ac5d3d463a092a12",
-      "status": "authored_or_curated"
-    },
-    {
-      "file": "tools/electrons/assemble_package26.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/build_electron_complete26_candidate.py",
-      "source_sha256": "e59089cef52548220b2624309590395535deae82d3c8fc1a6aa4a4a0379bf4cc",
-      "installed_sha256": "3795301c31db6fb4c4016b7fcf409900ca2c0e557e94b71b8b4f903c8eec3029",
-      "status": "adapted"
-    },
-    {
-      "file": "tools/electrons/build_electron_cut_birth26.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/build_electron_cut_birth26.py",
-      "source_sha256": "6f247550321a23faa540975894854b855b4b5225e57a78a2dc55b3f0efb2e915",
-      "installed_sha256": "5fa4e973c1576569f20eeda95982fbd0b6c52e0a17a44fdd6fc8ff559d6e5db1",
-      "status": "adapted"
-    },
-    {
-      "file": "tools/electrons/build_electron_native_grid_rates26.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/build_electron_native_grid_rates26.py",
-      "source_sha256": "b872cf61c27e002d00e74a470cf40f0a52538328be76b2a0caa9989117f102fd",
-      "installed_sha256": "35ef9c2211f4b37f9429ff8e1211441b9ce5d82eaeabfda738d0a37029cd66ab",
-      "status": "adapted"
-    },
-    {
-      "file": "tools/electrons/build_electron_scalar26.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/build_electron_scalar26.py",
-      "source_sha256": "beecdd611ea3779ac2e7bb98b8a818fb3a730ea3e77eac85577f98189d3ff04d",
-      "installed_sha256": "94e30ea6778e717b6ea38f45a745be7ed657908a10964f18fa62ecf0acdcab29",
-      "status": "adapted"
-    },
-    {
-      "file": "tools/electrons/build_schneider_joint.py",
-      "installed_sha256": "d6c566bfc7189a42b739f4092547301b01c9514f605b87f741b05a02c39a9e9f",
-      "status": "authored_or_curated"
-    },
-    {
-      "file": "tools/electrons/compact_electron_joint.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/compact_electron_joint.py",
-      "source_sha256": "a7f85d1fab5c910e7a22c7e802cf7b165181560610e01ac2121984b4bbd14db9",
-      "installed_sha256": "a7f85d1fab5c910e7a22c7e802cf7b165181560610e01ac2121984b4bbd14db9",
-      "status": "copied"
-    },
-    {
-      "file": "tools/electrons/compact_electron_runtime.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/compact_electron_runtime.py",
-      "source_sha256": "7e0c3d45a282e3917379ee87c847323ac38f2b8f825e923bbcec20f57418e083",
-      "installed_sha256": "05d989185ef05261325bb35d67dde547c10c5c20a407418f8490e38eecf2ae5d",
-      "status": "adapted"
-    },
-    {
-      "file": "tools/electrons/compile_electron_response.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/compile_electron_response.py",
-      "source_sha256": "664361a45ca54c050ec3dc9087bd26591fd5ef97ad6e4063088e4ea1b3f44d3e",
-      "installed_sha256": "c4086c947b265ea954d9da76a3f932d8c09c9f88c8c16c815b2d8f7399797f2f",
-      "status": "adapted"
-    },
-    {
-      "file": "tools/electrons/compile_photon_response.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/compile_photon_response.py",
-      "source_sha256": "c3e815e4d5c9ba44fa2852c1faff8db47441eff59929e869a2c930f0ff7487d2",
-      "installed_sha256": "c3e815e4d5c9ba44fa2852c1faff8db47441eff59929e869a2c930f0ff7487d2",
-      "status": "copied"
-    },
-    {
-      "file": "tools/electrons/electron_hard_rates.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/electron_hard_rates.py",
-      "source_sha256": "84382d0634df29a091aa517ebe7032061d5e8288a176f0a8e3a56ae6314f1a7b",
-      "installed_sha256": "84382d0634df29a091aa517ebe7032061d5e8288a176f0a8e3a56ae6314f1a7b",
-      "status": "copied"
-    },
-    {
-      "file": "tools/electrons/electron_joint_compiler.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/electron_joint_compiler.py",
-      "source_sha256": "cef5c82b96419e88a05909e4677e25709c4a0c4baa141add36d87885bfdc4331",
-      "installed_sha256": "cef5c82b96419e88a05909e4677e25709c4a0c4baa141add36d87885bfdc4331",
-      "status": "copied"
-    },
-    {
-      "file": "tools/electrons/electron_package_common.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/electron_package_common.py",
-      "source_sha256": "fadb9097a402d1dbf5c2f45fe5145dc26786c1daf9a07bdb07b9854b86800e88",
-      "installed_sha256": "fadb9097a402d1dbf5c2f45fe5145dc26786c1daf9a07bdb07b9854b86800e88",
-      "status": "copied"
-    },
-    {
-      "file": "tools/electrons/extract_electron_composition_laws26.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/extract_electron_composition_laws26.py",
-      "source_sha256": "1a193acd83bdf349b1e59d5bef4dfe501c6c2aae1f58cb9d4363f165638edd7f",
-      "installed_sha256": "453ff597bb290599ad55eff146de2959814c933a6a8e408b99ee2bdfa473ca50",
-      "status": "adapted"
-    },
-    {
-      "file": "tools/electrons/formats.py",
-      "installed_sha256": "f65b93cd8b1396ae7a6111834205241e9e357cc62651da55fb300d3ae92fd412",
-      "status": "authored_or_curated"
-    },
-    {
-      "file": "tools/electrons/pack_electron_composition_laws26.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/scripts/pack_electron_composition_laws26.py",
-      "source_sha256": "f38010d5d8bcf039e670ded33dbcfd98c761fe0aba4a04440806685e00b971fa",
-      "installed_sha256": "b29799cb8cd6cb793d2cd4f39a2277e9e76fc9473315c6a4c417d7655a52fda5",
-      "status": "adapted"
-    },
-    {
-      "file": "tools/electrons/package_release.py",
-      "installed_sha256": "ac498e04ba8ee6dc70be94db8d611aa38f955ddb92f230a18053509a48f0e084",
       "status": "authored_or_curated"
     },
     {
@@ -1439,170 +1137,6 @@
       "status": "copied"
     },
     {
-      "file": "topas/electrons/ElectronBoundaryProbe.cc",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/ElectronBoundaryProbe.cc",
-      "source_sha256": "007a7acc085e5bf1f2f6ae996703d6289e0e28f0f91120d88cc2f7612da1360f",
-      "installed_sha256": "007a7acc085e5bf1f2f6ae996703d6289e0e28f0f91120d88cc2f7612da1360f",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/ElectronBoundaryProbe.hh",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/ElectronBoundaryProbe.hh",
-      "source_sha256": "f2d2e7c4c6d4d23a5daabfb852c99579c6242a1fac4a148da3e12ce2eec2259d",
-      "installed_sha256": "f2d2e7c4c6d4d23a5daabfb852c99579c6242a1fac4a148da3e12ce2eec2259d",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/ElectronCollisionDump.cc",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/ElectronCollisionDump.cc",
-      "source_sha256": "79c8bca10249e011ffa32495b6395a6f0f7ed399ebde6edced6c775b78471dbd",
-      "installed_sha256": "79c8bca10249e011ffa32495b6395a6f0f7ed399ebde6edced6c775b78471dbd",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/ElectronCollisionDump.hh",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/ElectronCollisionDump.hh",
-      "source_sha256": "00f5086751d194c38dd26f8a30642013b028b489fa008c8e01170da7c91c827f",
-      "installed_sha256": "00f5086751d194c38dd26f8a30642013b028b489fa008c8e01170da7c91c827f",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/ElectronCompositionProbe.cc",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/ElectronCompositionProbe.cc",
-      "source_sha256": "b4d8e3d2100e8c31f646c4b98e9df2bae0a0c2ce69f6166059cdc5962871a9ac",
-      "installed_sha256": "b4d8e3d2100e8c31f646c4b98e9df2bae0a0c2ce69f6166059cdc5962871a9ac",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/ElectronCompositionProbe.hh",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/ElectronCompositionProbe.hh",
-      "source_sha256": "e349cf944f2289d359401a3158001752d26cf04d0f92ca3db88efd7298cfb8cb",
-      "installed_sha256": "e349cf944f2289d359401a3158001752d26cf04d0f92ca3db88efd7298cfb8cb",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/ElectronElasticDump.cc",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/ElectronElasticDump.cc",
-      "source_sha256": "94038ba1f8ba7b9a10714f60f1094222b4249607ba3caa6f2a1476176973f15e",
-      "installed_sha256": "94038ba1f8ba7b9a10714f60f1094222b4249607ba3caa6f2a1476176973f15e",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/ElectronElasticDump.hh",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/ElectronElasticDump.hh",
-      "source_sha256": "b94e77a71da09c5ac31f549cc562b4705371e446ee4512a2f09c91eb977536dd",
-      "installed_sha256": "b94e77a71da09c5ac31f549cc562b4705371e446ee4512a2f09c91eb977536dd",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/ElectronExtractionRange.hh",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/ElectronExtractionRange.hh",
-      "source_sha256": "8fbd3642664c771b2272d56f0e0b8a74982a1fd41a58572e731eb45a66411302",
-      "installed_sha256": "8fbd3642664c771b2272d56f0e0b8a74982a1fd41a58572e731eb45a66411302",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/ElectronFluctuationDump.cc",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/ElectronFluctuationDump.cc",
-      "source_sha256": "ce8543735304496903bfc3f8cc4673a35478d0117794699e6ccf26b786adbb51",
-      "installed_sha256": "ce8543735304496903bfc3f8cc4673a35478d0117794699e6ccf26b786adbb51",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/ElectronFluctuationDump.hh",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/ElectronFluctuationDump.hh",
-      "source_sha256": "d909a1b9ff92a452d0f8417d89a1c0b3e0e995c9ce7c5e2e33681289a32cc28f",
-      "installed_sha256": "d909a1b9ff92a452d0f8417d89a1c0b3e0e995c9ce7c5e2e33681289a32cc28f",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/IonBirthConditionalDump.cc",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/IonBirthConditionalDump.cc",
-      "source_sha256": "51c9772cdcdb6f4bb1d278169ba28b604b641d11fea4bee432ba58eb5dc76d44",
-      "installed_sha256": "51c9772cdcdb6f4bb1d278169ba28b604b641d11fea4bee432ba58eb5dc76d44",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/IonBirthConditionalDump.hh",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/IonBirthConditionalDump.hh",
-      "source_sha256": "7f3fcedfc7473b4f5091244a0dfcbc6959ccecf395295a186baf5803e6b25e15",
-      "installed_sha256": "7f3fcedfc7473b4f5091244a0dfcbc6959ccecf395295a186baf5803e6b25e15",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/IonElectronBirthNtuple.cc",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/IonElectronBirthNtuple.cc",
-      "source_sha256": "159a588520f091d693755fa1c25768a6e5e89afd1572f52bf72b6b280d170847",
-      "installed_sha256": "159a588520f091d693755fa1c25768a6e5e89afd1572f52bf72b6b280d170847",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/IonElectronBirthNtuple.hh",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/IonElectronBirthNtuple.hh",
-      "source_sha256": "0875b73347c0eedfe062cb9d615d6b0dc6d69fdb322797978f462ccf53e7b24e",
-      "installed_sha256": "0875b73347c0eedfe062cb9d615d6b0dc6d69fdb322797978f462ccf53e7b24e",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/PhotonConditionalDump.cc",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/PhotonConditionalDump.cc",
-      "source_sha256": "2c28ded4c3039a3e30da1f6f736591ac9331c6a7f30f13b66b0d07ec2f16f796",
-      "installed_sha256": "2c28ded4c3039a3e30da1f6f736591ac9331c6a7f30f13b66b0d07ec2f16f796",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/PhotonConditionalDump.hh",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/PhotonConditionalDump.hh",
-      "source_sha256": "af41be8b6f9cdfd347248d5b54ba9c3714c7e3176031d307b6735dfd074e8bab",
-      "installed_sha256": "af41be8b6f9cdfd347248d5b54ba9c3714c7e3176031d307b6735dfd074e8bab",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/PhotonResponseNtuple.cc",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/PhotonResponseNtuple.cc",
-      "source_sha256": "7f653a0ce7c9d4ce4cb42601539132e992950cb2746782839d86ac60a8a4734f",
-      "installed_sha256": "7f653a0ce7c9d4ce4cb42601539132e992950cb2746782839d86ac60a8a4734f",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/PhotonResponseNtuple.hh",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/PhotonResponseNtuple.hh",
-      "source_sha256": "3f53f9051dbdd54d81ea6f65e5328e75c16b2372b2b7605d62262563618acd86",
-      "installed_sha256": "3f53f9051dbdd54d81ea6f65e5328e75c16b2372b2b7605d62262563618acd86",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/PrimaryElectronTransportNtuple.cc",
-      "installed_sha256": "318f51454afeb06093785fd15df4f1b69d08ef43793642db503d548d61d6fb77",
-      "status": "authored_or_curated"
-    },
-    {
-      "file": "topas/electrons/PrimaryElectronTransportNtuple.hh",
-      "installed_sha256": "4f9d93adc18a3fffab4620fed3131ac7046a3aea145359e3b33a363242e72921",
-      "status": "authored_or_curated"
-    },
-    {
-      "file": "topas/electrons/SelectedElectronTransportNtuple.cc",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/SelectedElectronTransportNtuple.cc",
-      "source_sha256": "499c5defa6fa32d6c01facbead6271fa3c610af996df2842ece3fee5547bdf9e",
-      "installed_sha256": "499c5defa6fa32d6c01facbead6271fa3c610af996df2842ece3fee5547bdf9e",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/SelectedElectronTransportNtuple.hh",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/SelectedElectronTransportNtuple.hh",
-      "source_sha256": "24d658f10501d9221046d9bf690f0a688c72cc5c77d83112374938684b4a1b27",
-      "installed_sha256": "24d658f10501d9221046d9bf690f0a688c72cc5c77d83112374938684b4a1b27",
-      "status": "copied"
-    },
-    {
-      "file": "topas/electrons/packed_electron_graph.hpp",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/benchmark/electron_response_model/native/packed_electron_graph.hpp",
-      "source_sha256": "ef419e28ab16f94c57d62f0b5924ca6be373dba3f7e8c1fbfb7945f5c88b175d",
-      "installed_sha256": "ef419e28ab16f94c57d62f0b5924ca6be373dba3f7e8c1fbfb7945f5c88b175d",
-      "status": "copied"
-    },
-    {
       "file": "topas/unified_em/CarbonStoppingPowerNtuple.cc",
       "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/topas/unified_em/CarbonStoppingPowerNtuple.cc",
       "source_sha256": "c436db5589586f87b7a5f1e72bb06a6ca813dabfadf25a2f422f0de6ded8b3d3",
@@ -1618,8 +1152,9 @@
     },
     {
       "file": "verify_kit.py",
-      "installed_sha256": "93cf2abf95a29dbb54ca4d3795600e9ac029e3f6d877b3d4d646b260f0e0ee0a",
-      "status": "authored_or_curated"
+      "installed_sha256": "62df66fd2a425e5114ce2333be40b23246b81fd2274705363fdc93325855402d",
+      "status": "authored_or_curated",
+      "maintenance_note": "2026-10-15: remove retired explicit electron/photon transport tooling."
     }
   ]
 }

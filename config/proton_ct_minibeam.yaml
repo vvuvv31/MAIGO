@@ -1,5 +1,4 @@
-enable_electron_transport: false
-# proton_ct_minibeam: lung CT benchmark (not RT07575); current26 EM/electrons, FP32 dose.
+# proton_ct_minibeam: lung CT benchmark (not RT07575); continuous26 ion EM, local ionization, FP32 dose.
 transport_pipeline: proton_minibeam
 run_mode: research
 enable_ct_grid: true
@@ -95,15 +94,6 @@ enable_ct_material_mcs: true
 ct_schneider_file: data/materials/schneider/hu_to_material.txt
 all_ion_elastic_file: data/elastic/schneider/proton/all_ion.bin
 elastic_recoil_stopping_file: data/elastic/schneider/proton/recoil_stopping.bin
-material_electron_group_size: 32
-material_electron_queue_chunk: 262144
-material_electron_queue_lanes: 16384
-material_electron_queue_budget_MiB: 576
-material_electron_retain_bank: true
 
-material_electron_birth_file: data/em/electrons/shared/birth26.bin
-material_electron_joint_pilot_file: data/em/electrons/shared/joint.bin
-material_photon_response_index_file: data/em/electrons/shared/photon.index
-material_electron_charged_index_file: data/em/electrons/shared/charged.index
 primary_atomic_number: 1
 primary_mass_number: 1

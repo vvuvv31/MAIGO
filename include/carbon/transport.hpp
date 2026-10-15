@@ -415,12 +415,6 @@ struct SchneiderUnsupportedTrack {
 };
 static_assert(sizeof(SchneiderUnsupportedTrack) == 24, "unsupported-track layout");
 
-struct ElectronJointDiagnostics {
-    std::uint64_t queries{},domain_misses{},invalid_marches{};
-    double redistributed_MeV{},escaped_MeV{};
-    std::uint64_t ordered_path_replays{};
-};
-
 struct TransportResult {
     bool conditional_copper_response_enabled{false};
     // True only when the dedicated local-electron CT proton primary ran.
@@ -431,7 +425,6 @@ struct TransportResult {
     bool ct_secondary_first_order_restricted_enabled{false};
     bool ct_broadbeam_step_cap_enabled{false};
 
-    ElectronJointDiagnostics electron_joint_diagnostics{};
     EnergyAccountingLedger energy_ledger{};
     SchneiderNuclearDiagnostics schneider_diagnostics{};
     // Bounded per-record logs (empty on water path / when logging disabled).
@@ -467,11 +460,6 @@ struct TransportResult {
     // optional minibeam beamline.
     double beamline_removed_energy_MeV{0.0};
     double untracked_nuclear_energy_MeV{0.0};
-    double material_electron_untracked_MeV{0.0};
-    double material_electron_photon_untracked_MeV{0.0}; // informational subset
-    // Signed statistical weight added by electron Russian roulette:
-    // survivors gain W(1/p-1), killed tasks lose W. Zero in expectation.
-    double electron_variance_reduction_weight_gain_MeV{0.0};
     std::uint64_t nuclear_interactions{0};
     // Step 12 primary-only & validation counters
     std::uint64_t primary_inelastic_terminated_count{0};
@@ -516,7 +504,6 @@ struct TransportResult {
     double elapsed_seconds{0.0};
     double primary_kernel_seconds{0.0};
     double secondary_kernel_seconds{0.0};
-    double electron_kernel_seconds{0.0};
     std::string backend;
     MinibeamDiagnostics minibeam;
 
@@ -538,7 +525,7 @@ private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 
-    template<class Pipeline, int JointResponse>
+    template<class Pipeline>
     friend TransportResult transport_pipeline(
         const TransportConfig&, const StoppingPowerTable&,
         const std::string&, SyclTransportContext*);

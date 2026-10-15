@@ -9,7 +9,6 @@ Profiles:
   elastic-carbon  Frozen production carbon/reference all-ion elastic exporter
   recoil-carbon   Frozen production carbon/reference recoil stopping exporter
   elastic-proton  Current combined exporter for proton Water_75eV replacement rows
-  electrons       Electron/photon/birth/composition and spatial joint recorders
 Options:
   --geant4-dir DIR    Directory containing Geant4Config.cmake
   --cmake-prefix DIR CMAKE_PREFIX_PATH for TOPAS dependencies
@@ -39,7 +38,7 @@ while (($#)); do
   esac
 done
 [[ -n $build_dir && -n $profile && $jobs =~ ^[1-9][0-9]*$ ]] || { usage >&2; exit 2; }
-case "$profile" in nuclear-copper|unified-em|elastic-carbon|recoil-carbon|elastic-proton|electrons) ;;
+case "$profile" in nuclear-copper|unified-em|elastic-carbon|recoil-carbon|elastic-proton ) ;;
   *) echo "Unknown profile: $profile" >&2; exit 2;; esac
 if (( !stage_only )); then
   [[ -f $topas_source/CMakeLists.txt ]] || { echo "Missing TOPAS source tree" >&2; exit 2; }
@@ -56,7 +55,6 @@ fi
 mkdir -p -- "$stage"
 printf '%s\n' "$profile" > "$marker"
 case "$profile" in
-  electrons) cp -- "$here"/topas/electrons/* "$stage/";;
   *) cp -- "$here"/topas/common/* "$stage/";;
 esac
 case "$profile" in
@@ -72,15 +70,6 @@ case "$profile" in
     esac
     cp -- "$here/topas/all_ion_elastic/$source_file" "$stage/AllIonElasticDump.cc";;
 esac
-if [[ $profile == electrons ]]; then
-  for file in "$stage"/*.cc; do
-    if [[ $(head -n 1 -- "$file") != '// Scorer for '* ]]; then
-      name=$(basename -- "$file" .cc)
-      { printf '// Scorer for %s\n' "$name"; cat -- "$file"; } > "$file.tmp"
-      mv -- "$file.tmp" "$file"
-    fi
-  done
-fi
 if ((stage_only)); then printf 'Staged %s: %s\n' "$profile" "$stage"; exit 0; fi
 args=(-DTOPAS_EXTENSIONS_DIR="$stage" -DTOPAS_USE_QT="$topas_use_qt"
       "-DCMAKE_CXX_FLAGS=-I$here/../include")

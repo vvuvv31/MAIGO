@@ -12,7 +12,7 @@ MAIGO is a GPU Monte Carlo dose engine implemented in C++20 and SYCL, with charg
 
 Within a common physics and scoring framework, patient broadbeam transport provides the foundation, and explicit copper-collimator and air-gap transport extends the calculation to minibeams. Particle type, medium, and irradiation mode define eight configurations: all combinations of proton/carbon, water/CT, and broadbeam/minibeam. Four dedicated pipelines serve proton broadbeam, proton minibeam, carbon broadbeam, and carbon minibeam configurations; a generic pipeline supports other proton or C12 configurations. The pipelines share geometry, electromagnetic, nuclear, and scoring operations. A pipeline's particle designation identifies the primary source and does not restrict its charged-fragment species.
 
-The study evaluates physical absorbed dose. LET, biological dose, and relative biological effectiveness are outside the endpoints of this methods draft. Nuclear neutral products are not explicitly transported; their energy is recorded in separate untracked-energy accounts and is not substituted with local dose. Explicit electron transport is optional and includes electromagnetic photon transport when enabled.
+The study evaluates physical absorbed dose. LET, biological dose, and relative biological effectiveness are outside the endpoints of this methods draft. Nuclear neutral products are not explicitly transported; their energy is recorded in separate untracked-energy accounts and is not substituted with local dose. Explicit electron and electromagnetic photon transport are omitted; ionization energy is deposited locally in the patient or water medium.
 
 ### II.A.2. Physics-data generation and coverage
 
@@ -74,13 +74,13 @@ Minibeam calculations use material- and species-specific data from the Geant4 Ur
 
 Primary energy-loss fluctuations in copper remain enabled; restricted fragment fluctuations are disabled by default. Proton minibeams use `g4_universal_delta`, whereas carbon minibeams use `g4_ion_delta`. Carbon copper fragments retain hard-delta Poisson and spectrum sampling; disabling restricted fluctuations does not remove all stochastic energy transfer. Copper and air retain the corresponding native proposal clocks and material-boundary constraints. Patient steps are also limited by electromagnetic, scattering, and voxel-boundary constraints; the configured maximum step is therefore not the mean realized step.
 
-| Medium and irradiation mode | Maximum primary/ion step | Scattering path | Default explicit electron transport |
+| Medium and irradiation mode | Maximum primary/ion step | Scattering path | Explicit electron transport |
 |---|---:|---|---|
 | CT broadbeam, proton and carbon | 1.0 mm | Gaussian Fermi–Eyges | Off |
 | Water broadbeam, proton and carbon | 1.0 mm | Gaussian Fermi–Eyges | Off |
 | CT minibeam, proton and carbon | 0.5 mm | Urban | Off |
 | Water minibeam, proton and carbon | 0.5 mm | Urban | Off |
-| Minibeam copper collimator | 0.05 mm | Copper-specific scattering and energy loss | Follows the corresponding electron configuration |
+| Minibeam copper collimator | 0.05 mm | Copper-specific scattering and energy loss | Not transported |
 
 The combined minibeam mean-loss limit and native stepping parameters are determined by the executed branch. A general relative-energy-loss YAML key is not assumed to control all pipelines identically. Carbon minibeam research configurations using a 1 mm patient cap or scaled ionization-segmentation clocks are recorded separately and are not release defaults. Disabled secondary fluctuations are now the default, but carbon-minibeam dose validation remains incomplete. A broadbeam Gaussian-scattering hypothesis is not used as a direct explanation of Urban minibeam discrepancies.
 
@@ -90,17 +90,11 @@ All four minibeam configurations use compact scheduling to separate copper/air t
 
 This decomposition permits upstream and patient costs to be measured separately and execution pipelines to be optimized by primary species and irradiation mode. It does not replace the upstream calculation with a source containing only direct slit-transmitted primaries, and it does not introduce fixed phase-space reuse.
 
-### II.C.4. Optional spatial electron transport
+### II.C.4. Local ionization-energy deposition
 
-Minibeam peak–valley structure and heterogeneous interfaces require separate assessment of the local ionization-energy-deposition approximation. The framework retains the following optional electron/photon paths to evaluate spatial redistribution in both broadbeam and minibeam calculations.
+Ionization energy is scored locally without explicit electron/photon birth or transport tasks. Continuous26 ion energy loss, primary fluctuations, aggregate delta transfer and the existing Urban ionization segmentation clock are retained. Hard delta energy in copper remains a beamline energy sink rather than patient dose.
 
-Explicit electron transport is enabled with `enable_electron_transport: true`. When disabled, electron/photon packages are not loaded, and ionization energy follows the existing local-deposition path. This is a spatial-dose approximation, not removal of electromagnetic energy loss from the ions. Enabling transport requires complete, projectile-matched strict26 birth, charged-particle, photon, and spatial joint-response packages.
-
-The electron algorithm uses energy-packet estimators, birth merging, and energy-weighted successor sampling to reduce the cost of transporting complete electron trees. Charged collisions, atomic relaxation, elastic scattering, bremsstrahlung, and electromagnetic photon interactions use the corresponding composition data. Applicable homogeneous-medium segments are accelerated using spatial joint responses. Joint responses remain subject to package-validity and geometric-step constraints; electron geometry, energy loss, and scoring retain FP32 arithmetic.
-
-The optional CT broadbeam electron path additionally uses selective tracking in low-density regions and their neighborhood. The default research selection comprises densities no greater than 0.1 g/cm³ and a 5 mm halo, combined with birth sampling. Region selection requires an additional explicit setting. Ionization by patient nuclear secondary ions retains the current local-deposition policy. Uniform-water broadbeam configurations do not define a corresponding electron-selection region; enabling one master switch alone does not establish complete spatial electron transport.
-
-Electron-on/off comparisons use identical sources, weights, geometry, and incident-particle counts. Paired seeds isolate implementation differences, while independent batches estimate dose variance. Nuclear and elastic integer counters verify consistency of the upstream ion path when electron transport is enabled. This design measures spatial electron redistribution; small local differences are not generalized to all materials or all minibeam valleys.
+This spatial dose approximation omits electron/photon redistribution. Its effect must be assessed separately at low-density interfaces and minibeam peaks and valleys. Historical electron-on/off comparisons apply to their tested configurations and do not establish negligible effects for all geometries.
 
 ## II.D. Shared GPU execution and dose scoring
 
@@ -204,9 +198,9 @@ Noise attribution combines independent TOPAS-versus-TOPAS repeats, independent G
 
 Performance is reported separately for the actual NVIDIA RTX 2080 Ti, RTX A6000, and other devices used. GPU model, memory, driver, compilation target, executable hash, and concurrent workload are recorded. Cold-start time extends from process launch through the first complete batch dose output and includes initialization and data transfer. Subsequent-batch throughput divides subsequent incident histories by their corresponding runtime while reusing the same GPU context. Filesystem-cache conditions and portable PTX versus device-specific AOT builds are identified.
 
-Paired optimization studies use identical sources and seeds in A/B/B/A or other interleaved orders. The first batch may be excluded from warm timing while retaining its physics audits. End-to-end time and primary, secondary, electron, and upstream-collimator stage times are reported separately. Temperature and frequency drift under unlocked clocks are measurement limitations; startup smoke checks do not establish performance gains. When sampling or physical approximations change, time to a comparable statistical error is evaluated in addition to incident histories per second.
+Paired optimization studies use identical sources and seeds in A/B/B/A or other interleaved orders. The first batch may be excluded from warm timing while retaining its physics audits. End-to-end time and primary, secondary, and upstream-collimator stage times are reported separately. Temperature and frequency drift under unlocked clocks are measurement limitations; startup smoke checks do not establish performance gains. When sampling or physical approximations change, time to a comparable statistical error is evaluated in addition to incident histories per second.
 
-Each batch is checked for source completion, charged-species terminal states, electromagnetic and nuclear coverage, finite nonnegative dose, energy accounting, queue completion, and zero overflow. Matched GPU implementation checks and independent TOPAS physics acceptance are reported separately. Proton minibeam electron-package replacement uses a decrease of no more than one percentage point in local 3%/0.2 mm pass rate against a matched old baseline as an implementation-related criterion; absolute TOPAS gamma is evaluated separately. Independent absolute carbon minibeam dose acceptance remains incomplete, and passing matched scheduling checks does not replace that assessment.
+Each batch is checked for source completion, charged-species terminal states, electromagnetic and nuclear coverage, finite nonnegative dose, energy accounting, queue completion, and zero overflow. Matched GPU implementation checks and independent TOPAS physics acceptance are reported separately. Historical proton minibeam electron-package replacement used a decrease of no more than one percentage point in local 3%/0.2 mm pass rate against a matched old baseline as an implementation-related criterion; absolute TOPAS gamma is evaluated separately. Independent absolute carbon minibeam dose acceptance remains incomplete, and passing matched scheduling checks does not replace that assessment.
 
 ## References
 
@@ -218,6 +212,6 @@ Each batch is checked for source completion, charged-species terminal states, el
 
 ## Reproducibility materials (to be organized as supplementary material)
 
-Physics-package generation is described in [extensions/README.md](extensions/README.md), pipeline architecture and selective compilation in [docs/transport_pipelines.md](docs/transport_pipelines.md), electron opt-in behavior in [docs/optional_electron_transport_20261011.md](docs/optional_electron_transport_20261011.md), and installed data layout in [docs/data_layout_20261007.md](docs/data_layout_20261007.md). Performance candidates and unsuccessful experiments are recorded in `failed.md` and the corresponding study documents.
+Physics-package generation is described in [extensions/README.md](extensions/README.md), pipeline architecture and selective compilation in [docs/transport_pipelines.md](docs/transport_pipelines.md), electron-transport removal in [docs/no_electron_transport_20261015.md](docs/no_electron_transport_20261015.md), and installed data layout in [docs/data_layout_20261007.md](docs/data_layout_20261007.md). Performance candidates and unsuccessful experiments are recorded in `failed.md` and the corresponding study documents.
 
 Before submission, each study requires a frozen executable version, configuration, package hashes, and input inventory, together with patient-data provenance and ethics approval or exemption information; case-specific energy ranges, fields, spots, and collimator parameters; and actual independent-reference history counts and statistics. Unconfirmed ethics information, measured clinical beam calibration, or independent high-statistics acceptance is not represented as completed. Measured gamma, throughput, and noise belong in Results. Model applicability, finite event libraries, and the effects of untracked nuclear neutral products belong in Discussion.

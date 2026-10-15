@@ -390,9 +390,6 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"E_beamline_MeV\": " << result.beamline_removed_energy_MeV
            << ",\n"
            << "  \"E_untracked_MeV\": " << result.untracked_nuclear_energy_MeV << ",\n"
-           << "  \"E_material_electron_untracked_MeV\": " << result.material_electron_untracked_MeV << ",\n"
-           << "  \"E_material_photon_untracked_MeV\": " << result.material_electron_photon_untracked_MeV << ",\n"
-           << "  \"E_electron_variance_reduction_gain_MeV\": " << result.electron_variance_reduction_weight_gain_MeV << ",\n"
            << "  \"E_queue_lost_MeV\": "
            << result.secondary_queue_overflow_energy_MeV
            << ",\n"
@@ -419,34 +416,9 @@ void write_energy_ledger_json(const std::filesystem::path& path,
         output << "  \"nuclear_recoil_reference_grid_file\": \"" << config.primary_stopping_power_file.string() << "\",\n"
                << "  \"unified_water_material_id_note\": \"255 is a diagnostic sentinel, not a Schneider section; rate uses a separate water row\",\n";
     }
-    output << "  \"enable_electron_transport\": " << (config.enable_electron_transport ? "true" : "false") << ",\n"
-           << "  \"broadbeam_electron_tracking\": " << (config.broadbeam_electron_tracking ? "true" : "false") << ",\n"
-           << "  \"broadbeam_independent_electrons\": " << (config.broadbeam_independent_electrons ? "true" : "false") << ",\n"
-           << "  \"broadbeam_electron_density_threshold\": " << config.broadbeam_electron_density_threshold << ",\n"
-           << "  \"broadbeam_electron_halo_mm\": " << config.broadbeam_electron_halo_mm << ",\n"
-           << "  \"broadbeam_electron_low_density_survival\": " << config.broadbeam_electron_low_density_survival << ",\n"
-           << "  \"broadbeam_electron_tissue_survival\": " << config.broadbeam_electron_tissue_survival << ",\n"
-           << "  \"broadbeam_electron_birth_order\": " << (config.broadbeam_electron_birth_order?"true":"false") << ",\n";
     output << "  \"transport_profile\": \"" << config.transport_profile << "\",\n"
            << "  \"fermi_eyges_gaussian_only\": " << (config.fermi_eyges_gaussian_only ? "true" : "false") << ",\n";
-    if(!config.material_electron_charged_index_file.empty()) {
-        const auto& d=result.electron_joint_diagnostics;
-        output<<"  \"material_electron_response\": {\"status\": \"unvalidated_main_kernel_integration\", "
-              <<"\"density_sampling\": \""<<(config.enable_ct_grid?"candidate_same_section_density_mixture_birth_energy_packets":"deposited_fraction_weighted_brackets_no_coordinate_scaling")<<"\", "
-              <<"\"group_size\": "<<config.material_electron_group_size<<", "
-              <<"\"queue_budget_MiB\": "<<config.material_electron_queue_budget_MiB<<", "
-              <<"\"queue_chunk\": "<<config.material_electron_queue_chunk<<", "
-              <<"\"queue_lanes\": "<<config.material_electron_queue_lanes<<", "
-              <<"\"retained_bank\": "<<(config.material_electron_retain_bank?"true":"false")<<", "
-              <<"\"electron_kernel_seconds\": "<<result.electron_kernel_seconds<<", "
-              <<"\"density_g_cm3\": "<<(config.enable_ct_grid?"null":std::to_string(config.water_density_g_per_cm3))<<", "
-              <<"\"heterogeneous_continuation\": "<<(config.enable_ct_grid?"true":"false")
-              <<", \"unresolved_photon_policy\": \""<<(config.enable_ct_grid?"separate_untracked_energy_not_patient_escape":"explicit_escape_bound_not_validated")<<"\", "
-              <<"\"queries\": "<<d.queries<<", \"domain_misses\": "<<d.domain_misses
-              <<", \"invalid_paths\": "<<d.invalid_marches<<", \"path_replays\": "<<d.ordered_path_replays
-              <<", \"voxel_redistributed_MeV\": "<<d.redistributed_MeV
-              <<", \"outside_packet_MeV\": "<<d.escaped_MeV<<"},\n";
-    }
+
     write_schneider_physics_provenance(output, config);
     write_validation_scope(output, config);
     output << "  \"schneider_diagnostics\": {\n"

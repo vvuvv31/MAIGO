@@ -6,7 +6,7 @@ import numpy as np
 import yaml
 ROOT=Path(__file__).resolve().parents[1]
 CASES=[f'{s}_{m}_{b}' for s in ['proton','carbon'] for m in ['water','ct'] for b in ['broadbeam','minibeam']]
-AUDITS=['unified-em-audit','independent-fp32-completion','independent-charged-work','independent-photon-work','electron-joint-pilot-work','all-ion-elastic','elastic-failure-sites','urban-v2-steps','minibeam-copper-cascade']
+AUDITS=['unified-em-audit','all-ion-elastic','elastic-failure-sites','urban-v2-steps','minibeam-copper-cascade']
 
 def run(case,arm,binary,input_root,out,histories):
     directory=out/case/arm;directory.mkdir(parents=True)
@@ -27,10 +27,9 @@ def run(case,arm,binary,input_root,out,histories):
         assert q['accepted'] and not q['failures'] and q['queue_overflow_count']==0 and q['physical_relative_energy_residual']<1e-4,q
         dose=np.fromfile(directory/'batches'/f'batch{i:06d}'/'dose.raw','<f4')
         assert np.isfinite(dose).all() and (dose>=0).all() and dose.max()>0
-    for a,b in re.findall(r'\[independent-fp32-completion\] expected=(\d+) completed=(\d+)',text):assert a==b
     for line in text.splitlines():
-        if line.startswith(tuple('['+key+']' for key in AUDITS[2:])):
-            assert all(int(n)==0 for n in re.findall(r'(?:coverage_missing|invalid|photon_gap)=(\d+)',line)),line
+        if line.startswith(tuple('['+key+']' for key in AUDITS[1:])):
+            assert all(int(n)==0 for n in re.findall(r'(?:coverage_missing|invalid)=(\d+)',line)),line
     if arm=='candidate':
         selected=re.findall(r'^\[transport-pipeline\] name=(\S+)',text,re.M)
         assert selected==[cfg.get('transport_pipeline','generic')]*2,(case,selected)

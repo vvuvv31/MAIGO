@@ -38,14 +38,9 @@ def main():
     installed = json.loads((KIT.parent/'data/manifest.json').read_text())
     if set(coverage['assets']) != set(installed['files']):
         raise ValueError('Extraction coverage differs from installed asset manifest')
-    if len(list((KIT/'reference/electron_compositions').glob('composition*/topas.txt'))) != 26:
-        raise ValueError('Missing electron composition cards')
-    if len(json.loads((KIT/'reference/joint_index.json').read_text())['tables']) != 82:
-        raise ValueError('Missing joint calibration material definitions')
     if (KIT/'tools/neutron').exists():
         raise ValueError('Neutron package extraction is outside this runtime')
-    result = dict(passed=True, sources=len(provenance['files']), assets=len(coverage['assets']),
-                  electron_compositions=26, joint_material_definitions=82)
+    result = dict(passed=True, sources=len(provenance['files']), assets=len(coverage['assets']))
     text = json.dumps(result, indent=2)+'\n'
     if args.output:
         args.output.write_text(text)

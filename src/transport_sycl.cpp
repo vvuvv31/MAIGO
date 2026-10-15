@@ -13,13 +13,7 @@
 #include "carbon/cross_section.hpp"
 #include "carbon/hadronic_rate_cache.hpp"
 #include "carbon/ct_grid.hpp"
-#include "carbon/electron_ct_birth_position.hpp"
 #include "carbon/device.hpp"
-#include "carbon/broadbeam_electron_region.hpp"
-#include "carbon/electron_charged_packet.hpp"
-#include "carbon/electron_birth_task.hpp"
-#include "carbon/electron_fp32_device.hpp"
-#include "carbon/electron_voxel_cache.hpp"
 #include "carbon/copper_proton_fluctuation.hpp"
 #include "carbon/copper_ion_fluctuation.hpp"
 #include "carbon/inelastic.hpp"
@@ -71,8 +65,7 @@
 #include <vector>
 
 namespace carbon {
-// JointResponse: 0 disabled, 1 inline, 2 separate selected-response replay.
-template<class Pipeline, bool UniformWaterPath, int Stage, bool BroadBeam, int JointResponse>
+template<class Pipeline, bool UniformWaterPath, int Stage, bool BroadBeam>
 class PrimaryTransportKernel;
 // A single transfer at the beamline/medium boundary. All physics-specific
 // step states remain private to their own stage; RNG identity is preserved.
@@ -84,7 +77,7 @@ struct PrimaryMediumEntryState {
 };
 static_assert(sizeof(PrimaryMediumEntryState) == 64);
 
-template<class Pipeline, bool ProductionPath = false, bool BroadBeam = false, int JointResponse = 0>
+template<class Pipeline, bool ProductionPath = false, bool BroadBeam = false>
 class SecondaryTransportKernel;
 
 #include "detail/sycl_dose_atomic.inc"
@@ -1101,7 +1094,7 @@ UnifiedEmRequest unified_em_request(const TransportConfig& config) {
                 : config.em_delta_moments_file};
 }
 
-template<class Pipeline, int JointResponse = 0>
+template<class Pipeline>
 [[gnu::noinline]] TransportResult transport_pipeline(const TransportConfig& config,
                                const StoppingPowerTable& stopping_power,
                                const std::string& device_name,
@@ -1114,35 +1107,16 @@ template<class Pipeline, int JointResponse = 0>
 
 }
 
-// Dispatch once per batch; each selected pipeline has separate primary,
-// secondary and electron kernel identities while sharing the validated phases.
-template<class Pipeline>
-TransportResult run_pipeline(const TransportConfig& config,
-    const StoppingPowerTable& stopping_power, const std::string& device_name,
-    SyclTransportContext* context) {
-    if constexpr (Pipeline::broadbeam) {
-        if (config.broadbeam_independent_electrons)
-            return transport_pipeline<Pipeline, 3>(config, stopping_power, device_name, context);
-    }
-    return transport_pipeline<Pipeline>(config, stopping_power, device_name, context);
-}
-
 [[gnu::noinline]] TransportResult transport_sycl(const TransportConfig& config,
     const StoppingPowerTable& stopping_power,const std::string& device_name,SyclTransportContext* context) {
     config.validate();
     const bool broadbeam = config.transport_profile == "broadbeam_fast";
-    if (broadbeam) {
-        std::cout<<"[broadbeam-electron-tracking] requested="<<config.broadbeam_electron_tracking
-                 <<" effective="<<(config.broadbeam_independent_electrons?"shared_fp32":
-                    config.broadbeam_electron_tracking?"empty_uniform_water_selection":"disabled")
-                 <<" density_threshold="<<config.broadbeam_electron_density_threshold
-                 <<" halo_mm="<<config.broadbeam_electron_halo_mm<<'\n';
-    }
+
     const auto run = [&](auto pipeline) {
         using Pipeline = decltype(pipeline);
         std::cout << "[transport-pipeline] name=" << Pipeline::name
                   << " medium=" << (config.enable_ct_grid ? "ct" : "water") << '\n';
-        return run_pipeline<Pipeline>(config, stopping_power, device_name, context);
+        return transport_pipeline<Pipeline>(config, stopping_power, device_name, context);
     };
 #if CARBON_ENABLE_PROTON_BROADBEAM
     if (config.transport_pipeline == "proton_broadbeam") return run(pipelines::ProtonBroadbeam{});

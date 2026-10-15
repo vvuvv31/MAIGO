@@ -1,4 +1,4 @@
-// Shared secondary phase, included inside transport_pipeline<Pipeline, JointResponse>.
+// Shared secondary phase, included inside transport_pipeline<Pipeline>.
     double secondary_kernel_seconds = 0.0;
     const bool segment_secondaries = config.secondary_step_chunking;
     constexpr unsigned secondary_tail_threshold = Pipeline::secondary_tail_threshold;
@@ -105,7 +105,7 @@
                 constexpr bool kCarbonCtPointReuse = kProductionSecondaryPath &&
                     std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>;
                 constexpr bool kCachedElasticTotals = kCarbonCtPointReuse ||
-                    (JointResponse==0 && std::is_same_v<Pipeline,pipelines::CarbonMinibeam>);
+                    (std::is_same_v<Pipeline,pipelines::CarbonMinibeam>);
                 constexpr unsigned kSliceSegmentSteps = Pipeline::secondary_segment_steps;
                 return queue.submit([&](sycl::handler& cgh) {
                 const auto secondary_kernel =
@@ -451,7 +451,7 @@
                                     // Same-step view only; never retained across continuation.
                                     unified_secondary_point=unified_secondary_state.point();
                                     const auto point_pre=unified_secondary_point.template prepare<
-                                        JointResponse == 0, JointResponse == 0, JointResponse == 0>(sec_e);
+                                        true, true, true>(sec_e);
                                     unified_secondary_pre=point_pre;
                                 } else unified_secondary_pre=unified_secondary_state.prepare(sec_e);
                                 if(sec_global_urban) {
@@ -1644,13 +1644,13 @@
                                         };
                 cgh.parallel_for<SecondaryTransportKernel<
                                                                  Pipeline, kProductionSecondaryPath,
-                                                                 BroadBeam, JointResponse>>(
+                                                                 BroadBeam>>(
                     sycl::range<1>(active_size), secondary_kernel);
             });
                 };
                 auto round_event = [&]() {
                     if constexpr(BroadBeam &&
-                        (JointResponse==3 || std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>)) {
+                        (std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>)) {
                         if(broadbeam_ct_secondary_specialize)
                             return launch_secondary_round(std::true_type{},resume_active);
                     }

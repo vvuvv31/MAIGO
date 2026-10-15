@@ -16,12 +16,10 @@ struct CarbonBroadbeam {
         return broadbeam_history_chunk(histories);
     }
 
-    template<int JointResponse, class Launch>
+    template<class Launch>
     static auto launch_primary(bool ct_specialized, bool nonion, int source_z, int source_a, Launch&& launch) {
         (void)source_z; (void)source_a;
-        if constexpr (JointResponse == 3) if (ct_specialized)
-            return launch(std::false_type{}, std::integral_constant<int, 14>{});
-        if constexpr (JointResponse == 0) if (ct_specialized)
+        if (ct_specialized)
             return launch(std::false_type{}, std::integral_constant<int, 17>{});
         (void)nonion;
         return launch(std::false_type{}, std::integral_constant<int, 6>{});

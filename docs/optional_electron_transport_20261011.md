@@ -1,3 +1,7 @@
+# 历史记录：可选电子输运
+
+此接口已于 2026-10-15 删除，以下为历史实现记录。当前实现见 [移除说明](no_electron_transport_20261015.md)。
+
 # Explicit optional electron transport
 
 User-authorized on 2026-10-11: electron transport is optional for every preset and custom configuration. `enable_electron_transport` defaults to `false` in the configuration struct and YAML parser; all eight YAML presets explicitly set it to false. Merely supplying electron package paths does not enable transport.

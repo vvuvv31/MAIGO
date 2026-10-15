@@ -1,6 +1,5 @@
-enable_electron_transport: false
 # proton_ct_broadbeam: RT07575 head; current26 ion EM, local electron energy, FP32 dose.
-# Temporary patient-interior approximation; electron transport is disabled explicitly.
+# Patient ionization uses local deposition.
 transport_pipeline: proton_broadbeam
 run_mode: research
 enable_ct_grid: true
@@ -83,14 +82,3 @@ enable_flat_source: false
 tps_spots_file: inputs/rt07575_head/proton/spots.csv
 # RT07575 head full-plan: local1%/1mm >99%; explicit 1 mm ion step cap.
 broadbeam_maximum_mean_loss_fraction: 0.05
-material_electron_group_size: 32
-material_electron_queue_chunk: 524288
-material_electron_queue_lanes: 16384
-material_electron_queue_budget_MiB: 576
-material_electron_retain_bank: false
-broadbeam_electron_tracking: false
-broadbeam_electron_density_threshold: 0.1
-broadbeam_electron_halo_mm: 5.0
-broadbeam_electron_low_density_survival: 0.5
-broadbeam_electron_birth_order: true
-broadbeam_electron_tissue_survival: 0.5

@@ -79,9 +79,9 @@ struct SyclTransportContext::Impl {
                 pointer = nullptr;
             }
         };
-        release(electron_ct.density);
-        release(electron_ct.material);
-        electron_ct=CachedElectronCt{};
+        release(ct_geometry.density);
+        release(ct_geometry.material);
+        ct_geometry=CachedCtGeometry{};
     }
 
     // Persistent, validated, immutable host parse cache shared across shards in
@@ -93,17 +93,13 @@ struct SyclTransportContext::Impl {
         std::string signature;
         std::shared_ptr<const UnifiedEmPackage> package;
     };
-    struct CachedElectronCt {
-        std::string geometry_key,fp32_key;
-        // Box-metric selected region; reset with the grid.
-        std::string electron_region_key;
-        std::vector<std::uint8_t> electron_region_box;
-        std::shared_ptr<IndependentElectronFloatDevice> fp32;
+    struct CachedCtGeometry {
+        std::string geometry_key;
         std::shared_ptr<const CtGrid> grid;
         float* density{};
         std::uint8_t* material{};
     };
-    CachedElectronCt electron_ct;
+    CachedCtGeometry ct_geometry;
     CachedUnifiedEm unified_em_cache;
     std::shared_ptr<ResidentPhysicsTables> resident_em, resident_urban, resident_air, resident_copper_ions;
     std::shared_ptr<ResidentPhysicsTables> resident_ct_fields;

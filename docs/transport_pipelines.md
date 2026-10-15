@@ -3,7 +3,7 @@
 The eight release presets explicitly select one of four compile-time pipelines
 using `transport_pipeline`. The fifth, `generic`, is the default for custom
 configurations that omit this key. All sources remain restricted to proton/C12. Each pipeline generates its own
-primary, charged-secondary and electron kernel identities. A proton/carbon
+primary and charged-secondary kernel identities. A proton/carbon
 pipeline identity describes the source, not the species of its fragments:
 generic charged fragment species remain supported in every secondary worker.
 
@@ -18,8 +18,8 @@ The proton CT broadbeam explicit local-electron mode uses stage15, or stage16
 when a host certificate proves identical CT/scorer grids. Stage16 reuses the
 directed scoring cell for material reads; unclamped validity and exact face
 ownership remain authoritative. Other configurations keep their existing
-stages. Electron transport remains controlled explicitly by the YAML profile;
-this specialization does not provide a missing-package fallback.
+stages. All current paths use local ionization deposition; no electron/photon
+transport packages or configuration switches remain.
 
 Stages15/16 use a step-start delta first moment for the proton primary, retaining
 the current continuous26 rate, variance, restricted-loss slope and fluctuations.
@@ -51,7 +51,7 @@ species or supply missing physical data.
 | Phase | Shared implementation |
 |---|---|
 | Input/package cache, allocation, geometry and setup | `src/detail/sycl_pipeline_setup.inc` |
-| Primary launch, compact beamline/medium stages, electrons and Cu children | `src/detail/sycl_pipeline_primary.inc` |
+| Primary launch, compact beamline/medium stages and Cu children | `src/detail/sycl_pipeline_primary.inc` |
 | Charged fragments, grouping, segmented continuation and tails | `src/detail/sycl_pipeline_secondary.inc` |
 | Readback, dose and energy/coverage/completion audits, cleanup | `src/detail/sycl_pipeline_finalize.inc` |
 
@@ -65,7 +65,7 @@ creates independently compiled optimization boundaries rather than rewriting
 or approximating the physics. Future path-specific step helpers should be
 selected through the pipeline type rather than growing runtime species switches.
 
-Minibeams retain two compact primary stages and their separate Cu/electron/
+Minibeams retain two compact primary stages and their separate Cu/
 fragment kernels, rather than merging the entire simulation into four kernels.
 Carbon water retains its TPS CSV, emittance and generic Urban medium path.
 Primary rate/package calibrations, FP32 dose/geometry/loss, fluctuation flags,
@@ -120,7 +120,7 @@ export CUDA_DISABLE_PTX_JIT=1
 
 The options select pipeline families, not individual medium presets. A proton
 broadbeam build keeps both CT and water behavior and all required charged
-fragment/electron/photon transport. Common physics/package helpers remain
+charged-fragment transport. Common physics/package helpers remain
 available to the enabled family; disabling carbon primary pipelines does not
 remove charged fragment species. Selecting a disabled pipeline fails during
 configuration validation, before GPU/context/package setup. It never silently

@@ -1,4 +1,4 @@
-// Shared primary phase, included inside transport_pipeline<Pipeline, JointResponse>.
+// Shared primary phase, included inside transport_pipeline<Pipeline>.
     RuntimeScope runtime_steps("transport_loop_including_scoring_and_queue_transfers");
     double primary_kernel_seconds = 0.0;
 
@@ -29,7 +29,7 @@
     std::cout << "[ct-minibeam-split] " << ct_minibeam_split << "\n";
     const bool primary_minibeam_enabled = (!BroadBeam && config.enable_minibeam);
     // Package models are the authority. Do not infer their behavior from Z/A alone.
-    const bool nonion_primary = BroadBeam && JointResponse==0 &&
+    const bool nonion_primary = BroadBeam &&
         config.primary_atomic_number==1 && config.primary_mass_number==1 && nonion_primary_package_safe;
     std::cout<<"[nonion-primary] enabled="<<nonion_primary<<"\n";
 
@@ -38,24 +38,6 @@
     const bool compact_minibeam_primary = !BroadBeam && config.enable_minibeam;
     if (compact_minibeam_primary && !(global_urban && (enable_ct_grid || use_unified_water)))
         throw std::invalid_argument("Compact primary requires Urban water or CT minibeam");
-    // Exact CT profile: every constant substituted in stage 11 is checked
-    // here. The original material-aware stage 4 remains the fallback.
-    const bool ct_queued_primary_eligible = ct_minibeam_split &&
-        global_urban == true &&
-        enable_ct_grid == true &&
-        use_unified_water == false &&
-        enable_voxel_scoring == true &&
-        enable_multiple_scattering == true &&
-        enable_inelastic == true &&
-        use_schneider_primary_xs == true &&
-        use_material_electron == true &&
-        use_material_ct == true &&
-        defer_material_packets == true &&
-        primary_atomic_number == 1 &&
-        primary_mass_number == 1 &&
-        inverse_mass_number == 1.0F;
-    const bool ct_queued_primary_specialize = ct_queued_primary_eligible;
-    std::cout << "[ct-queued-primary-specialize] enabled=" << ct_queued_primary_specialize << "\n";
     auto* primary_medium_entry = compact_minibeam_primary
         ? mem_tracker.allocate<PrimaryMediumEntryState>(history_chunk) : nullptr;
     auto* primary_entry_counts = compact_minibeam_primary
@@ -86,8 +68,6 @@
     std::cout << "[beamline-order] enabled=" << order_beamline_lanes << "\n";
     std::cout << "[primary-compact] enabled=" << compact_minibeam_primary
               << " entry_bytes=" << sizeof(PrimaryMediumEntryState) << "\n";
-    std::vector<sycl::event> electron_events;
-    std::uint64_t electron_tasks_total=0, electron_queue_peak=0;
     // Exact host certificate, never a tolerance-based grid approximation.
     const bool primary_shared_ct_cell = enable_ct_grid &&
         ct_nx==voxel_bins_x && ct_ny==voxel_bins_y && ct_nz==number_of_bins &&
@@ -104,29 +84,25 @@
             std::min(history_chunk, number_of_histories - hist_offset);
         const auto chunk_global =
             ((chunk_count + local_size - 1) / local_size) * local_size;
-        if (defer_material_packets)queue.fill(material_task_counts,std::uint64_t{0},2);
         const auto launch_primary_chunk = [&](auto uniform_water_path_tag, auto stage_tag) {
             constexpr int kKernelStage = decltype(stage_tag)::value;
             constexpr bool kQueueCopperChildren = kKernelStage == 9;
-            constexpr bool kCtQueuedPrimaryPath = kKernelStage == 11;
-            // Stage 12 is broadbeam stage 6 with host-proven CT-shared-electron
-            // configuration folded at compile time (no physics difference).
-            constexpr bool kMinibeamCtCache = JointResponse==0 &&
+            constexpr bool kMinibeamCtCache =
                 (std::is_same_v<Pipeline,pipelines::ProtonMinibeam> || std::is_same_v<Pipeline,pipelines::CarbonMinibeam>);
             constexpr bool kSharedCtCell = kKernelStage == 16 || kKernelStage == 18;
             constexpr bool kLocalProtonCtPath = kKernelStage == 15 || kKernelStage == 16;
             constexpr bool kLocalCarbonCtPath = kKernelStage == 17 || kKernelStage == 18;
-            constexpr bool kLocalElectronCtPath = kLocalProtonCtPath || kLocalCarbonCtPath;
+            constexpr bool kSpecializedCtPath = kLocalProtonCtPath || kLocalCarbonCtPath;
             constexpr bool kPrimaryElasticTotals = kLocalProtonCtPath ||
                 (kMinibeamCtCache && std::is_same_v<Pipeline,pipelines::ProtonMinibeam>);
             constexpr bool kSpeciesElasticTotals = kLocalCarbonCtPath ||
                 (kMinibeamCtCache && std::is_same_v<Pipeline,pipelines::CarbonMinibeam>);
-            constexpr bool kBroadBeamCtPath = kKernelStage == 12 || kKernelStage == 13 || kKernelStage == 14 || kLocalElectronCtPath;
-            // 13/14 additionally fold the host-checked projectile (proton / C12).
-            constexpr int kFoldZ = (kKernelStage == 13 || kLocalProtonCtPath) ? 1 : (kKernelStage == 14 || kLocalCarbonCtPath) ? 6 : 0;
-            constexpr int kFoldA = (kKernelStage == 13 || kLocalProtonCtPath) ? 1 : (kKernelStage == 14 || kLocalCarbonCtPath) ? 12 : 0;
-            static_assert(!kBroadBeamCtPath || (BroadBeam && (kLocalElectronCtPath ? JointResponse==0 : JointResponse==3)));
-            constexpr int kPrimaryStage = kCtQueuedPrimaryPath ? 4 : kKernelStage == 9 ? 3 : kBroadBeamCtPath ? 6 : kKernelStage;
+            constexpr bool kBroadBeamCtPath = kSpecializedCtPath;
+            // Fold the host-checked projectile (proton / C12).
+            constexpr int kFoldZ = kLocalProtonCtPath ? 1 : kLocalCarbonCtPath ? 6 : 0;
+            constexpr int kFoldA = kLocalProtonCtPath ? 1 : kLocalCarbonCtPath ? 12 : 0;
+            static_assert(!kBroadBeamCtPath || BroadBeam);
+            constexpr int kPrimaryStage = kKernelStage == 9 ? 3 : kBroadBeamCtPath ? 6 : kKernelStage;
             constexpr bool kUniformWaterPrimaryPath = decltype(uniform_water_path_tag)::value;
             // Host eligibility requires global Urban for every split beamline.
             // Downstream CT material handling must not select upstream physics.
@@ -138,30 +114,26 @@
             const auto ct_runtime_enable_multiple_scattering = enable_multiple_scattering;
             const auto ct_runtime_enable_inelastic = enable_inelastic;
             const auto ct_runtime_use_schneider_primary_xs = use_schneider_primary_xs;
-            const auto ct_runtime_use_material_electron = use_material_electron;
-            const auto ct_runtime_defer_material_packets = defer_material_packets;
             const auto ct_runtime_primary_atomic_number = primary_atomic_number;
             const auto ct_runtime_primary_mass_number = primary_mass_number;
             const auto ct_runtime_inverse_mass_number = inverse_mass_number;
 
             return queue.parallel_for<PrimaryTransportKernel<
-                Pipeline, kUniformWaterPrimaryPath, kKernelStage, BroadBeam, JointResponse>>(
+                Pipeline, kUniformWaterPrimaryPath, kKernelStage, BroadBeam>>(
             sycl::nd_range<1>{sycl::range<1>{chunk_global}, sycl::range<1>{local_size}},
             [=](sycl::nd_item<1> item) {
                 // Constexpr-selected values remove unused physics branches;
                 // the host eligibility test proves their runtime equivalence.
-                const auto global_urban = kCtQueuedPrimaryPath ? true : (BroadBeam ? false : ct_runtime_global_urban);
-                const auto enable_ct_grid = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_ct_grid;
-                const auto use_unified_water = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? false : ct_runtime_use_unified_water;
-                const auto enable_voxel_scoring = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_voxel_scoring;
-                const auto enable_multiple_scattering = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_multiple_scattering;
-                const auto enable_inelastic = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_enable_inelastic;
-                const auto use_schneider_primary_xs = (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_schneider_primary_xs;
-                const auto use_material_electron = kLocalElectronCtPath ? false : (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_use_material_electron;
-                const auto defer_material_packets = kLocalElectronCtPath ? false : (kCtQueuedPrimaryPath || kBroadBeamCtPath) ? true : ct_runtime_defer_material_packets;
-                const auto primary_atomic_number = kCtQueuedPrimaryPath ? 1 : (kFoldZ ? kFoldZ : ct_runtime_primary_atomic_number);
-                const auto primary_mass_number = kCtQueuedPrimaryPath ? 1 : (kFoldA ? kFoldA : ct_runtime_primary_mass_number);
-                const auto inverse_mass_number = kCtQueuedPrimaryPath ? 1.0F : (kFoldA ? 1.0F / static_cast<float>(kFoldA) : ct_runtime_inverse_mass_number);
+                const auto global_urban = (BroadBeam ? false : ct_runtime_global_urban);
+                const auto enable_ct_grid = kBroadBeamCtPath ? true : ct_runtime_enable_ct_grid;
+                const auto use_unified_water = kBroadBeamCtPath ? false : ct_runtime_use_unified_water;
+                const auto enable_voxel_scoring = kBroadBeamCtPath ? true : ct_runtime_enable_voxel_scoring;
+                const auto enable_multiple_scattering = kBroadBeamCtPath ? true : ct_runtime_enable_multiple_scattering;
+                const auto enable_inelastic = kBroadBeamCtPath ? true : ct_runtime_enable_inelastic;
+                const auto use_schneider_primary_xs = kBroadBeamCtPath ? true : ct_runtime_use_schneider_primary_xs;
+                const auto primary_atomic_number = (kFoldZ ? kFoldZ : ct_runtime_primary_atomic_number);
+                const auto primary_mass_number = (kFoldA ? kFoldA : ct_runtime_primary_mass_number);
+                const auto inverse_mass_number = (kFoldA ? 1.0F / static_cast<float>(kFoldA) : ct_runtime_inverse_mass_number);
                 const bool enable_minibeam = BroadBeam ? false : primary_minibeam_enabled;
 
                 const auto lane = item.get_global_linear_id();
@@ -215,21 +187,6 @@
                         }
                     } else grid_deposit_split_device(grid_deposited_in_device, grid_deposited_out_device, in_grid, value_MeV);
                 };
-                MaterialBirthTask grouped_task{};
-                std::uint32_t grouped_count=0;
-                double grouped_weight=0;
-                // Separate stream: never consume transport or selected replay RNG.
-                std::uint64_t group_draw=0;
-                auto flush_electron_group=[&]() {
-                    if(!grouped_count)return;
-                    grouped_task.weight=grouped_weight;
-                    sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                        sycl::access::address_space::global_space> produced(material_task_counts[0]);
-                    const auto slot=produced.fetch_add(1);
-                    if(slot<material_task_capacity)material_tasks[slot]=grouped_task;
-                    grouped_count=0;grouped_weight=0;
-                };
-
                 std::uint64_t local_schneider_rate_queries = 0;
                 std::uint32_t steps = 0;
                 // Research-only water Urban state (one fMinimal track per
@@ -316,7 +273,6 @@
                                              static_cast<std::size_t>(voxel_y) * voxel_bins_x +
                                              static_cast<std::size_t>(voxel_x);
 
-                    const auto energy_MeVu = energy_MeV * inverse_mass_number;
                     auto local_density_g_per_cm3 = water_density_g_per_cm3;
                     std::uint8_t ct_material = 2;
                     auto in_ct = false;
@@ -375,7 +331,7 @@
                             record_unified_em_failure(unified_failure_count,unified_failure_records,1,section,primary_atomic_number,primary_mass_number,energy_MeV,local_density_g_per_cm3,0);
                             unified_count(0);break;}
                         if(unified_primary_clock.last_section!=unified_primary_state.section || unified_primary_clock.last_density!=unified_primary_state.density)primary_hadronic_cache.valid=false;
-                        if constexpr(kKernelStage==13 || kKernelStage==14 || kLocalElectronCtPath){
+                        if constexpr(kKernelStage==13 || kKernelStage==14 || kSpecializedCtPath){
                             // Reuse the material view through this step's loss
                             // draw, without adding cross-step/resume state.
                             unified_primary_point=unified_primary_state.point();
@@ -383,7 +339,7 @@
                             // omitting them produces a coherent beam-direction
                             // dose bias in low-density lung. Proton broadbeam
                             // keeps its separately scoped step-start approximation.
-                            const auto point_pre=unified_primary_point.template prepare<kLocalElectronCtPath,kLocalProtonCtPath,kLocalProtonCtPath>(energy_MeV);
+                            const auto point_pre=unified_primary_point.template prepare<kSpecializedCtPath,kLocalProtonCtPath,kLocalProtonCtPath>(energy_MeV);
                             unified_primary_pre=point_pre;
                         }else unified_primary_pre=unified_primary_state.prepare(energy_MeV);
                         // Match ionIoni proposal segmentation while retaining aggregate loss.
@@ -565,10 +521,9 @@
 
                     float deposited_MeV = 0.0F;
                     if (urban_range_limited) deposited_MeV = energy_MeV;
-                    float birth_expected_loss_MeV=urban_range_limited?energy_MeV:0.f;
                     if(!urban_range_limited){
                         auto draw=[&](){
-                            if constexpr(kKernelStage==13 || kKernelStage==14 || kLocalElectronCtPath)return unified_em_explicit_loss<kLocalProtonCtPath,true,kLocalElectronCtPath>(
+                            if constexpr(kKernelStage==13 || kKernelStage==14 || kSpecializedCtPath)return unified_em_explicit_loss<kLocalProtonCtPath,true,kSpecializedCtPath>(
                                 unified_primary_state,energy_MeV,accepted_loss_path_mm,enable_energy_straggling,
                                 unified_primary_pre,unified_uniform,&unified_primary_point);
                             else return unified_em_loss<kPrimaryStage==7>(
@@ -588,7 +543,6 @@
                             unified_count(0);break;}
                         deposited_MeV=draw.loss;unified_count(1);unified_count(3,draw.proposed);unified_count(4,draw.accepted);
                         unified_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
-                        birth_expected_loss_MeV=draw.mean+draw.delta_mean;
                     }
                     if (enable_minibeam) {
                         deposited_MeV = sycl::fmin(
@@ -596,158 +550,6 @@
                             deposited_MeV);
                     }
                     auto local_voxel_deposit_MeV = deposited_MeV;
-                    auto same_voxel_electron_packet_MeV = 0.0F;
-                    auto delta_tail_escaped_scorer_MeV = 0.0F;
-                    // Forward-redistributed energy leaves the source depth bin, so the
-                    // 1-D depth scorers must not credit it at the source bin (the 3-D
-                    // march deposits below credit the destination bins instead).
-                    auto forward_shifted_MeV = 0.0F;
-                    auto transverse_relocated_MeV = 0.0F;
-                    auto transverse_escaped_MeV = 0.0F;
-                    auto water_physical_escape_MeV=0.0F;
-                    float response_scored_separately_MeV=0.0F;
-                    float material_untracked_MeV=0;
-                    // Only the primary-loop EM loss exists here. Nuclear recoil
-                    // and interaction deposits are scored later and must never
-                    // be folded into this ionization response packet weight.
-                    if(use_material_electron && (!enable_ct_grid || in_ct) && deposited_MeV>0) {
-                        auto count=[&](int slot,std::uint64_t value) {
-                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                                sycl::access::address_space::global_space> a(electron_joint_diag_device[slot]);a.fetch_add(value);
-                        };
-                        auto untracked=[&](double weight,bool photon) {
-                            material_untracked_MeV+=static_cast<float>(weight);
-                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                                sycl::access::address_space::global_space> a(material_untracked_device[photon?0:1]);
-                            a.fetch_add(static_cast<std::uint64_t>(weight*1e6+0.5));
-                        };
-                        // A separate deterministic packet stream does not advance the
-                        // carbon transport RNG. Rebinding consumes this stream only.
-                        std::uint64_t packet_rng=spot_seed ^ ((rng_history+1)*0x9e3779b97f4a7c15ULL) ^
-                            (static_cast<std::uint64_t>(steps)<<32) ^ 0x6a09e667f3bcc909ULL;
-                        auto uniform=[&]() -> double {return float(electron_fp32::random_draw(packet_rng));};
-                        count(0,1);
-                        // Preserve the existing RNG draw even though its value is unused.
-                        static_cast<void>(uniform());
-                        (void)uniform(); // Preserve the independent birth CDF draw and RNG order.
-                        const auto birth_cdf_bits=packet_rng;
-                        const double along=uniform();
-                        const auto float_geometry=electron_fp32::ElectronCtGeometry{{ct_nx,ct_ny,ct_nz},
-                            {float(ct_origin_x),float(ct_origin_y),float(ct_origin_z)},
-                            {float(ct_spacing_x),float(ct_spacing_y),float(ct_spacing_z)},ct_density_device,ct_material_device};
-                        const auto birth_position=[&]() -> std::array<double,3> {
-                            const auto p=electron_fp32::electron_ct_birth_position(float_geometry,
-                                {position_x_mm,position_y_mm,position_z_mm},{direction_x,direction_y,direction_z},step_mm,float(along));
-                            return {p[0],p[1],p[2]};
-                        }();
-                        const auto birth_material=[&]() -> ElectronCtPointMaterial {
-                            const auto p=electron_fp32::electron_ct_point_material(float_geometry,
-                                {electron_fp32::Coordinate(birth_position[0]),electron_fp32::Coordinate(birth_position[1]),electron_fp32::Coordinate(birth_position[2])},
-                                {direction_x,direction_y,direction_z});return {p.valid,p.density,p.section};
-                        }();
-                        electron_fp32::ElectronBirthPartition birth;
-                        float birth_parent_MeVu=energy_MeVu,birth_cut_MeV=0.f;
-                        bool selected_birth=true;
-                        if constexpr(BroadBeam && JointResponse==3) {
-                            if(birth_material.valid) {
-                                const int bx=static_cast<int>(sycl::floor((birth_position[0]-ct_origin_x)/ct_spacing_x));
-                                const int by=static_cast<int>(sycl::floor((birth_position[1]-ct_origin_y)/ct_spacing_y));
-                                const int bz=static_cast<int>(sycl::floor((birth_position[2]-ct_origin_z)/ct_spacing_z));
-                                if(bx>=0&&by>=0&&bz>=0&&bx<int(ct_nx)&&by<int(ct_ny)&&bz<int(ct_nz)) {
-                                    selected_birth=broadbeam_electron_mask[(std::size_t(bz)*ct_ny+by)*ct_nx+bx];
-                                    // Unselected ionization remains local by explicit research policy.
-                                    if(!selected_birth)birth.valid=true;
-                                }
-                            }
-                        }
-                        if(birth_material.valid && selected_birth) {
-                            if(cut_birth26) {
-                                const auto composition=cut_birth26[birth_material.section];
-                                // Aggregate expectation is not a realizable
-                                // energy jump when it exceeds the parent's KE.
-                                const float parent=sycl::fmax(0.f,energy_MeV-float(along)*sycl::fmin(energy_MeV,birth_expected_loss_MeV));
-                                // Electron section25 is Water_75eV; ion EM uses section-1.
-                                const auto state=unified_device.select(birth_material.section==25?-1:birth_material.section,birth_material.density,unified_primary_species);
-                                if(state.valid&&birth_material.density>=composition.density_low&&
-                                   birth_material.density<=composition.density_high) {
-                                    birth_parent_MeVu=parent*inverse_mass_number;birth_cut_MeV=state.cut();
-                                    const float mass=primary_mass_number==1?938.272013f:11174.863388f;
-                                    const bool bragg=primary_mass_number==1&&parent<=2.f;
-                                    if(bragg)birth_cut_MeV=sycl::fmax(birth_cut_MeV,.00025f*mass/938.272013f);
-                                    const bool support=electron_birth_maximum(birth_parent_MeVu,primary_mass_number)>birth_cut_MeV;
-                                    birth.node=birth_material.section;
-                                    if(!support) {
-                                        // Native delta production is exactly
-                                        // zero below the cut, including below
-                                        // the ion table's energy minimum.
-                                        birth.valid=true;birth.fraction=0.f;
-                                    } else if(state.covers(parent)) {
-                                        float restricted,delta;
-                                        if constexpr(kKernelStage==13 || kKernelStage==14 || kLocalElectronCtPath)
-                                            state.point().birth_stopping(parent,restricted,delta);
-                                        else {
-                                            const auto point=state.prepare(parent);
-                                            restricted=point.stopping;
-                                            delta=point.delta_stopping;
-                                        }
-                                        const float total=restricted+delta;
-                                        birth.valid=sycl::isfinite(total)&&total>0.f&&restricted>=0.f&&delta>=0.f;
-                                        birth.fraction=delta/total;
-                                    }
-                                }
-                            }
-                        }
-                        const auto ti=birth.node;
-                        if(!birth.valid) {
-                            if(cut_birth26){
-                                sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                                    sycl::access::address_space::global_space> diagnostic(material_untracked_device[2]);
-                                if(diagnostic.fetch_add(1)==0){
-                                    MaterialPacketFailure failure{};failure.history=global_history;failure.step=steps;failure.rng=packet_rng;
-                                    auto& c=failure.before.cursor;c.section=birth_material.section;c.density_g_cm3=birth_material.density;
-                                    c.physical_density_g_cm3=birth_material.density;c.energy_MeV=birth_parent_MeVu*primary_mass_number;
-                                    c.position={electron_fp32::Coordinate(birth_position[0]),electron_fp32::Coordinate(birth_position[1]),electron_fp32::Coordinate(birth_position[2])};
-                                    failure.before.weight_MeV=deposited_MeV;failure.after.status=ElectronPacketStatus::invalid;
-                                    *material_failure_device=failure;
-                                }
-                            }
-                            count(1,1);untracked(deposited_MeV,false);
-                            local_voxel_deposit_MeV=0;forward_shifted_MeV+=deposited_MeV;
-                        } else if(birth.fraction>0 &&
-                                  deposited_MeV*static_cast<float>(birth.fraction)>0.0F) {
-                            // FP32 loss*yield can underflow to zero. A zero-weight
-                            // packet carries no energy and must not enter transport.
-                            // Response packets partition the already sampled total loss
-                            // by the pinned energy-weighted birth fraction, as in water.
-                            // Do not combine a binned birth law with individual aggregate
-                            // delta draws: their cut-onset support need not coincide.
-                            // No energy is added and the transport loss/RNG is unchanged.
-                            const float weight=deposited_MeV*static_cast<float>(birth.fraction);
-                            local_voxel_deposit_MeV-=weight;forward_shifted_MeV+=weight;
-
-                                MaterialBirthTask task{QueuedElectronBirth{birth_parent_MeVu,birth_cdf_bits,birth.node,birth_cut_MeV},birth_position,{direction_x,direction_y,direction_z},
-                                    birth_material.density,packet_rng,global_history,static_cast<std::uint32_t>(steps),
-                                    static_cast<std::uint32_t>(ti),weight};
-                                grouped_weight=float(grouped_weight)+weight;
-                                bool select=grouped_count==0;
-                                if(!select) {
-                                    const auto block=carbon::rng::philox4x32_10(
-                                        {static_cast<std::uint32_t>(rng_history),static_cast<std::uint32_t>(rng_history>>32),
-                                         static_cast<std::uint32_t>(group_draw),static_cast<std::uint32_t>(group_draw>>32)},
-                                        static_cast<std::uint32_t>(spot_seed)^0xe1ec7a91U,
-                                        static_cast<std::uint32_t>(spot_seed>>32)^0x47525031U);
-                                    ++group_draw;
-                                    const std::uint64_t bits=(std::uint64_t(block[0])<<32)|block[1];
-                                    select=electron_fp32::Draw{bits}<weight/float(grouped_weight);
-                                }
-                                if(select)grouped_task=task;
-                                if(++grouped_count==material_group_size)flush_electron_group();
-                                // Pending W is excluded from deposited/grid energy until
-                                // the task terminates. No untracked sink is recorded here.
-                                material_untracked_MeV+=weight;
-                        }
-                    }
-
                     if (bin != pending_primary_bin) {
                         if (pending_primary_depth_MeV > 0.0) {
                             sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
@@ -775,14 +577,10 @@
                         pending_primary_voxel = voxel_index;
                     }
 
-                    // Keep the legacy unrestricted-depth escape convention, but
-                    // remove relocated energy now tallied at its destination.
-                    pending_primary_depth_MeV += deposited_MeV - forward_shifted_MeV -
-                        transverse_relocated_MeV;
-                    pending_primary_depth_MeV += same_voxel_electron_packet_MeV;
+                    // Score the ionization loss locally in depth and voxel scorers.
+                    pending_primary_depth_MeV += deposited_MeV;
                     if ((enable_voxel_scoring) && voxel_index >= 0) {
                         pending_primary_voxel_MeV += local_voxel_deposit_MeV;
-                        pending_primary_voxel_MeV += same_voxel_electron_packet_MeV;
 
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
                             pending_primary_bin < static_cast<int>(number_of_bins)) {
@@ -791,17 +589,13 @@
                                              sycl::access::address_space::global_space>
                                 atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
                             atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(
-                                deposited_MeV - forward_shifted_MeV -
-                                transverse_relocated_MeV - transverse_escaped_MeV)+
-                                static_cast<DepthAtomicT>(same_voxel_electron_packet_MeV));
+                                deposited_MeV));
                         }
                     }
-                    history_deposited_MeV += deposited_MeV-water_physical_escape_MeV-material_untracked_MeV;
+                    history_deposited_MeV += deposited_MeV;
                     grid_split(
                         (enable_voxel_scoring) && voxel_index >= 0,
-                        deposited_MeV - delta_tail_escaped_scorer_MeV-water_physical_escape_MeV-
-                            material_untracked_MeV-response_scored_separately_MeV);
-                    grid_split(false, delta_tail_escaped_scorer_MeV);
+                        deposited_MeV);
 
                     const float seg_dir_x = direction_x;
                     const float seg_dir_y = direction_y;
@@ -904,7 +698,6 @@
 
                     energy_MeV -= deposited_MeV;
 
-                    if(defer_material_packets && (ct_elastic_this_step || inelastic_this_step))flush_electron_group();
 
                     // Elastic endpoint: the all-ion bank supplies target-specific TOPAS
                     // samples. Supported recoils are queued; below-cutoff energy is scored locally.
@@ -1368,7 +1161,6 @@
                 schneider_diag_add_device(schneider_diag_device,
                                               SchneiderDiagSlot::PrimaryRateQueries,
                                               local_schneider_rate_queries);
-                if(defer_material_packets)flush_electron_group();
                 if constexpr (BroadBeam) {
                     if (grid_in_pending_MeV != 0.0 && grid_deposited_in_device != nullptr)
                         sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
@@ -1385,20 +1177,20 @@
         };
         const auto dispatch_primary_chunk = [&]() {
             if constexpr(BroadBeam) {
-                if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam> && JointResponse==0) {
+                if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam>) {
                     if (broadbeam_ct_primary_specialize && primary_shared_ct_cell)
                         return launch_primary_chunk(std::false_type{}, std::integral_constant<int,16>{});
                 }
-                if constexpr (std::is_same_v<Pipeline, pipelines::CarbonBroadbeam> && JointResponse==0) {
+                if constexpr (std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>) {
                     if (broadbeam_ct_primary_specialize && primary_shared_ct_cell)
                         return launch_primary_chunk(std::false_type{}, std::integral_constant<int,18>{});
                 }
-                return Pipeline::template launch_primary<JointResponse>(
+                return Pipeline::launch_primary(
                     broadbeam_ct_primary_specialize, nonion_primary,
                     primary_atomic_number, primary_mass_number, launch_primary_chunk);
             } else {
                 // Compact minibeam: beamline launch (3, or 9 with queued Cu
-                // children) followed by the medium launch (4, or CT stage 11).
+                // children) followed by the medium launch (4).
                 {
                     const auto launch_minibeam_stage = [&](auto stage) {
                         // The Cu/air stages share one compiled kernel for water
@@ -1406,8 +1198,6 @@
                         // policy; never apply uniform-water substitutions to CT.
                         if constexpr (decltype(stage)::value == 4) {
                             if (!use_minibeam_primary_path) {
-                                if (ct_queued_primary_specialize)
-                                    return launch_primary_chunk(std::false_type{}, std::integral_constant<int,11>{});
                                 return launch_primary_chunk(std::false_type{}, stage);
                             }
                         }
@@ -1482,89 +1272,9 @@
         auto kernel_event = dispatch_primary_chunk();
         primary_events.push_back(kernel_event);
 
-        if (defer_material_packets) {
-            std::uint64_t count_host=0;
-            queue.copy(material_task_counts,&count_host,1).wait_and_throw();
-            if(count_host>material_task_capacity)
-                throw std::runtime_error("Electron response task queue overflow; batch rejected, no tasks discarded as accepted dose");
-            electron_tasks_total+=count_host;
-            electron_queue_peak=std::max<std::uint64_t>(electron_queue_peak,count_host);
-            if(count_host) {
-                const std::uint32_t lanes=static_cast<std::uint32_t>(std::min<std::uint64_t>(count_host,material_queue_lanes));
-                if(electron_order) {
-                    queue.fill(electron_order_counts,0U,electron_order_bins);
-                    electron_events.push_back(queue.parallel_for(sycl::range<1>(count_host),[=](sycl::id<1> index){
-                        namespace f=electron_fp32;
-                        const auto t=material_tasks[index[0]];
-                        unsigned bucket=32;
-                        if(t.birth.source<kElectronMaterialCount) {
-                            const auto e=sample_cut_electron_birth_seeded(cut_birth26,t.birth.source,
-                                electron_projectile_parameters,float(t.birth.energy),t.birth.cut,t.birth.cdf_bits).energy;
-                            const unsigned eb=(e>.001f)+(e>.003f)+(e>.01f)+(e>.03f)+(e>.1f)+(e>.3f)+(e>.65f);
-                            const unsigned db=(t.density>.01)+(t.density>.1)+(t.density>.5);
-                            bucket=db*8+eb;
-                        }
-                        electron_order_keys[index[0]]=static_cast<unsigned char>(bucket);
-                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                            sycl::access::address_space::global_space>(electron_order_counts[bucket]).fetch_add(1U);
-                    }));
-                    electron_events.push_back(queue.single_task([=]{
-                        std::uint32_t offset=0;
-                        for(unsigned b=0;b<electron_order_bins;++b){
-                            electron_order_offsets[b]=offset;offset+=electron_order_counts[b];electron_order_counts[b]=0;
-                        }
-                    }));
-                    electron_events.push_back(queue.parallel_for(sycl::range<1>(count_host),[=](sycl::id<1> index){
-                        const auto b=electron_order_keys[index[0]];
-                        const auto rank=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                            sycl::access::address_space::global_space>(electron_order_counts[b]).fetch_add(1U);
-                        electron_order[electron_order_offsets[b]+rank]=static_cast<std::uint32_t>(index[0]);
-                    }));
-                }
 
-                {
-#include "detail/sycl_independent_electron_fp32.inc"
-                }
-
-            }
-        }
     }
 
-    if(joint_pilot_work) {
-        std::array<std::uint64_t,9> work{};queue.copy(joint_pilot_work,work.data(),9).wait_and_throw();
-        sycl::free(joint_pilot_work,queue);
-        const char* names[]={"eligible","started","advances","fallback","below","deposited","escaped","photon_gap","invalid"};
-        std::cout<<"[electron-joint-pilot-work]";
-        for(unsigned k=0;k<9;++k)std::cout<<" "<<names[k]<<"="<<work[k];
-        std::cout<<"\n";
-    }
-    if(independent_charged_work) {
-        std::array<std::uint64_t,8> work{};queue.copy(independent_charged_work,work.data(),8).wait_and_throw();
-        const char* names[]={"calls","elastic","hard_proposals","hard_collisions","faces","stopped","coverage_missing","invalid"};
-        std::cout<<"[independent-charged-work]";for(unsigned k=0;k<8;++k)std::cout<<" "<<names[k]<<"="<<work[k];std::cout<<"\n";
-    }
-    if(independent_photon_work) {
-        std::array<std::uint64_t,8> work{};queue.copy(independent_photon_work,work.data(),8).wait_and_throw();
-        const char* names[]={"calls","interactions","voxel_crossings","electron","deposited","escaped","coverage_missing","invalid"};
-        std::cout<<"[independent-photon-work]";
-        for(unsigned k=0;k<8;++k)std::cout<<" "<<names[k]<<"="<<work[k];
-        std::cout<<"\n";
-    }
-    std::array<std::uint64_t,3> electron_work{};
-    if (defer_material_packets) {
-        queue.copy(material_queue_work,electron_work.data(),3).wait_and_throw();
-        free_device(material_queue_work);
-        queue.wait_and_throw();free_device(material_tasks);free_device(material_task_counts);
-        free_device(electron_order);free_device(electron_order_keys);free_device(electron_order_counts);free_device(electron_order_offsets);
-    }
-
-    double electron_kernel_seconds=0;
-    for(const auto& event:electron_events)electron_kernel_seconds+=event_duration_seconds(event);
-    if(defer_material_packets)
-        std::cout<<"[electron-queue-time] seconds="<<electron_kernel_seconds
-                 <<" tasks="<<electron_tasks_total<<" peak_tasks="<<electron_queue_peak
-                 <<" advances="<<electron_work[0]<<" source_restarts="<<electron_work[1]
-                 <<" boundary_restarts="<<electron_work[2]<<"\n";
     // The queue is in order, so all primary chunks retain exactly the previous
     // execution order.  Waiting once on the final event avoids a host/device
     // round trip and a flushed progress line between every chunk.

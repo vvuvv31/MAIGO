@@ -186,39 +186,6 @@ struct TransportConfig {
     // EM transport with secondary nuclear reactions disabled; no other value
     // and no default fallback exist (empty refuses startup).
     std::string secondary_out_of_scope_nuclear_policy{};
-    // Nonempty selects the exact proton packed+prevalidated runtime artifact.
-    // Electron/photon packages are loaded only after an explicit opt-in.
-    bool enable_electron_transport{false};
-    // Experimental material joint electron operator.
-    std::filesystem::path material_electron_joint_pilot_file{};
-    std::filesystem::path material_electron_charged_index_file{};
-    std::filesystem::path material_electron_birth_file{};
-    std::filesystem::path material_photon_response_index_file{};
-    // Exact C12 EM graph, shared-state records and crossing-bin storage.
-    bool material_electron_retain_bank{false};
-    std::uint32_t material_electron_queue_budget_MiB{576};
-    std::uint32_t material_electron_queue_chunk{1024};
-    std::uint32_t material_electron_queue_lanes{8192};
-    std::uint32_t material_electron_group_size{1};
-    // Independent electron arithmetic: 0=reference, 4=full FP32 runtime.
-    // User selection; uniform water above the density threshold has no selected
-    // region and needs no electron bank. The second flag is the effective CT path.
-    bool broadbeam_electron_tracking{false};
-    bool broadbeam_independent_electrons{false};
-    double broadbeam_electron_density_threshold{0.1};
-    double broadbeam_electron_halo_mm{5.0};
-
-    // Unbiased variance reduction for low-density (density<=threshold) CT
-    // broadbeam electrons. Survival<1 plays deterministic per-task Russian
-    // roulette on low-density births (weight/=survival, signed ledger keeps
-    // energy accounting exact). Physics and RNG laws unchanged.
-    double broadbeam_electron_low_density_survival{1.0};
-    // Selected halo births above the threshold: independent W/p roulette.
-    // Changes variance, not the surviving electron/photon transport law.
-    double broadbeam_electron_tissue_survival{1.0};
-    // Bucket queued indices by sampled birth energy and physical density.
-    bool broadbeam_electron_birth_order{false};
-
     double scorer_area_mm2{90'000.0};
     // Output-only absolute dose calibration. This scales Gy scorers while
     // preserving raw deposited-energy tallies and transport energy balance.
@@ -481,19 +448,7 @@ struct TransportConfig {
         }
         unified_water_nuclear_transport = is_water_mode();
     }
-    void resolve_electron_transport() noexcept {
-        if (enable_electron_transport) return;
-        material_electron_charged_index_file.clear();
-        material_electron_birth_file.clear();
-        material_photon_response_index_file.clear();
-        material_electron_joint_pilot_file.clear();
-        material_electron_retain_bank = false;
-        broadbeam_electron_tracking = false;
-        broadbeam_independent_electrons = false;
-        broadbeam_electron_low_density_survival = 1.0;
-        broadbeam_electron_tissue_survival = 1.0;
-        broadbeam_electron_birth_order = false;
-    }
+
     void require_primary_reference_mass(double reference_mass_MeV, const char* package,
                                         PrimaryMassConvention convention = PrimaryMassConvention::Nuclear) const {
         const double expected = convention == PrimaryMassConvention::Kinematic

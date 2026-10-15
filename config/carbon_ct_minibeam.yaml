@@ -1,5 +1,4 @@
-enable_electron_transport: false
-# carbon_ct_minibeam: lung CT benchmark (not RT07575); current26 EM/electrons, FP32 dose.
+# carbon_ct_minibeam: lung CT benchmark (not RT07575); continuous26 ion EM, local ionization, FP32 dose.
 transport_pipeline: carbon_minibeam
 run_mode: research
 enable_ct_grid: true
@@ -93,18 +92,9 @@ enable_ct_material_mcs: true
 ct_schneider_file: data/materials/schneider/hu_to_material.txt
 all_ion_elastic_file: data/elastic/schneider/carbon/all_ion.bin
 elastic_recoil_stopping_file: data/elastic/schneider/carbon/recoil_stopping.bin
-material_electron_group_size: 32
-material_electron_queue_chunk: 131072
-material_electron_queue_lanes: 16384
-material_electron_queue_budget_MiB: 576
-material_electron_retain_bank: true
 primary_atomic_number: 6
 primary_mass_number: 12
 initial_energy_MeVu: 250
 minibeam_air_slit_max_step_mm: 0.05
-material_electron_birth_file: data/em/electrons/shared/birth26.bin
-material_electron_joint_pilot_file: data/em/electrons/shared/joint.bin
-material_electron_charged_index_file: data/em/electrons/shared/charged.index
-material_photon_response_index_file: data/em/electrons/shared/photon.index
 minibeam_copper_fragment_elastic_file: data/elastic/copper/carbon/fragments.csv
 minibeam_copper_fragment_urban_package_file: data/scattering/urban/copper_fragments.bin

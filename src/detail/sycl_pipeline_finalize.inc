@@ -1,4 +1,4 @@
-// Shared finalize phase, included inside transport_pipeline<Pipeline, JointResponse>.
+// Shared finalize phase, included inside transport_pipeline<Pipeline>.
     runtime_steps.finish();
     RuntimeScope runtime_post("transport_readback_and_host_finalize");
     std::vector<DepthAtomicT> dose_device_host(number_of_bins);
@@ -214,27 +214,6 @@
     }
     queue.wait_and_throw();
 
-    // Electron worker ledgers are private FP32 sums. Widen only on the host
-    // after transport, avoiding a shared FP64 atomic in the full FP32 worker.
-    if(float_electron_grid_ledger) {
-        std::vector<float> partial(2*material_queue_lanes);
-        queue.copy(float_electron_grid_ledger,partial.data(),partial.size()).wait_and_throw();
-        for(unsigned lane=0;lane<material_queue_lanes;++lane) {
-            grid_deposited_in_host+=partial[2*lane];
-            grid_deposited_out_host+=partial[2*lane+1];
-        }
-    }
-    double electron_vr_gain_host=0;
-    if(float_electron_vr_ledger) {
-        std::vector<float> partial(material_queue_lanes);std::array<std::uint64_t,2> work{};
-        queue.copy(float_electron_vr_ledger,partial.data(),partial.size());
-        queue.copy(electron_vr_work,work.data(),2).wait_and_throw();
-        for(const float x:partial)electron_vr_gain_host+=x;
-        if(work[0]||work[1])
-            std::cout<<"[electron-variance-reduction-work] roulette_killed="<<work[0]<<" roulette_survived="<<work[1]
-                     <<" weight_gain_MeV="<<electron_vr_gain_host<<"\n";
-    }
-
     // Per-record Schneider logs: counts are exact after the fence above.
     // Staged into host vectors here (device buffers are freed below);
     // moved into TransportResult after its declaration.
@@ -255,29 +234,6 @@
             .wait_and_throw();
     }
 
-    std::array<std::uint64_t,7> electron_joint_diag_host{};
-    std::array<std::uint64_t,3> material_untracked_host{};
-    if(material_untracked_device)queue.copy(material_untracked_device,material_untracked_host.data(),3).wait_and_throw();
-
-    if(material_failure_device && material_untracked_host[2]) {
-        MaterialPacketFailure f;queue.copy(material_failure_device,&f,1).wait_and_throw();
-        const auto& c=f.before.cursor;
-        std::cerr<<"[material-packet-failure] history="<<f.history<<" step="<<f.step<<" rng="<<f.rng
-                 <<" photon_reason="<<f.photon_reason<<std::setprecision(9)<<" status="<<int(f.after.status)<<" gap="<<int(f.after.gap)<<" section="<<c.section
-                 <<" rho="<<c.density_g_cm3<<" physical_rho="<<c.physical_density_g_cm3
-                 <<" pdg="<<c.pdg<<" KE="<<c.energy_MeV<<" W="<<f.before.weight_MeV
-                 <<" position="<<c.position[0]<<','<<c.position[1]<<','<<c.position[2]<<" direction="<<c.direction[0]<<','<<c.direction[1]<<','<<c.direction[2]
-                 <<" after_position="<<f.after.cursor.position[0]<<','<<f.after.cursor.position[1]<<','<<f.after.cursor.position[2]<<'\n';
-    }
-    if(electron_joint_diag_device)queue.copy(electron_joint_diag_device,electron_joint_diag_host.data(),7).wait_and_throw();
-    if(use_electron_fp32) {
-        if(electron_joint_diag_host[6]!=electron_tasks_total)
-            throw std::runtime_error("Independent FP32 electron queue completion mismatch; batch rejected");
-        std::cout<<"[independent-fp32-completion] expected="<<electron_tasks_total
-                 <<" completed="<<electron_joint_diag_host[6]<<"\n";
-    }
-    // Free buffers
-    free_device(electron_joint_diag_device);
     free_device(dose_device);
     free_device(primary_terminal_counts_device);
     free_device(in_fov_dose_device);
@@ -333,7 +289,6 @@
         free_device(ct_material_device);
     }
     free_device(ct_xs_device);
-    free_device(broadbeam_electron_mask);
     free_device(schneider_inelastic_device);
     free_device(schneider_diag_device);
     free_device(schneider_float_device);
@@ -343,12 +298,12 @@
     free_device(schneider_track_count_device);
 
     TransportResult result;
-    if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam> && JointResponse==0)
+    if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam>)
         result.primary_first_order_delta_enabled=broadbeam_ct_primary_specialize;
-    if constexpr (std::is_same_v<Pipeline, pipelines::CarbonBroadbeam> && JointResponse==0) {
+    if constexpr (std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>) {
         result.carbon_secondary_first_order_delta_enabled=broadbeam_ct_secondary_specialize;
     }
-    if constexpr (BroadBeam && JointResponse==0) {
+    if constexpr (BroadBeam) {
         if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam>)
             result.ct_primary_first_order_restricted_enabled=broadbeam_ct_primary_specialize;
         result.ct_secondary_first_order_restricted_enabled=broadbeam_ct_secondary_specialize;
@@ -363,13 +318,6 @@
     result.elastic_queue_overflow_energy_MeV=elastic_energy_host[2];
     result.elastic_queue_overflow=elastic_counts_host[11];
     result.schneider_miss_log = std::move(schneider_miss_host);
-    result.electron_joint_diagnostics={electron_joint_diag_host[0],electron_joint_diag_host[1],electron_joint_diag_host[2],
-        static_cast<double>(electron_joint_diag_host[3])*1e-6,static_cast<double>(electron_joint_diag_host[4])*1e-6,electron_joint_diag_host[6]};
-    result.material_electron_photon_untracked_MeV=double(material_untracked_host[0])*1e-6;
-    result.material_electron_untracked_MeV=double(material_untracked_host[0]+material_untracked_host[1])*1e-6;
-    result.electron_variance_reduction_weight_gain_MeV=electron_vr_gain_host;
-    free_device(material_untracked_device);
-    free_device(material_failure_device);
 
     result.schneider_unsupported_tracks = std::move(schneider_track_host);
     result.backend = "sycl-" + resolved_device_name +
@@ -720,6 +668,5 @@
     result.elapsed_seconds =
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
     result.primary_kernel_seconds = primary_kernel_seconds;
-    result.electron_kernel_seconds = electron_kernel_seconds;
     result.secondary_kernel_seconds = secondary_kernel_seconds;
     return result;

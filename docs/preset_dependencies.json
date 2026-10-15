@@ -1,6 +1,6 @@
 {
-  "schema": 3,
-  "scope": "Eight preset inputs, fixed runtime defaults, electron payloads/aliases, bundle members and companion metadata. Generation provenance is not a runtime dependency.",
+  "schema": 4,
+  "scope": "Eight preset inputs, fixed runtime defaults, bundle members and companion metadata. Generation provenance is not a runtime dependency.",
   "presets": {
     "carbon_ct_broadbeam": {
       "config": "config/carbon_ct_broadbeam.yaml",
@@ -9,7 +9,6 @@
       "beam": "broadbeam",
       "transport_pipeline": "carbon_broadbeam",
       "ion_scattering": "fermi_eyges",
-      "electron_packages": [],
       "inputs": {
         "ct_grid_file": "inputs/rt07575_head/carbon/ct.bin",
         "tps_spots_file": "inputs/rt07575_head/carbon/spots.csv",
@@ -26,8 +25,6 @@
         "em_package_file": "data/em/ions/continuous26.bin",
         "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/carbon/final_states.bin"
       },
-      "enable_electron_transport": false,
-      "optional_electron_inputs": {},
       "files": [
         "data/elastic/schneider/carbon/all_ion.bin",
         "data/elastic/schneider/carbon/all_ion.metadata.json",
@@ -67,7 +64,6 @@
       "beam": "minibeam",
       "transport_pipeline": "carbon_minibeam",
       "ion_scattering": "urban_v2",
-      "electron_packages": [],
       "inputs": {
         "primary_stopping_power_file": "data/stopping/water/carbon.csv",
         "ct_schneider_primary_rate_file": "data/nuclear/schneider/carbon/inelastic_rates.bin",
@@ -92,13 +88,6 @@
         "elastic_recoil_stopping_file": "data/elastic/schneider/carbon/recoil_stopping.bin",
         "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv",
         "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin"
-      },
-      "enable_electron_transport": false,
-      "optional_electron_inputs": {
-        "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
-        "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
-        "material_electron_charged_index_file": "data/em/electrons/shared/charged.index",
-        "material_photon_response_index_file": "data/em/electrons/shared/photon.index"
       },
       "files": [
         "data/elastic/copper/carbon/fragments.csv",
@@ -149,7 +138,6 @@
       "beam": "broadbeam",
       "transport_pipeline": "carbon_broadbeam",
       "ion_scattering": "fermi_eyges",
-      "electron_packages": [],
       "inputs": {
         "unified_water_material_file": "data/materials/water/material.json",
         "primary_stopping_power_file": "data/stopping/water/carbon.csv",
@@ -162,13 +150,6 @@
         "em_delta_moments_file": "data/em/ions/delta_moments.bin",
         "em_package_file": "data/em/ions/continuous26.bin",
         "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/carbon/final_states.bin"
-      },
-      "enable_electron_transport": false,
-      "optional_electron_inputs": {
-        "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
-        "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
-        "material_electron_charged_index_file": "data/em/electrons/shared/charged.index",
-        "material_photon_response_index_file": "data/em/electrons/shared/photon.index"
       },
       "files": [
         "data/elastic/schneider/carbon/all_ion.bin",
@@ -205,7 +186,6 @@
       "beam": "minibeam",
       "transport_pipeline": "carbon_minibeam",
       "ion_scattering": "urban_v2",
-      "electron_packages": [],
       "inputs": {
         "tps_spots_file": "inputs/water_minibeam/carbon/spots.csv",
         "minibeam_copper_stopping_power_file": "data/stopping/copper/carbon.csv",
@@ -230,13 +210,6 @@
         "urban_mcs_package_file": "data/scattering/urban/ct_copper.bin",
         "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv",
         "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin"
-      },
-      "enable_electron_transport": false,
-      "optional_electron_inputs": {
-        "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
-        "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
-        "material_photon_response_index_file": "data/em/electrons/shared/photon.index",
-        "material_electron_charged_index_file": "data/em/electrons/shared/charged.index"
       },
       "files": [
         "data/elastic/copper/carbon/fragments.csv",
@@ -288,7 +261,6 @@
       "beam": "broadbeam",
       "transport_pipeline": "proton_broadbeam",
       "ion_scattering": "fermi_eyges",
-      "electron_packages": [],
       "inputs": {
         "ct_schneider_primary_rate_file": "data/nuclear/schneider/proton/inelastic_rates.bin",
         "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/proton/final_states.bin",
@@ -305,8 +277,6 @@
         "primary_stopping_power_file": "data/stopping/water/proton.csv",
         "tps_spots_file": "inputs/rt07575_head/proton/spots.csv"
       },
-      "enable_electron_transport": false,
-      "optional_electron_inputs": {},
       "files": [
         "data/elastic/schneider/proton/all_ion.bin",
         "data/elastic/schneider/proton/all_ion.metadata.json",
@@ -345,7 +315,6 @@
       "beam": "minibeam",
       "transport_pipeline": "proton_minibeam",
       "ion_scattering": "urban_v2",
-      "electron_packages": [],
       "inputs": {
         "primary_stopping_power_file": "data/stopping/water/proton.csv",
         "ct_schneider_primary_rate_file": "data/nuclear/schneider/proton/inelastic_rates.bin",
@@ -369,13 +338,6 @@
         "ct_schneider_file": "data/materials/schneider/hu_to_material.txt",
         "all_ion_elastic_file": "data/elastic/schneider/proton/all_ion.bin",
         "elastic_recoil_stopping_file": "data/elastic/schneider/proton/recoil_stopping.bin"
-      },
-      "enable_electron_transport": false,
-      "optional_electron_inputs": {
-        "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
-        "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
-        "material_photon_response_index_file": "data/em/electrons/shared/photon.index",
-        "material_electron_charged_index_file": "data/em/electrons/shared/charged.index"
       },
       "files": [
         "data/elastic/copper/proton/primary.csv",
@@ -423,7 +385,6 @@
       "beam": "broadbeam",
       "transport_pipeline": "proton_broadbeam",
       "ion_scattering": "fermi_eyges",
-      "electron_packages": [],
       "inputs": {
         "unified_water_material_file": "data/materials/water/material.json",
         "primary_stopping_power_file": "data/stopping/water/proton.csv",
@@ -436,13 +397,6 @@
         "em_package_file": "data/em/ions/continuous26.bin",
         "all_ion_elastic_file": "data/elastic/schneider/proton/all_ion.bin",
         "elastic_recoil_stopping_file": "data/elastic/schneider/proton/recoil_stopping.bin"
-      },
-      "enable_electron_transport": false,
-      "optional_electron_inputs": {
-        "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
-        "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
-        "material_electron_charged_index_file": "data/em/electrons/shared/charged.index",
-        "material_photon_response_index_file": "data/em/electrons/shared/photon.index"
       },
       "files": [
         "data/elastic/schneider/proton/all_ion.bin",
@@ -479,7 +433,6 @@
       "beam": "minibeam",
       "transport_pipeline": "proton_minibeam",
       "ion_scattering": "urban_v2",
-      "electron_packages": [],
       "inputs": {
         "unified_water_material_file": "data/materials/water/material.json",
         "primary_stopping_power_file": "data/stopping/water/proton.csv",
@@ -502,13 +455,6 @@
         "minibeam_air_urban_package_file": "data/scattering/urban/air.bin",
         "minibeam_air_ionization_rate_file": "data/ionization/air/proton_rate.csv",
         "urban_mcs_package_file": "data/scattering/urban/ct_copper.bin"
-      },
-      "enable_electron_transport": false,
-      "optional_electron_inputs": {
-        "material_electron_birth_file": "data/em/electrons/shared/birth26.bin",
-        "material_electron_joint_pilot_file": "data/em/electrons/shared/joint.bin",
-        "material_photon_response_index_file": "data/em/electrons/shared/photon.index",
-        "material_electron_charged_index_file": "data/em/electrons/shared/charged.index"
       },
       "files": [
         "data/elastic/copper/proton/primary.csv",
@@ -759,6 +705,5 @@
       "bytes": 88565
     }
   },
-  "total_unique_bytes": 4758361441,
-  "electron_registry": "docs/electron_packages_manifest.json"
+  "total_unique_bytes": 4758361441
 }

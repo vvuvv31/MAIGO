@@ -111,14 +111,8 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         report.approximations.push_back({"ct_broadbeam_fragment_step_start_restricted_mean",
             "Dedicated local-electron carbon CT broadbeam charged fragments use step-start restricted stopping without its within-step stopping-slope correction. Nominal stopping/range, ion charge correction, full range-derived terminals, nominal delta moments and hard rates remain active; fluctuations follow the configured primary/secondary switches. Patient TOPAS qualification is configuration-specific",1.,0.});
     report.approximations.push_back({"condensed_delta_partition_v1",
-            "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition unless an explicit spatial response is enabled, configured combined mean-loss guard (default 1%); higher spectrum moments and patient BODY Gamma not validated",1.,0.});
-    if (config.enable_minibeam && !config.material_electron_charged_index_file.empty()) {
-        report.approximations.push_back({"minibeam_primary_electron_transport",
-            "Primary ionization loss is partitioned using projectile-specific electron births, "
-            "then transported with the shared FP32 charged/photon operators. Birth grouping and "
-            "channel-averaged yields remain approximations. Secondary-ion electron births and "
-            "upstream electron production are not included. Carbon minibeam dose acceptance is pending", 1., 0.});
-    }
+            "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition, configured combined mean-loss guard (default 1%); higher spectrum moments and patient BODY Gamma not validated",1.,0.});
+
     if (config.secondary_species_grouping && config.enable_inelastic &&
         config.enable_secondary_transport)
         report.approximations.push_back({"secondary_species_grouping_accuracy_pending",
@@ -158,61 +152,19 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             "Research FE mean-loss cap relaxed; geometry faces, nuclear competition and sampled loss remain active; patient gamma requires validation",
             config.broadbeam_maximum_mean_loss_fraction,0.01});
     if(config.transport_profile=="broadbeam_fast") {
-        if(config.broadbeam_independent_electrons && config.broadbeam_electron_low_density_survival!=1)
-            report.approximations.push_back({"broadbeam_low_density_electron_roulette",
-                "Unbiased deterministic per-task Russian roulette of electrons born at density<=threshold; survivors carry W/p and a signed weight ledger closes energy accounting. Not a physics approximation; finite-statistics patient gamma requires validation",
-                config.broadbeam_electron_low_density_survival,1.0});
-        if(config.broadbeam_independent_electrons && config.broadbeam_electron_tissue_survival!=1)
-            report.approximations.push_back({"broadbeam_tissue_electron_roulette",
-                "Unbiased per-task roulette of selected electron births at density>threshold; survivors and photon descendants carry W/p with a signed energy ledger. Changes variance; validate regional noise and patient gamma",
-                config.broadbeam_electron_tissue_survival,1.0});
-        if(config.broadbeam_independent_electrons)
-            report.approximations.push_back({"broadbeam_selected_independent_electrons",
-                "Primary ionization in low-density voxels and the configured box halo uses shared FP32 electron/photon transport with projectile-specific births; continuation is unrestricted. Elsewhere local; halo is a research approximation, not a range proof; secondary-ion electrons remain local",config.broadbeam_electron_halo_mm,0.});
-        else if(config.broadbeam_electron_tracking)
-            report.approximations.push_back({"broadbeam_empty_water_electron_selection",
-                "Low-density-plus-halo tracking is enabled, but uniform water exceeds the density threshold; no selected births, no electron bank loading, ionization remains local",config.broadbeam_electron_density_threshold,0.});
-        else
             report.approximations.push_back({"broadbeam_fast_local_electron_neutral_sink",
                 "Broad beam uses local ionization deposition and no neutron transport; nuclear neutral energy remains explicitly untransported. Field edges and tissue interfaces require dose validation",1.,0.});
     }
-    if(!config.material_electron_charged_index_file.empty()) {
-        // Research execution is explicitly requested; accuracy is still pending.
-        // Lookup/geometry failures below remain fatal in every run mode.
-        auto& scope_issues=config.run_mode==RunMode::research?report.approximations:report.failures;
-            scope_issues.push_back({"unvalidated_electron_fp32_transport","Independent electron birth/joint/charged/photon transport and CT geometry use FP32 with integer CDF sampling; precision-sensitive thresholds and local CT dose require separate validation",1.,0.});
-        if(!config.material_electron_charged_index_file.empty())
-            scope_issues.push_back({"unvalidated_independent_charged_response","Composition26 charged transport with continuous density scalars, actual-cut mass-scaled hard rates, calibrated Penelope/Moller and SB/2BS outcomes, and spatial joint handoff; no density-node fallback. Dose validation is configuration-specific",1.,0.});
-        if(!config.material_photon_response_index_file.empty())
-            scope_issues.push_back({"unvalidated_independent_photon_response","Actual-geometry optical-depth flight with density-scaled attenuation and one calibrated FP32 photon conditional law per composition; density/cut terminal approximations remain explicit",1.,0.});
-        if(!config.material_electron_birth_file.empty())
-            scope_issues.push_back({"unvalidated_independent_electron_birth",config.primary_atomic_number==6?
-                "C12 actual-cut composition26 shell birth law with projectile-specific parameters; broadbeam validation does not qualify carbon minibeam accuracy":
-                "Proton actual-cut composition26 shell birth law with projectile-specific parameters; head and lung minibeam dose validation have separate scopes",1.,0.});
-        if(!config.material_electron_joint_pilot_file.empty())
-            scope_issues.push_back({"unvalidated_material_electron_joint_pilot","Experimental material joint operator (including optional density scaling); homogeneous screens do not certify CT dose accuracy",1.,0.});
-        if(config.enable_ct_grid && (config.enable_inelastic || config.enable_secondary_transport))
-            report.approximations.push_back({"ct_nuclear_primary_electron_response_only",
-                "CT material electron response relocates primary-loop ionization loss only, before nuclear interactions; charged secondary electron losses remain local. This is a partial full-physics integration, not a complete electron transport model",1.,0.});
-        if(config.enable_ct_grid && config.enable_inelastic)
-            report.approximations.push_back({"ct_nuclear_neutron_dose_missing",
-                "CT nuclear reactions enabled but neutron transport is unavailable; neutral energy sinks do not contribute neutron-induced patient dose",1.,0.});
-        if(result.material_electron_photon_untracked_MeV>0)
-            report.approximations.push_back({"material_photon_untracked","Photon continuation not covered; separate energy sink, not local dose or patient escape",
-                result.material_electron_photon_untracked_MeV,0.});
-        if(result.electron_joint_diagnostics.domain_misses || result.electron_joint_diagnostics.invalid_marches)
-            report.failures.push_back({"material_electron_lookup_or_geometry_failure","Material response lookup or ancestry failed",static_cast<double>(result.electron_joint_diagnostics.domain_misses+result.electron_joint_diagnostics.invalid_marches),0.});
-    }
+
     if (config.unified_water_nuclear_transport)
         report.approximations.push_back({"water_topas_match_pending",
             "Shared CINEL03 framework enabled for production; water TOPAS accuracy validation remains incomplete",1.,0.});
     // One physical ledger includes all explicit terminal sinks.
     const auto physical_raw_residual =
-        result.initial_energy_MeV + 
-        result.electron_variance_reduction_weight_gain_MeV - result.total_deposited_energy_MeV -
+        result.initial_energy_MeV - result.total_deposited_energy_MeV -
         result.escaped_energy_MeV - result.beamline_removed_energy_MeV -
         result.untracked_nuclear_energy_MeV -
-        result.primary_other_terminal_kinetic_MeV - result.material_electron_untracked_MeV;
+        result.primary_other_terminal_kinetic_MeV;
     report.absolute_physical_energy_residual_MeV = std::abs(physical_raw_residual);
     report.physical_relative_energy_residual =
         result.physical_relative_energy_balance_error();
@@ -346,7 +298,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             result.elapsed_seconds,
             result.primary_kernel_seconds,
             result.secondary_kernel_seconds,
-            result.electron_kernel_seconds,
             report.absolute_physical_energy_residual_MeV,
             report.physical_relative_energy_residual,
         };

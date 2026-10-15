@@ -1,6 +1,5 @@
-enable_electron_transport: false
 # carbon_ct_broadbeam: RT07575 head; current26 ion EM, local electron energy, FP32 dose.
-# Patient-interior approximation; electron transport is disabled explicitly.
+# Patient ionization uses local deposition.
 transport_pipeline: carbon_broadbeam
 run_mode: research
 number_of_histories: 6481909
@@ -68,14 +67,3 @@ secondary_species_grouping: true
 secondary_step_chunking: true
 broadbeam_maximum_mean_loss_fraction: 0.05
 ct_schneider_primary_cinel03_file: data/nuclear/schneider/carbon/final_states.bin
-material_electron_group_size: 32
-material_electron_queue_chunk: 524288
-material_electron_queue_lanes: 16384
-material_electron_queue_budget_MiB: 576
-material_electron_retain_bank: false
-broadbeam_electron_tracking: false
-broadbeam_electron_density_threshold: 0.1
-broadbeam_electron_halo_mm: 5.0
-broadbeam_electron_low_density_survival: 0.5
-broadbeam_electron_birth_order: true
-broadbeam_electron_tissue_survival: 0.5

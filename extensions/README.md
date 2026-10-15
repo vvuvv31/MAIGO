@@ -17,14 +17,13 @@
 | proton_ct_minibeam | proton 主粒子表 | Cu/空气、独立 lung benchmark CT |
 | carbon_ct_minibeam | carbon 主粒子表 | Cu/空气、独立 lung benchmark CT |
 
-共同包族包括 EMCNT001 continuous26、delta moments、strict26 electron/photon、次级核反应及 Urban。每个预设实际展开的文件路径以 [preset_dependencies.json](../docs/preset_dependencies.json) 为准。RT07575 是 head case，CT、源、权重、放置、准直器及归一化必须成套使用；lung minibeam 不能称为 RT07575 全计划验证。
+共同包族包括 EMCNT001 continuous26、delta moments、次级核反应及 Urban。每个预设实际展开的文件路径以 [preset_dependencies.json](../docs/preset_dependencies.json) 为准。RT07575 是 head case，CT、源、权重、放置、准直器及归一化必须成套使用；lung minibeam 不能称为 RT07575 全计划验证。
 
 覆盖清单区分物理提取、离线派生、静态定义和外部输入。CT、计划 spots、beam model 不是物理扩展输出；这里不加入 DICOM 转换或 TOPAS 文本计划 replay。
 
 **源码齐备不等于可以仅凭源码逐字节重建当前包。** 必须匹配 TOPAS/Geant4 数据集、物理模块、cut、seed、统计量及离线校准语料。两项具体前提：
 
 - 碳主核反应冻结编译器要求原生产记录按 stride=20 重建恰好 30113 个基础事件，再加审计过的低能补点。次级编译器需要 campaign manifest、raw validation 和对应原始记录。
-- strict26 scalar、光子 conditional 与弹性 calibration 使用离线 charged/photon operators 和 index。此目录不附带庞大校准语料；须提供匹配语料，或重新采集并独立验收。最终运行时仍只有 26 种组成，不回退到离线密度节点。
 
 全量 raw/corpus 未复制，未执行全量生产重提取或新剂量验收。
 
@@ -35,7 +34,6 @@
 | `topas/common/` | 核反应捕获、Schneider rate/stopping、主粒子材料查询、材料 JSON |
 | `topas/unified_em/` | 全离子 native EM；与 common 的同名 stopping scorer 分开链接 |
 | `topas/all_ion_elastic/` | 弹性联合分布/反冲，含冻结 carbon 实现 |
-| `topas/electrons/` | electron/photon rates、conditional、birth、boundary、composition、joint |
 | `copper_ion_transport/` | [碳微束铜碎片弹性提取与涨落验证](copper_ion_transport/README.md) |
 | `native/` | Geant4 原生工具 CMake 项目 |
 | `tools/` | 各包族 campaign 驱动、编译器和验证器 |
@@ -60,7 +58,7 @@ export MAIGO_G4_CMAKE=/path/to/geant4-11.3.2/lib/cmake/Geant4
 export MAIGO_TOPAS_PREFIX=/path/to/topas-dependencies
 bash extensions/build_native.sh --build-dir extensions/work/build/native \
   --geant4-dir "$MAIGO_G4_CMAKE" --jobs 6
-for profile in nuclear-copper unified-em elastic-carbon recoil-carbon elastic-proton electrons; do
+for profile in nuclear-copper unified-em elastic-carbon recoil-carbon elastic-proton; do
   bash extensions/build_topas_extensions.sh --topas-source "$MAIGO_TOPAS_SOURCE" \
     --build-dir "extensions/work/build/$profile" --profile "$profile" \
     --geant4-dir "$MAIGO_G4_CMAKE" --cmake-prefix "$MAIGO_TOPAS_PREFIX" --jobs 6
@@ -74,7 +72,6 @@ done
 | elastic-carbon | 冻结 reference/carbon 弹性 |
 | recoil-carbon | 冻结 reference/carbon 反冲 stopping |
 | elastic-proton | Water_75eV proton 行/反冲替换 |
-| electrons | strict26 electron/photon/birth/composition/joint |
 
 每个 profile 必须有独立 build 目录，脚本拒绝混用。源码暂存到 build 下 `maigo-extension-source/`，TOPAS 源目录不变。`--stage-only` 只选择源码；`--cmake-arg ARG` 可重复；默认 Qt=ON，无 Qt 时显式 `--topas-use-qt OFF` 并确认其他依赖。
 
@@ -84,7 +81,6 @@ done
 export MAIGO_KIT_WORK="$PWD/extensions/work"
 export MAIGO_NUCLEAR_TOPAS="$MAIGO_KIT_WORK/build/nuclear-copper/topas"
 export MAIGO_EM_TOPAS="$MAIGO_KIT_WORK/build/unified-em/topas"
-export MAIGO_ELECTRON_TOPAS="$MAIGO_KIT_WORK/build/electrons/topas"
 export MAIGO_NATIVE="$MAIGO_KIT_WORK/build/native"
 export MAIGO_STAGE="$MAIGO_KIT_WORK/packages-candidate"
 python3 extensions/prepare_staging.py --out "$MAIGO_STAGE"
@@ -256,53 +252,14 @@ CT 是 Water_75eV + 全部 25 Schneider 组成；CT/Cu 各 52 species，空气�
 
 Schneider radiation-length JSON 可从 CT native 元数据 section、density、radlen 派生并对齐当前 schema，质量 radlen=`radlen_mm/10*density`；HU 映射来自 reference。来源 metadata 与 section0 delta-tail 校准审计需按实际新 campaign 重建，不能直接把旧时间戳当成新采样证据。
 
-## 9. strict26 electron/photon/birth/joint
+## 9. 电子／光子包移除
 
-提供 `MAIGO_CALIBRATION`：`charged/index.txt`、`photon/index.txt` 及声明的 operators；首行后每行为 `section density relative_file`，section0..25。离线语料不安装进最终目录。
-
-```bash
-export MAIGO_CALIBRATION=/path/to/audited-electron-calibration/shared
-python3 extensions/tools/electrons/extract_electron_composition_laws26.py \
-  --reference extensions/reference/electron_compositions --binary "$MAIGO_ELECTRON_TOPAS" \
-  --out "$MAIGO_KIT_WORK/electron-laws" --workers 4 --brems-elements
-python3 extensions/tools/electrons/build_electron_scalar26.py \
-  --source "$MAIGO_CALIBRATION" --output "$MAIGO_KIT_WORK/electron-scalar"
-python3 extensions/tools/electrons/build_electron_cut_birth26.py \
-  --calibration "$MAIGO_CALIBRATION" --native "$MAIGO_KIT_WORK/electron-laws" \
-  --out "$MAIGO_KIT_WORK/electron-birth"
-python3 extensions/tools/electrons/pack_electron_composition_laws26.py \
-  --birth "$MAIGO_KIT_WORK/electron-birth/birth26.bin" \
-  --scalar "$MAIGO_KIT_WORK/electron-scalar/scalar26.npz" \
-  --laws "$MAIGO_KIT_WORK/electron-laws" --out "$MAIGO_KIT_WORK/electron-components"
-python3 extensions/tools/electrons/build_electron_native_grid_rates26.py \
-  --calibration "$MAIGO_CALIBRATION" --reference extensions/reference/electron_compositions \
-  --binary "$MAIGO_ELECTRON_TOPAS" --penelope-functions "$MAIGO_KIT_WORK/electron-laws" \
-  --out "$MAIGO_KIT_WORK/electron-rates"
-python3 extensions/tools/electrons/build_schneider_joint.py \
-  --binary "$MAIGO_ELECTRON_TOPAS" --index extensions/reference/joint_index.json \
-  --template extensions/reference/electron_joint.txt \
-  --out "$MAIGO_KIT_WORK/electron-joint" --histories 10000 --workers 3
-python3 extensions/tools/electrons/assemble_package26.py \
-  --components "$MAIGO_KIT_WORK/electron-components" \
-  --rates "$MAIGO_KIT_WORK/electron-rates/rates26.bin" \
-  --birth "$MAIGO_KIT_WORK/electron-birth/birth26.bin" \
-  --calibration "$MAIGO_CALIBRATION" --joint "$MAIGO_KIT_WORK/electron-joint/schneider_joint.bin" \
-  --out "$MAIGO_KIT_WORK/electron-flat"
-python3 extensions/tools/electrons/package_release.py \
-  --source "$MAIGO_KIT_WORK/electron-flat" --output-root "$MAIGO_STAGE"
-```
-
-joint index 对应82份真实材料定义；operator 路径是定位标识，不要求历史 operator 存在。driver 内部使用当前 joint 编译/压缩流程，最终 MAIJNB02 包25 Schneider compositions；不要改采样规则。
-
-组装保留每组成一套 photon conditional calibration + 连续 mass-scaled rates 的明确近似及 proton/carbon-specific birth 参数。最终 shared 有 scalar/rates/penelope/atomic/brems/birth26、26 elastic、26 photon、joint；专属参数放 proton/carbon，aliases 在候选目录内部建立，manifest/registry 计算实际大小。
-
-重新采集离线 calibration 可使用目录中的 composition/collision/photon conditional/elastic/fluctuation/ion birth scorers；`compile_electron_response.py`、`compile_photon_response.py` 所有 raw 输入均显式指定，详见 `--help`。这里没有自动化历史全量 calibration campaign 的一键重建：material/cut/energy/conditional 采样需匹配审计配方，更换即为新候选模型。
+当前运行时仅保留离子 EM 能损和局部沉积，不再提取或安装电子／光子输运包。continuous26 和 delta moments 的提取仍按第 4 节执行。
 
 ## 10. 检查、安装和验证范围
 
 ```bash
 python3 extensions/verify_kit.py
-python3 scripts/check_electron_packages.py
 python3 scripts/check_data_manifest.py
 ```
 
@@ -312,7 +269,7 @@ python3 scripts/check_data_manifest.py
 
 ### 碳离子 TOPAS 剂量参考的核弹性过程
 
-`g4h-elastic_HP` 不会为 GenericIon 注册核弹性。与当前启用碳离子核弹性的 GPU 对比时，TOPAS 必须另外加载官方 `G4IonElasticPhysics`。`topas/common/CarbonIonElasticPhysics.{hh,cc}` 将该构造器暴露为 TOPAS 模块，并在构建过程后检查 GenericIon 弹性是否实际注册；它不修改 Geant4 截面或散射模型。上述非 electrons 构建 profile 会自动 staging 此扩展；独立 PBS 剂量验证构建则将这两个文件与 PBS 扩展一起放入 `TOPAS_EXTENSIONS_DIR`。
+`g4h-elastic_HP` 不会为 GenericIon 注册核弹性。与当前启用碳离子核弹性的 GPU 对比时，TOPAS 必须另外加载官方 `G4IonElasticPhysics`。`topas/common/CarbonIonElasticPhysics.{hh,cc}` 将该构造器暴露为 TOPAS 模块，并在构建过程后检查 GenericIon 弹性是否实际注册；它不修改 Geant4 截面或散射模型。上述构建 profile 会自动 staging 此扩展；独立 PBS 剂量验证构建则将这两个文件与 PBS 扩展一起放入 `TOPAS_EXTENSIONS_DIR`。
 
 在已有物理模块列表中增加 `"CarbonIonElasticPhysics"`，并同步增加 `sv:Ph/Default/Modules` 的元素数量。例如 RT07575 head 原七模块列表补为：
 
