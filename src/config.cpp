@@ -400,7 +400,8 @@ void TransportConfig::validate() const {
     const_cast<TransportConfig*>(this)->resolve_electron_transport();
     if (enable_electron_transport && material_electron_charged_index_file.empty())
         throw std::invalid_argument("enable_electron_transport requires explicit shared FP32 electron packages");
-    if (device != "cuda") throw std::invalid_argument("device must be cuda");
+    if (device != "cuda" && device != "intel")
+        throw std::invalid_argument("device must be cuda or intel");
     if (config_schema_version != 1U) {
         throw std::invalid_argument(
             "config_schema_version must be 1 for the current flat configuration schema");

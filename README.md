@@ -10,9 +10,10 @@ was not changed by this refactor.
 
 ## Build and run
 
-The supported release platform is Linux with an NVIDIA GPU. MAIGO uses the
-Intel LLVM/DPC++ SYCL compiler with the CUDA backend
-(`nvptx64-nvidia-cuda`); this release has no CPU, Intel GPU or AMD GPU runtime.
+Supported GPU platforms are Linux with NVIDIA CUDA or Intel Arc Level Zero.
+MAIGO uses Intel LLVM/DPC++ SYCL with native AOT device images
+(`nvptx64-nvidia-cuda` or `spir64_gen`); CPU and AMD backends are not supported.
+The NVIDIA workflow is described below; Intel Arc instructions follow step 3.
 The workflow is: install the driver and CUDA Toolkit → build the CUDA-capable
 SYCL toolchain → compile MAIGO → restore physics data → supply matching case
 inputs → run and inspect the audits. Compilation does not require patient data.
@@ -154,6 +155,59 @@ CXX="$CXX" BUILD_JOBS=4 BUILD_DIR=build \
 
 Always set `CXX` when using the wrapper on another machine; its fallback path
 points to the original development machine.
+
+### Intel Arc build and run
+
+Install the Intel GPU compute runtime (Level Zero), GPU firmware and oneAPI
+DPC++ compiler. The user needs access to `/dev/dri/renderD*` (normally via the
+`render` group). Load the oneAPI environment before compiling or running:
+
+```bash
+source /opt/intel/oneapi/setvars.sh
+# oneAPI 2026.1 + B580 driver 26.22: use the working Level Zero V1 adapter.
+export SYCL_UR_USE_LEVEL_ZERO_V2=0
+ONEAPI_DEVICE_SELECTOR=level_zero:gpu sycl-ls
+cmake -S . -B build-intel \
+  -DCMAKE_CXX_COMPILER=icpx -DCMAKE_BUILD_TYPE=Release \
+  -DCARBON_SYCL_TARGETS=spir64_gen -DCARBON_INTEL_GPU_ARCH=bmg-g21
+cmake --build build-intel -j 4
+```
+
+`bmg-g21` targets Arc B580; choose the `ocloc` device identifier for your GPU.
+An explicit architecture is required. `spir64` runtime-JIT builds are rejected.
+On the tested oneAPI 2026.1/B580 setup, the default Level Zero V2 adapter returns
+`UR_RESULT_ERROR_UNSUPPORTED_FEATURE` when launching a native kernel; keep
+`SYCL_UR_USE_LEVEL_ZERO_V2=0` set when running. This still uses Level Zero and
+the precompiled GPU image.
+The driver must expose FP64, atomic64 and device USM for the existing transport
+and energy audits. Physics packages and source inputs are shared with CUDA.
+Intel primary kernels move the immutable nuclear/EM views into device memory
+to respect the smaller kernel-argument budget. Intel AOT builds also generate
+separate native images per kernel to avoid incorrect CT lookup results observed
+with merged images on oneAPI 2026.1/B580. Temporary upload arrays are retained
+until their asynchronous transfers complete; physics and RNG remain unchanged.
+Keep the eight release YAMLs as CUDA defaults; copy the desired configuration,
+set `device: intel`, and run `build-intel/carbon_mc --config <your-config.yaml>`.
+Use an absolute-path configuration for a copy outside `config/`, so package
+paths resolve to the same assets. There is no CPU or alternative-backend fallback.
+
+On the tested Xe/B580 system, the compute engine's default **640 ms preemption
+timeout** resets longer carbon CT minibeam kernels. Set it to 10 seconds before
+running these workloads (root required; this setting resets on reboot):
+
+```bash
+# Select the DRM card belonging to the Intel GPU on your machine.
+ARC_ENGINE=/sys/class/drm/card0/device/tile0/gt0/engines/ccs
+cat "$ARC_ENGINE/preempt_timeout_us"
+echo 10000000 | sudo tee "$ARC_ENGINE/preempt_timeout_us"
+```
+
+The tested 5,000 ms `job_timeout_ms` can remain unchanged. The executable does
+not modify driver settings. Do not reduce physical track limits to work around
+a driver timeout. All eight electron-off presets passed two 10,000-history
+batches on B580 with the native AOT build; these are runtime/audit checks, not
+TOPAS dose acceptance or throughput benchmarks. Electron-on execution on Arc
+has not yet been tested. See [Intel Arc validation notes](docs/intel_arc_support_20261015.md).
 
 ### 4. Download and restore the physics assets
 
@@ -426,9 +480,9 @@ custom magic/version reader selectors are removed.
 See `docs/release_cleanup5_20261007.md` for the fixed rate-reader contract and
 matched eight-preset regression evidence.
 
-The release runtime accepts only `device: cuda` and the
-`nvptx64-nvidia-cuda` SYCL build target. Generic GPU/CPU selectors and vendor
-aliases are retired; no fallback to another backend occurs.
+The runtime accepts `device: cuda` with `nvptx64-nvidia-cuda` or `device: intel`
+with Intel Level Zero and the `spir64_gen` AOT target. Generic GPU/CPU selectors
+and vendor aliases are retired; no fallback to another backend occurs.
 
 See `docs/release_cleanup6_20261007.md` for CUDA-only migration and matched
 eight-preset regression evidence.

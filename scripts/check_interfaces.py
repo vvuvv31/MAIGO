@@ -28,11 +28,11 @@ def main():
             r=subprocess.run([str(a.binary.resolve()),'--config',str(f)],cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
             ok=r.returncode!=0 and 'transport_pipeline' in r.stdout and '[unified-em-audit]' not in r.stdout
             reports.append(dict(transport_pipeline=pipeline,passed=ok));assert ok,(pipeline,r.stdout)
-        for device in ['gpu','cpu','default','nvidia','level_zero','intel','arc','opencl','hip','native_cpu','']:
+        for device in ['gpu','cpu','default','nvidia','level_zero','arc','opencl','hip','native_cpu','']:
             c=dict(cfg);c['device']=device
             f=Path(tmp)/'case.yaml';f.write_text(yaml.safe_dump(c,sort_keys=False))
             r=subprocess.run([str(a.binary.resolve()),'--config',str(f)],cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
-            ok=r.returncode!=0 and 'device must be cuda' in r.stdout and '[unified-em-audit]' not in r.stdout
+            ok=r.returncode!=0 and 'device must be cuda or intel' in r.stdout and '[unified-em-audit]' not in r.stdout
             reports.append(dict(device=device,passed=ok));assert ok,(device,r.stdout)
         for missing in [('primary_atomic_number',), ('primary_mass_number',), ('primary_atomic_number','primary_mass_number')]:
             c=dict(cfg)

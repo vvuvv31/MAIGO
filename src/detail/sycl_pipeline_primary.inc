@@ -2,6 +2,22 @@
     RuntimeScope runtime_steps("transport_loop_including_scoring_and_queue_transfers");
     double primary_kernel_seconds = 0.0;
 
+#ifdef CARBON_INTEL_GPU_AOT
+    // Arc has a smaller kernel-argument budget. Keep the immutable views in
+    // device memory rather than decomposing their large by-value captures.
+    // CUDA retains its established captures and arithmetic.
+    struct IntelPrimaryContext {
+        SchneiderCtDeviceContext nuclear;
+        UnifiedEmDevice em;
+    };
+    static_assert(std::is_trivially_copyable_v<IntelPrimaryContext>);
+    const IntelPrimaryContext host_primary_context{schneider_ct_device_ctx, unified_device};
+    auto* intel_primary_context = mem_tracker.allocate<IntelPrimaryContext>(1);
+    if (intel_primary_context == nullptr) throw std::bad_alloc();
+    queue.memcpy(intel_primary_context, &host_primary_context,
+                 sizeof(host_primary_context)).wait_and_throw();
+#endif
+
     // Opt-in homogeneous-water Urban minibeam specialization. Eligibility
     // proves every compile-time substitution below against runtime settings.
     const bool use_minibeam_primary_path = config.minibeam_primary_specialization;
@@ -152,6 +168,10 @@
                 if (lane >= chunk_count) {
                     return;
                 }
+#ifdef CARBON_INTEL_GPU_AOT
+                const auto& schneider_ct_device_ctx = intel_primary_context->nuclear;
+                const auto& unified_device = intel_primary_context->em;
+#endif
                 auto global_history = hist_offset + lane;
                 if constexpr (kPrimaryStage == 3) {
                     if (beamline_order != nullptr) global_history = hist_offset + beamline_order[lane];

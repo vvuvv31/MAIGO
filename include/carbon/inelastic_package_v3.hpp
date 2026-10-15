@@ -254,6 +254,10 @@ inline constexpr float kCinel03MaxAllowedNodeGapMeVperU = 5.0F;
 // Exact-channel bounded stochastic-bracketing lookup. Device-safe (no
 // exceptions, no dynamic allocation). u_bracket drives the E0/E1 choice,
 // u_event drives the intra-node event pick; both must be in [0,1].
+#if defined(CARBON_INTEL_GPU_AOT) && defined(__SYCL_DEVICE_ONLY__)
+// Keep exact-channel lookup isolated from the large Intel transport kernels.
+__attribute__((noinline))
+#endif
 inline Cinel03LookupResult cinel03_lookup_event_device(
     const Cinel03EnergyNode* energy_nodes,
     std::uint32_t node_count,

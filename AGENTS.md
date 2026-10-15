@@ -60,11 +60,19 @@
 - Primary rate readers are fixed to `SCHNRATE` v3. Startup rate metadata uses
   `basename.metadata.json`; do not restore appended `.bin.metadata.json` naming
   or configurable binary magic/version selectors.
-- The release runtime and build target are CUDA-only (`device: cuda`,
-  `nvptx64-nvidia-cuda`). Do not restore vendor aliases, CPU fallback or Intel
-  kernel-argument pointer adaptation. Preserve CUDA queue/device ordering.
+- Supported GPU backends are CUDA (`device: cuda`, `nvptx64-nvidia-cuda`)
+  and Intel Level Zero (`device: intel`, `spir64_gen`). No vendor aliases or
+  CPU/backend fallback. Preserve CUDA queue/device ordering and physics.
+  Intel builds require an explicit `CARBON_INTEL_GPU_ARCH` (Arc B580: `bmg-g21`)
+  and native AOT device images; do not introduce SPIR-V runtime JIT builds.
+  Intel primary kernels pass immutable nuclear/EM views through one device
+  context pointer to respect their kernel-argument budget; CUDA keeps by-value captures.
+  Temporary host upload buffers must remain alive until asynchronous copies complete.
+  The tested Xe/B580 needs `preempt_timeout_us=10000000` for long minibeam
+  kernels (driver default 640000). Configure the driver separately; do not
+  truncate trajectories or change physics to bypass its preemption timeout.
 - CUDA device code must be compiled ahead of time for the GPU that will run it.
-  Every build command must explicitly specify `-DCARBON_CUDA_ARCH=sm_75`
+  Every CUDA build command must explicitly specify `-DCARBON_CUDA_ARCH=sm_75`
   (adjust for the destination GPU: RTX 2080 Ti `sm_75`, RTX A6000 `sm_86`,
   L4 `sm_89`); direct SYCL compiler commands must specify the corresponding
   `--cuda-gpu-arch`. Do not rely on automatic architecture selection, an empty

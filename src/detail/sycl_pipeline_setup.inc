@@ -7,7 +7,8 @@
     RuntimeScope runtime_transport("transport_total");
     RuntimeScope runtime_setup("transport_setup_including_upload");
     config.validate();
-    if (device_name != "cuda") throw std::invalid_argument("device must be cuda");
+    if (device_name != "cuda" && device_name != "intel")
+        throw std::invalid_argument("device must be cuda or intel");
     std::cout<<"[transport-profile] requested="<<config.transport_profile
              <<" compiled_kernel="<<(BroadBeam?(JointResponse==3?"broadbeam_fe_independent":"broadbeam_fe"):"reference_detailed")<<"\n";
     validate_schneider_ct_startup(config);
@@ -44,8 +45,11 @@
                                   : make_sycl_queue(resolved_device_name);
     auto& queue = local_queue;
     const auto device = queue.get_device();
-    if (!device.is_gpu() || queue.get_backend() != sycl::backend::ext_oneapi_cuda)
-        throw std::invalid_argument("Transport requires a CUDA GPU queue");
+    const auto expected_backend = device_name == "cuda"
+        ? sycl::backend::ext_oneapi_cuda : sycl::backend::ext_oneapi_level_zero;
+    if (!device.is_gpu() || queue.get_backend() != expected_backend ||
+        (device_name == "intel" && device.get_info<sycl::info::device::vendor_id>() != 0x8086))
+        throw std::invalid_argument("Transport queue does not match requested GPU backend");
 
     const auto device_memory_budget_bytes =
         config.device_memory_budget_gib > 0.0
@@ -878,7 +882,8 @@
         out_values = mem_tracker.allocate<float>(v.size());
         if (!out_energies || !out_values) throw std::bad_alloc();
         queue.copy(e.data(), out_energies, e.size());
-        queue.copy(v.data(), out_values, v.size());
+        // Both temporary host vectors must survive their asynchronous copies.
+        queue.copy(v.data(), out_values, v.size()).wait_and_throw();
     };
     if (!config.minibeam_air_ionization_rate_file.empty()) {
         int z=0,a=0;double density=0,cut=0,peak=0;std::string material;
@@ -1393,7 +1398,7 @@
     const auto maximum_primary_steps = config.maximum_primary_steps;
     const auto energy_cutoff_MeV = static_cast<float>(config.energy_cutoff_MeV);
 
-    if (!(!BroadBeam && config.enable_minibeam)) {
+    if (device_name == "cuda" && !(!BroadBeam && config.enable_minibeam)) {
         cuda_clock_warmup(queue, mem_tracker);
     }
 
