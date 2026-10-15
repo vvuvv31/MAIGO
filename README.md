@@ -13,12 +13,27 @@ was not changed by this refactor.
 Supported GPU platforms are Linux with NVIDIA CUDA or Intel Arc Level Zero.
 MAIGO uses Intel LLVM/DPC++ SYCL with native AOT device images
 (`nvptx64-nvidia-cuda` or `spir64_gen`); CPU and AMD backends are not supported.
-The NVIDIA workflow is described below; Intel Arc instructions follow step 3.
-The workflow is: install the driver and CUDA Toolkit → build the CUDA-capable
-SYCL toolchain → compile MAIGO → restore physics data → supply matching case
+Choose one backend: **NVIDIA users follow steps 1–3**; **Intel Arc users go
+straight to [Intel Arc build and run](#intel-arc-build-and-run)**. Both then follow
+steps 4–6 for physics assets, case inputs and execution. Arc does not require CUDA
+or a source build of the CUDA-capable LLVM toolchain.
+
+The workflow is: install the GPU driver and matching SYCL toolchain → compile
+MAIGO for the destination GPU → restore physics data → supply matching case
 inputs → run and inspect the audits. Compilation does not require patient data.
 
-### 1. Install system dependencies and CUDA
+Clone the repository first, for either backend:
+
+```bash
+git clone --branch clean --single-branch https://github.com/vvuvv31/MAIGO.git MAIGO_clean
+cd MAIGO_clean
+export MAIGO_ROOT="$PWD"
+```
+
+Use separate build directories for different backends or GPU architectures.
+The same executable can run different cases; compilation is not per patient.
+
+### 1. NVIDIA: install system dependencies and CUDA
 
 The following package commands assume Ubuntu 24.04 LTS (Python 3.12).
 Use a host compiler supported by your chosen LLVM and CUDA versions; MAIGO
@@ -51,7 +66,7 @@ export CUDA_ROOT=/usr/local/cuda-12.6  # change to your Toolkit installation
 The CUDA version displayed by `nvidia-smi` is the driver's supported CUDA
 version, not proof that the Toolkit is installed. Both checks above should work.
 
-### 2. Build the complete Intel LLVM/SYCL toolchain
+### 2. NVIDIA: build the complete Intel LLVM/SYCL toolchain
 
 The [`libsycl` directory](https://github.com/intel/llvm/tree/sycl/libsycl) contains
 part of the runtime; building it alone does not provide the SYCL compiler and
@@ -96,13 +111,10 @@ the CUDA runtime adapter and a working NVIDIA driver. A preinstalled `icpx`
 may also be used if its CUDA backend is available; the compiler name alone
 does not establish CUDA support.
 
-### 3. Clone and compile MAIGO
+### 3. NVIDIA: compile MAIGO
 
 ```bash
-git clone --branch clean --single-branch https://github.com/vvuvv31/MAIGO.git MAIGO_clean
-cd MAIGO_clean
-export MAIGO_ROOT="$PWD"
-
+cd "$MAIGO_ROOT"
 # -DCARBON_CUDA_ARCH=sm_75: 根据自己显卡设置 / adjust for your GPU.
 cmake -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
@@ -158,19 +170,32 @@ points to the original development machine.
 
 ### Intel Arc build and run
 
-Install the Intel GPU compute runtime (Level Zero), GPU firmware and oneAPI
-DPC++ compiler. The user needs access to `/dev/dri/renderD*` (normally via the
-`render` group). Load the oneAPI environment before compiling or running:
+Start from the clone above. Install Git, CMake 3.22+, Ninja and Python, then
+install the [Intel GPU compute runtime](https://github.com/intel/compute-runtime)
+(Level Zero), GPU firmware, the matching `ocloc` offline compiler, and the
+[Intel oneAPI DPC++/C++ compiler](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html).
+Follow the packages and kernel requirements for your distribution and GPU.
+The tested system is Debian 13, Arc B580 12 GB, oneAPI 2026.1 and Xe driver
+26.22.38646.4. The user needs access to `/dev/dri/renderD*` (normally via the
+`render` group; log in again after changing group membership).
+
+Load the oneAPI environment before compiling or running. Confirm that `sycl-ls`
+lists the Intel GPU under Level Zero, then build:
 
 ```bash
+cd "$MAIGO_ROOT"
 source /opt/intel/oneapi/setvars.sh
+icpx --version
+ocloc --help
 # oneAPI 2026.1 + B580 driver 26.22: use the working Level Zero V1 adapter.
 export SYCL_UR_USE_LEVEL_ZERO_V2=0
 ONEAPI_DEVICE_SELECTOR=level_zero:gpu sycl-ls
-cmake -S . -B build-intel \
+cmake -S . -B build-intel -G Ninja \
   -DCMAKE_CXX_COMPILER=icpx -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CXX_FLAGS="-fsycl-max-parallel-link-jobs=4" \
   -DCARBON_SYCL_TARGETS=spir64_gen -DCARBON_INTEL_GPU_ARCH=bmg-g21
-cmake --build build-intel -j 4
+cmake --build build-intel --target carbon_mc -j 4
+build-intel/carbon_mc --help
 ```
 
 `bmg-g21` targets Arc B580; choose the `ocloc` device identifier for your GPU.
@@ -186,10 +211,24 @@ to respect the smaller kernel-argument budget. Intel AOT builds also generate
 separate native images per kernel to avoid incorrect CT lookup results observed
 with merged images on oneAPI 2026.1/B580. Temporary upload arrays are retained
 until their asynchronous transfers complete; physics and RNG remain unchanged.
-Keep the eight release YAMLs as CUDA defaults; copy the desired configuration,
-set `device: intel`, and run `build-intel/carbon_mc --config <your-config.yaml>`.
-Use an absolute-path configuration for a copy outside `config/`, so package
-paths resolve to the same assets. There is no CPU or alternative-backend fallback.
+Keep the eight release YAMLs as CUDA defaults. Step 6 shows how to make a
+private `device: intel` copy and run it from the repository root. There is no
+CPU or alternative-backend fallback.
+
+**AOT happens during the build, including the final link.** That link compiles
+GPU kernels to native machine code and embeds them in the executable; it can
+therefore take much longer than an ordinary C++ link. `cmake --build -j 4`
+controls build tasks, while `-fsycl-max-parallel-link-jobs=4` controls device
+compilation inside the SYCL link. Adjust both to available CPU and RAM; eight
+parallel link jobs were also tested on the 62 GiB B580 host. Selective pipeline
+compilation can further reduce build work.
+
+Build once and reuse the executable across cases and continuous batches.
+Changing CT, spot weights, particle counts or supported YAML parameters does
+not require rebuilding. Changes to C++ code, compiled pipeline selection,
+toolchain or destination GPU architecture do. A custom C++ full-plan driver
+also needs an AOT build once; ordinary `carbon_mc` runs need no extra driver.
+Neither build time nor AOT link time belongs in cold-start throughput.
 
 On the tested Xe/B580 system, the compute engine's default **640 ms preemption
 timeout** resets longer carbon CT minibeam kernels. Set it to 10 seconds before
@@ -280,20 +319,49 @@ restore can satisfy by itself.
 
 ### 6. Run a scene or continuous batches
 
-Run from the repository root, keeping the SYCL runtime library path configured
-and `CUDA_DISABLE_PTX_JIT=1` set.
-After supplying the matching inputs, start with a small execution check:
+Run from the repository root after supplying the matching inputs. In each new
+shell, restore the appropriate toolchain environment from above and set
+`MAIGO_ROOT` to your checkout. Select **one** of the following launch setups.
+
+For NVIDIA (with the CUDA-capable SYCL library path configured):
 
 ```bash
 cd "$MAIGO_ROOT"
 export CUDA_DISABLE_PTX_JIT=1
-build/carbon_mc --config config/proton_ct_broadbeam.yaml --histories 10000
+export ONEAPI_DEVICE_SELECTOR=cuda:gpu
+export MAIGO_BINARY="$MAIGO_ROOT/build/carbon_mc"
+export MAIGO_CONFIG="$MAIGO_ROOT/config/proton_ct_broadbeam.yaml"
+```
+
+For Arc (after configuring the Xe timeout where required):
+
+```bash
+cd "$MAIGO_ROOT"
+source /opt/intel/oneapi/setvars.sh
+export SYCL_UR_USE_LEVEL_ZERO_V2=0
+export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
+export CUDA_DISABLE_PTX_JIT=1
+mkdir -p tmp/arc_run
+sed 's/^device: cuda$/device: intel/' config/proton_ct_broadbeam.yaml \
+  > tmp/arc_run/proton_ct_broadbeam.yaml
+export MAIGO_BINARY="$MAIGO_ROOT/build-intel/carbon_mc"
+export MAIGO_CONFIG="$MAIGO_ROOT/tmp/arc_run/proton_ct_broadbeam.yaml"
+```
+
+This private copy changes only the requested device. Relative data/input paths
+resolve from the repository root; keep running there. Use the same approach
+for other presets, or supply your own complete case configuration.
+
+Start with a small execution check, using the selected backend:
+
+```bash
+"$MAIGO_BINARY" --config "$MAIGO_CONFIG" --histories 10000
 ```
 
 Continuous batches share one GPU context and loaded physics packages:
 
 ```bash
-build/carbon_mc --config config/proton_ct_broadbeam.yaml \
+"$MAIGO_BINARY" --config "$MAIGO_CONFIG" \
   --batch-count 3 --histories-per-batch 100000 \
   --batch-output out/proton_ct_broadbeam_first_batches
 ```
