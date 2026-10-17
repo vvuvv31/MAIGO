@@ -35,8 +35,8 @@ extensions/work/build/copper_ion_transport/validate \
 
 ## 运行时范围
 
-`g4_ion_delta` 用于两个碳微束：主 C12 与带电碎片使用 native 受限平均能损、G4 ion/universal 涨落和 δ 转移；碎片采用 Urban 相关角度/位移，并与按物种铜核弹性竞争。MSC 的几何步长用于位移，真实步长用于能损和光学深度。级联达到原有代数上限后停止新的非弹性反应，但继续弹性/EM 输运。
+两个碳微束使用 `g4_delta`，并显式开启 `minibeam_copper_fragment_native_transport: true`：主 C12 与带电碎片使用 native 受限平均能损、G4 ion/universal 涨落和 δ 转移；碎片采用 Urban 相关角度/位移，并与按物种铜核弹性竞争。MSC 的几何步长用于位移，真实步长用于能损和光学深度。级联达到原有代数上限后停止新的非弹性反应，但继续弹性/EM 输运。
 
-质子两个预设保留 `g4_universal_delta` 原有实现。C12 主粒子的 A×amu 校准运动学不变；碎片按 native 物种质量处理。δ 电子与铜核反冲能量仍记入束线移除能量，不向患者局部沉积。水/CT continuous26、strict26、电子/光子输运及核非弹性包不变。
+质子两个预设也使用 `g4_delta`，按质子身份保留原 Universal 标定，碎片原生输运开关默认关闭。C12 主粒子的 A×amu 校准运动学不变；碎片按 native 物种质量处理。δ 电子与铜核反冲能量仍记入束线移除能量，不向患者局部沉积。水/CT continuous26 和核非弹性包不变。
 
 有限弹性事件库的收敛性、铜 δ 电子的显式输运以及碳微束剂量验收仍未完成；GPU completion/energy/coverage/zero-overflow 审计必须通过，不能用 smoke 测试宣称 TOPAS 剂量精度或性能。

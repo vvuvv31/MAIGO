@@ -53,13 +53,14 @@ def main():
             r=subprocess.run([str(a.binary.resolve()),'--config',str(f)],cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
             ok=r.returncode!=0 and '[unified-em-audit]' not in r.stdout
             reports.append(dict(key=key,value=0,passed=ok));assert ok,r.stdout
-        # The retired monolithic minibeam schedule must fail before transport.
-        c=yaml.safe_load((ROOT/'config/carbon_water_minibeam.yaml').read_text())
-        c['minibeam_primary_pipeline']='combined'
-        f=Path(tmp)/'case.yaml';f.write_text(yaml.safe_dump(c,sort_keys=False))
-        r=subprocess.run([str(a.binary.resolve()),'--config',str(f)],cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
-        ok=r.returncode!=0 and 'minibeam_primary_pipeline must be compact' in r.stdout and '[unified-em-audit]' not in r.stdout
-        reports.append(dict(key='minibeam_primary_pipeline',value='combined',passed=ok));assert ok,r.stdout
+        # Compact is unconditional; the redundant selector is no longer accepted.
+        for value in ['compact', 'combined']:
+            c=yaml.safe_load((ROOT/'config/carbon_water_minibeam.yaml').read_text())
+            c['minibeam_primary_pipeline']=value
+            f=Path(tmp)/'case.yaml';f.write_text(yaml.safe_dump(c,sort_keys=False))
+            r=subprocess.run([str(a.binary.resolve()),'--config',str(f)],cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+            ok=r.returncode!=0 and 'Unsupported preset configuration key' in r.stdout and '[unified-em-audit]' not in r.stdout
+            reports.append(dict(key='minibeam_primary_pipeline',value=value,passed=ok));assert ok,r.stdout
         # Secondary mean-loss defaults must not relax the primary requirement.
         c=dict(cfg);c.update(run_mode='production',enable_energy_straggling=False,
                             enable_secondary_energy_straggling=False)

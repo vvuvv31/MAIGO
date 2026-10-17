@@ -40,6 +40,6 @@ minibeam_copper_fragment_enable_energy_straggling: false
 
 模体/患者 continuous26 次级路径关闭受限连续损失涨落及聚合δ矩抽样，保留相应平均能损、全部带电次级输运、散射、核反应和中性产物能量sink。它不关闭核反应或散射的随机性，也不改变束流初始能量展宽。
 
-质子铜碎片路径关闭当前受限/总损失涨落调用，保留平均损失。原生碳铜碎片 `g4_ion_delta` 路径关闭的是 **restricted fluctuations**：仍执行硬δ Poisson/能谱/形状因子抽样，保留原有硬电离能损。其开关不等同于完全确定性总能损。开启时必须保持原损失与RNG序列；primary 调用显式保留完整涨落。
+质子铜碎片路径关闭当前受限/总损失涨落调用，保留平均损失。`minibeam_copper_fragment_native_transport: true` 的原生铜碎片路径关闭的是 **restricted fluctuations**：仍执行硬δ Poisson/能谱/形状因子抽样，保留原有硬电离能损。其开关不等同于完全确定性总能损。开启时必须保持原损失与RNG序列；primary 调用显式保留完整涨落。
 
 生产配置继续要求 primary 涨落开启；次级开关可独立设置。Cu数据、原生Urban、species弹性包、平均能损、核反应与全部运行审计要求保持有效。

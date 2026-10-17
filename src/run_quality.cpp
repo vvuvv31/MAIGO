@@ -133,13 +133,14 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         report.approximations.push_back({"all_ion_elastic_candidate",
             "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",1.,0.});
     }
-    if (config.enable_minibeam && config.minibeam_copper_straggling_model == "g4_ion_delta") {
+    if (config.enable_minibeam && config.minibeam_copper_straggling_model == "g4_delta") {
+        report.approximations.push_back({"copper_native_fluctuation",
+            "Shared native Cu loss engine selects primary parameters by ZA; restricted/total means and calibrated hard-delta sampling remain explicit. Delta electrons are beamline energy sinks",1.,0.});
+    }
+    if (config.enable_minibeam && config.minibeam_copper_fragment_native_transport) {
         report.approximations.push_back({"copper_ion_transport",
-            "Cu primary/charged fragments use native restricted mean, configured restricted G4 ion/universal fluctuations plus sampled hard delta transfers, species Urban scattering and finite species elastic banks. Delta electrons and nuclear neutrals remain beamline energy sinks. Elastic bank convergence and carbon minibeam dose acceptance remain pending",1.,0.});
+            "Cu charged fragments use native restricted mean, independently configured restricted fluctuations plus calibrated hard delta transfers, species Urban scattering and finite species elastic banks. This fragment path is independent of the primary fluctuation selector. Delta electrons and nuclear neutrals remain beamline energy sinks. Elastic bank convergence and carbon minibeam dose acceptance remain pending",1.,0.});
     } else if (config.enable_minibeam) {
-        if (config.minibeam_copper_straggling_model == "g4_universal_delta")
-            report.approximations.push_back({"copper_proton_total_fluctuation",
-                "Native copper proton loss: native 0.05 mm cut plus sampled delta transfers; delta electrons are not transported",1.,0.});
         report.approximations.push_back({"minibeam_copper_candidate",
             "Copper primary transport uses the configured source ZA, elastic bank and nuclear event package; charged nuclear products use species stopping tables with source-charge-scaled fallback in Copper and Highland secondary MCS. Nuclear neutrals remain an explicit beamline energy sink; dose acceptance pending",1.,0.});
     }

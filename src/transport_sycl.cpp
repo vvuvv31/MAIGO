@@ -14,8 +14,7 @@
 #include "carbon/hadronic_rate_cache.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/device.hpp"
-#include "carbon/copper_proton_fluctuation.hpp"
-#include "carbon/copper_ion_fluctuation.hpp"
+#include "carbon/copper_fluctuation.hpp"
 #include "carbon/inelastic.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/particle.hpp"
@@ -1110,7 +1109,6 @@ template<class Pipeline>
 [[gnu::noinline]] TransportResult transport_sycl(const TransportConfig& config,
     const StoppingPowerTable& stopping_power,const std::string& device_name,SyclTransportContext* context) {
     config.validate();
-    const bool broadbeam = config.transport_profile == "broadbeam_fast";
 
     const auto run = [&](auto pipeline) {
         using Pipeline = decltype(pipeline);
@@ -1132,7 +1130,7 @@ template<class Pipeline>
 #endif
 #if CARBON_ENABLE_GENERIC
     if (config.transport_pipeline == "generic") {
-        if (broadbeam) return run(pipelines::Generic<true>{});
+        if (config.transport_profile == "broadbeam_fast") return run(pipelines::Generic<true>{});
         return run(pipelines::Generic<false>{});
     }
 #endif

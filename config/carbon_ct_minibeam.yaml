@@ -35,7 +35,7 @@ em_package_file: data/em/ions/continuous26.bin
 enable_energy_straggling: true
 enable_secondary_energy_straggling: false
 ct_secondary_exact_faces: true
-history_chunk_size: 131072
+history_chunk_size: 2097152
 secondary_queue_capacity: 8000000
 secondary_species_grouping: true
 secondary_step_chunking: true
@@ -81,10 +81,10 @@ minibeam_copper_inclxx_file: data/nuclear/copper/carbon/cascade.cinpkg
 minibeam_copper_ion_stopping_power_file: data/stopping/copper/ions_carbon.csv
 minibeam_copper_ion_cross_section_file: data/nuclear/copper/ion_cross_sections.csv
 minibeam_air_urban_package_file: data/scattering/urban/air.bin
-minibeam_copper_straggling_model: g4_ion_delta
+minibeam_copper_straggling_model: g4_delta
 minibeam_copper_primary_native_mean_loss: true
+minibeam_copper_fragment_native_transport: true
 minibeam_primary_specialization: false
-minibeam_primary_pipeline: compact
 ct_grid_file: inputs/lung_minibeam/ct.bin
 unified_water_nuclear_transport: false
 urban_ct_density_scaling: true
@@ -95,6 +95,6 @@ elastic_recoil_stopping_file: data/elastic/schneider/carbon/recoil_stopping.bin
 primary_atomic_number: 6
 primary_mass_number: 12
 initial_energy_MeVu: 250
-minibeam_air_slit_max_step_mm: 0.05
+minibeam_air_slit_max_step_mm: 0.2
 minibeam_copper_fragment_elastic_file: data/elastic/copper/carbon/fragments.csv
 minibeam_copper_fragment_urban_package_file: data/scattering/urban/copper_fragments.bin

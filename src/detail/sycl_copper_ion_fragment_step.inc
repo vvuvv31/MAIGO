@@ -49,7 +49,9 @@ if (!f_in_copper) {
         minibeam_copper_ion_xs_device, minibeam_copper_ion_xs_present_device,
         minibeam_copper_ion_xs_grid_size, minibeam_copper_ion_xs_minimum_energy,
         minibeam_copper_ion_xs_inverse_step, f_energy, f_charge, f_a);
-    f_rate = f_elastic_rate + (f_terminal ? 0.0F : f_native_inelastic_rate);
+    // Generation-limited cascades omit inelastic reactions and retain their
+    // omitted optical depth; direct primary children have no terminal ledger.
+    f_rate = f_elastic_rate + (f_terminal_tau ? 0.0F : f_native_inelastic_rate);
     if (f_rate > 0.0F && !f_tau_active) {
         f_tau = -sycl::log(sycl::fmax(1.0e-7F,
             rng::uniform01(f_seed, f_stream, f_step, 2)));
@@ -87,7 +89,7 @@ if (!f_in_copper) {
     f_x += f_scattering.final_geom_path_mm * f_direction.x + f_scattering.displacement_mm.x;
     f_y += f_scattering.final_geom_path_mm * f_direction.y + f_scattering.displacement_mm.y;
     f_z += f_scattering.final_geom_path_mm * f_direction.z + f_scattering.displacement_mm.z;
-    if (f_terminal) f_ignored_tau += f_native_inelastic_rate * f_path;
+    if (f_terminal_tau) *f_terminal_tau += f_native_inelastic_rate * f_path;
     const auto f_range = f_context.range(f_energy);
     if (f_path >= f_range) { f_energy = 0; break; }
     auto f_mean = f_context.dedx(f_energy) * f_path;
@@ -95,9 +97,11 @@ if (!f_in_copper) {
     std::uint64_t f_draw_index = 0;
     auto f_uniform = [&]() { return (rng::random_u32(
         f_seed, f_stream, (std::uint64_t(f_step) << 32) | f_draw_index++, 124) >> 8) * 0x1p-24f; };
-    const auto f_draw = copper_ion_total_fluctuation(f_energy, f_mass, f_charge, f_a,
-        f_context.factor, f_mean, f_path, minibeam_copper_density, f_uniform,
-        minibeam_copper_fragment_enable_energy_straggling);
+    const auto f_draw = sample_copper_fluctuation(
+        {f_energy, f_mass, f_charge, f_a, f_context.factor, f_mean, f_path,
+         minibeam_copper_density, CopperMeanLoss::restricted,
+         minibeam_copper_fragment_enable_energy_straggling,
+         CopperFluctuationContext::native_ion_fragment}, f_uniform);
     f_count(f_draw.valid ? copper_proton_fragment_loss_slot : copper_proton_loss_failure_slot);
     if (!f_draw.valid) break;
     if (f_draw.loss >= f_energy - energy_cutoff_MeV) { f_energy = 0; break; }
@@ -113,7 +117,7 @@ if (!f_in_copper) {
             }
             f_elastic_rate = f_bank[minibeam_elastic_nearest(f_bank, f_bank_size, e)].macroscopic_rate_per_mm;
         }
-        const auto inelastic = f_terminal ? 0.0F : minibeam_copper_ion_inelastic_rate(
+        const auto inelastic = f_terminal_tau ? 0.0F : minibeam_copper_ion_inelastic_rate(
             minibeam_copper_ion_xs_device, minibeam_copper_ion_xs_present_device,
             minibeam_copper_ion_xs_grid_size, minibeam_copper_ion_xs_minimum_energy,
             minibeam_copper_ion_xs_inverse_step, f_energy, f_charge, f_a);

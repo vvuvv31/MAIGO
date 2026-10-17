@@ -699,19 +699,25 @@ void TransportConfig::validate() const {
                 (run_mode == RunMode::production || multiple_scattering_model != "urban_v2" ||
                  !minibeam_copper_enable_mcs ||
                  !minibeam_copper_enable_energy_straggling ||
-                 (minibeam_copper_straggling_model != "g4_universal_delta" &&
-                  minibeam_copper_straggling_model != "g4_ion_delta")))
+                 minibeam_copper_straggling_model != "g4_delta"))
                 throw std::invalid_argument("Native Cu primary mean requires Urban v2 and finite-cut fluctuations");
             if (minibeam_copper_straggling_model != "clipped_gaussian" &&
-                minibeam_copper_straggling_model != "g4_universal_delta" &&
-                minibeam_copper_straggling_model != "g4_ion_delta")
+                minibeam_copper_straggling_model != "g4_delta")
                 throw std::invalid_argument("Unknown copper straggling model");
-            if (minibeam_copper_straggling_model == "g4_ion_delta" &&
-                (primary_atomic_number != 6 || primary_mass_number != 12 ||
-                 !minibeam_copper_primary_native_mean_loss ||
-                 minibeam_copper_fragment_urban_package_file.empty() ||
+            if (minibeam_copper_straggling_model == "g4_delta" &&
+                !(primary_atomic_number == 1 && primary_mass_number == 1) &&
+                !minibeam_copper_primary_native_mean_loss)
+                throw std::invalid_argument("Cu ion fluctuations require a native restricted primary mean");
+            if (minibeam_copper_fragment_native_transport &&
+                (minibeam_copper_fragment_urban_package_file.empty() ||
                  (minibeam_copper_enable_elastic && minibeam_copper_fragment_elastic_file.empty())))
-                throw std::invalid_argument("Cu ion transport requires C12, native mean, native fragment Urban data and a species-specific elastic bank");
+                throw std::invalid_argument("Native Cu fragment transport requires fragment Urban data and a species-specific elastic bank when elastic is enabled");
+            if (minibeam_copper_fragment_native_transport &&
+                (run_mode == RunMode::production || multiple_scattering_model != "urban_v2" ||
+                 !minibeam_copper_enable_mcs ||
+                 std::abs(minibeam_copper_density_g_per_cm3 - 8.96) > 1e-5 ||
+                 minibeam_copper_fragment_straggling_scale != 1.0))
+                throw std::invalid_argument("Native Cu fragment transport requires research/smoke, Urban v2, G4_Cu density and unit fragment straggling scale");
             if (minibeam_copper_straggling_model != "clipped_gaussian" &&
                 std::abs(minibeam_copper_density_g_per_cm3 - 8.96) > 1e-5)
                 throw std::invalid_argument("Native copper cut is pinned to G4_Cu at 8.96 g/cm3");
@@ -1348,13 +1354,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values, "secondary_species_grouping", config.secondary_species_grouping);
     config.minibeam_primary_specialization = parse_bool(
         values, "minibeam_primary_specialization", config.minibeam_primary_specialization);
-    {
-        const auto it = values.find("minibeam_primary_pipeline");
-        if (it != values.end()) config.minibeam_primary_pipeline = it->second;
-        if (config.minibeam_primary_pipeline != "compact")
-            throw std::invalid_argument(
-                "minibeam_primary_pipeline must be compact");
-    }
     config.secondary_step_chunking = parse_bool(
         values, "secondary_step_chunking", config.secondary_step_chunking);
     config.enable_inelastic =
@@ -1480,6 +1479,9 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_copper_primary_native_mean_loss = parse_bool(
         values, "minibeam_copper_primary_native_mean_loss",
         config.minibeam_copper_primary_native_mean_loss);
+    config.minibeam_copper_fragment_native_transport = parse_bool(
+        values, "minibeam_copper_fragment_native_transport",
+        config.minibeam_copper_fragment_native_transport);
     if (const auto it = values.find("minibeam_copper_straggling_model"); it != values.end())
         config.minibeam_copper_straggling_model = it->second;
     config.minibeam_copper_straggling_scale = parse_number(

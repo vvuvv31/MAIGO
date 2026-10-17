@@ -36,7 +36,7 @@ em_package_file: data/em/ions/continuous26.bin
 enable_energy_straggling: true
 enable_secondary_energy_straggling: false
 ct_secondary_exact_faces: true
-history_chunk_size: 262144
+history_chunk_size: 1048576
 secondary_queue_capacity: 8000000
 secondary_species_grouping: false
 secondary_step_chunking: false
@@ -82,11 +82,11 @@ minibeam_copper_inclxx_file: data/nuclear/copper/proton/cascade.cinpkg
 minibeam_copper_ion_stopping_power_file: data/stopping/copper/ions_proton.csv
 minibeam_copper_ion_cross_section_file: data/nuclear/copper/ion_cross_sections.csv
 minibeam_air_urban_package_file: data/scattering/urban/air.bin
-minibeam_copper_straggling_model: g4_universal_delta
+minibeam_copper_straggling_model: g4_delta
 minibeam_air_ionization_rate_file: data/ionization/air/proton_rate.csv
 minibeam_copper_primary_native_mean_loss: false
+minibeam_copper_fragment_native_transport: false
 minibeam_primary_specialization: false
-minibeam_primary_pipeline: compact
 ct_grid_file: inputs/lung_minibeam/ct.bin
 unified_water_nuclear_transport: false
 urban_ct_density_scaling: true

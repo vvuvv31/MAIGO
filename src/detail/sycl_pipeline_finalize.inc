@@ -83,11 +83,12 @@
                    minibeam_event_counts_host.data(),
                    minibeam_event_counts_host.size());
         queue.wait_and_throw();
-        if (copper_proton_native_fluctuation) {
+        if (copper_native_fluctuations || copper_native_fragment_transport) {
             if(air_ion_count)std::cout<<"AIR_IONIZATION_CLOCK steps="
                 <<minibeam_event_counts_host[air_ion_step_slot]<<" proposals="
                 <<minibeam_event_counts_host[air_ion_proposal_slot]<<'\n';
-            std::cout << (copper_ion_native_transport ? "COPPER_ION_LOSS_QUALITY failures=" : "COPPER_PROTON_LOSS_QUALITY failures=")
+            std::cout << (primary_atomic_number == 1 && primary_mass_number == 1
+                             ? "COPPER_PROTON_LOSS_QUALITY failures=" : "COPPER_ION_LOSS_QUALITY failures=")
                       << minibeam_event_counts_host[copper_proton_loss_failure_slot]
                       << " primary=" << minibeam_event_counts_host[copper_proton_primary_loss_slot]
                       << " fragment=" << minibeam_event_counts_host[copper_proton_fragment_loss_slot] << '\n';
@@ -95,7 +96,7 @@
                 throw std::runtime_error("Invalid copper ion fluctuation draw: reject partial dose");
         }
 
-        if (copper_ion_native_transport) {
+        if (copper_native_fragment_transport) {
             std::cout << "COPPER_ION_TRANSPORT_QUALITY failures="
                 << minibeam_event_counts_host[copper_ion_transport_failure_slot]
                 << " fragment_urban=" << minibeam_event_counts_host[copper_fragment_urban_slot]

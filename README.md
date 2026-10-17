@@ -399,6 +399,21 @@ Pipeline layout is documented in [transport pipelines](docs/transport_pipelines.
 Ion step caps are forced during configuration loading: **broadbeam 1.0 mm**,
 **minibeam 0.5 mm**, and **minibeam copper 0.05 mm**, for both water and CT.
 These effective caps override the corresponding YAML values.
+Carbon CT minibeam slit air defaults to a separate 0.2 mm cap; copper remains
+0.05 mm and the patient cap remains 0.5 mm. See the
+[slit-air timing and dose comparison](docs/carbon_minibeam_slit_air_20261016.md).
+The dedicated proton and carbon CT minibeam beamlines continue native steps in segments,
+regrouping live tracks by current material and energy while preserving both
+Urban states, RNG identity, clocks and ledgers. See the
+[matched two-GPU timing and implementation checks](docs/carbon_minibeam_beamline_continuation_20261016.md).
+The proton CT minibeam default primary pool is 1,048,576 histories; explicit
+user chunk sizes remain authoritative. See the
+[three-case proton timing and implementation checks](docs/proton_minibeam_beamline_continuation_20261016.md).
+Direct charged children of carbon CT primary copper reactions also continue in
+64-native-step segments, regrouped by species, energy and current Cu/air region.
+The original RNG steps, Urban state, shared nuclear optical depth and energy
+bookkeeping are retained. See the
+[Cu-child scheduling comparison](docs/carbon_minibeam_cu_child_continuation_20261016.md).
 
 Release presets retain primary energy-loss straggling and disable secondary
 straggling by default (`enable_secondary_energy_straggling: false`). Minibeams
@@ -454,9 +469,18 @@ sampler: elastic and inelastic rates compete through one clock per track. Second
 continuation preserves the remaining depth and draw counter; the inelastic generation
 limit does not disable elastic scattering.
 
-Proton minibeams retain `g4_universal_delta`; carbon minibeams use `g4_ion_delta`
-with native Cu fragment Urban and species elastic transport. See
-[Cu ion extraction and limits](extensions/copper_ion_transport/README.md).
+All four minibeams select `minibeam_copper_straggling_model: g4_delta` and use one
+[shared Cu fluctuation engine](docs/copper_fluctuation_engine.md). Primary ZA
+selects proton or ion parameters; total/restricted mean-loss types remain explicit.
+`minibeam_copper_primary_native_mean_loss` independently selects the primary mean.
+`minibeam_copper_fragment_native_transport` independently selects native Cu
+fragment Urban and species elastic packages (carbon defaults: `true`; proton:
+`false`). Changing the primary fluctuation model does not select fragment
+transport or its packages. Native ion fragments retain their extracted
+calibration, including proton fragments. The two old species-named model values
+are removed; custom configurations must use `g4_delta` and the explicit fragment
+switch. Additional source species are not enabled.
+See [Cu ion extraction and limits](extensions/copper_ion_transport/README.md).
 
 The data/inputs are local external assets and are excluded from Git. The
 installed inventory is `docs/copied_inputs.json`; expanded preset dependencies
@@ -506,6 +530,12 @@ Explicit electromagnetic electron/photon transport was subsequently removed. See
 `docs/no_neutral_20261007.md` for removal scope and matched regression evidence. The proton water minibeam
 therefore no longer includes the former neutron-dose contribution.
 TPS isocenter input uses only the supported `tps_isocenter_z_mm` key.
+
+Current three-case full-plan GPU/TOPAS gamma, per-device throughput, statistical
+uncertainty and error-distribution figures are collected in the
+[2026-10-17 validation report](docs/full_plan_validation_20261017/README.md).
+Carbon broadbeam TOPAS uncertainties are explicitly marked as estimates from
+matched low-statistics reruns; the original reference doses are retained.
 
 For a matched implementation regression, supply a frozen control executable
 and its preset directory with neutron transport disabled in every control

@@ -184,7 +184,7 @@
     if (context && retain_physics_device) {
         if (!uses_urban_package) context->impl_->resident_urban.reset();
         if (BroadBeam || !config.enable_minibeam) context->impl_->resident_air.reset();
-        if (BroadBeam || !config.enable_minibeam || config.minibeam_copper_straggling_model != "g4_ion_delta")
+        if (BroadBeam || !config.enable_minibeam || !config.minibeam_copper_fragment_native_transport)
             context->impl_->resident_copper_ions.reset();
     }
     const auto resident_tables = [&](auto& slot,const std::string& key,const char* name) {
@@ -237,7 +237,7 @@
     UrbanMcsView copper_fragment_urban_device{};
     std::vector<UrbanMcsSpecies> copper_fragment_species_host;
     std::shared_ptr<ResidentPhysicsTables> copper_ion_resident;
-    if (!BroadBeam && config.enable_minibeam && config.minibeam_copper_straggling_model == "g4_ion_delta") {
+    if (!BroadBeam && config.enable_minibeam && config.minibeam_copper_fragment_native_transport) {
         const auto& package = inputs.get<UrbanMcsPackage>(input_cache_key(config.minibeam_copper_fragment_urban_package_file),
             [&] { return UrbanMcsPackage::load(config.minibeam_copper_fragment_urban_package_file); });
         if (package.materials.size() != 1 || package.view().material(-2,8.96F) < 0)
@@ -703,7 +703,7 @@
             [&] { return CrossSectionTable::from_csv(config.minibeam_copper_cross_section_file); });
         const auto& elastic = inputs.get<std::vector<CopperElasticRecord>>(input_cache_key(config.minibeam_copper_elastic_file),
             [&] { return load_copper_elastic_events(config.minibeam_copper_elastic_file); });
-        if(config.minibeam_copper_straggling_model=="g4_ion_delta" && config.minibeam_copper_enable_elastic) {
+        if(config.minibeam_copper_fragment_native_transport && config.minibeam_copper_enable_elastic) {
             const auto& bank=inputs.get<CopperFragmentElasticBank>(input_cache_key(config.minibeam_copper_fragment_elastic_file),
                 [&]{return load_copper_fragment_elastic(config.minibeam_copper_fragment_elastic_file,copper_fragment_species_host);});
             if(copper_ion_resident) {
@@ -1263,10 +1263,10 @@
     const auto minibeam_copper_fragment_cascade_generations =
         config.minibeam_copper_fragment_cascade_generations;
     const auto minibeam_copper_enable_mcs = config.minibeam_copper_enable_mcs;
-    const bool copper_proton_native_fluctuation =
-        config.minibeam_copper_straggling_model != "clipped_gaussian";
-    const bool copper_ion_native_transport =
-        config.minibeam_copper_straggling_model == "g4_ion_delta";
+    const bool copper_native_fluctuations =
+        config.minibeam_copper_straggling_model == "g4_delta";
+    const bool copper_native_fragment_transport =
+        config.minibeam_copper_fragment_native_transport;
     const bool copper_primary_native_mean = config.minibeam_copper_primary_native_mean_loss;
     const auto minibeam_copper_enable_energy_straggling =
         config.minibeam_copper_enable_energy_straggling;

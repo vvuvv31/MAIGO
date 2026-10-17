@@ -1,3 +1,13 @@
+    struct CopperChildContinuation {
+        float energy, x, y, z;
+        Direction3F direction;
+        std::uint32_t step;
+        float copper_path, nuclear_tau;
+        UrbanV2TrackState urban_state;
+        bool tau_active, at_boundary;
+        unsigned bucket;
+    };
+    static_assert(std::is_trivially_copyable_v<CopperChildContinuation>);
 // Shared primary phase, included inside transport_pipeline<Pipeline>.
     RuntimeScope runtime_steps("transport_loop_including_scoring_and_queue_transfers");
     double primary_kernel_seconds = 0.0;
@@ -74,6 +84,80 @@
         ct_spacing_x==voxel_size_x_mm && ct_spacing_y==voxel_size_y_mm &&
         ct_spacing_z==depth_bin_width_mm && ct_origin_x==voxel_min_x_mm &&
         ct_origin_y==voxel_min_y_mm && ct_origin_z==0.0F;
+    // CT proton broadbeam and proton/carbon minibeam continuation. Pending scores and every
+    // cross-step physics/RNG state survive without resampling or early scoring.
+    struct PrimaryContinuation {
+        PrimaryMediumEntryState entry{};
+        float history_deposited_MeV{};
+        double grid_in_pending_MeV{};
+        double grid_out_pending_MeV{};
+        std::uint64_t local_schneider_rate_queries{};
+        std::uint32_t steps{};
+        UrbanV2TrackState global_urban_state{};
+        bool global_urban_boundary{};
+        double pending_primary_depth_MeV{};
+        int pending_primary_bin{};
+        double pending_primary_voxel_MeV{};
+        std::size_t pending_primary_voxel{};
+        float nuclear_tau_remaining{};
+        HadronicRateCache primary_hadronic_cache{};
+        bool nuclear_tau_active{};
+        std::uint32_t nuclear_tau_rng_step{};
+        UnifiedEmClock unified_primary_clock{};
+        UnifiedEmState unified_primary_state{};
+        std::uint64_t unified_primary_counter{};
+        std::uint32_t interaction_section{};
+        float interaction_density{};
+    };
+    static_assert(std::is_trivially_copyable_v<PrimaryContinuation>);
+    const bool use_primary_continuation = enable_ct_grid &&
+        (std::is_same_v<Pipeline,pipelines::ProtonMinibeam> ||
+         std::is_same_v<Pipeline,pipelines::CarbonMinibeam> ||
+         (std::is_same_v<Pipeline,pipelines::ProtonBroadbeam> && broadbeam_ct_primary_specialize && primary_shared_ct_cell));
+    auto* continuation_states=use_primary_continuation?mem_tracker.allocate<PrimaryContinuation>(history_chunk):nullptr;
+    auto* continuation_input=use_primary_continuation?mem_tracker.allocate<std::uint32_t>(history_chunk):nullptr;
+    auto* continuation_output=use_primary_continuation?mem_tracker.allocate<std::uint32_t>(history_chunk):nullptr;
+    auto* continuation_count=use_primary_continuation?mem_tracker.allocate<std::uint32_t>(1):nullptr;
+    constexpr unsigned continuation_buckets=27*16;
+    auto* continuation_histogram=use_primary_continuation?mem_tracker.allocate<std::uint32_t>(continuation_buckets):nullptr;
+    auto* continuation_offsets=use_primary_continuation?mem_tracker.allocate<std::uint32_t>(continuation_buckets):nullptr;
+    if(use_primary_continuation && (!continuation_states || !continuation_input || !continuation_output ||
+        !continuation_count || !continuation_histogram || !continuation_offsets))throw std::bad_alloc();
+    float continuation_max_energy=initial_energy_MeV;
+    for(const auto& spot:config.primary_spot_batch)continuation_max_energy=std::max(continuation_max_energy,spot.floats[0]);
+    std::vector<sycl::event> continuation_extra_events;
+    std::cout << "[primary-continuation] enabled=" << use_primary_continuation
+              << " bytes=" << sizeof(PrimaryContinuation) << " segment_steps=64\n";
+    // Cu/air native-beamline_step continuation keeps both material states and clocks.
+    // Checkpoints change scheduling only; terminated tracks still reach the
+    // compact entry partition exactly once, including zero-energy_MeV records.
+    struct BeamlineContinuation {
+        float energy_MeV, position_x_mm, position_y_mm, position_z_mm, direction_x, direction_y, direction_z, air_loss_MeV;
+        UrbanV2TrackState air_urban_state;
+        std::uint64_t air_urban_step;
+        DiscreteDeltaClockCandidate<float> air_ion_clock;
+        float air_ion_threshold, air_ion_rate;
+        bool air_boundary, ever_in_copper;
+        float incident_energy_MeV, air_loss_at_entry_MeV, removed_energy_MeV;
+        std::uint64_t beamline_step;
+        float nuclear_tau_remaining;
+        bool nuclear_tau_active;
+        UrbanV2TrackState copper_urban_state;
+        bool copper_boundary, previous_in_copper;
+        unsigned order_bucket;
+    };
+    static_assert(std::is_trivially_copyable_v<BeamlineContinuation>);
+    const bool use_beamline_continuation=(std::is_same_v<Pipeline,pipelines::ProtonMinibeam> ||
+        std::is_same_v<Pipeline,pipelines::CarbonMinibeam>) && enable_ct_grid && queue_copper_primary_children;
+    auto* beamline_states=use_beamline_continuation?mem_tracker.allocate<BeamlineContinuation>(history_chunk):nullptr;
+    auto* beamline_resume_input=use_beamline_continuation?mem_tracker.allocate<std::uint32_t>(history_chunk):nullptr;
+    auto* beamline_resume_output=use_beamline_continuation?mem_tracker.allocate<std::uint32_t>(history_chunk):nullptr;
+    auto* beamline_resume_count=use_beamline_continuation?mem_tracker.allocate<std::uint32_t>(1):nullptr;
+    auto* beamline_histogram=use_beamline_continuation?mem_tracker.allocate<std::uint32_t>(32):nullptr;
+    auto* beamline_offsets=use_beamline_continuation?mem_tracker.allocate<std::uint32_t>(32):nullptr;
+    if(use_beamline_continuation && (!beamline_states || !beamline_resume_input || !beamline_resume_output || !beamline_resume_count || !beamline_histogram || !beamline_offsets))throw std::bad_alloc();
+    std::vector<sycl::event> beamline_extra_events, beamline_order_events;
+    std::cout<<"[beamline-continuation] enabled="<<use_beamline_continuation<<" bytes="<<sizeof(BeamlineContinuation)<<" segment=64\n";
     std::vector<sycl::event> primary_events;
     primary_events.reserve((compact_minibeam_primary ? 2 : 1) *
         ((number_of_histories + history_chunk - 1) / history_chunk));
@@ -84,13 +168,18 @@
             std::min(history_chunk, number_of_histories - hist_offset);
         const auto chunk_global =
             ((chunk_count + local_size - 1) / local_size) * local_size;
+        bool beamline_resuming=false;
+        std::size_t beamline_lanes=chunk_count;
+        unsigned beamline_segment_steps=64;
+        std::size_t continuation_lanes=chunk_count;
+        unsigned continuation_segment_steps=64;
         const auto launch_primary_chunk = [&](auto uniform_water_path_tag, auto stage_tag) {
             constexpr int kKernelStage = decltype(stage_tag)::value;
             constexpr bool kQueueCopperChildren = kKernelStage == 9;
             constexpr bool kMinibeamCtCache =
                 (std::is_same_v<Pipeline,pipelines::ProtonMinibeam> || std::is_same_v<Pipeline,pipelines::CarbonMinibeam>);
-            constexpr bool kSharedCtCell = kKernelStage == 16 || kKernelStage == 18;
-            constexpr bool kLocalProtonCtPath = kKernelStage == 15 || kKernelStage == 16;
+            constexpr bool kSharedCtCell = kKernelStage == 18 || kKernelStage == 21 || kKernelStage == 22;
+            constexpr bool kLocalProtonCtPath = kKernelStage == 15 || kKernelStage == 21 || kKernelStage == 22;
             constexpr bool kLocalCarbonCtPath = kKernelStage == 17 || kKernelStage == 18;
             constexpr bool kSpecializedCtPath = kLocalProtonCtPath || kLocalCarbonCtPath;
             constexpr bool kPrimaryElasticTotals = kLocalProtonCtPath ||
@@ -102,7 +191,9 @@
             constexpr int kFoldZ = kLocalProtonCtPath ? 1 : kLocalCarbonCtPath ? 6 : 0;
             constexpr int kFoldA = kLocalProtonCtPath ? 1 : kLocalCarbonCtPath ? 12 : 0;
             static_assert(!kBroadBeamCtPath || BroadBeam);
-            constexpr int kPrimaryStage = kKernelStage == 9 ? 3 : kBroadBeamCtPath ? 6 : kKernelStage;
+            constexpr bool kContinuation = kKernelStage==19 || kKernelStage==20 || kKernelStage==21 || kKernelStage==22;
+            constexpr bool kResume = kKernelStage==20 || kKernelStage==22;
+            constexpr int kPrimaryStage = (kContinuation && !BroadBeam) ? 4 : kKernelStage == 9 ? 3 : kBroadBeamCtPath ? 6 : kKernelStage;
             constexpr bool kUniformWaterPrimaryPath = decltype(uniform_water_path_tag)::value;
             // Host eligibility requires global Urban for every split beamline.
             // Downstream CT material handling must not select upstream physics.
@@ -120,7 +211,7 @@
 
             return queue.parallel_for<PrimaryTransportKernel<
                 Pipeline, kUniformWaterPrimaryPath, kKernelStage, BroadBeam>>(
-            sycl::nd_range<1>{sycl::range<1>{chunk_global}, sycl::range<1>{local_size}},
+            sycl::nd_range<1>{sycl::range<1>{kKernelStage==9 && use_beamline_continuation?((beamline_lanes+local_size-1)/local_size)*local_size:kResume?((continuation_lanes+local_size-1)/local_size)*local_size:chunk_global}, sycl::range<1>{local_size}},
             [=](sycl::nd_item<1> item) {
                 // Constexpr-selected values remove unused physics branches;
                 // the host eligibility test proves their runtime equivalence.
@@ -137,7 +228,7 @@
                 const bool enable_minibeam = BroadBeam ? false : primary_minibeam_enabled;
 
                 const auto lane = item.get_global_linear_id();
-                if (lane >= chunk_count) {
+                if (lane >= (kKernelStage==9 && use_beamline_continuation?beamline_lanes:kResume?continuation_lanes:chunk_count)) {
                     return;
                 }
 #ifdef CARBON_INTEL_GPU_AOT
@@ -149,8 +240,14 @@
                     if (beamline_order != nullptr) global_history = hist_offset + beamline_order[lane];
                 }
 
+                if constexpr(kKernelStage==9) {
+                    if(use_beamline_continuation && beamline_resuming)global_history=hist_offset+beamline_resume_input[lane];
+                }
+                const auto continuation_slot=kResume?continuation_input[lane]:static_cast<std::uint32_t>(lane);
                 PrimaryMediumEntryState entry{};
+                if constexpr(!kResume) {
 #include "detail/sycl_primary_beamline.inc"
+                }
                 if constexpr (kPrimaryStage == 3) {
                     // Partition all histories, never discard a terminated track.
                     // The two ends cannot overlap: active + inactive <= chunk_count.
@@ -161,7 +258,10 @@
                             primary_entry_counts[active ? 0 : 1]).fetch_add(1U);
                     primary_medium_entry[active ? rank : chunk_count - 1 - rank] = entry;
                 } else {
-                    if constexpr (kPrimaryStage == 4) {
+                    if constexpr(kResume) {
+                        entry=continuation_states[continuation_slot].entry;
+                        global_history=entry.global_history;
+                    } else if constexpr (kPrimaryStage == 4) {
                         entry = primary_medium_entry[water_energy_order ? water_energy_order[lane] : lane];
                         global_history = entry.global_history;
                     }
@@ -194,6 +294,8 @@
                 UrbanV2TrackState global_urban_state{};
                 bool global_urban_boundary=true;
                 const int global_urban_ion=(kUniformWaterPrimaryPath || global_urban)?urban_device.projectile(primary_atomic_number,primary_mass_number):-1;
+                // Terminal flags are set only immediately before leaving the
+                // transport loop; a continuation checkpoint cannot carry them.
                 bool water_urban_escaped_geometry = false;
 
                 double pending_primary_depth_MeV = 0.0;
@@ -216,8 +318,72 @@
                 std::uint32_t interaction_section = 0;
                 float interaction_density = 0.0F;
 
+                if constexpr(kResume) {
+                    const auto& saved=continuation_states[continuation_slot];
+                    history_deposited_MeV=saved.history_deposited_MeV;
+                    grid_in_pending_MeV=saved.grid_in_pending_MeV;
+                    grid_out_pending_MeV=saved.grid_out_pending_MeV;
+                    local_schneider_rate_queries=saved.local_schneider_rate_queries;
+                    steps=saved.steps;
+                    global_urban_state=saved.global_urban_state;
+                    global_urban_boundary=saved.global_urban_boundary;
+                    pending_primary_depth_MeV=saved.pending_primary_depth_MeV;
+                    pending_primary_bin=saved.pending_primary_bin;
+                    pending_primary_voxel_MeV=saved.pending_primary_voxel_MeV;
+                    pending_primary_voxel=saved.pending_primary_voxel;
+                    nuclear_tau_remaining=saved.nuclear_tau_remaining;
+                    primary_hadronic_cache=saved.primary_hadronic_cache;
+                    nuclear_tau_active=saved.nuclear_tau_active;
+                    nuclear_tau_rng_step=saved.nuclear_tau_rng_step;
+                    unified_primary_clock=saved.unified_primary_clock;
+                    unified_primary_state=saved.unified_primary_state;
+                    unified_primary_counter=saved.unified_primary_counter;
+                    interaction_section=saved.interaction_section;
+                    interaction_density=saved.interaction_density;
+                    // select()/select_ct() bind tables to this kernel's view.
+                    // A saved kernel-capture address must never be dereferenced
+                    // after its launch ends; rebind before any resumed query.
+                    if(unified_primary_state.tables)unified_primary_state.tables=&unified_device;
+                }
+                unsigned segment_iterations=0;
                 const std::uint32_t max_primary_steps = maximum_primary_steps;
                 while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
+                    if constexpr(kContinuation) {
+                        if(segment_iterations++>=continuation_segment_steps) {
+                            auto& saved=continuation_states[continuation_slot];
+                            saved.entry=entry;
+                            saved.entry.energy_MeV=energy_MeV;
+                            saved.entry.position_x_mm=position_x_mm;saved.entry.position_y_mm=position_y_mm;saved.entry.position_z_mm=position_z_mm;
+                            saved.entry.direction_x=direction_x;saved.entry.direction_y=direction_y;saved.entry.direction_z=direction_z;
+                            saved.history_deposited_MeV=history_deposited_MeV;
+                            saved.grid_in_pending_MeV=grid_in_pending_MeV;
+                            saved.grid_out_pending_MeV=grid_out_pending_MeV;
+                            saved.local_schneider_rate_queries=local_schneider_rate_queries;
+                            saved.steps=steps;
+                            saved.global_urban_state=global_urban_state;
+                            saved.global_urban_boundary=global_urban_boundary;
+                            saved.pending_primary_depth_MeV=pending_primary_depth_MeV;
+                            saved.pending_primary_bin=pending_primary_bin;
+                            saved.pending_primary_voxel_MeV=pending_primary_voxel_MeV;
+                            saved.pending_primary_voxel=pending_primary_voxel;
+                            saved.nuclear_tau_remaining=nuclear_tau_remaining;
+                            saved.primary_hadronic_cache=primary_hadronic_cache;
+                            saved.nuclear_tau_active=nuclear_tau_active;
+                            saved.nuclear_tau_rng_step=nuclear_tau_rng_step;
+                            saved.unified_primary_clock=unified_primary_clock;
+                            saved.unified_primary_state=unified_primary_state;
+                            saved.unified_primary_counter=unified_primary_counter;
+                            saved.interaction_section=interaction_section;
+                            saved.interaction_density=interaction_density;
+                            const auto rank=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,
+                                sycl::memory_scope::device,sycl::access::address_space::global_space>(*continuation_count).fetch_add(1);
+                            // The host rejects an oversized count before the
+                            // next launch; do not write beyond the queue first.
+                            if(rank<chunk_count)continuation_output[rank]=continuation_slot;
+                            return;
+                        }
+                    }
+
                     const auto escaped_z =
                         position_z_mm < 0.0F || position_z_mm >= phantom_length_mm;
                     if (escaped_z) break;
@@ -331,7 +497,7 @@
                             record_unified_em_failure(unified_failure_count,unified_failure_records,1,section,primary_atomic_number,primary_mass_number,energy_MeV,local_density_g_per_cm3,0);
                             unified_count(0);break;}
                         if(unified_primary_clock.last_section!=unified_primary_state.section || unified_primary_clock.last_density!=unified_primary_state.density)primary_hadronic_cache.valid=false;
-                        if constexpr(kKernelStage==13 || kKernelStage==14 || kSpecializedCtPath){
+                        if constexpr(kSpecializedCtPath){
                             // Reuse the material view through this step's loss
                             // draw, without adding cross-step/resume state.
                             unified_primary_point=unified_primary_state.point();
@@ -523,7 +689,7 @@
                     if (urban_range_limited) deposited_MeV = energy_MeV;
                     if(!urban_range_limited){
                         auto draw=[&](){
-                            if constexpr(kKernelStage==13 || kKernelStage==14 || kSpecializedCtPath)return unified_em_explicit_loss<kLocalProtonCtPath,true,kSpecializedCtPath>(
+                            if constexpr(kSpecializedCtPath)return unified_em_explicit_loss<kLocalProtonCtPath,true,kSpecializedCtPath>(
                                 unified_primary_state,energy_MeV,accepted_loss_path_mm,enable_energy_straggling,
                                 unified_primary_pre,unified_uniform,&unified_primary_point);
                             else return unified_em_loss<kPrimaryStage==7>(
@@ -563,8 +729,7 @@
                         pending_primary_bin = bin;
                     }
                     if ((enable_voxel_scoring) && voxel_index != pending_primary_voxel) {
-                        if (pending_primary_voxel_MeV > 0.0 && pending_primary_voxel >= 0 &&
-                            pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
+                        if (pending_primary_voxel_MeV > 0.0 && pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                             sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
@@ -579,7 +744,7 @@
 
                     // Score the ionization loss locally in depth and voxel scorers.
                     pending_primary_depth_MeV += deposited_MeV;
-                    if ((enable_voxel_scoring) && voxel_index >= 0) {
+                    if (enable_voxel_scoring) {
                         pending_primary_voxel_MeV += local_voxel_deposit_MeV;
 
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
@@ -594,7 +759,7 @@
                     }
                     history_deposited_MeV += deposited_MeV;
                     grid_split(
-                        (enable_voxel_scoring) && voxel_index >= 0,
+                        enable_voxel_scoring,
                         deposited_MeV);
 
                     const float seg_dir_x = direction_x;
@@ -785,15 +950,14 @@
                                 sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[3]).fetch_add(1);
                                 sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(untracked_nuclear_device[global_history]).fetch_add(scat.recoil_ke_MeV);
                             } else if (scat.recoil_ke_MeV > 0.0F) {
-                                if ((enable_voxel_scoring) && voxel_index >= 0 &&
-                                    voxel_index < number_of_voxels) {
+                                if ((enable_voxel_scoring) && voxel_index < number_of_voxels) {
                                     pending_primary_voxel_MeV += scat.recoil_ke_MeV;
                                 }
                                 history_deposited_MeV += scat.recoil_ke_MeV;
                                 sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[0]).fetch_add(scat.recoil_ke_MeV);
                                 pending_primary_depth_MeV += scat.recoil_ke_MeV;
                                 grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,
-                                    (enable_voxel_scoring)&&voxel_index>=0,scat.recoil_ke_MeV);
+                                    enable_voxel_scoring,scat.recoil_ke_MeV);
                             }
                         }
                     }
@@ -888,13 +1052,13 @@
                         const float local_deposit = sycl::fmax(0.0F, event.process_local_deposit_MeV);
 
                         pending_primary_depth_MeV += local_deposit;
-                        if ((enable_voxel_scoring) && voxel_index >= 0) {
+                        if (enable_voxel_scoring) {
                             pending_primary_voxel_MeV += local_deposit;
                         }
                         history_deposited_MeV += local_deposit;
                         grid_deposit_split_device(
                             grid_deposited_in_device, grid_deposited_out_device,
-                            (enable_voxel_scoring) && voxel_index >= 0, local_deposit);
+                            enable_voxel_scoring, local_deposit);
 
                         float charged_accounted_MeV = 0.0F;
                         float neutral_accounted_MeV = 0.0F;
@@ -1020,7 +1184,7 @@
                                 }
                             } else {
                                 pending_primary_depth_MeV += product.kinetic_energy_MeV;
-                                if ((enable_voxel_scoring) && voxel_index >= 0) {
+                                if (enable_voxel_scoring) {
                                     pending_primary_voxel_MeV += product.kinetic_energy_MeV;
                                 }
 
@@ -1028,7 +1192,7 @@
                                 grid_deposit_split_device(
                                     grid_deposited_in_device,
                                     grid_deposited_out_device,
-                                    (enable_voxel_scoring) && voxel_index >= 0,
+                                    enable_voxel_scoring,
                                     product.kinetic_energy_MeV);
                                 charged_accounted_MeV += product.kinetic_energy_MeV;
                                 schneider_diag_increment_device(
@@ -1082,8 +1246,7 @@
                 if (energy_MeV > 0.0F && energy_MeV <= energy_cutoff_MeV && inside_phantom) {
                     const auto cutoff_energy_MeV = energy_MeV;
                     pending_primary_depth_MeV += cutoff_energy_MeV;
-                    if ((enable_voxel_scoring) && pending_primary_voxel >= 0 &&
-                        pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
+                    if ((enable_voxel_scoring) && pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                         pending_primary_voxel_MeV += cutoff_energy_MeV;
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
                             pending_primary_bin < static_cast<int>(number_of_bins)) {
@@ -1097,8 +1260,7 @@
                     history_deposited_MeV += cutoff_energy_MeV;
                     grid_deposit_split_device(
                         grid_deposited_in_device, grid_deposited_out_device,
-                        (enable_voxel_scoring) && pending_primary_voxel >= 0 &&
-                            pending_primary_voxel <
+                        (enable_voxel_scoring) && pending_primary_voxel <
                                 static_cast<std::size_t>(number_of_voxels),
                         cutoff_energy_MeV);
                     if (cutoff_stopped_energy_device != nullptr) {
@@ -1145,8 +1307,7 @@
                     atomic_dose.fetch_add(static_cast<DepthAtomicT>(pending_primary_depth_MeV));
                 }
 
-                if ((enable_voxel_scoring) && pending_primary_voxel >= 0 &&
-                    pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
+                if ((enable_voxel_scoring) && pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                     if (pending_primary_voxel_MeV > 0.0) {
                         sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                          sycl::memory_scope::device,
@@ -1175,11 +1336,56 @@
                 } // medium stage (or broadbeam transport)
             });
         };
+        const auto launch_continuation = [&](auto first_stage, auto resume_stage) {
+            queue.fill(continuation_count,0U,1);
+            auto last_event=launch_primary_chunk(std::false_type{},first_stage);
+            unsigned rounds=0;
+            for(;;) {
+                std::uint32_t active=0;
+                queue.copy(continuation_count,&active,1).wait_and_throw();
+                if(active>chunk_count)throw std::runtime_error("Primary continuation queue overflow");
+                if(!active)break;
+                continuation_extra_events.push_back(last_event);
+                continuation_lanes=active;
+                continuation_segment_steps=(active<8192 || ++rounds>=64)?maximum_primary_steps:64;
+                if(continuation_segment_steps==maximum_primary_steps) {
+                    water_order_events.push_back(queue.copy(continuation_output,continuation_input,active));
+                } else {
+                    auto key=[=](std::uint32_t slot) {
+                        const auto& state=continuation_states[slot];
+                        const auto material=static_cast<unsigned>(sycl::clamp(state.unified_primary_state.section,0,26));
+                        const auto energy=sycl::min(15U,static_cast<unsigned>(sycl::fmax(0.F,state.entry.energy_MeV)/continuation_max_energy*16));
+                        return material*16+energy;
+                    };
+                    water_order_events.push_back(queue.fill(continuation_histogram,0U,continuation_buckets));
+                    water_order_events.push_back(queue.parallel_for(sycl::range<1>(active),[=](sycl::id<1> id){
+                        const auto b=key(continuation_output[id[0]]);
+                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                            sycl::access::address_space::global_space>(continuation_histogram[b]).fetch_add(1);
+                    }));
+                    water_order_events.push_back(queue.single_task([=]{
+                        unsigned offset=0;
+                        for(unsigned b=0;b<continuation_buckets;++b) {
+                            continuation_offsets[b]=offset;offset+=continuation_histogram[b];continuation_histogram[b]=0;
+                        }
+                    }));
+                    water_order_events.push_back(queue.parallel_for(sycl::range<1>(active),[=](sycl::id<1> id){
+                        const auto slot=continuation_output[id[0]],b=key(slot);
+                        const auto rank=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                            sycl::access::address_space::global_space>(continuation_histogram[b]).fetch_add(1);
+                        continuation_input[continuation_offsets[b]+rank]=slot;
+                    }));
+                }
+                queue.fill(continuation_count,0U,1);
+                last_event=launch_primary_chunk(std::false_type{},resume_stage);
+            }
+            return last_event;
+        };
         const auto dispatch_primary_chunk = [&]() {
             if constexpr(BroadBeam) {
                 if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam>) {
                     if (broadbeam_ct_primary_specialize && primary_shared_ct_cell)
-                        return launch_primary_chunk(std::false_type{}, std::integral_constant<int,16>{});
+                        return launch_continuation(std::integral_constant<int,21>{},std::integral_constant<int,22>{});
                 }
                 if constexpr (std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>) {
                     if (broadbeam_ct_primary_specialize && primary_shared_ct_cell)
@@ -1225,20 +1431,54 @@
                                 minibeam_slit_count, minibeam_slit_width, minibeam_slit_pitch,
                                 0.5F * minibeam_slit_length, minibeam_slit_thickness,
                                 minibeam_slit_offset);
-                            bool expensive=copper;
-
                             const auto rank = sycl::atomic_ref<std::uint32_t,
                                 sycl::memory_order::relaxed, sycl::memory_scope::device,
                                 sycl::access::address_space::global_space>(
-                                    beamline_order_counts[expensive ? 0 : 1]).fetch_add(1U);
-                            beamline_order[expensive ? rank : chunk_count - 1 - rank] = lane;
+                                    beamline_order_counts[copper ? 0 : 1]).fetch_add(1U);
+                            beamline_order[copper ? rank : chunk_count - 1 - rank] = lane;
                         });
                     }
                     {
                         queue.fill(primary_entry_counts, std::uint64_t{0}, 2);
-                        primary_events.push_back(queue_copper_primary_children
+                        if(use_beamline_continuation)queue.fill(beamline_resume_count,0U,1);
+                        auto upstream_event=queue_copper_primary_children
                             ? launch_minibeam_stage(std::integral_constant<int,9>{})
-                            : launch_minibeam_stage(std::integral_constant<int,3>{}));
+                            : launch_minibeam_stage(std::integral_constant<int,3>{});
+                        if(use_beamline_continuation) {
+                            unsigned rounds=0;
+                            for(;;) {
+                                std::uint32_t active=0;
+                                queue.copy(beamline_resume_count,&active,1).wait_and_throw();
+                                if(active>chunk_count)throw std::runtime_error("Upstream continuation overflow");
+                                if(!active)break;
+                                beamline_extra_events.push_back(upstream_event);
+                                beamline_lanes=active;beamline_resuming=true;
+                                beamline_segment_steps=(active<8192 || ++rounds>=64)?100001:64;
+                                if(beamline_segment_steps==100001) {
+                                    beamline_order_events.push_back(queue.copy(beamline_resume_output,beamline_resume_input,active));
+                                } else {
+                                    beamline_order_events.push_back(queue.fill(beamline_histogram,0U,32));
+                                    beamline_order_events.push_back(queue.parallel_for(sycl::range<1>(active),[=](sycl::id<1> id) {
+                                        const auto b=beamline_states[beamline_resume_output[id[0]]].order_bucket;
+                                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                            sycl::access::address_space::global_space>(beamline_histogram[b]).fetch_add(1U);
+                                    }));
+                                    beamline_order_events.push_back(queue.single_task([=] {
+                                        unsigned offset=0;
+                                        for(unsigned b=0;b<32;++b){beamline_offsets[b]=offset;offset+=beamline_histogram[b];beamline_histogram[b]=0;}
+                                    }));
+                                    beamline_order_events.push_back(queue.parallel_for(sycl::range<1>(active),[=](sycl::id<1> id) {
+                                        const auto slot=beamline_resume_output[id[0]], b=beamline_states[slot].order_bucket;
+                                        const auto rank=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                            sycl::access::address_space::global_space>(beamline_histogram[b]).fetch_add(1U);
+                                        beamline_resume_input[beamline_offsets[b]+rank]=slot;
+                                    }));
+                                }
+                                queue.fill(beamline_resume_count,0U,1);
+                                upstream_event=launch_minibeam_stage(std::integral_constant<int,9>{});
+                            }
+                        }
+                        primary_events.push_back(upstream_event);
                         if (water_energy_order) {
                             queue.fill(water_energy_counts,0U,water_energy_buckets+1);
                             auto bucket=[=](float energy) {
@@ -1264,6 +1504,12 @@
                                 water_energy_order[water_energy_offsets[b]+rank]=index[0];
                             }));
                         }
+                        if constexpr(std::is_same_v<Pipeline,pipelines::ProtonMinibeam> ||
+                                     std::is_same_v<Pipeline,pipelines::CarbonMinibeam>) {
+                            if(use_primary_continuation) {
+                                return launch_continuation(std::integral_constant<int,19>{},std::integral_constant<int,20>{});
+                            }
+                        }
                         return launch_minibeam_stage(std::integral_constant<int, 4>{});
                     }
                 }
@@ -1275,9 +1521,9 @@
 
     }
 
-    // The queue is in order, so all primary chunks retain exactly the previous
-    // execution order.  Waiting once on the final event avoids a host/device
-    // round trip and a flushed progress line between every chunk.
+    // The queue retains chunk order. CT primary continuations read
+    // their live counts between segments; other paths wait only on the final
+    // event. Account for every continuation kernel in patient/primary timing.
     if (!primary_events.empty()) {
         primary_events.back().wait_and_throw();
         double split_beamline_seconds = 0.0, split_water_seconds = 0.0;
@@ -1289,14 +1535,37 @@
                 else split_water_seconds += seconds;
             }
         }
+        for(const auto& event:continuation_extra_events) {
+            const auto seconds=event_duration_seconds(event);
+            split_water_seconds+=seconds;primary_kernel_seconds+=seconds;
+        }
+        for(const auto& e:beamline_extra_events) {
+            const auto seconds=event_duration_seconds(e);
+            primary_kernel_seconds+=seconds;split_beamline_seconds+=seconds;
+        }
         if (compact_minibeam_primary)
             std::cout << "[primary-split-time] beamline_s=" << split_beamline_seconds
                       << " water_s=" << split_water_seconds << "\n";
         std::cout << "[progress] primary batches completed: "
                   << number_of_histories << "/" << number_of_histories
-                  << " histories (" << primary_events.size() << " launches)\n";
+                  << " histories (" << primary_events.size()+continuation_extra_events.size()+beamline_extra_events.size() << " launches)\n";
     }
 
+    if(beamline_states)mem_tracker.free(beamline_states);
+    if(beamline_resume_input)mem_tracker.free(beamline_resume_input);
+    if(beamline_resume_output)mem_tracker.free(beamline_resume_output);
+    if(beamline_resume_count)mem_tracker.free(beamline_resume_count);
+    if(beamline_histogram)mem_tracker.free(beamline_histogram);
+    if(beamline_offsets)mem_tracker.free(beamline_offsets);
+    double beamline_order_seconds=0;
+    for(const auto& e:beamline_order_events)beamline_order_seconds+=event_duration_seconds(e);
+    std::cout<<"[beamline-continuation-order] seconds="<<beamline_order_seconds<<" extra_launches="<<beamline_extra_events.size()<<"\n";
+    if(continuation_states)mem_tracker.free(continuation_states);
+    if(continuation_input)mem_tracker.free(continuation_input);
+    if(continuation_output)mem_tracker.free(continuation_output);
+    if(continuation_count)mem_tracker.free(continuation_count);
+    if(continuation_histogram)mem_tracker.free(continuation_histogram);
+    if(continuation_offsets)mem_tracker.free(continuation_offsets);
     if (primary_medium_entry) mem_tracker.free(primary_medium_entry);
     if (primary_entry_counts) mem_tracker.free(primary_entry_counts);
     double water_order_seconds=0;
@@ -1314,45 +1583,93 @@
         queue.copy(copper_primary_child_counts,&count,1).wait_and_throw();
         if(count>copper_primary_child_capacity)
             throw std::runtime_error("Cu primary-child queue overflow; batch rejected without truncation");
+        constexpr unsigned child_buckets=9*16*2;
+        const bool continue_children=std::is_same_v<Pipeline,pipelines::CarbonMinibeam> && enable_ct_grid;
+        auto* child_states=continue_children && count?mem_tracker.allocate<CopperChildContinuation>(count):nullptr;
+        auto* child_input=continue_children && count?mem_tracker.allocate<std::uint32_t>(count):nullptr;
+        auto* child_output=continue_children && count?mem_tracker.allocate<std::uint32_t>(count):nullptr;
+        auto* child_count=continue_children && count?mem_tracker.allocate<std::uint32_t>(1):nullptr;
+        auto* child_histogram=continue_children && count?mem_tracker.allocate<std::uint32_t>(child_buckets):nullptr;
+        auto* child_offsets=continue_children && count?mem_tracker.allocate<std::uint32_t>(child_buckets):nullptr;
+        if(continue_children && count && (!child_states||!child_input||!child_output||!child_count||!child_histogram||!child_offsets))throw std::bad_alloc();
+        std::vector<sycl::event> child_order_events;
         if(count) {
-            const auto lanes=std::min<std::size_t>(count,17408);
-            auto event=queue.parallel_for(sycl::nd_range<1>{sycl::range<1>{((lanes+127)/128)*128},sycl::range<1>{128}},
-                [=](sycl::nd_item<1>) {
-                    for(;;) {
-                        const auto slot=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,
-                            sycl::memory_scope::device,sycl::access::address_space::global_space>
-                            (copper_primary_child_counts[1]).fetch_add(1U);
-                        if(slot>=count)break;
-                        const auto task=copper_primary_child_tasks[slot];
-                        const auto& product=minibeam_copper_products_device[task.flat_product_index];
-                        const auto product_index=task.product_index;
-                        const auto global_history=task.global_history;
-                        const auto rng_history=task.rng_history;
-                        const auto spot_seed=task.spot_seed;
-                        const auto beamline_step=task.beamline_step;
-                        const auto position_x_mm=task.x,position_y_mm=task.y,position_z_mm=task.z;
-                        const auto direction_x=task.dx,direction_y=task.dy,direction_z=task.dz;
-                        const auto event_cos=task.event_cos,event_sin=task.event_sin;
-                        const auto block_exit_z=minibeam_block_center_z+.5F*minibeam_block_thickness;
-                        // Started tasks are all finished when this event completes,
-                        // including the original stop/backward early-continue paths.
-                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,
-                            sycl::memory_scope::device,sycl::access::address_space::global_space>
-                            (copper_primary_child_counts[2]).fetch_add(1U);
-                        float queued_energy=0;
+            auto launch_children=[&](auto continuation_tag,bool child_resuming,unsigned child_segment_steps,std::uint32_t child_lanes) {
+                constexpr bool kChildContinuation=decltype(continuation_tag)::value;
+                const auto lanes=std::min<std::size_t>(child_lanes,17408);
+                auto event=queue.parallel_for(sycl::nd_range<1>{sycl::range<1>{((lanes+127)/128)*128},sycl::range<1>{128}},
+                    [=](sycl::nd_item<1>) {
+                        for(;;) {
+                            const auto index=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,
+                                sycl::memory_scope::device,sycl::access::address_space::global_space>
+                                (copper_primary_child_counts[1]).fetch_add(1U);
+                            if(index>=child_lanes)break;
+                            const auto slot=kChildContinuation && child_resuming?child_input[index]:index;
+                            const auto task=copper_primary_child_tasks[slot];
+                            const auto& product=minibeam_copper_products_device[task.flat_product_index];
+                            const auto product_index=task.product_index;
+                            const auto global_history=task.global_history;
+                            const auto rng_history=task.rng_history;
+                            const auto spot_seed=task.spot_seed;
+                            const auto beamline_step=task.beamline_step;
+                            const auto position_x_mm=task.x,position_y_mm=task.y,position_z_mm=task.z;
+                            const auto direction_x=task.dx,direction_y=task.dy,direction_z=task.dz;
+                            const auto event_cos=task.event_cos,event_sin=task.event_sin;
+                            const auto block_exit_z=minibeam_block_center_z+.5F*minibeam_block_thickness;
+                            auto* child_state=kChildContinuation?child_states+slot:nullptr;
+                            if(!child_resuming)
+                                sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,
+                                    sycl::memory_scope::device,sycl::access::address_space::global_space>
+                                    (copper_primary_child_counts[2]).fetch_add(1U);
+                            float queued_energy=0;
 #include "detail/sycl_copper_primary_child.inc"
-                        if(queued_energy>0)
-                            sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                                sycl::access::address_space::global_space>(beamline_removed_device[global_history]).fetch_sub(queued_energy);
+                            if(queued_energy>0)
+                                sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>(beamline_removed_device[global_history]).fetch_sub(queued_energy);
+                        }
+                    });
+                event.wait_and_throw();copper_primary_child_seconds+=event_duration_seconds(event);
+            };
+            if(continue_children) {
+                std::uint32_t remaining=count;
+                for(unsigned round=0;remaining;++round) {
+                    queue.fill(copper_primary_child_counts+1,0U,1);
+                    queue.fill(child_count,0U,1);
+                    queue.fill(child_histogram,0U,child_buckets);
+                    launch_children(std::true_type{},round!=0,remaining<8192 || round>=64?100000U:64U,remaining);
+                    queue.copy(child_count,&remaining,1).wait_and_throw();
+                    std::cout<<"[copper-child-continuation-round] round="<<round<<" remaining="<<remaining<<" initial="<<count<<"\n";
+                    if(remaining) {
+                        std::vector<std::uint32_t> histogram(child_buckets),offsets(child_buckets);
+                        queue.copy(child_histogram,histogram.data(),child_buckets).wait_and_throw();
+                        std::uint32_t total=0;
+                        for(unsigned b=0;b<child_buckets;++b){offsets[b]=total;total+=histogram[b];}
+                        if(total!=remaining)throw std::runtime_error("Cu child continuation partition mismatch");
+                        queue.copy(offsets.data(),child_offsets,child_buckets).wait_and_throw();
+                        child_order_events.push_back(queue.parallel_for(sycl::range<1>{remaining},[=](sycl::id<1> id){
+                            const auto slot=child_output[id[0]];
+                            const auto dest=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                sycl::access::address_space::global_space>(child_offsets[child_states[slot].bucket]).fetch_add(1U);
+                            child_input[dest]=slot;
+                        }));
                     }
-                });
-            event.wait_and_throw();copper_primary_child_seconds=event_duration_seconds(event);
+                }
+            } else launch_children(std::false_type{},false,100000U,count);
         }
         std::uint32_t completed=0;
         queue.copy(copper_primary_child_counts+2,&completed,1).wait_and_throw();
         if(completed!=count)throw std::runtime_error("Cu primary-child queue drain mismatch");
+        double child_order_seconds=0;
+        for(const auto& e:child_order_events)child_order_seconds+=event_duration_seconds(e);
+        std::cout << "[copper-child-continuation] enabled="<<continue_children<<" bytes="<<sizeof(CopperChildContinuation)<<" order_s="<<child_order_seconds<<"\n";
         std::cout << "[copper-primary-child-queue] seconds=" << copper_primary_child_seconds
                   << " tasks=" << count << " completed=" << completed << " overflow=0\n";
+        if(child_states)mem_tracker.free(child_states);
+        if(child_input)mem_tracker.free(child_input);
+        if(child_output)mem_tracker.free(child_output);
+        if(child_count)mem_tracker.free(child_count);
+        if(child_histogram)mem_tracker.free(child_histogram);
+        if(child_offsets)mem_tracker.free(child_offsets);
         free_device(copper_primary_child_tasks);free_device(copper_primary_child_counts);
     }
     // Process-faithful fragment+Cu products are transported through the
@@ -1433,7 +1750,7 @@
                         auto inelastic_rate = 0.0F;
                         auto collision_in_step = false;
                         auto path = boundary_path;
-                        if (in_copper && !copper_ion_native_transport) {
+                        if (in_copper && !copper_native_fragment_transport) {
                             inelastic_rate = minibeam_copper_ion_inelastic_rate(
                                 minibeam_copper_ion_xs_device,
                                 minibeam_copper_ion_xs_present_device,
@@ -1463,7 +1780,7 @@
                                 }
                             }
                         }
-                        if (copper_ion_native_transport) {
+                        if (copper_native_fragment_transport) {
                             auto& f_energy = energy; auto& f_x = x; auto& f_y = y; auto& f_z = z;
                             auto& f_direction = direction; auto& f_path = path;
                             auto& f_rate = inelastic_rate; auto& f_collision = collision_in_step;
@@ -1471,8 +1788,8 @@
                             auto& f_urban_state = fragment_urban_state; auto& f_at_boundary = fragment_at_boundary;
                             const auto f_charge = cascade.z; const auto f_a = cascade.a;
                             const auto f_seed = random_seed; const auto f_stream = cascade.rng_stream; const auto f_step = step;
-                            const auto f_in_copper = in_copper; const auto f_terminal = terminal_copper_generation;
-                            auto& f_ignored_tau = ignored_nuclear_tau;
+                            const auto f_in_copper = in_copper;
+                            auto* const f_terminal_tau = terminal_copper_generation ? &ignored_nuclear_tau : nullptr;
 #include "detail/sycl_copper_ion_fragment_step.inc"
                         } else {
                         x += path * direction.x;
@@ -1480,7 +1797,7 @@
                         z += path * direction.z;
                         }
                         if (in_copper) {
-                          if (!copper_ion_native_transport) {
+                          if (!copper_native_fragment_transport) {
                             const auto stopping = minibeam_copper_ion_stopping(
                                 minibeam_copper_sp_energies_device,
                                 minibeam_copper_sp_values_device,
@@ -1531,12 +1848,13 @@
                                             gaussian);
                             }
                             if (minibeam_copper_fragment_enable_energy_straggling) {
-                                if (copper_proton_native_fluctuation && cascade.z == 1 && cascade.a == 1) {
+                                if (copper_native_fluctuations && cascade.z == 1 && cascade.a == 1) {
                                     std::uint64_t draw_index = 0;
                                     auto uniform = [&]() { return (rng::random_u32(
                                         random_seed, cascade.rng_stream, (std::uint64_t(step) << 32) | draw_index++, 124) >> 8) * 0x1p-24f; };
-                                    const auto draw = copper_proton_total_fluctuation(
-                                        energy, 938.272013F, mean_loss, path, minibeam_copper_density, uniform);
+                                    const auto draw = sample_copper_fluctuation(
+                                        {energy, 938.272013F, 1, 1, 1.f, mean_loss, path,
+                                         minibeam_copper_density, CopperMeanLoss::total, true}, uniform);
                                     sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                         sycl::memory_scope::device, sycl::access::address_space::global_space>(
                                         minibeam_event_counts_device[draw.valid ? copper_proton_fragment_loss_slot : copper_proton_loss_failure_slot]).fetch_add(1U);

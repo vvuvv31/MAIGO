@@ -4,7 +4,7 @@
 
 namespace carbon {
 // NativeMath is independent of native Gaussian evaluation: only the measured
-// proton CT broadbeam primary enables these additional intrinsic operations.
+// proton CT broadbeam and dedicated proton Cu primary enable these operations.
 template<bool Native=false, class Real>
 inline Real fluctuation_log(Real x) {
     if constexpr(Native) return sycl::native::log(x);

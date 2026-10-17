@@ -37,7 +37,6 @@ emittance_sigma_y_mm: 2.4669
 emittance_sigma_y_prime: 0.0041
 emittance_correlation_y: 0.8069
 minibeam: true
-minibeam_primary_pipeline: compact
 # Retain the TPS source and generic Urban water medium kernel.
 minibeam_primary_specialization: false
 minibeam_collimator_center_to_isocenter_mm: 30.0
@@ -56,8 +55,9 @@ minibeam_copper_radiation_length_g_per_cm2: 12.8628
 minibeam_copper_enable_mcs: true
 minibeam_copper_enable_elastic: true
 minibeam_copper_enable_energy_straggling: true
-minibeam_copper_straggling_model: g4_ion_delta
+minibeam_copper_straggling_model: g4_delta
 minibeam_copper_primary_native_mean_loss: true
+minibeam_copper_fragment_native_transport: true
 minibeam_copper_straggling_scale: 1.0
 minibeam_copper_mcs_scale: 1.0
 minibeam_copper_fragment_mcs_scale: 1.0

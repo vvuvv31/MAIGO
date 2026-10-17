@@ -211,10 +211,6 @@ struct TransportConfig {
     // Compile-time geometry/model branch selection for uniform-water Urban
     // minibeam. Runtime eligibility is checked before the first kernel launch.
     bool minibeam_primary_specialization{false};
-    // Minibeams always launch the beamline, then group medium-entry records
-    // for the water or material-aware CT launch. Preserve source/RNG identity.
-    // The preset key accepts only compact; no single-kernel minibeam path.
-    std::string minibeam_primary_pipeline{"compact"};
     // Pause after the compile-time secondary iteration limit (default 16) and compact survivors.
     // Production presets opt in; false retains full-track scheduling without state buffers.
     bool secondary_step_chunking{false};
@@ -316,17 +312,19 @@ struct TransportConfig {
     // independent of downstream ion straggling; both default to enabled.
     bool minibeam_copper_enable_energy_straggling{true};
     double minibeam_copper_straggling_scale{1.0};
-    // Native Cu selectors: universal/delta for proton; ion/delta for C12 and charged fragments.
+    // Native Cu fluctuations select projectile parameters inside the shared engine.
     std::string minibeam_copper_straggling_model{"clipped_gaussian"};
     // Native restricted mean law for the configured primary in Cu.
     bool minibeam_copper_primary_native_mean_loss{false};
+    // Species Urban/elastic fragment transport is independent of primary fluctuations.
+    bool minibeam_copper_fragment_native_transport{false};
     // Separate Copper fragment control, enabled in all default minibeams.
     bool minibeam_copper_fragment_enable_energy_straggling{false};
     double minibeam_copper_fragment_straggling_scale{1.0};
     // Amplitude scale for the selected Copper MCS model. The legacy Highland
     // benchmark uses 0.785; the slab-constrained model uses 1.0.
     double minibeam_copper_mcs_scale{0.785};
-    // Copper fragments use independently controlled Urban (ion/delta) or cumulative
+    // Copper fragments use independently controlled native Urban or cumulative
     // Highland path.  Do not inherit the primary Fermi--Eyges normalization.
     double minibeam_copper_fragment_mcs_scale{0.785};
     // Number of fragment+Cu reactions whose process-faithful correlated

@@ -88,11 +88,11 @@ minibeam_copper_inclxx_file: data/nuclear/copper/proton/cascade.cinpkg
 minibeam_copper_ion_stopping_power_file: data/stopping/copper/ions_proton.csv
 minibeam_copper_ion_cross_section_file: data/nuclear/copper/ion_cross_sections.csv
 minibeam_air_urban_package_file: data/scattering/urban/air.bin
-minibeam_copper_straggling_model: g4_universal_delta
+minibeam_copper_straggling_model: g4_delta
 minibeam_air_ionization_rate_file: data/ionization/air/proton_rate.csv
 minibeam_copper_primary_native_mean_loss: false
+minibeam_copper_fragment_native_transport: false
 minibeam_primary_specialization: true
-minibeam_primary_pipeline: compact
 multiple_scattering_model: urban_v2
 urban_mcs_package_file: data/scattering/urban/ct_copper.bin
 primary_atomic_number: 1

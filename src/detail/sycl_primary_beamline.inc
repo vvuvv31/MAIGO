@@ -2,6 +2,11 @@
 // Included inside the primary kernel; all step/RNG/ledger operations stay inline.
 // kUrbanBeamlinePath describes upstream physics, independent of water/CT downstream.
                 if constexpr (kPrimaryStage != 4) {
+                const bool beamline_resume=kKernelStage==9 && use_beamline_continuation && beamline_resuming;
+                // Source draws are stateless functions of the original spot
+                // seed/history. Re-evaluating them on resume preserves source
+                // identity and incident energy; transport resumes from saved
+                // coordinates/energy below and never repeats pre-block air.
                 const PrimarySpotBatchEntry* spot = nullptr;
                 std::uint64_t rng_history = global_history;
                 if (primary_spot_count > 0) {
@@ -214,7 +219,15 @@
                     }
                     return true;
                 };
-                if (minibeam_air_urban) {
+                if(beamline_resume) {
+                    const auto& saved=beamline_states[global_history-hist_offset];
+                    energy_MeV=saved.energy_MeV;position_x_mm=saved.position_x_mm;position_y_mm=saved.position_y_mm;position_z_mm=saved.position_z_mm;
+                    direction_x=saved.direction_x;direction_y=saved.direction_y;direction_z=saved.direction_z;
+                    beamline_air_loss_MeV=saved.air_loss_MeV;air_urban_state=saved.air_urban_state;air_urban_step=saved.air_urban_step;
+                    air_ion_clock=saved.air_ion_clock;air_ion_threshold=saved.air_ion_threshold;air_ion_rate=saved.air_ion_rate;
+                    air_urban_boundary=saved.air_boundary;
+                }
+                if (minibeam_air_urban && !beamline_resume) {
                     if (!advance_air_to_plane(minibeam_block_entrance_z)) energy_MeV=0.0F;
                 }
                 const auto minibeam_hits_copper = enable_minibeam &&
@@ -231,15 +244,15 @@
                 // Track actual copper contact for the beamline energy ledger.
                 auto beamline_ever_in_copper_hist = false;
 
-                if (minibeam_copper_transport && (minibeam_hits_copper || minibeam_air_urban) &&
+                if (minibeam_copper_transport && (minibeam_hits_copper || minibeam_air_urban || beamline_resume) &&
                     direction_z > 1.0e-8F) {
-                    const auto incident_beamline_energy = energy_MeV;
-                    const auto air_loss_at_block_entry = beamline_air_loss_MeV;
+                    auto incident_beamline_energy = energy_MeV;
+                    auto air_loss_at_block_entry = beamline_air_loss_MeV;
                     const auto block_entrance_z = minibeam_block_entrance_z;
                     const auto block_exit_z = minibeam_block_exit_z;
                     const auto to_entrance =
                         (block_entrance_z - position_z_mm) / direction_z;
-                    if (to_entrance >= 0.0F) {
+                    if (!beamline_resume && to_entrance >= 0.0F) {
                         position_x_mm += to_entrance * direction_x;
                         position_y_mm += to_entrance * direction_y;
                         position_z_mm = block_entrance_z;
@@ -268,12 +281,43 @@
                     UrbanMcsContext copper_loss_context{};
                     // (touch accumulators live at history scope:
                     // beamline_ever_in_copper_hist / beamline_cu_true_path_hist_mm)
+                    if(beamline_resume) {
+                        const auto& saved=beamline_states[global_history-hist_offset];
+                        beamline_ever_in_copper_hist=saved.ever_in_copper;
+                        incident_beamline_energy=saved.incident_energy_MeV;air_loss_at_block_entry=saved.air_loss_at_entry_MeV;removed_energy=saved.removed_energy_MeV;
+                        beamline_step=saved.beamline_step;copper_nuclear_tau_remaining=saved.nuclear_tau_remaining;copper_nuclear_tau_active=saved.nuclear_tau_active;
+                        urban_v2_state=saved.copper_urban_state;urban_v2_at_boundary=saved.copper_boundary;urban_v2_prev_in_cu=saved.previous_in_copper;
+                    }
+                    unsigned beamline_segment_iterations=0;
                     constexpr std::uint64_t maximum_beamline_steps = 100000;
                     while (energy_MeV > energy_cutoff_MeV &&
                            direction_z > 1.0e-8F &&
                            position_z_mm < block_exit_z - 1.0e-6F &&
                            beamline_step < maximum_beamline_steps) {
 
+                        if constexpr(kKernelStage==9) {
+                            if(use_beamline_continuation && beamline_segment_iterations++>=beamline_segment_steps) {
+                                const auto slot=static_cast<std::uint32_t>(global_history-hist_offset);
+                                auto& saved=beamline_states[slot];
+                                saved.energy_MeV=energy_MeV;saved.position_x_mm=position_x_mm;saved.position_y_mm=position_y_mm;saved.position_z_mm=position_z_mm;
+                                saved.direction_x=direction_x;saved.direction_y=direction_y;saved.direction_z=direction_z;
+                                saved.air_loss_MeV=beamline_air_loss_MeV;saved.air_urban_state=air_urban_state;saved.air_urban_step=air_urban_step;
+                                saved.air_ion_clock=air_ion_clock;saved.air_ion_threshold=air_ion_threshold;saved.air_ion_rate=air_ion_rate;
+                                saved.air_boundary=air_urban_boundary;saved.ever_in_copper=beamline_ever_in_copper_hist;
+                                saved.incident_energy_MeV=incident_beamline_energy;saved.air_loss_at_entry_MeV=air_loss_at_block_entry;saved.removed_energy_MeV=removed_energy;
+                                saved.beamline_step=beamline_step;saved.nuclear_tau_remaining=copper_nuclear_tau_remaining;saved.nuclear_tau_active=copper_nuclear_tau_active;
+                                saved.copper_urban_state=urban_v2_state;saved.copper_boundary=urban_v2_at_boundary;saved.previous_in_copper=urban_v2_prev_in_cu;
+                                const auto cu=minibeam_point_in_copper(position_x_mm+1.0e-5F*direction_x,position_y_mm+1.0e-5F*direction_y,
+                                    minibeam_cos,minibeam_sin,minibeam_block_radius,minibeam_slit_count,minibeam_slit_width,
+                                    minibeam_slit_pitch,0.5F*minibeam_slit_length,minibeam_slit_offset);
+                                const auto energy=sycl::min(15U,static_cast<unsigned>(sycl::fmax(0.F,energy_MeV)/continuation_max_energy*16));
+                                saved.order_bucket=(cu?16:0)+energy;
+                                const auto rank=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                    sycl::access::address_space::global_space>(*beamline_resume_count).fetch_add(1U);
+                                if(rank<chunk_count)beamline_resume_output[rank]=slot;
+                                return;
+                            }
+                        }
                         // Limit the transported path, not only its axial
                         // projection. This keeps the Poisson tail truncation
                         // and every material interaction bounded for oblique
@@ -526,8 +570,7 @@
                         // Gaussian loss (or stops the run); its counter-based
                         // draws 48/49 are not consumed by anything else.
                         if (minibeam_copper_enable_energy_straggling &&
-                            !(copper_ion_native_transport || (copper_proton_native_fluctuation && primary_atomic_number == 1 &&
-                              primary_mass_number == 1))) {
+                            !copper_native_fluctuations) {
                             constexpr float copper_z_over_a_rel_water =
                                 (29.0F / 63.546F) / 0.55509F;
                             const auto effective_charge =
@@ -552,16 +595,20 @@
                                     sycl::sqrt(sycl::fmax(0.0F, variance)) * gaussian);
                         }
                         if (minibeam_copper_enable_energy_straggling) {
-                            if (copper_ion_native_transport || (copper_proton_native_fluctuation && primary_atomic_number == 1 && primary_mass_number == 1)) {
+                            if (copper_native_fluctuations) {
                                 std::uint64_t draw_index = 0;
                                 auto uniform = [&]() { return (rng::random_u32(
                                     spot_seed, rng_history, (std::uint64_t(beamline_step) << 32) | draw_index++, 124) >> 8) * 0x1p-24f; };
-                                const auto draw = copper_ion_native_transport
-                                    ? copper_ion_total_fluctuation(energy_MeV,primary_rest_mass_MeV,
-                                        primary_atomic_number,primary_mass_number,copper_loss_context.factor,
-                                        native_restricted_mean,true_loss_path_mm,minibeam_copper_density,uniform,true)
-                                    : copper_proton_total_fluctuation(
-                                        energy_MeV, primary_rest_mass_MeV, mean_loss, true_loss_path_mm, minibeam_copper_density, uniform, native_restricted_mean);
+                                const bool proton = primary_atomic_number == 1 && primary_mass_number == 1;
+                                const auto draw = sample_copper_fluctuation<
+                                          std::is_same_v<Pipeline,pipelines::ProtonMinibeam>>(
+                                        {energy_MeV, primary_rest_mass_MeV,
+                                         primary_atomic_number, primary_mass_number,
+                                         proton ? 1.f : copper_loss_context.factor,
+                                         native_restricted_mean>=0 ? native_restricted_mean : mean_loss,
+                                         true_loss_path_mm, minibeam_copper_density,
+                                         native_restricted_mean>=0 ? CopperMeanLoss::restricted : CopperMeanLoss::total,
+                                         true}, uniform);
                                 sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                     sycl::memory_scope::device, sycl::access::address_space::global_space>(
                                     minibeam_event_counts_device[draw.valid ? copper_proton_primary_loss_slot : copper_proton_loss_failure_slot]).fetch_add(1U);
@@ -589,119 +636,130 @@
                             beamline_ever_in_copper_hist = true;
 
                         }
-                        const auto collision_energy_u = energy_MeV * inverse_mass_number;
-                        const auto elastic_index = minibeam_elastic_nearest(
-                            minibeam_copper_elastic_device,
-                            minibeam_copper_elastic_count, collision_energy_u);
-                        const auto elastic_rate = minibeam_copper_enable_elastic
-                            ? minibeam_copper_elastic_device[
-                                  elastic_index].macroscopic_rate_per_mm
-                            : 0.0F;
-                        const auto inelastic_rate = minibeam_copper_enable_inelastic
-                            ? minibeam_linear_table(
-                                  minibeam_copper_xs_energies_device,
-                                  minibeam_copper_xs_values_device,
-                                  minibeam_copper_xs_count, collision_energy_u)
-                            : 0.0F;
-                        const auto total_nuclear_rate = elastic_rate + inelastic_rate;
                         if (minibeam_copper_enable_mcs) {
                             direction_x = correlated_scattering.direction.x;
                             direction_y = correlated_scattering.direction.y;
                             direction_z = correlated_scattering.direction.z;
                         }
-                        if (collision_in_step && total_nuclear_rate > 0.0F) {
-                            copper_nuclear_tau_active = false;
-                            const auto choose = rng::uniform01(
-                                spot_seed, rng_history, beamline_step, 61) *
-                                total_nuclear_rate;
-                            if (choose < elastic_rate) {
+                        // Post-loss rates are used only to select a real nuclear candidate.
+                        if (collision_in_step) {
+                            const auto collision_energy_u = energy_MeV * inverse_mass_number;
+                            const auto elastic_index = minibeam_elastic_nearest(
+                                minibeam_copper_elastic_device,
+                                minibeam_copper_elastic_count, collision_energy_u);
+                            const auto elastic_rate = minibeam_copper_enable_elastic
+                                ? minibeam_copper_elastic_device[
+                                      elastic_index].macroscopic_rate_per_mm
+                                : 0.0F;
+                            const auto inelastic_rate = minibeam_copper_enable_inelastic
+                                ? minibeam_linear_table(
+                                      minibeam_copper_xs_energies_device,
+                                      minibeam_copper_xs_values_device,
+                                      minibeam_copper_xs_count, collision_energy_u)
+                                : 0.0F;
+                            const auto total_nuclear_rate = elastic_rate + inelastic_rate;
+                            if (total_nuclear_rate > 0.0F) {
+                                copper_nuclear_tau_active = false;
+                                const auto choose = rng::uniform01(
+                                    spot_seed, rng_history, beamline_step, 61) *
+                                    total_nuclear_rate;
+                                if (choose < elastic_rate) {
 
-                                const auto sample_index = minibeam_elastic_local_sample(
-                                    minibeam_copper_elastic_device,
-                                    minibeam_copper_elastic_count, collision_energy_u,
-                                    rng::uniform01(spot_seed, rng_history,
-                                                   beamline_step, 63));
-                                const auto& sample = minibeam_copper_elastic_device[
-                                    sample_index];
-                                const auto outcome = elastic_two_body(
-                                    energy_MeV, direction_x, direction_y, direction_z,
-                                    1.0 - 2.0 * sample.transfer_fraction,
-                                    rng::uniform01(spot_seed, rng_history,
-                                                   beamline_step, 62),
-                                    primary_rest_mass_MeV, sample.target_mass_MeV);
-                                removed_energy += outcome.recoil_ke_MeV;
-                                energy_MeV = outcome.projectile_ke_MeV;
-                                direction_x = outcome.proj_dir_x;
-                                direction_y = outcome.proj_dir_y;
-                                direction_z = outcome.proj_dir_z;
-                            } else {
+                                    const auto sample_index = minibeam_elastic_local_sample(
+                                        minibeam_copper_elastic_device,
+                                        minibeam_copper_elastic_count, collision_energy_u,
+                                        rng::uniform01(spot_seed, rng_history,
+                                                       beamline_step, 63));
+                                    const auto& sample = minibeam_copper_elastic_device[
+                                        sample_index];
+                                    const auto outcome = elastic_two_body(
+                                        energy_MeV, direction_x, direction_y, direction_z,
+                                        1.0 - 2.0 * sample.transfer_fraction,
+                                        rng::uniform01(spot_seed, rng_history,
+                                                       beamline_step, 62),
+                                        primary_rest_mass_MeV, sample.target_mass_MeV);
+                                    removed_energy += outcome.recoil_ke_MeV;
+                                    energy_MeV = outcome.projectile_ke_MeV;
+                                    direction_x = outcome.proj_dir_x;
+                                    direction_y = outcome.proj_dir_y;
+                                    direction_z = outcome.proj_dir_z;
+                                } else {
 
-                                sycl::atomic_ref<
-                                    std::uint64_t, sycl::memory_order::relaxed,
-                                    sycl::memory_scope::device,
-                                    sycl::access::address_space::global_space>
-                                    nuclear_count(minibeam_event_counts_device[0]);
-                                nuclear_count.fetch_add(1U);
-                                const auto lookup = cinel03_lookup_event_device(
-                                    minibeam_copper_nodes_device,
-                                    minibeam_copper_node_count,
-                                    minibeam_copper_offsets_device,
-                                    minibeam_copper_indices_device,
-                                    minibeam_copper_event_count,
-                                    primary_atomic_number, primary_mass_number,
-                                    29, collision_energy_u,
-                                    rng::uniform01(spot_seed, rng_history,
-                                                   beamline_step, 63),
-                                    rng::uniform01(spot_seed, rng_history,
-                                                   beamline_step, 64));
-                                float queued_energy = 0.0F;
-                                if (lookup.status == Cinel03LookupStatus::Hit) {
-                                    const auto& event = minibeam_copper_interactions_device[
-                                        lookup.event_index];
                                     sycl::atomic_ref<
                                         std::uint64_t, sycl::memory_order::relaxed,
                                         sycl::memory_scope::device,
                                         sycl::access::address_space::global_space>
-                                        generated_count(minibeam_event_counts_device[1]);
-                                    generated_count.fetch_add(event.direct_product_count);
-                                    const auto phi = 6.2831853071795864769F *
+                                        nuclear_count(minibeam_event_counts_device[0]);
+                                    nuclear_count.fetch_add(1U);
+                                    const auto lookup = cinel03_lookup_event_device(
+                                        minibeam_copper_nodes_device,
+                                        minibeam_copper_node_count,
+                                        minibeam_copper_offsets_device,
+                                        minibeam_copper_indices_device,
+                                        minibeam_copper_event_count,
+                                        primary_atomic_number, primary_mass_number,
+                                        29, collision_energy_u,
                                         rng::uniform01(spot_seed, rng_history,
-                                                       beamline_step, 65);
-                                    const auto event_cos = sycl::cos(phi);
-                                    const auto event_sin = sycl::sin(phi);
-                                    for (std::uint32_t product_index = 0;
-                                         product_index < event.direct_product_count;
-                                         ++product_index) {
-                                        const auto flat_index =
-                                            event.product_offset + product_index;
-                                        if (flat_index >= minibeam_copper_product_count) break;
-                                        const auto& product =
-                                            minibeam_copper_products_device[flat_index];
-                                        if ((product.role != 0 && product.role != 1) ||
-                                            product.z <= 0 || product.a <= 0 ||
-                                            product.kinetic_energy_MeV <= energy_cutoff_MeV) {
-                                            continue;
-                                        }
-                                        if constexpr (kQueueCopperChildren) {
-                                            const auto slot=sycl::atomic_ref<std::uint32_t,
-                                                sycl::memory_order::relaxed,sycl::memory_scope::device,
-                                                sycl::access::address_space::global_space>(copper_primary_child_counts[0]).fetch_add(1U);
-                                            if(slot<copper_primary_child_capacity) {
-                                                copper_primary_child_tasks[slot]={global_history,rng_history,spot_seed,beamline_step,
-                                                    flat_index,product_index,position_x_mm,position_y_mm,position_z_mm,
-                                                    direction_x,direction_y,direction_z,event_cos,event_sin};
+                                                       beamline_step, 63),
+                                        rng::uniform01(spot_seed, rng_history,
+                                                       beamline_step, 64));
+                                    float queued_energy = 0.0F;
+                                    if (lookup.status == Cinel03LookupStatus::Hit) {
+                                        const auto& event = minibeam_copper_interactions_device[
+                                            lookup.event_index];
+                                        sycl::atomic_ref<
+                                            std::uint64_t, sycl::memory_order::relaxed,
+                                            sycl::memory_scope::device,
+                                            sycl::access::address_space::global_space>
+                                            generated_count(minibeam_event_counts_device[1]);
+                                        generated_count.fetch_add(event.direct_product_count);
+                                        const auto phi = 6.2831853071795864769F *
+                                            rng::uniform01(spot_seed, rng_history,
+                                                           beamline_step, 65);
+                                        const auto event_cos = sycl::cos(phi);
+                                        const auto event_sin = sycl::sin(phi);
+                                        for (std::uint32_t product_index = 0;
+                                             product_index < event.direct_product_count;
+                                             ++product_index) {
+                                            const auto flat_index =
+                                                event.product_offset + product_index;
+                                            if (flat_index >= minibeam_copper_product_count) break;
+                                            const auto& product =
+                                                minibeam_copper_products_device[flat_index];
+                                            if ((product.role != 0 && product.role != 1) ||
+                                                product.z <= 0 || product.a <= 0 ||
+                                                product.kinetic_energy_MeV <= energy_cutoff_MeV) {
+                                                continue;
                                             }
-                                        } else {
+                                            if constexpr (kQueueCopperChildren) {
+                                                const auto slot=sycl::atomic_ref<std::uint32_t,
+                                                    sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                                    sycl::access::address_space::global_space>(copper_primary_child_counts[0]).fetch_add(1U);
+                                                if(slot<copper_primary_child_capacity) {
+                                                    copper_primary_child_tasks[slot]={global_history,rng_history,spot_seed,beamline_step,
+                                                        flat_index,product_index,position_x_mm,position_y_mm,position_z_mm,
+                                                        direction_x,direction_y,direction_z,event_cos,event_sin};
+                                                }
+                                            } else {
+                                                constexpr bool kChildContinuation=false;
+                                                constexpr bool child_resuming=false;
+                                                constexpr unsigned child_segment_steps=100000U;
+                                                CopperChildContinuation* child_state=nullptr;
+                                                std::uint32_t* child_count=nullptr;
+                                                std::uint32_t* child_output=nullptr;
+                                                std::uint32_t* child_histogram=nullptr;
+                                                constexpr std::uint32_t slot=0;
 #include "detail/sycl_copper_primary_child.inc"
+                                            }
                                         }
                                     }
+                                    removed_energy = sycl::fmax(
+                                        removed_energy,
+                                        incident_beamline_energy - queued_energy -
+                                        (beamline_air_loss_MeV-air_loss_at_block_entry));
+                                    energy_MeV = 0.0F;
+                                    break;
                                 }
-                                removed_energy = sycl::fmax(
-                                    removed_energy,
-                                    incident_beamline_energy - queued_energy -
-                                    (beamline_air_loss_MeV-air_loss_at_block_entry));
-                                energy_MeV = 0.0F;
-                                break;
                             }
                         }
                         ++beamline_step;

@@ -24,12 +24,24 @@
 - All eight release presets enable medium nuclear elastic transport with
   projectile-specific all-ion elastic and recoil stopping packages. All four
   minibeams also enable copper-collimator nuclear elastic scattering.
-- All four minibeams use compact scheduling. Carbon water retains its TPS CSV
+- All four minibeams use fixed compact scheduling, with no scheduler selector
+  configuration key. Carbon water retains its TPS CSV
   source, emittance and generic Urban water medium kernel. Preserve physical/
   source behavior in refactors. Generic charged fragment species are required.
 - Continuous batches reuse one GPU context/packages. Allocate plan weights
   across the whole campaign using largest remainder, preserve per-spot seeds,
   and never multiply normalized plan dose by the number of batches.
+- Large GPU Monte Carlo campaigns must use both the local RTX 2080 Ti and
+  RTX A6000 (`ssh v@172.17.152.19`) by default. Compile the same source revision
+  ahead of time for each device (`sm_75` / `sm_86`), deploy the A6000 executable
+  and required current assets, and run both devices concurrently. Allocate
+  histories in proportion to measured throughput so their estimated remaining
+  run times are approximately equal; rebalance unstarted work when estimates
+  change. Prepare the remote run before committing most of the campaign to the
+  local GPU. Merely checking the A6000, or leaving all substantial computation
+  on the local GPU, does not fulfill this requirement. Keep campaign-wide spot
+  allocation, independent reproducible seeds, normalization and runtime audits
+  intact, and record device/source provenance when merging results.
 - Before performance experiments read `failed.md`. No performance claim from
   smoke tests. Preserve energy/EM/coverage/completion and zero-overflow audits.
 - Broadbeam dose gate: local1%/1mm >99%, search0.1mm. Historical proton-minibeam package
@@ -40,8 +52,11 @@
   not new TOPAS acceptance. Explicit calibration approximations of continuous26
   hard rates/conditional terminals remain unchanged.
 - Release configurations use `max_secondary_inelastic_generations` and
-  current Cu fluctuations (`g4_universal_delta` for proton minibeams and
-  `g4_ion_delta` for carbon minibeams); do not restore old aliases or retired scorer keys.
+  unified Cu fluctuations (`g4_delta`, primary parameters selected by ZA).
+  Native Cu fragment transport has its own `minibeam_copper_fragment_native_transport`
+  switch; do not select fragment packages or transport from the fluctuation model.
+  Preserve independently extracted native-fragment calibration, including H1.
+  Do not restore old species-named model aliases or retired scorer keys.
   YAML source identity requires explicit Z/A, energies use `initial_energy_MeVu`,
   and TPS CSV uses `energy_MeV,x_mm,y_mm,weight`. Urban loss/range/MFP uses only
   current packages; no CSV oracle route. Primary reference masses are checked

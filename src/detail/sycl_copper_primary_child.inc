@@ -34,10 +34,38 @@ const auto child_rng_stream =
         rng::primary_descendant_stream(spot_seed, rng_history), beamline_step,
         rng::branch_role_beamline_charged,
         product_index);
+if constexpr(kChildContinuation) {
+    if(child_resuming) {
+        const auto saved=*child_state;
+        child_energy=saved.energy;child_x=saved.x;child_y=saved.y;child_z=saved.z;
+        child_direction=saved.direction;child_step=saved.step;
+        child_copper_segment_path=saved.copper_path;child_nuclear_tau_remaining=saved.nuclear_tau;
+        child_nuclear_tau_active=saved.tau_active;child_urban_state=saved.urban_state;child_at_boundary=saved.at_boundary;
+    }
+}
+const auto child_segment_begin=child_step;
+bool child_suspended=false;
 while (child_energy > energy_cutoff_MeV &&
        child_direction.z > 1.0e-8F &&
        child_z < block_exit_z - 1.0e-6F &&
        child_step < 100000U) {
+    if constexpr(kChildContinuation) {
+        if(child_step-child_segment_begin>=child_segment_steps) {
+            const auto eb=sycl::min(15U,static_cast<unsigned>(sycl::fmax(0.f,child_energy/static_cast<float>(product.a))/25.f));
+            const auto cu=minibeam_point_in_copper(child_x,child_y,minibeam_cos,minibeam_sin,minibeam_block_radius,
+                minibeam_slit_count,minibeam_slit_width,minibeam_slit_pitch,.5F*minibeam_slit_length,minibeam_slit_offset);
+            const unsigned bucket=(child_species_category*16+eb)*2+static_cast<unsigned>(cu);
+            *child_state={child_energy,child_x,child_y,child_z,child_direction,child_step,child_copper_segment_path,
+                child_nuclear_tau_remaining,child_urban_state,child_nuclear_tau_active,child_at_boundary,bucket};
+            const auto output=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                sycl::access::address_space::global_space>(*child_count).fetch_add(1U);
+            child_output[output]=slot;
+            sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
+                sycl::access::address_space::global_space>(child_histogram[bucket]).fetch_add(1U);
+            child_suspended=true;
+            break;
+        }
+    }
     const auto nominal_child_path = sycl::fmin(
         minibeam_copper_max_step,
         (block_exit_z - child_z) /
@@ -74,7 +102,7 @@ while (child_energy > energy_cutoff_MeV &&
     auto child_inelastic_rate = 0.0F;
     auto child_collision_in_step = false;
     auto child_transport_path = child_path;
-    if (child_in_copper && !copper_ion_native_transport) {
+    if (child_in_copper && !copper_native_fragment_transport) {
         child_inelastic_rate =
             minibeam_copper_ion_inelastic_rate(
                 minibeam_copper_ion_xs_device,
@@ -108,7 +136,7 @@ while (child_energy > energy_cutoff_MeV &&
                 child_inelastic_rate;
         }
     }
-    if (copper_ion_native_transport) {
+    if (copper_native_fragment_transport) {
         auto& f_energy = child_energy; auto& f_x = child_x; auto& f_y = child_y; auto& f_z = child_z;
         auto& f_direction = child_direction; auto& f_path = child_transport_path;
         auto& f_rate = child_inelastic_rate; auto& f_collision = child_collision_in_step;
@@ -116,8 +144,8 @@ while (child_energy > energy_cutoff_MeV &&
         auto& f_urban_state = child_urban_state; auto& f_at_boundary = child_at_boundary;
         const auto f_charge = product.z; const auto f_a = product.a;
         const auto f_seed = spot_seed; const auto f_stream = child_rng_stream; const auto f_step = child_step;
-        const auto f_in_copper = child_in_copper; constexpr bool f_terminal = false;
-        float f_ignored_tau = 0;
+        const auto f_in_copper = child_in_copper;
+        float* const f_terminal_tau = nullptr;
 #include "sycl_copper_ion_fragment_step.inc"
     } else {
     child_x += child_transport_path *
@@ -128,7 +156,7 @@ while (child_energy > energy_cutoff_MeV &&
         child_direction.z;
     }
     if (child_in_copper) {
-      if (!copper_ion_native_transport) {
+      if (!copper_native_fragment_transport) {
         const auto child_stopping =
             minibeam_copper_ion_stopping(
                 minibeam_copper_sp_energies_device,
@@ -195,12 +223,13 @@ while (child_energy > energy_cutoff_MeV &&
                         gaussian);
         }
         if (minibeam_copper_fragment_enable_energy_straggling) {
-            if (copper_proton_native_fluctuation && product.z == 1 && product.a == 1) {
+            if (copper_native_fluctuations && product.z == 1 && product.a == 1) {
                 std::uint64_t draw_index = 0;
                 auto uniform = [&]() { return (rng::random_u32(
                     spot_seed, child_rng_stream, (std::uint64_t(child_step) << 32) | draw_index++, 124) >> 8) * 0x1p-24f; };
-                const auto draw = copper_proton_total_fluctuation(
-                    child_energy, product.rest_mass, mean_child_loss, child_transport_path, minibeam_copper_density, uniform);
+                const auto draw = sample_copper_fluctuation(
+                    {child_energy, product.rest_mass, 1, 1, 1.f, mean_child_loss,
+                     child_transport_path, minibeam_copper_density, CopperMeanLoss::total, true}, uniform);
                 sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                     sycl::memory_scope::device, sycl::access::address_space::global_space>(
                     minibeam_event_counts_device[draw.valid ? copper_proton_fragment_loss_slot : copper_proton_loss_failure_slot]).fetch_add(1U);
@@ -704,6 +733,7 @@ while (child_energy > energy_cutoff_MeV &&
     }
     ++child_step;
 }
+if(child_suspended) continue;
 if (child_energy <= energy_cutoff_MeV ||
     child_direction.z <= 1.0e-8F ||
     child_step == 100000U) continue;

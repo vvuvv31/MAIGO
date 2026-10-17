@@ -14,14 +14,14 @@ generic charged fragment species remain supported in every secondary worker.
 | Carbon broadbeam | `src/pipelines/carbon_broadbeam.hpp` |
 | Carbon minibeam | `src/pipelines/carbon_minibeam.hpp` |
 
-The proton CT broadbeam explicit local-electron mode uses stage15, or stage16
-when a host certificate proves identical CT/scorer grids. Stage16 reuses the
-directed scoring cell for material reads; unclamped validity and exact face
-ownership remain authoritative. Other configurations keep their existing
-stages. All current paths use local ionization deposition; no electron/photon
+The proton CT broadbeam specialization uses stage15, or continuation
+stages21/22 when a host certificate proves identical CT/scorer grids. These
+continuation stages reuse the directed scoring cell for material reads;
+unclamped validity and exact face ownership remain authoritative. Other
+configurations keep their existing stages. All current paths use local ionization deposition; no electron/photon
 transport packages or configuration switches remain.
 
-Stages15/16 use a step-start delta first moment for the proton primary, retaining
+Stages15/21/22 use a step-start delta first moment for the proton primary, retaining
 the current continuous26 rate, variance, restricted-loss slope and fluctuations.
 The two nearby-energy delta evaluations are omitted. Secondary particles and
 other stages keep the slope correction. The executed specialization sets
@@ -46,7 +46,7 @@ modes and all package/coverage validation. It does not admit other primary
 species or supply missing physical data.
 
 `src/transport_sycl.cpp` contains common helpers and the once-per-batch router.
-`transport_pipeline<Pipeline, JointResponse>` composes four shared phases:
+`transport_pipeline<Pipeline>` composes four shared phases:
 
 | Phase | Shared implementation |
 |---|---|
@@ -65,8 +65,11 @@ creates independently compiled optimization boundaries rather than rewriting
 or approximating the physics. Future path-specific step helpers should be
 selected through the pipeline type rather than growing runtime species switches.
 
-Minibeams retain two compact primary stages and their separate Cu/
+Minibeams use unconditional compact scheduling and their separate Cu/
 fragment kernels, rather than merging the entire simulation into four kernels.
+There is no `minibeam_primary_pipeline` configuration key.
+Continuation records retain cross-segment physics and scoring state; terminal
+escape/reaction flags remain local because those outcomes end transport.
 Carbon water retains its TPS CSV, emittance and generic Urban medium path.
 Primary rate/package calibrations, FP32 dose/geometry/loss, fluctuation flags,
 step caps, seed allocation and normalization are unchanged by the refactor.
