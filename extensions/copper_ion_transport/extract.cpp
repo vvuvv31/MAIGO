@@ -46,7 +46,6 @@ int main(int argc,char** argv) {
   <<"#pragma once\n// Generated from Geant4 11.3.2 G4_Cu; see extensions/copper_ion_transport.\nnamespace carbon {\n"
   <<"inline constexpr float copper_cut_MeV="<<converter.Convert(.05*mm,mat)/MeV<<"f;\n"
   <<"inline constexpr float copper_excitation_MeV="<<mat->GetIonisation()->GetMeanExcitationEnergy()/MeV<<"f;\n"
-  <<"inline constexpr float copper_e0_MeV="<<mat->GetIonisation()->GetEnergy0fluct()/MeV<<"f;\n"
   <<"inline constexpr float copper_fermi_MeV="<<mat->GetIonisation()->GetFermiEnergy()/MeV<<"f;\n"
   <<"inline constexpr float copper_electron_density="<<mat->GetElectronDensity()*mm*mm*mm<<"f;\n"
   <<"struct CopperIonIdentity {int z,a;float spin,magnetic_moment2;};\n"

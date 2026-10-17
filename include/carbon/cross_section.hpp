@@ -27,6 +27,9 @@ private:
 // Consumes optical depth over a segment of length step_mm in a medium with macro_xs (mm^-1).
 // If collision occurs within step_mm: returns true, clamps step_mm to collision distance, resets tau_active.
 // Otherwise: returns false, subtracts macro_xs * step_mm from tau_remaining, keeps tau_active true.
+// The caller supplies elastic+inelastic macroscopic hazards and chooses the
+// process only after a hit. rng_u is consumed only when the clock is inactive;
+// crossing a material boundary or suspending a track does not reset the clock.
 inline bool consume_schneider_optical_depth_segment(
     float& tau_remaining,
     bool& tau_active,

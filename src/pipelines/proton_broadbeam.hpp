@@ -4,7 +4,7 @@
 namespace carbon::pipelines {
 // Independent compile-time pipeline. Generic secondary projectile species remain supported.
 struct ProtonBroadbeam {
-    static constexpr const char* name = "proton_broadbeam";
+    static constexpr const char *name = "proton_broadbeam";
     static constexpr bool broadbeam = true;
     static constexpr unsigned secondary_segment_steps = kSecondarySegmentSteps;
     static constexpr unsigned secondary_tail_threshold = 8192U;
@@ -16,14 +16,19 @@ struct ProtonBroadbeam {
         return broadbeam_history_chunk(histories);
     }
 
-    template<class Launch>
-    static auto launch_primary(bool ct_specialized, bool nonion, int source_z, int source_a, Launch&& launch) {
-        (void)source_z; (void)source_a;
+    template <class Launch>
+    static auto launch_primary(bool ct_specialized, bool nonion, int source_z, int source_a,
+                               Launch &&launch) {
+        (void)source_z;
+        (void)source_a;
         if (ct_specialized)
-            return launch(std::false_type{}, std::integral_constant<int, 15>{});
+            return launch(std::false_type{},
+                          std::integral_constant<int, primary_stage::proton_ct>{});
         if (nonion)
-            return launch(std::false_type{}, std::integral_constant<int, 7>{});
-        return launch(std::false_type{}, std::integral_constant<int, 6>{});
+            return launch(std::false_type{},
+                          std::integral_constant<int, primary_stage::full_transport_nonion>{});
+        return launch(std::false_type{},
+                      std::integral_constant<int, primary_stage::full_transport>{});
     }
 };
 } // namespace carbon::pipelines

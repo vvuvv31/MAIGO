@@ -1,4 +1,7 @@
-// Shared finalize phase, included inside transport_pipeline<Pipeline>.
+// Include contract: last phase inside transport_pipeline<Pipeline>.
+// Read device scores/counters after transport completion, widen FP32 scores to
+// host results, and reject failed coverage/completion/overflow audits. Scores
+// remain deposited energy in MeV here; io.cpp converts voxel energy to Gy.
     runtime_steps.finish();
     RuntimeScope runtime_post("transport_readback_and_host_finalize");
     std::vector<DepthAtomicT> dose_device_host(number_of_bins);
@@ -635,9 +638,9 @@
 
     // Charged birth energy and nuclear-vertex itemization
     result.energy_ledger.E_transported_secondaries = result.queued_secondary_energy_MeV;
-    // Split Schneider nuclear-vertex ledger, accumulated on device from
-    // actually executed vertices (informational itemization; the legacy
-    // untracked sink behavior above is unchanged this step).
+    // Itemize executed nuclear vertices for auditing. These fields describe
+    // energy already accounted for by transport; they are not extra deposits.
+    // Untracked neutral energy remains a sink, never a dose correction.
     {
         const auto fslot = [&](SchneiderFloatSlot s) -> double {
             return static_cast<double>(schneider_float_host[static_cast<std::uint32_t>(s)]);

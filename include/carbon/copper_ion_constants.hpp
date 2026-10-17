@@ -3,7 +3,6 @@
 namespace carbon {
 inline constexpr float copper_cut_MeV=0.16144841053869555f;
 inline constexpr float copper_excitation_MeV=0.00032199999999999997f;
-inline constexpr float copper_e0_MeV=9.9999999999999991e-06f;
 inline constexpr float copper_fermi_MeV=0.028414230250000005f;
 inline constexpr float copper_electron_density=2.4624709586328329e+21f;
 struct CopperIonIdentity {int z,a;float spin,magnetic_moment2;};

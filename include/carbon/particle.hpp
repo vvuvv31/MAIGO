@@ -67,22 +67,4 @@ struct SecondaryParticle3D {
 
 static_assert(sizeof(SecondaryParticle3D) == 48);
 
-struct ElectronParticle3D {
-    float position_x_mm{0.0F};
-    float position_y_mm{0.0F};
-    float position_z_mm{0.0F};
-    float kinetic_energy_MeV{0.0F};
-    float direction_x{0.0F};
-    float direction_y{0.0F};
-    float direction_z{0.0F};
-    std::int32_t pdg_id{11};  // 11 = e-, -11 = e+
-    std::uint8_t origin_category{0};
-    std::uint8_t generation{0};
-    std::uint16_t reserved{0};
-    std::uint64_t rng_stream{0};
-};
-
-static_assert(sizeof(ElectronParticle3D) == 48);
-inline constexpr float positron_annihilation_reserve_MeV = 1.0219979F;
-
 }  // namespace carbon

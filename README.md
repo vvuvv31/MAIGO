@@ -508,6 +508,9 @@ After an intentional asset change, regenerate the manifest with
 
 Validation scripts require Python 3, NumPy and PyYAML.
 
+For the runtime's include structure, scheduling states, units and dose-accounting
+contracts, see the [Chinese core code review guide](docs/core_code_review_zh.md).
+
 The release configuration requires explicit `primary_atomic_number` and
 `primary_mass_number`; YAML source energies use `initial_energy_MeVu`.
 TPS CSV uses total `energy_MeV`, `x_mm`, `y_mm`, and `weight`. Central sources
@@ -537,17 +540,21 @@ uncertainty and error-distribution figures are collected in the
 Carbon broadbeam TOPAS uncertainties are explicitly marked as estimates from
 matched low-statistics reruns; the original reference doses are retained.
 
-For a matched implementation regression, supply a frozen control executable
-and its preset directory with neutron transport disabled in every control
-preset (`enable_neutron_transport: false` for binaries that support that key):
+For a matched implementation regression, explicitly select both a frozen
+control executable with compatible physics/configuration and the candidate
+executable you just built. Each root must contain its corresponding presets
+and assets. Load the compiler's shared-library environment before running;
+the checks inherit it without substituting a machine-specific library path.
 
 ```bash
-python3 scripts/validate_presets.py \
+CUDA_DISABLE_PTX_JIT=1 python3 scripts/validate_presets.py \
   --control /path/to/frozen/carbon_mc --control-root /path/to/frozen/root \
-  --out docs/validation_new
-python3 scripts/check_interfaces.py --output docs/interface_check_new.json
-python3 scripts/check_release_inputs.py --output docs/release_inputs_new.json
-python3 scripts/check_package_contracts.py --output docs/package_contracts_new.json
+  --candidate "$PWD/build/carbon_mc" --out tmp/validation_new
+CUDA_DISABLE_PTX_JIT=1 python3 scripts/check_interfaces.py \
+  --binary "$PWD/build/carbon_mc" --output tmp/interface_check_new.json
+python3 scripts/check_release_inputs.py --output tmp/release_inputs_new.json
+CUDA_DISABLE_PTX_JIT=1 python3 scripts/check_package_contracts.py \
+  --binary "$PWD/build/carbon_mc" --output tmp/package_contracts_new.json
 ```
 
 The control is used only for scientific comparison. Small-history matched GPU

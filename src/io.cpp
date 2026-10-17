@@ -23,24 +23,28 @@
 
 namespace carbon {
 namespace {
-constexpr double kMeV_to_joule=1.602176634e-13;
-double voxel_mass_kg(const TransportConfig& config) {
-    return config.voxel_size_x_mm * config.voxel_size_y_mm *
-           config.scorer_spacing_z_mm() *
+constexpr double kMeV_to_joule = 1.602176634e-13;
+// density[g/cm^3] * volume[mm^3] * 1e-6 gives mass[kg]. CT uses
+// each voxel's medium density below; water uses this uniform reference mass.
+double voxel_mass_kg(const TransportConfig &config) {
+    return config.voxel_size_x_mm * config.voxel_size_y_mm * config.scorer_spacing_z_mm() *
            config.water_density_g_per_cm3 * 1.0e-6;
 }
 struct ScorerMasses {
     double uniform_mass_kg{};
     std::shared_ptr<const std::vector<double>> medium;
-    double operator[](std::size_t i)const {return medium?(*medium)[i]:uniform_mass_kg;}
+    double operator[](std::size_t i) const {
+        return medium ? (*medium)[i] : uniform_mass_kg;
+    }
 };
-ScorerMasses voxel_masses_kg(const TransportConfig& config) {
-    if (!config.enable_ct_grid)return {voxel_mass_kg(config),{}};
+ScorerMasses voxel_masses_kg(const TransportConfig &config) {
+    if (!config.enable_ct_grid)
+        return {voxel_mass_kg(config), {}};
     const auto count = config.number_of_voxels();
-    const auto volume_mm3 = config.voxel_size_x_mm * config.voxel_size_y_mm *
-        config.scorer_spacing_z_mm();
+    const auto volume_mm3 =
+        config.voxel_size_x_mm * config.voxel_size_y_mm * config.scorer_spacing_z_mm();
     const auto grid_owner = CtGrid::load(config.ct_grid_file);
-    const auto& grid = *grid_owner;
+    const auto &grid = *grid_owner;
     if (grid.nx != config.voxel_bins_x || grid.ny != config.voxel_bins_y ||
         grid.nz != config.number_of_bins() ||
         std::abs(static_cast<double>(grid.spacing_x_mm) - config.voxel_size_x_mm) > 1.0e-6 ||
@@ -55,16 +59,16 @@ ScorerMasses voxel_masses_kg(const TransportConfig& config) {
         std::shared_ptr<const std::vector<double>> masses;
     };
     thread_local Cache cached;
-    if(cached.grid!=grid_owner || cached.volume_mm3!=volume_mm3 || !cached.masses) {
-        auto masses=std::make_shared<std::vector<double>>(count);
+    if (cached.grid != grid_owner || cached.volume_mm3 != volume_mm3 || !cached.masses) {
+        auto masses = std::make_shared<std::vector<double>>(count);
         for (std::size_t i = 0; i < count; ++i) {
             // Preserve the dose-to-medium density floor and FP64 evaluation.
             const auto density = std::max(1.0e-6, static_cast<double>(grid.density_g_per_cm3[i]));
             (*masses)[i] = volume_mm3 * density * 1.0e-6;
         }
-        cached={grid_owner,volume_mm3,std::move(masses)};
+        cached = {grid_owner, volume_mm3, std::move(masses)};
     }
-    return {0.,cached.masses};
+    return {0., cached.masses};
 }
 double energy_MeV_to_dose_Gy(double energy_MeV, double mass_kg) {
     if (mass_kg <= 0.0) {
@@ -72,10 +76,12 @@ double energy_MeV_to_dose_Gy(double energy_MeV, double mass_kg) {
     }
     return energy_MeV * kMeV_to_joule / mass_kg;
 }
-double scored_dose_Gy(const TransportConfig& config, double energy_MeV, double mass_kg) {
+double scored_dose_Gy(const TransportConfig &config, double energy_MeV, double mass_kg) {
+    // Apply the configured plan/output normalization exactly once, then divide
+    // deposited energy by medium mass. Batch count is not a dose multiplier.
     return energy_MeV_to_dose_Gy(energy_MeV * config.dose_output_scale, mass_kg);
 }
-void ensure_parent_directory(const std::filesystem::path& path) {
+void ensure_parent_directory(const std::filesystem::path &path) {
     if (path.has_parent_path()) {
         std::filesystem::create_directories(path.parent_path());
     }

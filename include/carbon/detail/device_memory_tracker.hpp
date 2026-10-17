@@ -122,10 +122,6 @@ struct DeviceMemoryTracker {
         }
     }
 
-    const std::vector<void*>& active_allocations() const noexcept {
-        return allocations;
-    }
-
     ~DeviceMemoryTracker() {
         if (!unlimited() || std::getenv("CARBON_RUNTIME_BREAKDOWN") != nullptr) {
             std::cerr << "[device-memory] tracked_peak_GiB="
@@ -152,4 +148,3 @@ struct DeviceMemoryTracker {
 };
 
 }  // namespace carbon::detail
-

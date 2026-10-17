@@ -26,12 +26,10 @@ bash extensions/copper_ion_transport/build_extract.sh \
 
 ## 数值验证
 
-```bash
-extensions/work/build/copper_ion_transport/validate \
-  data/scattering/urban/copper_fragments.bin > extensions/work/copper_native_validation.jsonl
-```
-
-验证器用 native G4IonFluctuations/G4UniversalFluctuation 对照 FP32 移植的受限涨落方差及采样矩，并用独立数值积分验证包含 δ 转移的总能损矩（含平均约 26 个候选/步的情况），覆盖质子、d、alpha、Li7、C12、O16、Ti48 和多个能量/步长。超出当前 Urban 因子表的测试点明确标为 OUTSIDE_BANK；运行时缺失覆盖会拒绝剂量，不会替代模型。验证结果只说明相应离线采样比较通过。
+`build_extract.sh` 自动调用 `validate_urban`，检查候选 Urban 包与 held-out
+native Geant4 探针；失败时不生成可安装包。它检查的是 Urban 查表精度，
+不验证涨落采样或完整计划剂量。统一铜涨落引擎的验证范围和已有结果见
+[`docs/copper_fluctuation_engine.md`](../../docs/copper_fluctuation_engine.md)。
 
 ## 运行时范围
 

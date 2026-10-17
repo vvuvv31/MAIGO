@@ -1,4 +1,8 @@
-// Shared secondary phase, included inside transport_pipeline<Pipeline>.
+// Include contract: follows primary inside transport_pipeline<Pipeline>.
+// Drain charged-particle generations, including children appended by earlier
+// secondary generations. Grouping changes index order, never particle identity;
+// checkpoints retain pending dose, nuclear/ionization clocks and RNG counters.
+// Generation bounds distinguish already scheduled particles from new births.
     double secondary_kernel_seconds = 0.0;
     const bool segment_secondaries = config.secondary_step_chunking;
     constexpr unsigned secondary_tail_threshold = Pipeline::secondary_tail_threshold;
@@ -623,6 +627,10 @@
                             // Retain the remaining depth across steps, material boundaries
                             // and scheduler slices; only a nuclear candidate resets it.
                             const float macro_nuclear = macro_inelastic + macro_elastic;
+                            // The same shared optical-depth rule as for primaries:
+                            // locate a combined-hazard candidate, then select one
+                            // channel. The generation cap disables new inelastic
+                            // branches only; existing charged tracks still move.
                             if (macro_nuclear > 0.0F) {
                                 float u_nuclear = 1.0F;
                                 if (!nuclear_tau_active) {

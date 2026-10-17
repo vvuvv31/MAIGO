@@ -391,10 +391,7 @@ inline CopperUrbanCoefficients copper_urban_coefficients(
 
 // Exact Geant4 11.3.2 model constants (G4UrbanMscModel ctor + G4VMscModel.hh).
 constexpr float kUrbanV2Dtrl = 0.05F;
-constexpr float kUrbanV2Taulim = 1.0e-6F;
 constexpr float kUrbanV2TlimitMinFix = 1.0e-8F;    // 0.01 nm
-constexpr float kUrbanV2TlimitMinFix2 = 1.0e-6F;   // 1 nm
-constexpr float kUrbanV2TauSmall = 1.0e-16F;
 constexpr float kUrbanV2TauBig = 8.0F;
 constexpr float kUrbanV2FacRange = 0.2F;  // MscMuHadRangeFactor (TOPAS log: Rfact=0.2)
 constexpr float kUrbanV2LambdaLimit = 1.0F;  // mm (TOPAS log: Llim=1 mm)

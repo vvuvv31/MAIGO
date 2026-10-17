@@ -1,8 +1,12 @@
 // Shared source, Cu/air transport, and medium-entry handoff.
 // Included inside the primary kernel; all step/RNG/ledger operations stay inline.
 // kUrbanBeamlinePath describes upstream physics, independent of water/CT downstream.
-                if constexpr (kPrimaryStage != 4) {
-                const bool beamline_resume=kKernelStage==9 && use_beamline_continuation && beamline_resuming;
+// Include contract: inside the primary device kernel, before medium transport.
+// Advance through slit air/Cu, create Cu child tasks, and preserve the original
+// history/seed in the medium-entry record. Cu delta/recoil losses stay in the
+// beamline sink; this fragment must not score them into the patient dose grid.
+                if constexpr (kPrimaryStage != primary_stage::medium) {
+                const bool beamline_resume=kKernelStage == primary_stage::beamline_queued_children && use_beamline_continuation && beamline_resuming;
                 // Source draws are stateless functions of the original spot
                 // seed/history. Re-evaluating them on resume preserves source
                 // identity and incident energy; transport resumes from saved
@@ -295,7 +299,7 @@
                            position_z_mm < block_exit_z - 1.0e-6F &&
                            beamline_step < maximum_beamline_steps) {
 
-                        if constexpr(kKernelStage==9) {
+                        if constexpr(kKernelStage == primary_stage::beamline_queued_children) {
                             if(use_beamline_continuation && beamline_segment_iterations++>=beamline_segment_steps) {
                                 const auto slot=static_cast<std::uint32_t>(global_history-hist_offset);
                                 auto& saved=beamline_states[slot];

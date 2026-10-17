@@ -16,7 +16,7 @@ def run(case,arm,binary,input_root,out,histories):
     cfg['random_seed']=1001904402
     file=directory/'case.yaml';file.write_text(yaml.safe_dump(cfg,sort_keys=False))
     env={k:v for k,v in os.environ.items() if not k.startswith('CARBON_')}
-    env['LD_LIBRARY_PATH']='/home/wuwei/sycl_workspace/llvm/build/install/lib'
+    env['CUDA_DISABLE_PTX_JIT']='1'
     command=[str(binary),'--config',str(file),'--batch-count','2','--histories-per-batch',str(histories),'--batch-output',str(directory/'batches')]
     (directory/'command.json').write_text(json.dumps(command,indent=2)+'\n')
     with (directory/'gpu.log').open('w') as log:r=subprocess.run(command,cwd=input_root,env=env,stdout=log,stderr=subprocess.STDOUT)
@@ -40,7 +40,7 @@ def run(case,arm,binary,input_root,out,histories):
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--control',type=Path,required=True);p.add_argument('--control-root',type=Path,required=True)
-    p.add_argument('--candidate',type=Path,default=ROOT/'build/carbon_mc');p.add_argument('--candidate-root',type=Path,default=ROOT);p.add_argument('--out',type=Path,required=True)
+    p.add_argument('--candidate',type=Path,required=True);p.add_argument('--candidate-root',type=Path,default=ROOT);p.add_argument('--out',type=Path,required=True)
     p.add_argument('--histories',type=int,default=10000)
     p.add_argument('--cases',nargs='+',choices=CASES,default=CASES)
     a=p.parse_args();a.out=a.out.resolve();a.out.mkdir(parents=True,exist_ok=False)

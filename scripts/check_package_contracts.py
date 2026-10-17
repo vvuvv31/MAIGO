@@ -12,7 +12,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--binary',type=Path,default=ROOT/'build/carbon_mc')
+    parser.add_argument('--binary',type=Path,required=True)
     parser.add_argument('--output',type=Path,required=True)
     args=parser.parse_args()
     reports=[]
@@ -24,7 +24,6 @@ def main():
     assert any(c['has_support'] is False for c in proton['channels'])
     reports.append(dict(check='explicit_carbon_and_proton_support',passed=True))
     env={k:v for k,v in os.environ.items() if not k.startswith('CARBON_')}
-    env['LD_LIBRARY_PATH']='/home/wuwei/sycl_workspace/llvm/build/install/lib'
     env['CUDA_DISABLE_PTX_JIT']='1'
     with tempfile.TemporaryDirectory(prefix='maigo_package_contracts_') as temporary:
         temporary=Path(temporary)

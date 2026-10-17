@@ -1,4 +1,8 @@
-// Shared setup phase, included inside transport_pipeline<Pipeline>.
+// Include contract: first phase inside transport_pipeline<Pipeline>.
+// Establish the queue, package views, scoring/audit buffers and charged-particle
+// queues used by all later phases. mem_tracker owns temporary device storage;
+// an optional SyclTransportContext retains immutable packages between batches.
+// Upload completion and the existing queue ordering are part of this contract.
     using SecondaryResumeState = SecondaryResumeStateT<BroadBeam>;
     ImmutableInputCache local_inputs;
     auto& inputs = context ? context->impl_->immutable_inputs : local_inputs;

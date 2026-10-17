@@ -22,12 +22,14 @@
     {
       "file": "copper_ion_transport/CMakeLists.txt",
       "status": "authored_or_curated",
-      "installed_sha256": "7afaf23b06634be20dba075720ed9a1492e95ee2227f991de4b843841d9a8483"
+      "installed_sha256": "25b7e572847fca41b5aa81db46f2bcff3e8e2ffcafc988724d7a9fc84a4ef67f",
+      "maintenance_note": "2026-10-17: remove obsolete fluctuation validator and its build/documentation entries; retain held-out Urban validation."
     },
     {
       "file": "copper_ion_transport/README.md",
       "status": "authored_or_curated",
-      "installed_sha256": "441e89f23386ecf72e126918e561abd44dff34bb0d96313604128a088a5ee474"
+      "installed_sha256": "173b7086aac8f550b16dfe3e9e81d70723778ba203ccbf7e1310406a44ef180a",
+      "maintenance_note": "2026-10-17: remove obsolete fluctuation validator and its build/documentation entries; retain held-out Urban validation."
     },
     {
       "file": "copper_ion_transport/build_extract.sh",
@@ -37,7 +39,8 @@
     {
       "file": "copper_ion_transport/extract.cpp",
       "status": "authored_or_curated",
-      "installed_sha256": "b521699e62b28d280ee7032a9e0a8fb97145bf3cc0ec45a131525e1baa01ca0e"
+      "installed_sha256": "f337bafe0a27536439b298598d70edf09e11a87df1cfdda4cc3cbf861a543b17",
+      "maintenance_note": "2026-10-17: stop emitting unused copper_e0_MeV; retain independently calibrated transport constants."
     },
     {
       "file": "copper_ion_transport/native_setup.hpp",
@@ -48,11 +51,6 @@
       "file": "copper_ion_transport/prepare.py",
       "status": "authored_or_curated",
       "installed_sha256": "a11599cc017049ff97c42cceca411e7adf9779e3a7f087529b9d94cd93ee392d"
-    },
-    {
-      "file": "copper_ion_transport/validate.cpp",
-      "status": "authored_or_curated",
-      "installed_sha256": "44ea1cf6115a8b120a434fe90f46b3a8b0ed627fdb447dee44a957426afd11e3"
     },
     {
       "file": "coverage.json",

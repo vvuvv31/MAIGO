@@ -64,6 +64,8 @@
 #include <vector>
 
 namespace carbon {
+namespace primary_stage = pipelines::primary_stage;
+
 template<class Pipeline, bool UniformWaterPath, int Stage, bool BroadBeam>
 class PrimaryTransportKernel;
 // A single transfer at the beamline/medium boundary. All physics-specific
@@ -1099,6 +1101,10 @@ template<class Pipeline>
                                const std::string& device_name,
                                SyclTransportContext* context) {
     constexpr bool BroadBeam = Pipeline::broadbeam;
+    // These fragments form one function body and share its local scope.
+    // setup owns uploads/allocations; primary appends charged children;
+    // secondary drains their generations; finalize reads scores and audits.
+    // See docs/core_code_review_zh.md for state and scoring invariants.
 #include "detail/sycl_pipeline_setup.inc"
 #include "detail/sycl_pipeline_primary.inc"
 #include "detail/sycl_pipeline_secondary.inc"

@@ -1,3 +1,9 @@
+    // Include contract: follows setup inside transport_pipeline<Pipeline>.
+    // Advance source histories through the beamline and scoring medium; append
+    // charged nuclear products for the secondary phase. Positions/paths are mm,
+    // kinetic energies are total MeV, and directions are unit vectors.
+    // A continuation suspends scheduling only: pending scores, optical depths,
+    // MSC history and RNG counters must survive together without replaying a step.
     struct CopperChildContinuation {
         float energy, x, y, z;
         Direction3F direction;
@@ -8,7 +14,6 @@
         unsigned bucket;
     };
     static_assert(std::is_trivially_copyable_v<CopperChildContinuation>);
-// Shared primary phase, included inside transport_pipeline<Pipeline>.
     RuntimeScope runtime_steps("transport_loop_including_scoring_and_queue_transfers");
     double primary_kernel_seconds = 0.0;
 
@@ -22,45 +27,57 @@
     };
     static_assert(std::is_trivially_copyable_v<IntelPrimaryContext>);
     const IntelPrimaryContext host_primary_context{schneider_ct_device_ctx, unified_device};
-    auto* intel_primary_context = mem_tracker.allocate<IntelPrimaryContext>(1);
-    if (intel_primary_context == nullptr) throw std::bad_alloc();
-    queue.memcpy(intel_primary_context, &host_primary_context,
-                 sizeof(host_primary_context)).wait_and_throw();
+    auto *intel_primary_context = mem_tracker.allocate<IntelPrimaryContext>(1);
+    if (intel_primary_context == nullptr)
+        throw std::bad_alloc();
+    queue.memcpy(intel_primary_context, &host_primary_context, sizeof(host_primary_context))
+        .wait_and_throw();
 #endif
 
     // Opt-in homogeneous-water Urban minibeam specialization. Eligibility
     // proves every compile-time substitution below against runtime settings.
     const bool use_minibeam_primary_path = config.minibeam_primary_specialization;
-    if (use_minibeam_primary_path && !(
-        (!BroadBeam && config.enable_minibeam) && global_urban && use_unified_water &&
-        !enable_ct_grid))
-        throw std::invalid_argument("Minibeam primary specialization requires uniform-water Urban minibeam");
+    if (use_minibeam_primary_path && !((!BroadBeam && config.enable_minibeam) && global_urban &&
+                                       use_unified_water && !enable_ct_grid))
+        throw std::invalid_argument(
+            "Minibeam primary specialization requires uniform-water Urban minibeam");
     std::cout << "[minibeam-primary-specialization] " << use_minibeam_primary_path << "\n";
     std::cout << "[ct-minibeam-split] " << ct_minibeam_split << "\n";
     const bool primary_minibeam_enabled = (!BroadBeam && config.enable_minibeam);
     // Package models are the authority. Do not infer their behavior from Z/A alone.
-    const bool nonion_primary = BroadBeam &&
-        config.primary_atomic_number==1 && config.primary_mass_number==1 && nonion_primary_package_safe;
-    std::cout<<"[nonion-primary] enabled="<<nonion_primary<<"\n";
+    const bool nonion_primary = BroadBeam && config.primary_atomic_number == 1 &&
+                                config.primary_mass_number == 1 && nonion_primary_package_safe;
+    std::cout << "[nonion-primary] enabled=" << nonion_primary << "\n";
 
     // compact: a beamline launch writes one medium-entry record per history and
     // partitions survivors to the front; the medium launch transports only those.
     const bool compact_minibeam_primary = !BroadBeam && config.enable_minibeam;
     if (compact_minibeam_primary && !(global_urban && (enable_ct_grid || use_unified_water)))
         throw std::invalid_argument("Compact primary requires Urban water or CT minibeam");
-    auto* primary_medium_entry = compact_minibeam_primary
-        ? mem_tracker.allocate<PrimaryMediumEntryState>(history_chunk) : nullptr;
-    auto* primary_entry_counts = compact_minibeam_primary
-        ? mem_tracker.allocate<std::uint64_t>(2) : nullptr;
-    if (compact_minibeam_primary && (!primary_medium_entry || !primary_entry_counts)) throw std::bad_alloc();
+    auto *primary_medium_entry = compact_minibeam_primary
+                                     ? mem_tracker.allocate<PrimaryMediumEntryState>(history_chunk)
+                                     : nullptr;
+    auto *primary_entry_counts =
+        compact_minibeam_primary ? mem_tracker.allocate<std::uint64_t>(2) : nullptr;
+    if (compact_minibeam_primary && (!primary_medium_entry || !primary_entry_counts))
+        throw std::bad_alloc();
     // Proton medium-entry records are ordered by entry energy before transport.
-    const unsigned water_energy_buckets = compact_minibeam_primary &&
-        (use_minibeam_primary_path || ct_minibeam_split) &&
-        config.primary_atomic_number==1 && config.primary_mass_number==1 ? 16U : 0U;
-    auto* water_energy_order = water_energy_buckets ? mem_tracker.allocate<std::uint32_t>(history_chunk) : nullptr;
-    auto* water_energy_counts = water_energy_buckets ? mem_tracker.allocate<std::uint32_t>(water_energy_buckets+1) : nullptr;
-    auto* water_energy_offsets = water_energy_buckets ? mem_tracker.allocate<std::uint32_t>(water_energy_buckets+1) : nullptr;
-    if(water_energy_buckets && (!water_energy_order || !water_energy_counts || !water_energy_offsets))throw std::bad_alloc();
+    const unsigned water_energy_buckets =
+        compact_minibeam_primary && (use_minibeam_primary_path || ct_minibeam_split) &&
+                config.primary_atomic_number == 1 && config.primary_mass_number == 1
+            ? 16U
+            : 0U;
+    auto *water_energy_order =
+        water_energy_buckets ? mem_tracker.allocate<std::uint32_t>(history_chunk) : nullptr;
+    auto *water_energy_counts = water_energy_buckets
+                                    ? mem_tracker.allocate<std::uint32_t>(water_energy_buckets + 1)
+                                    : nullptr;
+    auto *water_energy_offsets = water_energy_buckets
+                                     ? mem_tracker.allocate<std::uint32_t>(water_energy_buckets + 1)
+                                     : nullptr;
+    if (water_energy_buckets &&
+        (!water_energy_order || !water_energy_counts || !water_energy_offsets))
+        throw std::bad_alloc();
     std::vector<sycl::event> water_order_events;
     std::cout << "[minibeam-candidates] water_energy_buckets=" << water_energy_buckets << '\n';
     // Beamline lane order: a straight-ray prediction from the sampled flat
@@ -68,22 +85,24 @@
     // ones (a few air steps), so fewer warps idle on a single long lane. Only
     // the lane->history map changes; every history keeps its index, RNG
     // stream and output slots.
-    const bool order_beamline_lanes = compact_minibeam_primary && enable_minibeam && enable_flat_source &&
-        !enable_emittance_source && primary_spot_count == 0;
-    auto* beamline_order = order_beamline_lanes
-        ? mem_tracker.allocate<std::uint32_t>(history_chunk) : nullptr;
-    auto* beamline_order_counts = order_beamline_lanes
-        ? mem_tracker.allocate<std::uint32_t>(2) : nullptr;
-    if (order_beamline_lanes && (!beamline_order || !beamline_order_counts)) throw std::bad_alloc();
+    const bool order_beamline_lanes = compact_minibeam_primary && enable_minibeam &&
+                                      enable_flat_source && !enable_emittance_source &&
+                                      primary_spot_count == 0;
+    auto *beamline_order =
+        order_beamline_lanes ? mem_tracker.allocate<std::uint32_t>(history_chunk) : nullptr;
+    auto *beamline_order_counts =
+        order_beamline_lanes ? mem_tracker.allocate<std::uint32_t>(2) : nullptr;
+    if (order_beamline_lanes && (!beamline_order || !beamline_order_counts))
+        throw std::bad_alloc();
     std::cout << "[beamline-order] enabled=" << order_beamline_lanes << "\n";
     std::cout << "[primary-compact] enabled=" << compact_minibeam_primary
               << " entry_bytes=" << sizeof(PrimaryMediumEntryState) << "\n";
     // Exact host certificate, never a tolerance-based grid approximation.
-    const bool primary_shared_ct_cell = enable_ct_grid &&
-        ct_nx==voxel_bins_x && ct_ny==voxel_bins_y && ct_nz==number_of_bins &&
-        ct_spacing_x==voxel_size_x_mm && ct_spacing_y==voxel_size_y_mm &&
-        ct_spacing_z==depth_bin_width_mm && ct_origin_x==voxel_min_x_mm &&
-        ct_origin_y==voxel_min_y_mm && ct_origin_z==0.0F;
+    const bool primary_shared_ct_cell =
+        enable_ct_grid && ct_nx == voxel_bins_x && ct_ny == voxel_bins_y &&
+        ct_nz == number_of_bins && ct_spacing_x == voxel_size_x_mm &&
+        ct_spacing_y == voxel_size_y_mm && ct_spacing_z == depth_bin_width_mm &&
+        ct_origin_x == voxel_min_x_mm && ct_origin_y == voxel_min_y_mm && ct_origin_z == 0.0F;
     // CT proton broadbeam and proton/carbon minibeam continuation. Pending scores and every
     // cross-step physics/RNG state survive without resampling or early scoring.
     struct PrimaryContinuation {
@@ -110,21 +129,34 @@
         float interaction_density{};
     };
     static_assert(std::is_trivially_copyable_v<PrimaryContinuation>);
-    const bool use_primary_continuation = enable_ct_grid &&
-        (std::is_same_v<Pipeline,pipelines::ProtonMinibeam> ||
-         std::is_same_v<Pipeline,pipelines::CarbonMinibeam> ||
-         (std::is_same_v<Pipeline,pipelines::ProtonBroadbeam> && broadbeam_ct_primary_specialize && primary_shared_ct_cell));
-    auto* continuation_states=use_primary_continuation?mem_tracker.allocate<PrimaryContinuation>(history_chunk):nullptr;
-    auto* continuation_input=use_primary_continuation?mem_tracker.allocate<std::uint32_t>(history_chunk):nullptr;
-    auto* continuation_output=use_primary_continuation?mem_tracker.allocate<std::uint32_t>(history_chunk):nullptr;
-    auto* continuation_count=use_primary_continuation?mem_tracker.allocate<std::uint32_t>(1):nullptr;
-    constexpr unsigned continuation_buckets=27*16;
-    auto* continuation_histogram=use_primary_continuation?mem_tracker.allocate<std::uint32_t>(continuation_buckets):nullptr;
-    auto* continuation_offsets=use_primary_continuation?mem_tracker.allocate<std::uint32_t>(continuation_buckets):nullptr;
-    if(use_primary_continuation && (!continuation_states || !continuation_input || !continuation_output ||
-        !continuation_count || !continuation_histogram || !continuation_offsets))throw std::bad_alloc();
-    float continuation_max_energy=initial_energy_MeV;
-    for(const auto& spot:config.primary_spot_batch)continuation_max_energy=std::max(continuation_max_energy,spot.floats[0]);
+    const bool use_primary_continuation =
+        enable_ct_grid && (std::is_same_v<Pipeline, pipelines::ProtonMinibeam> ||
+                           std::is_same_v<Pipeline, pipelines::CarbonMinibeam> ||
+                           (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam> &&
+                            broadbeam_ct_primary_specialize && primary_shared_ct_cell));
+    auto *continuation_states = use_primary_continuation
+                                    ? mem_tracker.allocate<PrimaryContinuation>(history_chunk)
+                                    : nullptr;
+    auto *continuation_input =
+        use_primary_continuation ? mem_tracker.allocate<std::uint32_t>(history_chunk) : nullptr;
+    auto *continuation_output =
+        use_primary_continuation ? mem_tracker.allocate<std::uint32_t>(history_chunk) : nullptr;
+    auto *continuation_count =
+        use_primary_continuation ? mem_tracker.allocate<std::uint32_t>(1) : nullptr;
+    constexpr unsigned continuation_buckets = 27 * 16;
+    auto *continuation_histogram = use_primary_continuation
+                                       ? mem_tracker.allocate<std::uint32_t>(continuation_buckets)
+                                       : nullptr;
+    auto *continuation_offsets = use_primary_continuation
+                                     ? mem_tracker.allocate<std::uint32_t>(continuation_buckets)
+                                     : nullptr;
+    if (use_primary_continuation &&
+        (!continuation_states || !continuation_input || !continuation_output ||
+         !continuation_count || !continuation_histogram || !continuation_offsets))
+        throw std::bad_alloc();
+    float continuation_max_energy = initial_energy_MeV;
+    for (const auto &spot : config.primary_spot_batch)
+        continuation_max_energy = std::max(continuation_max_energy, spot.floats[0]);
     std::vector<sycl::event> continuation_extra_events;
     std::cout << "[primary-continuation] enabled=" << use_primary_continuation
               << " bytes=" << sizeof(PrimaryContinuation) << " segment_steps=64\n";
@@ -132,7 +164,8 @@
     // Checkpoints change scheduling only; terminated tracks still reach the
     // compact entry partition exactly once, including zero-energy_MeV records.
     struct BeamlineContinuation {
-        float energy_MeV, position_x_mm, position_y_mm, position_z_mm, direction_x, direction_y, direction_z, air_loss_MeV;
+        float energy_MeV, position_x_mm, position_y_mm, position_z_mm, direction_x, direction_y,
+            direction_z, air_loss_MeV;
         UrbanV2TrackState air_urban_state;
         std::uint64_t air_urban_step;
         DiscreteDeltaClockCandidate<float> air_ion_clock;
@@ -147,20 +180,33 @@
         unsigned order_bucket;
     };
     static_assert(std::is_trivially_copyable_v<BeamlineContinuation>);
-    const bool use_beamline_continuation=(std::is_same_v<Pipeline,pipelines::ProtonMinibeam> ||
-        std::is_same_v<Pipeline,pipelines::CarbonMinibeam>) && enable_ct_grid && queue_copper_primary_children;
-    auto* beamline_states=use_beamline_continuation?mem_tracker.allocate<BeamlineContinuation>(history_chunk):nullptr;
-    auto* beamline_resume_input=use_beamline_continuation?mem_tracker.allocate<std::uint32_t>(history_chunk):nullptr;
-    auto* beamline_resume_output=use_beamline_continuation?mem_tracker.allocate<std::uint32_t>(history_chunk):nullptr;
-    auto* beamline_resume_count=use_beamline_continuation?mem_tracker.allocate<std::uint32_t>(1):nullptr;
-    auto* beamline_histogram=use_beamline_continuation?mem_tracker.allocate<std::uint32_t>(32):nullptr;
-    auto* beamline_offsets=use_beamline_continuation?mem_tracker.allocate<std::uint32_t>(32):nullptr;
-    if(use_beamline_continuation && (!beamline_states || !beamline_resume_input || !beamline_resume_output || !beamline_resume_count || !beamline_histogram || !beamline_offsets))throw std::bad_alloc();
+    const bool use_beamline_continuation = (std::is_same_v<Pipeline, pipelines::ProtonMinibeam> ||
+                                            std::is_same_v<Pipeline, pipelines::CarbonMinibeam>) &&
+                                           enable_ct_grid && queue_copper_primary_children;
+    auto *beamline_states = use_beamline_continuation
+                                ? mem_tracker.allocate<BeamlineContinuation>(history_chunk)
+                                : nullptr;
+    auto *beamline_resume_input =
+        use_beamline_continuation ? mem_tracker.allocate<std::uint32_t>(history_chunk) : nullptr;
+    auto *beamline_resume_output =
+        use_beamline_continuation ? mem_tracker.allocate<std::uint32_t>(history_chunk) : nullptr;
+    auto *beamline_resume_count =
+        use_beamline_continuation ? mem_tracker.allocate<std::uint32_t>(1) : nullptr;
+    auto *beamline_histogram =
+        use_beamline_continuation ? mem_tracker.allocate<std::uint32_t>(32) : nullptr;
+    auto *beamline_offsets =
+        use_beamline_continuation ? mem_tracker.allocate<std::uint32_t>(32) : nullptr;
+    if (use_beamline_continuation &&
+        (!beamline_states || !beamline_resume_input || !beamline_resume_output ||
+         !beamline_resume_count || !beamline_histogram || !beamline_offsets))
+        throw std::bad_alloc();
     std::vector<sycl::event> beamline_extra_events, beamline_order_events;
-    std::cout<<"[beamline-continuation] enabled="<<use_beamline_continuation<<" bytes="<<sizeof(BeamlineContinuation)<<" segment=64\n";
+    std::cout << "[beamline-continuation] enabled=" << use_beamline_continuation
+              << " bytes=" << sizeof(BeamlineContinuation) << " segment=64\n";
     std::vector<sycl::event> primary_events;
     primary_events.reserve((compact_minibeam_primary ? 2 : 1) *
-        ((number_of_histories + history_chunk - 1) / history_chunk));
+                           ((number_of_histories + history_chunk - 1) / history_chunk));
+
     for (std::size_t hist_offset = 0;
          hist_offset < number_of_histories;
          hist_offset += history_chunk) {
@@ -174,30 +220,55 @@
         std::size_t continuation_lanes=chunk_count;
         unsigned continuation_segment_steps=64;
         const auto launch_primary_chunk = [&](auto uniform_water_path_tag, auto stage_tag) {
+            // kKernelStage names a compiled launch/checkpoint policy.
+            // kPrimaryStage below selects the shared physical body: continuation
+            // and queued-child launches reuse it without changing process order.
             constexpr int kKernelStage = decltype(stage_tag)::value;
-            constexpr bool kQueueCopperChildren = kKernelStage == 9;
+            constexpr bool kQueueCopperChildren =
+                kKernelStage == primary_stage::beamline_queued_children;
             constexpr bool kMinibeamCtCache =
-                (std::is_same_v<Pipeline,pipelines::ProtonMinibeam> || std::is_same_v<Pipeline,pipelines::CarbonMinibeam>);
-            constexpr bool kSharedCtCell = kKernelStage == 18 || kKernelStage == 21 || kKernelStage == 22;
-            constexpr bool kLocalProtonCtPath = kKernelStage == 15 || kKernelStage == 21 || kKernelStage == 22;
-            constexpr bool kLocalCarbonCtPath = kKernelStage == 17 || kKernelStage == 18;
+                (std::is_same_v<Pipeline, pipelines::ProtonMinibeam> ||
+                 std::is_same_v<Pipeline, pipelines::CarbonMinibeam>);
+            constexpr bool kSharedCtCell =
+                kKernelStage == primary_stage::carbon_ct_shared_cell ||
+                kKernelStage == primary_stage::proton_ct_shared_cell_begin ||
+                kKernelStage == primary_stage::proton_ct_shared_cell_resume;
+            constexpr bool kLocalProtonCtPath =
+                kKernelStage == primary_stage::proton_ct ||
+                kKernelStage == primary_stage::proton_ct_shared_cell_begin ||
+                kKernelStage == primary_stage::proton_ct_shared_cell_resume;
+            constexpr bool kLocalCarbonCtPath =
+                kKernelStage == primary_stage::carbon_ct ||
+                kKernelStage == primary_stage::carbon_ct_shared_cell;
             constexpr bool kSpecializedCtPath = kLocalProtonCtPath || kLocalCarbonCtPath;
-            constexpr bool kPrimaryElasticTotals = kLocalProtonCtPath ||
-                (kMinibeamCtCache && std::is_same_v<Pipeline,pipelines::ProtonMinibeam>);
-            constexpr bool kSpeciesElasticTotals = kLocalCarbonCtPath ||
-                (kMinibeamCtCache && std::is_same_v<Pipeline,pipelines::CarbonMinibeam>);
+            constexpr bool kPrimaryElasticTotals =
+                kLocalProtonCtPath ||
+                (kMinibeamCtCache && std::is_same_v<Pipeline, pipelines::ProtonMinibeam>);
+            constexpr bool kSpeciesElasticTotals =
+                kLocalCarbonCtPath ||
+                (kMinibeamCtCache && std::is_same_v<Pipeline, pipelines::CarbonMinibeam>);
             constexpr bool kBroadBeamCtPath = kSpecializedCtPath;
             // Fold the host-checked projectile (proton / C12).
             constexpr int kFoldZ = kLocalProtonCtPath ? 1 : kLocalCarbonCtPath ? 6 : 0;
             constexpr int kFoldA = kLocalProtonCtPath ? 1 : kLocalCarbonCtPath ? 12 : 0;
             static_assert(!kBroadBeamCtPath || BroadBeam);
-            constexpr bool kContinuation = kKernelStage==19 || kKernelStage==20 || kKernelStage==21 || kKernelStage==22;
-            constexpr bool kResume = kKernelStage==20 || kKernelStage==22;
-            constexpr int kPrimaryStage = (kContinuation && !BroadBeam) ? 4 : kKernelStage == 9 ? 3 : kBroadBeamCtPath ? 6 : kKernelStage;
+            constexpr bool kContinuation =
+                kKernelStage == primary_stage::minibeam_ct_begin ||
+                kKernelStage == primary_stage::minibeam_ct_resume ||
+                kKernelStage == primary_stage::proton_ct_shared_cell_begin ||
+                kKernelStage == primary_stage::proton_ct_shared_cell_resume;
+            constexpr bool kResume = kKernelStage == primary_stage::minibeam_ct_resume ||
+                                     kKernelStage == primary_stage::proton_ct_shared_cell_resume;
+            constexpr int kPrimaryStage = (kContinuation && !BroadBeam) ? primary_stage::medium
+                                          : kKernelStage == primary_stage::beamline_queued_children
+                                              ? primary_stage::beamline
+                                          : kBroadBeamCtPath ? primary_stage::full_transport
+                                                             : kKernelStage;
             constexpr bool kUniformWaterPrimaryPath = decltype(uniform_water_path_tag)::value;
             // Host eligibility requires global Urban for every split beamline.
             // Downstream CT material handling must not select upstream physics.
-            constexpr bool kUrbanBeamlinePath = kUniformWaterPrimaryPath || kPrimaryStage == 3;
+            constexpr bool kUrbanBeamlinePath =
+                kUniformWaterPrimaryPath || kPrimaryStage == primary_stage::beamline;
             const auto ct_runtime_global_urban = global_urban;
             const auto ct_runtime_enable_ct_grid = enable_ct_grid;
             const auto ct_runtime_use_unified_water = use_unified_water;
@@ -211,7 +282,14 @@
 
             return queue.parallel_for<PrimaryTransportKernel<
                 Pipeline, kUniformWaterPrimaryPath, kKernelStage, BroadBeam>>(
-            sycl::nd_range<1>{sycl::range<1>{kKernelStage==9 && use_beamline_continuation?((beamline_lanes+local_size-1)/local_size)*local_size:kResume?((continuation_lanes+local_size-1)/local_size)*local_size:chunk_global}, sycl::range<1>{local_size}},
+            sycl::nd_range<1>{
+                sycl::range<1>{
+                    kKernelStage == primary_stage::beamline_queued_children && use_beamline_continuation
+                        ? ((beamline_lanes + local_size - 1) / local_size) * local_size
+                        : kResume
+                            ? ((continuation_lanes + local_size - 1) / local_size) * local_size
+                            : chunk_global},
+                sycl::range<1>{local_size}},
             [=](sycl::nd_item<1> item) {
                 // Constexpr-selected values remove unused physics branches;
                 // the host eligibility test proves their runtime equivalence.
@@ -228,7 +306,9 @@
                 const bool enable_minibeam = BroadBeam ? false : primary_minibeam_enabled;
 
                 const auto lane = item.get_global_linear_id();
-                if (lane >= (kKernelStage==9 && use_beamline_continuation?beamline_lanes:kResume?continuation_lanes:chunk_count)) {
+                if (lane >= (kKernelStage == primary_stage::beamline_queued_children && use_beamline_continuation
+                                 ? beamline_lanes
+                                 : kResume ? continuation_lanes : chunk_count)) {
                     return;
                 }
 #ifdef CARBON_INTEL_GPU_AOT
@@ -236,11 +316,11 @@
                 const auto& unified_device = intel_primary_context->em;
 #endif
                 auto global_history = hist_offset + lane;
-                if constexpr (kPrimaryStage == 3) {
+                if constexpr (kPrimaryStage == primary_stage::beamline) {
                     if (beamline_order != nullptr) global_history = hist_offset + beamline_order[lane];
                 }
 
-                if constexpr(kKernelStage==9) {
+                if constexpr(kKernelStage == primary_stage::beamline_queued_children) {
                     if(use_beamline_continuation && beamline_resuming)global_history=hist_offset+beamline_resume_input[lane];
                 }
                 const auto continuation_slot=kResume?continuation_input[lane]:static_cast<std::uint32_t>(lane);
@@ -248,7 +328,7 @@
                 if constexpr(!kResume) {
 #include "detail/sycl_primary_beamline.inc"
                 }
-                if constexpr (kPrimaryStage == 3) {
+                if constexpr (kPrimaryStage == primary_stage::beamline) {
                     // Partition all histories, never discard a terminated track.
                     // The two ends cannot overlap: active + inactive <= chunk_count.
                     const bool active = entry.energy_MeV > energy_cutoff_MeV;
@@ -261,7 +341,7 @@
                     if constexpr(kResume) {
                         entry=continuation_states[continuation_slot].entry;
                         global_history=entry.global_history;
-                    } else if constexpr (kPrimaryStage == 4) {
+                    } else if constexpr (kPrimaryStage == primary_stage::medium) {
                         entry = primary_medium_entry[water_energy_order ? water_energy_order[lane] : lane];
                         global_history = entry.global_history;
                     }
@@ -595,9 +675,9 @@
                             if (in_ct || ((kUniformWaterPrimaryPath || use_unified_water))) {
                                 const std::uint32_t section_id = ((kUniformWaterPrimaryPath || use_unified_water)) ? 255U : static_cast<std::uint32_t>(
                                     sycl::min(static_cast<std::uint32_t>(ct_material), 24U));
-                                // v3: hazard from the masked rate-binary partials
-                                // (single source with the target sampler); v1
-                                // keeps the CSV XS table EXACTLY.
+                                // SCHNRATE v3 masked partials also drive target
+                                // selection. Convert the mass-specific total to
+                                // a macroscopic hazard (mm^-1) using density once.
                                 const float mass_rate = schneider_ct_device_ctx.primary_rates(
                                     section_id, cur_e_u).total;
                                 // Density enters exactly once, in the total
@@ -629,6 +709,10 @@
                                 const float macro_tot = macro_inelastic + macro_el_ct;
                                 ++local_schneider_rate_queries;
 
+                                // One dimensionless optical depth competes with
+                                // the combined hazard. Draw only for a new clock;
+                                // material crossings retain its residual. Select
+                                // exactly one process after locating a candidate.
                                 float u_nuc = 1.0F;
                                 if (!nuclear_tau_active) {
                                     u_nuc = rng::uniform01(
@@ -692,7 +776,7 @@
                             if constexpr(kSpecializedCtPath)return unified_em_explicit_loss<kLocalProtonCtPath,true,kSpecializedCtPath>(
                                 unified_primary_state,energy_MeV,accepted_loss_path_mm,enable_energy_straggling,
                                 unified_primary_pre,unified_uniform,&unified_primary_point);
-                            else return unified_em_loss<kPrimaryStage==7>(
+                            else return unified_em_loss<kPrimaryStage == primary_stage::full_transport_nonion>(
                                 unified_primary_state, energy_MeV, accepted_loss_path_mm,
                                 enable_energy_straggling, unified_primary_pre,
                                 unified_uniform);
@@ -1022,11 +1106,9 @@
                                                        energy_MeV);
 
                         if (primary_lookup.status != Cinel03LookupStatus::Hit) {
-                            // Per-miss log: recompute the macro total exactly
-                            // as at hazard time (density x mass, once).
-                            // Per-miss macro total recomputed exactly as at
-                            // hazard time: v3 uses the masked binary total
-                            // (no CSV exists for v3), v1 the CSV XS table.
+                            // Log the current SCHNRATE v3 masked total at this
+                            // vertex energy, converting to mm^-1 with density
+                            // once. This query does not alter the live clock.
                             const float primary_miss_macro = interaction_density *
                                 schneider_ct_device_ctx.primary_rates(interaction_section, cur_primary_e_u).total;
                             schneider_log_miss_device(
@@ -1382,27 +1464,33 @@
             return last_event;
         };
         const auto dispatch_primary_chunk = [&]() {
-            if constexpr(BroadBeam) {
+            if constexpr (BroadBeam) {
                 if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam>) {
                     if (broadbeam_ct_primary_specialize && primary_shared_ct_cell)
-                        return launch_continuation(std::integral_constant<int,21>{},std::integral_constant<int,22>{});
+                        return launch_continuation(
+                            std::integral_constant<int,
+                                                   primary_stage::proton_ct_shared_cell_begin>{},
+                            std::integral_constant<int,
+                                                   primary_stage::proton_ct_shared_cell_resume>{});
                 }
                 if constexpr (std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>) {
                     if (broadbeam_ct_primary_specialize && primary_shared_ct_cell)
-                        return launch_primary_chunk(std::false_type{}, std::integral_constant<int,18>{});
+                        return launch_primary_chunk(
+                            std::false_type{},
+                            std::integral_constant<int, primary_stage::carbon_ct_shared_cell>{});
                 }
-                return Pipeline::launch_primary(
-                    broadbeam_ct_primary_specialize, nonion_primary,
-                    primary_atomic_number, primary_mass_number, launch_primary_chunk);
+                return Pipeline::launch_primary(broadbeam_ct_primary_specialize, nonion_primary,
+                                                primary_atomic_number, primary_mass_number,
+                                                launch_primary_chunk);
             } else {
-                // Compact minibeam: beamline launch (3, or 9 with queued Cu
-                // children) followed by the medium launch (4).
+                // Compact minibeam: beamline (optionally with queued Cu children)
+                // finishes before the medium launch consumes surviving entries.
                 {
                     const auto launch_minibeam_stage = [&](auto stage) {
                         // The Cu/air stages share one compiled kernel for water
                         // and CT. Only downstream transport selects a material
                         // policy; never apply uniform-water substitutions to CT.
-                        if constexpr (decltype(stage)::value == 4) {
+                        if constexpr (decltype(stage)::value == primary_stage::medium) {
                             if (!use_minibeam_primary_path) {
                                 return launch_primary_chunk(std::false_type{}, stage);
                             }
@@ -1414,107 +1502,163 @@
                         queue.parallel_for(sycl::range<1>(chunk_count), [=](sycl::id<1> id) {
                             const auto lane = static_cast<std::uint32_t>(id[0]);
                             const std::uint64_t history = hist_offset + lane;
-                            const auto local_x = flat_source_half_width_x_mm *
+                            const auto local_x =
+                                flat_source_half_width_x_mm *
                                 (2.0F * rng::uniform01(random_seed, history, 0, 34) - 1.0F);
-                            const auto local_y = flat_source_half_width_y_mm *
+                            const auto local_y =
+                                flat_source_half_width_y_mm *
                                 (2.0F * rng::uniform01(random_seed, history, 0, 35) - 1.0F);
                             const auto direction = compose_tps_direction(
-                                0.0F, 0.0F, 1.0F, beam_ux_x, beam_ux_y, beam_ux_z,
-                                beam_uy_x, beam_uy_y, beam_uy_z, beam_uz_x, beam_uz_y, beam_uz_z);
+                                0.0F, 0.0F, 1.0F, beam_ux_x, beam_ux_y, beam_ux_z, beam_uy_x,
+                                beam_uy_y, beam_uy_z, beam_uz_x, beam_uz_y, beam_uz_z);
                             const bool copper = minibeam_ray_hits_cylindrical_copper(
                                 source_origin_x_mm + beam_ux_x * local_x + beam_uy_x * local_y,
                                 source_origin_y_mm + beam_ux_y * local_x + beam_uy_y * local_y,
                                 source_origin_z_mm + beam_ux_z * local_x + beam_uy_z * local_y,
-                                direction.x, direction.y, direction.z,
-                                minibeam_cos, minibeam_sin, minibeam_block_radius,
-                                minibeam_block_center_z, minibeam_block_thickness,
-                                minibeam_slit_count, minibeam_slit_width, minibeam_slit_pitch,
-                                0.5F * minibeam_slit_length, minibeam_slit_thickness,
-                                minibeam_slit_offset);
-                            const auto rank = sycl::atomic_ref<std::uint32_t,
-                                sycl::memory_order::relaxed, sycl::memory_scope::device,
-                                sycl::access::address_space::global_space>(
-                                    beamline_order_counts[copper ? 0 : 1]).fetch_add(1U);
+                                direction.x, direction.y, direction.z, minibeam_cos, minibeam_sin,
+                                minibeam_block_radius, minibeam_block_center_z,
+                                minibeam_block_thickness, minibeam_slit_count, minibeam_slit_width,
+                                minibeam_slit_pitch, 0.5F * minibeam_slit_length,
+                                minibeam_slit_thickness, minibeam_slit_offset);
+                            const auto rank =
+                                sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                                                 sycl::memory_scope::device,
+                                                 sycl::access::address_space::global_space>(
+                                    beamline_order_counts[copper ? 0 : 1])
+                                    .fetch_add(1U);
                             beamline_order[copper ? rank : chunk_count - 1 - rank] = lane;
                         });
                     }
                     {
                         queue.fill(primary_entry_counts, std::uint64_t{0}, 2);
-                        if(use_beamline_continuation)queue.fill(beamline_resume_count,0U,1);
-                        auto upstream_event=queue_copper_primary_children
-                            ? launch_minibeam_stage(std::integral_constant<int,9>{})
-                            : launch_minibeam_stage(std::integral_constant<int,3>{});
-                        if(use_beamline_continuation) {
-                            unsigned rounds=0;
-                            for(;;) {
-                                std::uint32_t active=0;
-                                queue.copy(beamline_resume_count,&active,1).wait_and_throw();
-                                if(active>chunk_count)throw std::runtime_error("Upstream continuation overflow");
-                                if(!active)break;
+                        if (use_beamline_continuation)
+                            queue.fill(beamline_resume_count, 0U, 1);
+                        auto upstream_event =
+                            queue_copper_primary_children
+                                ? launch_minibeam_stage(
+                                      std::integral_constant<
+                                          int, primary_stage::beamline_queued_children>{})
+                                : launch_minibeam_stage(
+                                      std::integral_constant<int, primary_stage::beamline>{});
+                        if (use_beamline_continuation) {
+                            unsigned rounds = 0;
+                            for (;;) {
+                                std::uint32_t active = 0;
+                                queue.copy(beamline_resume_count, &active, 1).wait_and_throw();
+                                if (active > chunk_count)
+                                    throw std::runtime_error("Upstream continuation overflow");
+                                if (!active)
+                                    break;
                                 beamline_extra_events.push_back(upstream_event);
-                                beamline_lanes=active;beamline_resuming=true;
-                                beamline_segment_steps=(active<8192 || ++rounds>=64)?100001:64;
-                                if(beamline_segment_steps==100001) {
-                                    beamline_order_events.push_back(queue.copy(beamline_resume_output,beamline_resume_input,active));
+                                beamline_lanes = active;
+                                beamline_resuming = true;
+                                beamline_segment_steps =
+                                    (active < 8192 || ++rounds >= 64) ? 100001 : 64;
+                                if (beamline_segment_steps == 100001) {
+                                    beamline_order_events.push_back(queue.copy(
+                                        beamline_resume_output, beamline_resume_input, active));
                                 } else {
-                                    beamline_order_events.push_back(queue.fill(beamline_histogram,0U,32));
-                                    beamline_order_events.push_back(queue.parallel_for(sycl::range<1>(active),[=](sycl::id<1> id) {
-                                        const auto b=beamline_states[beamline_resume_output[id[0]]].order_bucket;
-                                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                                            sycl::access::address_space::global_space>(beamline_histogram[b]).fetch_add(1U);
-                                    }));
+                                    beamline_order_events.push_back(
+                                        queue.fill(beamline_histogram, 0U, 32));
+                                    beamline_order_events.push_back(queue.parallel_for(
+                                        sycl::range<1>(active), [=](sycl::id<1> id) {
+                                            const auto b =
+                                                beamline_states[beamline_resume_output[id[0]]]
+                                                    .order_bucket;
+                                            sycl::atomic_ref<
+                                                std::uint32_t, sycl::memory_order::relaxed,
+                                                sycl::memory_scope::device,
+                                                sycl::access::address_space::global_space>(
+                                                beamline_histogram[b])
+                                                .fetch_add(1U);
+                                        }));
                                     beamline_order_events.push_back(queue.single_task([=] {
-                                        unsigned offset=0;
-                                        for(unsigned b=0;b<32;++b){beamline_offsets[b]=offset;offset+=beamline_histogram[b];beamline_histogram[b]=0;}
+                                        unsigned offset = 0;
+                                        for (unsigned b = 0; b < 32; ++b) {
+                                            beamline_offsets[b] = offset;
+                                            offset += beamline_histogram[b];
+                                            beamline_histogram[b] = 0;
+                                        }
                                     }));
-                                    beamline_order_events.push_back(queue.parallel_for(sycl::range<1>(active),[=](sycl::id<1> id) {
-                                        const auto slot=beamline_resume_output[id[0]], b=beamline_states[slot].order_bucket;
-                                        const auto rank=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                                            sycl::access::address_space::global_space>(beamline_histogram[b]).fetch_add(1U);
-                                        beamline_resume_input[beamline_offsets[b]+rank]=slot;
-                                    }));
+                                    beamline_order_events.push_back(queue.parallel_for(
+                                        sycl::range<1>(active), [=](sycl::id<1> id) {
+                                            const auto slot = beamline_resume_output[id[0]],
+                                                       b = beamline_states[slot].order_bucket;
+                                            const auto rank =
+                                                sycl::atomic_ref<
+                                                    std::uint32_t, sycl::memory_order::relaxed,
+                                                    sycl::memory_scope::device,
+                                                    sycl::access::address_space::global_space>(
+                                                    beamline_histogram[b])
+                                                    .fetch_add(1U);
+                                            beamline_resume_input[beamline_offsets[b] + rank] =
+                                                slot;
+                                        }));
                                 }
-                                queue.fill(beamline_resume_count,0U,1);
-                                upstream_event=launch_minibeam_stage(std::integral_constant<int,9>{});
+                                queue.fill(beamline_resume_count, 0U, 1);
+                                upstream_event = launch_minibeam_stage(
+                                    std::integral_constant<
+                                        int, primary_stage::beamline_queued_children>{});
                             }
                         }
                         primary_events.push_back(upstream_event);
                         if (water_energy_order) {
-                            queue.fill(water_energy_counts,0U,water_energy_buckets+1);
-                            auto bucket=[=](float energy) {
-                                if(energy<=energy_cutoff_MeV)return water_energy_buckets;
-                                return sycl::min(water_energy_buckets-1,
-                                    static_cast<unsigned>(sycl::fmax(0.F,energy)/initial_energy_MeV*water_energy_buckets));
+                            queue.fill(water_energy_counts, 0U, water_energy_buckets + 1);
+                            auto bucket = [=](float energy) {
+                                if (energy <= energy_cutoff_MeV)
+                                    return water_energy_buckets;
+                                return sycl::min(water_energy_buckets - 1,
+                                                 static_cast<unsigned>(sycl::fmax(0.F, energy) /
+                                                                       initial_energy_MeV *
+                                                                       water_energy_buckets));
                             };
-                            water_order_events.push_back(queue.parallel_for(sycl::range<1>(chunk_count),[=](sycl::id<1> index){
-                                const auto b=bucket(primary_medium_entry[index[0]].energy_MeV);
-                                sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                                    sycl::access::address_space::global_space>(water_energy_counts[b]).fetch_add(1U);
-                            }));
-                            water_order_events.push_back(queue.single_task([=]{
-                                unsigned offset=0;
-                                for(unsigned b=0;b<=water_energy_buckets;++b){
-                                    water_energy_offsets[b]=offset;offset+=water_energy_counts[b];water_energy_counts[b]=0;
+                            water_order_events.push_back(queue.parallel_for(
+                                sycl::range<1>(chunk_count), [=](sycl::id<1> index) {
+                                    const auto b =
+                                        bucket(primary_medium_entry[index[0]].energy_MeV);
+                                    sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                                                     sycl::memory_scope::device,
+                                                     sycl::access::address_space::global_space>(
+                                        water_energy_counts[b])
+                                        .fetch_add(1U);
+                                }));
+                            water_order_events.push_back(queue.single_task([=] {
+                                unsigned offset = 0;
+                                for (unsigned b = 0; b <= water_energy_buckets; ++b) {
+                                    water_energy_offsets[b] = offset;
+                                    offset += water_energy_counts[b];
+                                    water_energy_counts[b] = 0;
                                 }
                             }));
-                            water_order_events.push_back(queue.parallel_for(sycl::range<1>(chunk_count),[=](sycl::id<1> index){
-                                const auto b=bucket(primary_medium_entry[index[0]].energy_MeV);
-                                const auto rank=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                                    sycl::access::address_space::global_space>(water_energy_counts[b]).fetch_add(1U);
-                                water_energy_order[water_energy_offsets[b]+rank]=index[0];
-                            }));
+                            water_order_events.push_back(queue.parallel_for(
+                                sycl::range<1>(chunk_count), [=](sycl::id<1> index) {
+                                    const auto b =
+                                        bucket(primary_medium_entry[index[0]].energy_MeV);
+                                    const auto rank =
+                                        sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
+                                                         sycl::memory_scope::device,
+                                                         sycl::access::address_space::global_space>(
+                                            water_energy_counts[b])
+                                            .fetch_add(1U);
+                                    water_energy_order[water_energy_offsets[b] + rank] = index[0];
+                                }));
                         }
-                        if constexpr(std::is_same_v<Pipeline,pipelines::ProtonMinibeam> ||
-                                     std::is_same_v<Pipeline,pipelines::CarbonMinibeam>) {
-                            if(use_primary_continuation) {
-                                return launch_continuation(std::integral_constant<int,19>{},std::integral_constant<int,20>{});
+                        if constexpr (std::is_same_v<Pipeline, pipelines::ProtonMinibeam> ||
+                                      std::is_same_v<Pipeline, pipelines::CarbonMinibeam>) {
+                            if (use_primary_continuation) {
+                                return launch_continuation(
+                                    std::integral_constant<int, primary_stage::minibeam_ct_begin>{},
+                                    std::integral_constant<int,
+                                                           primary_stage::minibeam_ct_resume>{});
                             }
                         }
-                        return launch_minibeam_stage(std::integral_constant<int, 4>{});
+                        return launch_minibeam_stage(
+                            std::integral_constant<int, primary_stage::medium>{});
                     }
                 }
             }
         };
+
         auto kernel_event = dispatch_primary_chunk();
         primary_events.push_back(kernel_event);
 

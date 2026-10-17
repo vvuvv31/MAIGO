@@ -12,9 +12,10 @@ KEYS += ['physics_profile','spots_lateral_yz_skew','spots_lateral_yz_skew_auto_p
 KEYS += ['ct_schneider_radiation_length_file']
 FLAGS=['--plan-manifest','--sequential-spots','--scorer-let','--dose-output','--straggling-scale']
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--binary',type=Path,default=ROOT/'build/carbon_mc');p.add_argument('--output',type=Path,required=True);a=p.parse_args()
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--binary',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
     cfg=yaml.safe_load((ROOT/'config/proton_water_broadbeam.yaml').read_text())
-    env={k:v for k,v in os.environ.items() if not k.startswith('CARBON_')};env['LD_LIBRARY_PATH']='/home/wuwei/sycl_workspace/llvm/build/install/lib'
+    env={k:v for k,v in os.environ.items() if not k.startswith('CARBON_')}
+    env['CUDA_DISABLE_PTX_JIT']='1'
     reports=[]
     with tempfile.TemporaryDirectory(prefix='maigo_clean_interfaces_') as tmp:
         for key in KEYS:

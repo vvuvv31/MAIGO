@@ -1,0 +1,28 @@
+#pragma once
+
+namespace carbon::pipelines::primary_stage {
+
+// Compile-time kernel identities, not YAML options or physical process IDs.
+// Keep the integer values stable: PrimaryTransportKernel uses them as template
+// arguments. A stage selects both its input state and its compile-time physics
+// policy; changing only the launch site can therefore select the wrong policy.
+inline constexpr int beamline = 3;
+inline constexpr int medium = 4;
+inline constexpr int full_transport = 6;
+inline constexpr int full_transport_nonion = 7;
+inline constexpr int beamline_queued_children = 9;
+
+// CT broadbeam specializations. Shared-cell paths require the host to prove
+// exact equality of the material and dose grids before reusing a cell lookup.
+inline constexpr int proton_ct = 15;
+inline constexpr int carbon_ct = 17;
+inline constexpr int carbon_ct_shared_cell = 18;
+
+// Begin consumes source/entry state; resume consumes a continuation checkpoint.
+// Each pair must retain the same physics policy and particle/RNG identity.
+inline constexpr int minibeam_ct_begin = 19;
+inline constexpr int minibeam_ct_resume = 20;
+inline constexpr int proton_ct_shared_cell_begin = 21;
+inline constexpr int proton_ct_shared_cell_resume = 22;
+
+} // namespace carbon::pipelines::primary_stage
