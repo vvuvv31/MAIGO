@@ -1,6 +1,6 @@
 # MAIGO_clean
 
-论文主线为 **GPU Monte Carlo: From Broadbeam to Minibeam**。材料与方法：[中文](mm_zh.md) / [English](mm_en.md)。
+论文主线为 **GPU Monte Carlo: From Broadbeam to Minibeam**。材料与方法：[中文](mm_zh.md) / [English](mm.md)；[文献与写作分析](docs/gpu_mc_methods_literature.md)。
 
 A standalone GPU runtime for the eight current MAIGO presets. The source and
 runtime inputs were copied independently from MAIGO_minibeam; there are no
