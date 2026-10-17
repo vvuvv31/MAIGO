@@ -262,47 +262,16 @@ const char* schneider_miss_status_name(const std::uint8_t status) noexcept {
     }
 }
 }
-void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
-                                const TransportConfig& config,
-                                const TransportResult& result) {
-    if (!config.enable_voxel_scoring) {
-        throw std::invalid_argument(
-            "Dense MHD dose output requested while voxel scoring is disabled");
-    }
-    if (result.voxel_deposited_energy_MeV.size() != config.number_of_voxels()) {
-        throw std::invalid_argument("Transport result voxel count does not match configuration");
-    }
-    if (mhd_path.empty()) {
-        throw std::invalid_argument("Dense MHD output path is empty");
-    }
-
+namespace {
+void write_dense_voxel_field_mhd(const std::filesystem::path& mhd_path,
+                                 const TransportConfig& config,
+                                 const std::vector<float>& raw,
+                                 const std::string& units_header) {
+    if (mhd_path.empty() || raw.size() != config.number_of_voxels())
+        throw std::invalid_argument("Invalid dense voxel field output");
     ensure_parent_directory(mhd_path);
-    const auto masses_kg = voxel_masses_kg(config);
-    const auto nx = config.voxel_bins_x;
-    const auto ny = config.voxel_bins_y;
+    const auto nx = config.voxel_bins_x, ny = config.voxel_bins_y;
     const auto nz = config.number_of_bins();
-    const auto plane_size = nx * ny;
-    const auto count = config.number_of_voxels();
-
-    // MHD RAW layout matches sparse_dose_to_mhd: z major, then y, x fastest.
-    // linear_zyx = iz * nx * ny + iy * nx + ix
-    std::vector<float> raw(count, 0.0F);
-    for (std::size_t iz = 0; iz < nz; ++iz) {
-        for (std::size_t iy = 0; iy < ny; ++iy) {
-            for (std::size_t ix = 0; ix < nx; ++ix) {
-                const auto index_xyz = iz * plane_size + iy * nx + ix;
-                const auto energy = result.voxel_deposited_energy_MeV[index_xyz];
-                if (energy == 0.0) {
-                    continue;
-                }
-                const auto linear_zyx = iz * plane_size + iy * nx + ix;
-                // Same index layout as GPU scorer (z-major plane of xy).
-                raw[linear_zyx] =
-                    static_cast<float>(scored_dose_Gy(config, energy, masses_kg[index_xyz]));
-            }
-        }
-    }
-
     std::filesystem::path mhd = mhd_path;
     if (mhd.extension() != ".mhd") {
         mhd += ".mhd";
@@ -362,8 +331,80 @@ void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
            << config.voxel_size_y_mm << ' ' << config.scorer_spacing_z_mm() << '\n'
            << "DimSize = " << nx << ' ' << ny << ' ' << nz << '\n'
            << "ElementType = MET_FLOAT\n"
-           << "DoseUnits = Gy\n"
+           << units_header
            << "ElementDataFile = " << raw_path.filename().string() << '\n';
+}
+}
+void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
+                                const TransportConfig& config,
+                                const TransportResult& result) {
+    if (!config.enable_voxel_scoring) {
+        throw std::invalid_argument(
+            "Dense MHD dose output requested while voxel scoring is disabled");
+    }
+    if (result.voxel_deposited_energy_MeV.size() != config.number_of_voxels()) {
+        throw std::invalid_argument("Transport result voxel count does not match configuration");
+    }
+    if (mhd_path.empty()) {
+        throw std::invalid_argument("Dense MHD output path is empty");
+    }
+
+    ensure_parent_directory(mhd_path);
+    const auto masses_kg = voxel_masses_kg(config);
+    const auto nx = config.voxel_bins_x;
+    const auto ny = config.voxel_bins_y;
+    const auto nz = config.number_of_bins();
+    const auto plane_size = nx * ny;
+    const auto count = config.number_of_voxels();
+
+    // MHD RAW layout matches sparse_dose_to_mhd: z major, then y, x fastest.
+    // linear_zyx = iz * nx * ny + iy * nx + ix
+    std::vector<float> raw(count, 0.0F);
+    for (std::size_t iz = 0; iz < nz; ++iz) {
+        for (std::size_t iy = 0; iy < ny; ++iy) {
+            for (std::size_t ix = 0; ix < nx; ++ix) {
+                const auto index_xyz = iz * plane_size + iy * nx + ix;
+                const auto energy = result.voxel_deposited_energy_MeV[index_xyz];
+                if (energy == 0.0) {
+                    continue;
+                }
+                const auto linear_zyx = iz * plane_size + iy * nx + ix;
+                // Same index layout as GPU scorer (z-major plane of xy).
+                raw[linear_zyx] =
+                    static_cast<float>(scored_dose_Gy(config, energy, masses_kg[index_xyz]));
+            }
+        }
+    }
+
+    write_dense_voxel_field_mhd(mhd_path, config, raw, "DoseUnits = Gy\n");
+}
+void write_dense_voxel_let_mhd(const std::filesystem::path& prefix,
+                              const TransportConfig& config,
+                              const TransportResult& result) {
+    const auto count = config.number_of_voxels();
+    const auto& n = result.voxel_let_numerator_MeV2_per_mm;
+    const auto& d = result.voxel_let_denominator_MeV;
+    if (!config.enable_voxel_scoring || n.size() != count || d.size() != count)
+        throw std::invalid_argument("LET output requires complete voxel moments");
+    std::vector<float> let(count);
+    for (std::size_t i = 0; i < count; ++i) {
+        if (!std::isfinite(n[i]) || !std::isfinite(d[i]) || n[i] < 0 || d[i] < 0 ||
+            (d[i] == 0 && n[i] != 0))
+            throw std::runtime_error("Invalid LET moments");
+        let[i] = d[i] > 0 ? n[i] / d[i] : 0;
+    }
+    // MeV/mm equals keV/um numerically. Moments are raw sums, independent
+    // of dose_output_scale: prescription scaling cancels in their ratio.
+    const std::string definition = "LETDefinition = unrestricted_electronic_stopping_track_length\n"
+        "LETStoppingEnergy = pre_step\n"
+        "LETParticles = all_transported_charged_ions\n"
+        "LETZeroDenominator = 0_no_scored_track\n";
+    write_dense_voxel_field_mhd(prefix.string()+".mhd", config, let,
+        "LETUnits = keV/um\n" + definition);
+    write_dense_voxel_field_mhd(prefix.string()+"_numerator.mhd", config, n,
+        "FieldUnits = MeV^2/mm\n" + definition);
+    write_dense_voxel_field_mhd(prefix.string()+"_denominator.mhd", config, d,
+        "FieldUnits = MeV\n" + definition);
 }
 void write_energy_ledger_json(const std::filesystem::path& path,
                               const TransportConfig& config,

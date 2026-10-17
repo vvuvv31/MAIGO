@@ -566,6 +566,7 @@
     if (use_all_elastic && primary_elastic_projectile < 0)
         throw std::invalid_argument("All-ion elastic has no record for the YAML primary projectile");
     ElasticRecoilStoppingView recoil_stopping{};
+    ElasticRecoilStoppingView let_recoil_stopping{};
     float* elastic_energy = nullptr; // local, queued charged, overflow
     std::uint32_t* elastic_audit = nullptr; // primary, secondary, bad query, unsupported recoil
     if(use_all_elastic) {
@@ -576,6 +577,22 @@
         if(!keys||!se||!sv)throw std::bad_alloc();
         queue.copy(stop.keys.data(),keys,stop.keys.size());queue.copy(stop.energies.data(),se,stop.energies.size());queue.copy(stop.values.data(),sv,stop.values.size()).wait_and_throw();
         recoil_stopping={keys,se,sv,static_cast<std::uint32_t>(stop.keys.size()/2),static_cast<std::uint32_t>(stop.energies.size())};
+        if (!config.letd_output_prefix.empty()) {
+            // Transport uses total stopping. Electronic LET requires its own bank,
+            // with identical isotope/grid coverage and no nuclear stopping component.
+            if (config.letd_recoil_electronic_stopping_file.empty())
+                throw std::invalid_argument("LET with all-ion elastic requires letd_recoil_electronic_stopping_file");
+            const auto& electronic = inputs.get<ElasticRecoilStoppingTable>(
+                input_cache_key(config.letd_recoil_electronic_stopping_file), [&] {
+                    return ElasticRecoilStoppingTable::load_electronic(config.letd_recoil_electronic_stopping_file);
+                });
+            if (electronic.keys != stop.keys || electronic.energies != stop.energies)
+                throw std::invalid_argument("LET electronic recoil bank must match transport isotope/energy coverage");
+            auto* values = mem_tracker.allocate<float>(electronic.values.size());
+            if (!values) throw std::bad_alloc();
+            queue.copy(electronic.values.data(), values, electronic.values.size()).wait_and_throw();
+            let_recoil_stopping = {keys,se,values,recoil_stopping.np,recoil_stopping.ne};
+        }
         const auto& bank = inputs.get<AllIonElasticTable>(input_cache_key(config.all_ion_elastic_file),
             [&] { return AllIonElasticTable::load(config.all_ion_elastic_file); });
         config.require_primary_reference_mass(bank.masses[primary_elastic_projectile], "Elastic package");
@@ -942,6 +959,16 @@
     auto* voxel_dose_device = enable_voxel_scoring
                                   ? mem_tracker.allocate<DoseAtomicT>(number_of_voxels)
                                   : nullptr;
+    auto* let_numerator_device = config.letd_output_prefix.empty() ? nullptr
+        : mem_tracker.allocate<float>(number_of_voxels);
+    auto* let_denominator_device = config.letd_output_prefix.empty() ? nullptr
+        : mem_tracker.allocate<float>(number_of_voxels);
+    if (!config.letd_output_prefix.empty()) {
+        if (!enable_voxel_scoring || !let_numerator_device || !let_denominator_device)
+            throw std::runtime_error("Cannot allocate voxel LET moments");
+        queue.fill(let_numerator_device, 0.0F, number_of_voxels).wait_and_throw();
+        queue.fill(let_denominator_device, 0.0F, number_of_voxels).wait_and_throw();
+    }
 
     const auto enable_inelastic = config.enable_inelastic;
     if (enable_inelastic && !use_schneider_primary_xs) {

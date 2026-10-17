@@ -453,7 +453,7 @@ void TransportConfig::validate() const {
             !enable_energy_straggling)
             throw std::invalid_argument("Production unified EM requires primary fluctuations");
         if ((!enable_ct_grid) && (!is_water_mode()))
-            throw std::invalid_argument("Unified EM requires unified water or a Schneider CT grid, with LET off");
+            throw std::invalid_argument("Unified EM requires unified water or a Schneider CT grid");
         if (!ct_secondary_exact_faces)
             throw std::invalid_argument("Unified EM requires exact CT faces and native unscaled fluctuations");
     }
@@ -1642,6 +1642,16 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     if (parse_bool(values,"LET",false))
         throw std::invalid_argument("The eight presets use dose scoring with LET off");
+    if (const auto it = values.find("letd_output_prefix"); it != values.end()) {
+        config.letd_output_prefix = scorer_output_path(path, it->second, false);
+        if (!config.enable_voxel_scoring)
+            throw std::invalid_argument("letd_output_prefix requires enable_voxel_scoring=true");
+    }
+    config.letd_recoil_electronic_stopping_file = parse_path(
+        values, "letd_recoil_electronic_stopping_file", {});
+    if (!config.letd_recoil_electronic_stopping_file.empty())
+        config.letd_recoil_electronic_stopping_file = resolve_input_path_from_config(
+            config.letd_recoil_electronic_stopping_file, path);
 
     const auto device = values.find("device");
     if (device != values.end()) {
@@ -1650,7 +1660,7 @@ TransportConfig load_config(const std::filesystem::path& path) {
 
     if(!config.all_ion_elastic_file.empty()) {
         if((!config.enable_inelastic) || (!config.enable_secondary_transport) || ((!config.enable_ct_grid) && (!config.unified_water_nuclear_transport)))
-            throw std::invalid_argument("All-ion elastic requires Schneider CT/unified-water nuclear transport, secondary transport and LET off");
+            throw std::invalid_argument("All-ion elastic requires Schneider CT/unified-water nuclear transport and secondary transport");
         if(config.enable_ct_grid && !config.ct_secondary_exact_faces)
             throw std::invalid_argument("All-ion elastic requires secondary exact faces");
     }

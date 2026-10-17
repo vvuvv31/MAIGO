@@ -78,6 +78,14 @@
       "bytes": 591080,
       "sha256": "c6d44902f91479f452716c3978893c91e42d8960be1c4c925e0f1dd1851c2517"
     },
+    "data/let/schneider/recoil_electronic_stopping.bin": {
+      "bytes": 528040,
+      "sha256": "2031ebe913510ce1f81089aceeefc6aa3e2f9872cedc9e5d4415722ea3acc8ad"
+    },
+    "data/let/schneider/recoil_electronic_stopping.metadata.json": {
+      "bytes": 867,
+      "sha256": "47a4716a6cba7b9cdea5b4e475060f3bba8416ac4edd08d170cb9fce2ae28fd4"
+    },
     "data/materials/schneider/hu_to_material.txt": {
       "bytes": 37352,
       "sha256": "5022cd89617b28dbd8ee8bf8b095ea20cfd99f6405218693c0df238b3617a139"

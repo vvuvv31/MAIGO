@@ -85,7 +85,7 @@ TOPAS 的 `CutForAllParticles` 是次级生产射程 cut，**不是最大输运�
 
 ## 5. 剂量计分与比较范围
 
-TOPAS 参考使用对应的 DoseToMedium 计分。GPU 对体素沉积能量作 FP32 原子累积，再按体素质量和源归一化换算剂量；并行累加顺序可产生小的数值差异。GPU 没有通用 Geant4 scorer/LET/生物剂量过程，本对比限定为物理剂量。
+TOPAS 参考使用对应的 DoseToMedium 计分。GPU 对体素沉积能量作 FP32 原子累积，再按体素质量和源归一化换算剂量；并行累加顺序可产生小的数值差异。本页既有验收限定为物理剂量。可选 `letd_output_prefix` 另行提供电子阻止本领的剂量加权 LET，独立保存分子、分母；其定义及匹配 TOPAS scorer 见 [LET 计分说明](let_scoring.md)。GPU 没有通用 Geant4 scorer 或生物剂量过程。
 
 完整计划必须匹配束斑能量、位置、发射度、优化权重、CT 放置、铜几何、计分网格及原始入射粒子归一化。GPU 连续批次按全活动分配束斑粒子数并复用物理包；不能把已归一化计划剂量再乘批次数。RT07575 是头部病例，发布 CT 微束默认的独立肺部 benchmark 不能代替它的 full-plan 验证。
 

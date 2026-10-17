@@ -2,6 +2,9 @@
 #include "carbon/transport.hpp"
 #include <filesystem>
 namespace carbon {
+void write_dense_voxel_let_mhd(const std::filesystem::path& prefix,
+                              const TransportConfig& config,
+                              const TransportResult& result);
 void write_dense_voxel_dose_mhd(const std::filesystem::path& mhd_path,
                                 const TransportConfig& config,
                                 const TransportResult& result);

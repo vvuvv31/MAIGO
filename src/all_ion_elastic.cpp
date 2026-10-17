@@ -26,9 +26,10 @@ AllIonElasticTable AllIonElasticTable::load(const std::filesystem::path& path){
 }
 }
 namespace carbon {
-ElasticRecoilStoppingTable ElasticRecoilStoppingTable::load(const std::filesystem::path& path){
+namespace {
+ElasticRecoilStoppingTable read_recoil_stopping(const std::filesystem::path& path, bool electronic){
  std::ifstream f(path,std::ios::binary);char magic[8];f.read(magic,8);std::uint32_t h[3];f.read(reinterpret_cast<char*>(h),12);
- if(!f||std::memcmp(magic,"ELRSP001",8)||h[0]==0||h[0]>200||h[1]!=26||h[2]<2||h[2]>10000)throw std::runtime_error("Invalid recoil stopping schema");
+ if(!f||std::memcmp(magic,electronic ? "LERSP001" : "ELRSP001",8)||h[0]==0||h[0]>200||h[1]!=26||h[2]<2||h[2]>10000)throw std::runtime_error("Invalid recoil stopping schema");
  const std::uint64_t np=h[0],ne=h[2],nv=np*26*ne;
  if(std::filesystem::file_size(path)!=20+np*8+ne*4+nv*4)throw std::runtime_error("Recoil stopping size mismatch");
  ElasticRecoilStoppingTable t;t.keys.resize(np*2);t.energies.resize(ne);t.values.resize(nv);
@@ -39,5 +40,12 @@ ElasticRecoilStoppingTable ElasticRecoilStoppingTable::load(const std::filesyste
  for(unsigned i=0;i<ne;++i)if(!std::isfinite(t.energies[i])||t.energies[i]<=0||(i&&t.energies[i]<=t.energies[i-1]))throw std::runtime_error("Bad recoil grid");
  for(float v:t.values)if(!std::isfinite(v)||v<=0)throw std::runtime_error("Bad recoil stopping value");
  return t;
+}
+}
+ElasticRecoilStoppingTable ElasticRecoilStoppingTable::load(const std::filesystem::path& path){
+ return read_recoil_stopping(path,false);
+}
+ElasticRecoilStoppingTable ElasticRecoilStoppingTable::load_electronic(const std::filesystem::path& path){
+ return read_recoil_stopping(path,true);
 }
 }

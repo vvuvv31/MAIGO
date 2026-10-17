@@ -455,8 +455,13 @@ There are no archived readers, old density banks, per-batch SHA256 checks, DICOM
 conversion, TOPAS text-channel plan reader, sequential spot replay, old CLI
 aliases, diagnostic build modes or alternative precision scorers. Unsupported
 configuration keys fail before transport. Mandatory quality/energy/coverage,
-completion and overflow audits remain. LET/research scorer routes are outside
-this runtime. Internally required fragments remain part of the current physics.
+completion and overflow audits remain. Internally required fragments remain
+part of the current physics. Optional patient/phantom electronic LETd scoring
+uses `letd_output_prefix: letd` and, with medium all-ion elastic,
+`letd_recoil_electronic_stopping_file: data/let/schneider/recoil_electronic_stopping.bin`,
+with independent additive moments and no change
+to transport or dose normalization; release presets leave it unset. See
+[LET scoring and the matched TOPAS scorer](docs/let_scoring.md).
 Current process implementations and differences from TOPAS/Geant4 are documented in
 [TOPAS and GPU physics comparison](docs/topas_gpu_physics_comparison.md) (Chinese).
 

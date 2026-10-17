@@ -346,6 +346,27 @@ struct UnifiedEmPoint {
                 a.model,
                 a.fluctuation};
     }
+    // LET uses the native unrestricted electronic response, independently of
+    // the calibrated restricted-loss/delta estimator used to move the ion.
+    // Density changes its linear scale and Sternheimer correction. Cuts do not
+    // enter this unrestricted response. The native factor carries the reference
+    // projectile's effective-charge scaling, just as in corrected_raw_stopping.
+    float unrestricted_electronic_stopping(float kinetic) const {
+        const auto node = at(kinetic / record->a);
+        const bool alpha = record->z == 2 && record->a == 4;
+        const float reference_mass = alpha ? 3727.379f : 938.27208816f;
+        const float tau = kinetic * record->ratio / reference_mass;
+        const float bg2 = tau * (tau + 2), beta2 = bg2 / ((tau + 1) * (tau + 1));
+        const float x = .5f * std::log10(bg2);
+        const float density_difference =
+            em_density_effect(x, material.c, material.m, material.a, material.x0,
+                              material.x1, material.d0) -
+            em_density_effect(x, continuous->base_c, continuous->base_m,
+                              continuous->base_a, continuous->base_x0,
+                              continuous->base_x1, continuous->base_d0);
+        return node.full * density_scale - node.factor * material.coefficient *
+                   (alpha ? 4.f : 1.f) / beta2 * density_difference;
+    }
     float raw(int kind, float x, float *slope = nullptr) const {
         const auto *v = segments + record->offsets[kind];
         unsigned lo = 0, hi = record->counts[kind] - 1;

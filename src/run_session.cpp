@@ -43,6 +43,8 @@ void write_result(const TransportConfig& config,const TransportResult& result,
         throw std::runtime_error(quality.summary());
     if(config.enable_voxel_scoring && !config.voxel_dose_mhd_output_file.empty())
         write_dense_voxel_dose_mhd(config.voxel_dose_mhd_output_file,config,result);
+    if(!config.letd_output_prefix.empty())
+        write_dense_voxel_let_mhd(config.letd_output_prefix,config,result);
     if(!quality.accepted)throw std::runtime_error(quality.summary());
     std::cout<<"Quality status: "<<quality.status()<<"\nQuality report: "<<directory/"quality_report.json"<<'\n';
 }

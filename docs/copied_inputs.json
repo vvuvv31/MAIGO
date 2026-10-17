@@ -89,6 +89,8 @@
     "data/em/ions/delta_moments.bin",
     "data/em/ions/delta_moments.metadata.json",
     "data/ionization/air/proton_rate.csv",
+    "data/let/schneider/recoil_electronic_stopping.bin",
+    "data/let/schneider/recoil_electronic_stopping.metadata.json",
     "data/manifest.json",
     "data/materials/schneider/hu_to_material.txt",
     "data/materials/schneider/radiation_lengths.json",

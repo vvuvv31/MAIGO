@@ -19,6 +19,10 @@ d:Ge/World/HLX = 1 m
 d:Ge/World/HLY = 1 m
 d:Ge/World/HLZ = 1 m
 b:Ge/World/Invisible = \"True\"
+s:Ge/BeamPosition/Parent = \"World\"
+s:Ge/BeamPosition/Type = \"Group\"
+d:Ge/BeamPosition/TransZ = 500 mm
+d:Ge/BeamPosition/RotX = 180 deg
 s:Ge/Patient/Parent = \"World\"
 s:Ge/Patient/Material = \"Water_75eV\"
 s:Ge/Patient/Type = \"TsDicomPatient\"
@@ -54,22 +58,45 @@ def main() -> None:
     parser.add_argument("--samples", type=int, default=512)
     parser.add_argument("--seed", type=int, default=918721)
     parser.add_argument("--recoil-only", action="store_true")
+    parser.add_argument("--recoil-electronic", action="store_true",
+                        help="With --recoil-only, extract LERSP001 electronic stopping for LET")
+    parser.add_argument("--stopping-isotope", action="append", default=[], metavar="Z:A",
+                        help="Additional charged residual isotope, repeatable; requires --recoil-only")
     args = parser.parse_args()
+    extra_isotopes = []
+    try:
+        for item in args.stopping_isotope:
+            z, a = map(int, item.split(":"))
+            if not (1 <= z <= 32 and z <= a <= 250):
+                raise ValueError(item)
+            extra_isotopes.append((z, a))
+    except ValueError:
+        parser.error("--stopping-isotope must be Z:A with 1<=Z<=32 and Z<=A<=250")
+    extra_isotopes = sorted(set(extra_isotopes))
+    if extra_isotopes and not args.recoil_only:
+        parser.error("--stopping-isotope requires --recoil-only")
+    if args.recoil_electronic and not args.recoil_only:
+        parser.error("--recoil-electronic requires --recoil-only")
     if not args.hu_file.is_file() or not args.dicom_dir.is_dir():
         parser.error("--hu-file and --dicom-dir must exist")
     if args.samples < 32:
         parser.error("--samples must be at least 32")
     args.output.mkdir(parents=True, exist_ok=True)
+    (args.output / "raw").mkdir(exist_ok=True)
     species = [(1, 1)] if args.recoil_only else SPECIES
     cases = []
     for index, (z, a) in enumerate(species):
-        stem = "recoil_stopping" if args.recoil_only else f"z{z}a{a}"
+        stem = ("recoil_electronic_stopping" if args.recoil_electronic else "recoil_stopping") if args.recoil_only else f"z{z}a{a}"
         text = TEMPLATE.format(
             hu_file=args.hu_file.resolve(), dicom_dir=args.dicom_dir.resolve(),
             z=z, a=a, beam_energy=200 * a, seed=args.seed + index,
             samples=args.samples, output_stem=(args.output / "raw" / stem).resolve(),
-            recoil_flag='b:Sc/Elastic/RecoilStoppingOnly = "True"' if args.recoil_only else "",
+            recoil_flag=('b:Sc/Elastic/RecoilStoppingOnly = "True"' +
+                         ('\nb:Sc/Elastic/ElectronicStoppingOnly = "True"' if args.recoil_electronic else '')) if args.recoil_only else "",
         )
+        if extra_isotopes:
+            values = " ".join(str(v) for za in extra_isotopes for v in za)
+            text += f"\niv:Sc/Elastic/AdditionalStoppingIsotopes = {2*len(extra_isotopes)} {values}\n"
         path = args.output / f"{stem}.txt"
         path.write_text(text, encoding="utf-8")
         cases.append(path.name)
@@ -78,6 +105,8 @@ def main() -> None:
         "schema": 1, "species": species, "samples_per_node": args.samples,
         "hu_file": str(args.hu_file.resolve()), "dicom_dir": str(args.dicom_dir.resolve()),
         "recoil_only": args.recoil_only,
+        "recoil_electronic": args.recoil_electronic,
+        "additional_stopping_isotopes": extra_isotopes,
     }, indent=2) + "\n", encoding="utf-8")
     print(f"prepared {len(cases)} case(s) below {args.output}")
 

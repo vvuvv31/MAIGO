@@ -239,6 +239,15 @@
     }
 
     free_device(dose_device);
+    std::vector<float> let_numerator_host, let_denominator_host;
+    if (let_numerator_device) {
+        let_numerator_host.resize(number_of_voxels);
+        let_denominator_host.resize(number_of_voxels);
+        queue.copy(let_numerator_device, let_numerator_host.data(), number_of_voxels).wait_and_throw();
+        queue.copy(let_denominator_device, let_denominator_host.data(), number_of_voxels).wait_and_throw();
+    }
+    free_device(let_numerator_device);
+    free_device(let_denominator_device);
     free_device(primary_terminal_counts_device);
     free_device(in_fov_dose_device);
     free_device(voxel_dose_device);
@@ -356,6 +365,8 @@
     result.primary_deposited_energy_MeV = dose_host;
     result.deposited_energy_MeV = std::move(dose_host);
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
+    result.voxel_let_numerator_MeV2_per_mm = std::move(let_numerator_host);
+    result.voxel_let_denominator_MeV = std::move(let_denominator_host);
 
     result.in_fov_deposited_energy_MeV = std::move(in_fov_dose_host);
 

@@ -43,6 +43,8 @@ std::vector<std::size_t> allocate(const std::vector<long double> &weights, std::
 void relocate_outputs(TransportConfig &c, const std::filesystem::path &dir) {
     if (!c.voxel_dose_mhd_output_file.empty())
         c.voxel_dose_mhd_output_file = dir / c.voxel_dose_mhd_output_file.filename();
+    if (!c.letd_output_prefix.empty())
+        c.letd_output_prefix = dir / c.letd_output_prefix.filename();
 }
 }
 std::vector<RunShard> make_repeated_batches(const RunShard &original, const CliState &cli,

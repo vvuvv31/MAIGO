@@ -426,6 +426,11 @@ struct TransportConfig {
         "data/stopping/water/carbon.csv"};
     // Dense MetaImage MHD/RAW (total Gy). Empty disables.
     std::filesystem::path voxel_dose_mhd_output_file{};
+    // Optional unrestricted electronic LETd, using the stopping-power
+    // track-length estimator sum(S_e^2 dl) / sum(S_e dl). No transport effect.
+    std::filesystem::path letd_output_prefix{};
+    // LET-only electronic recoil stopping; never replaces transport's total stopping.
+    std::filesystem::path letd_recoil_electronic_stopping_file{};
 
     std::string device{"cuda"};
 

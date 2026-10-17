@@ -800,6 +800,21 @@
                             deposited_MeV);
                     }
                     auto local_voxel_deposit_MeV = deposited_MeV;
+                    if (let_numerator_device) {
+                        const auto cell = urban_voxel_cell(
+                            {position_x_mm, position_y_mm, position_z_mm},
+                            {direction_x, direction_y, direction_z},
+                            {voxel_min_x_mm, voxel_min_y_mm, 0},
+                            {voxel_max_x_mm, voxel_max_y_mm, phantom_length_mm},
+                            {voxel_size_x_mm, voxel_size_y_mm, depth_bin_width_mm},
+                            voxel_bins_x, voxel_bins_y, number_of_bins);
+                        if (cell.valid) {
+                            const auto v = (cell.iz * voxel_bins_y + cell.iy) * voxel_bins_x + cell.ix;
+                            score_electronic_let(let_numerator_device, let_denominator_device,
+                                v, unified_primary_state.point().unrestricted_electronic_stopping(energy_MeV),
+                                accepted_loss_path_mm);
+                        }
+                    }
                     if (bin != pending_primary_bin) {
                         if (pending_primary_depth_MeV > 0.0) {
                             sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,

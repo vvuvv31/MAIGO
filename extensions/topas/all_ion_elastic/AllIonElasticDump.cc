@@ -188,14 +188,32 @@ void AllIonElasticDump::DumpCrossSections() {
     }
     if(fPm->ParameterExists(GetFullParmName("RecoilStoppingOnly")) &&
        fPm->GetBooleanParameter(GetFullParmName("RecoilStoppingOnly"))) {
+        const bool electronicOnly = fPm->ParameterExists(GetFullParmName("ElectronicStoppingOnly")) &&
+            fPm->GetBooleanParameter(GetFullParmName("ElectronicStoppingOnly"));
         std::set<std::pair<int,int>> isotopes;
         for(auto* m:pure) {
             auto* el=(*m->GetElementVector())[0];
             for(auto* isotope:*el->GetIsotopeVector())isotopes.insert({isotope->GetZ(),isotope->GetN()});
         }
+        // Nonelastic residual ions need not be natural target isotopes.
+        // Explicit additions extend the same total/electronic stopping pair;
+        // this does not register new source particles or nuclear models.
+        if (fPm->ParameterExists(GetFullParmName("AdditionalStoppingIsotopes"))) {
+            const auto key = GetFullParmName("AdditionalStoppingIsotopes");
+            const auto count = fPm->GetVectorLength(key);
+            const auto* za = fPm->GetIntegerVector(key);
+            if (count % 2 != 0) throw std::runtime_error("Stopping isotopes require Z/A pairs");
+            for (int i=0;i<count;i+=2) {
+                if (za[i]<1 || za[i]>32 || za[i+1]<za[i] || za[i+1]>250)
+                    throw std::runtime_error("Invalid additional stopping isotope");
+                isotopes.insert({za[i],za[i+1]});
+            }
+        }
+        if (isotopes.size()>200)
+            throw std::runtime_error("Stopping isotope count exceeds runtime bank limit (200)");
         std::ofstream f(output_json_path_+".bin",std::ios::binary);
         auto write=[&](auto x){f.write(reinterpret_cast<const char*>(&x),sizeof(x));};
-        f.write("ELRSP001",8);write(std::uint32_t(isotopes.size()));write(std::uint32_t(26));write(std::uint32_t(energies.size()));
+        f.write(electronicOnly ? "LERSP001" : "ELRSP001",8);write(std::uint32_t(isotopes.size()));write(std::uint32_t(26));write(std::uint32_t(energies.size()));
         for(auto za:isotopes){write(std::int32_t(za.first));write(std::int32_t(za.second));}
         for(double e:energies)write(float(e));
         G4EmCalculator calculator;
@@ -203,7 +221,9 @@ void AllIonElasticDump::DumpCrossSections() {
             auto* ion=za.first==1&&za.second==1?table->FindParticle("proton"):
                 za.first==1&&za.second==2?table->FindParticle("deuteron"):table->GetIonTable()->GetIon(za.first,za.second,0.);
             for(auto* mat:mats)for(double e:energies){
-                const double value=calculator.ComputeTotalDEDX(e*za.second*MeV,ion,mat)/(MeV/mm)/(mat->GetDensity()/(g/cm3));
+                const double value=(electronicOnly ?
+                    calculator.ComputeElectronicDEDX(e*za.second*MeV,ion,mat) :
+                    calculator.ComputeTotalDEDX(e*za.second*MeV,ion,mat))/(MeV/mm)/(mat->GetDensity()/(g/cm3));
                 if(!std::isfinite(value)||value<=0)throw std::runtime_error("Invalid recoil stopping");
                 write(float(value));
             }

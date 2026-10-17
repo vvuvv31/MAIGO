@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <array>
 namespace carbon {
-inline constexpr std::array<std::string_view,157> preset_keys{
+inline constexpr std::array<std::string_view,158> preset_keys{
     "LET",
+    "letd_output_prefix",
+    "letd_recoil_electronic_stopping_file",
     "all_ion_elastic_file",
     "beam_energy_spread",
     "broadbeam_maximum_mean_loss_fraction",

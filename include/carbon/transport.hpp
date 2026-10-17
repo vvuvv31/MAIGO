@@ -444,6 +444,10 @@ struct TransportResult {
         IonSpeciesLedgerSchema::metric_count;
     std::vector<double> deposited_energy_MeV;
     std::vector<double> voxel_deposited_energy_MeV;
+    // Additive LET moments; merge these, never averages of per-batch ratios.
+    // S_e is linear electronic stopping in MeV/mm, dl is the true ion path.
+    std::vector<float> voxel_let_numerator_MeV2_per_mm;
+    std::vector<float> voxel_let_denominator_MeV;
     std::vector<double> in_fov_deposited_energy_MeV;
     std::vector<double> primary_deposited_energy_MeV;
     std::vector<double> secondary_carbon_deposited_energy_MeV;

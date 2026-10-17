@@ -97,5 +97,7 @@ struct ElasticRecoilStoppingView {
 struct ElasticRecoilStoppingTable {
  std::vector<std::int32_t> keys;std::vector<float> energies,values;
  static ElasticRecoilStoppingTable load(const std::filesystem::path&);
+ // Separate magic prevents a total-stopping transport bank being used for electronic LET.
+ static ElasticRecoilStoppingTable load_electronic(const std::filesystem::path&);
 };
 }

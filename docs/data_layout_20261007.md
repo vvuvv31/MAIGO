@@ -8,6 +8,7 @@
 |---|---|
 | `data/materials/{water,schneider}` | 水材料描述、HU 映射、材料辐射长度 |
 | `data/em/ions` | continuous26 离子 EM、delta moments、生成辅助 composition bases |
+| `data/let/schneider` | 可选 LET 专用反冲电子阻止本领；不参与输运，八个剂量预设不依赖 |
 | `data/nuclear/schneider/{proton,carbon,secondary}` | 主/次级核反应率、final states、bundle 和 sidecars |
 | `data/nuclear/copper/{proton,carbon}` | 铜中的主粒子反应率与级联；共享离子截面在上层 |
 | `data/elastic/{schneider,copper}` | 各粒子校准的弹性散射、反冲 stopping |

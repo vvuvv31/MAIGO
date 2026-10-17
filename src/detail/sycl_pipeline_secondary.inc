@@ -710,8 +710,25 @@
                                 unified_secondary_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_secondary_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
                             }
                             const auto post_em_e = sycl::fmax(0.0F, sec_e - dE);
-                             {
-
+                            if (let_numerator_device) {
+                                // Pre-step position/direction identify the segment's
+                                // scorer voxel; a later nuclear replay may move it.
+                                const auto cell = urban_voxel_cell(
+                                    {sec_x, sec_y, sec_z},
+                                    {collision_input_dx, collision_input_dy, collision_input_dz},
+                                    {voxel_min_x_mm, voxel_min_y_mm, 0},
+                                    {voxel_max_x_mm, voxel_max_y_mm, phantom_length_mm},
+                                    {voxel_size_x_mm, voxel_size_y_mm, depth_bin_width_mm},
+                                    voxel_bins_x, voxel_bins_y, number_of_bins);
+                                const float stopping = generic_recoil ?
+                                    let_recoil_stopping.stopping(recoil_sp_idx,
+                                        sec_in_ct ? sec_ct_material : 25, sec_e_u) * sec_local_density_g_per_cm3 :
+                                    unified_secondary_state.point().unrestricted_electronic_stopping(sec_e);
+                                if (cell.valid) {
+                                    const auto v = (cell.iz * voxel_bins_y + cell.iy) * voxel_bins_x + cell.ix;
+                                    score_electronic_let(let_numerator_device, let_denominator_device,
+                                        v, stopping, sec_step_mm);
+                                }
                             }
                             auto post_em_x = sec_x + collision_input_dx * sec_step_mm;
                             auto post_em_y = sec_y + collision_input_dy * sec_step_mm;
