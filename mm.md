@@ -26,30 +26,68 @@ For reoptimized physical-dose plans, A denotes the dose-influence matrix per inc
 
 ## II.B. Shared ion transport and broadbeam calculation
 
-### II.B.1. Step selection, mean energy loss, and fluctuations
+### II.B.1. Unrestricted electronic stopping and mean energy loss
 
-Each charged track carries position, direction, kinetic energy, species, and random identity. Electromagnetic parameters are evaluated for the current composition, density, and energy. Geometric boundaries, the maximum step, mean-loss limits, scattering-related limits, and nuclear interaction distances compete to determine the accepted step. Geometry queries and scoring-voxel assignment distinguish material boundaries from scoring boundaries. The imposed maximum step is therefore not the mean realized step.
+Each charged track carries position, direction, total kinetic energy E, nuclear identity (Z,A), and random-stream identity. The electromagnetic response is selected for that species, the current material composition, and the actual density. Package energy coordinates expressed in MeV/u are evaluated at E/A. The unrestricted linear electronic stopping power, \(S_e(E)\), includes the expected energy transferred to ionization secondaries over the full kinematically allowed interval. Its native species-dependent response includes effective-charge behavior; a single proton stopping curve multiplied by a universal charge-squared factor is not used for all ions.
 
-The mean ionization loss is computed from composition-specific unrestricted electronic stopping powers. In water and patient media, small losses use midpoint integration; larger losses are obtained by subtracting the accepted path from the residual CSDA range and inverting the result. The range integrates the reciprocal of the linearly interpolated stopping response. Stopping and range are evaluated at the actual density using continuous Sternheimer density-effect corrections. Primary energy-loss fluctuations are sampled from this total mean. Charged secondaries use the unrestricted mean loss without straggling by default, while their motion, scattering, and permitted nuclear interactions remain active.
+For fixed local composition and density, the CSDA range and the finite-path mean loss are related by
 
-One shared fluctuation engine selects the Universal or Ion parameters and corrections from particle identity, mass, and material response. It uses the kinematic maximum electron transfer \(T_{\max}\) as the transfer limit, without a separate soft-loss and hard-delta partition. For medium data exported at a reference transfer cut \(T_c\), the variance at the current density is converted to its unrestricted value using
+\[
+ R(E)=\int_0^E\frac{dE'}{S_e(E')},\qquad
+ \overline{\Delta E}(E,\ell)
+ =E-R^{-1}\!\left(\max[R(E)-\ell,0]\right),
+\tag{1}
+\]
+
+where \(\ell\) is true path length. Reference ranges integrate the reciprocal of the piecewise-linear stopping response analytically within each energy interval; the corresponding analytic inverse is used within that interval. The prescribed low-energy continuation supplies the integral below the first response node. At the actual CT density, the Sternheimer density-effect correction is evaluated continuously. Linear density scaling of range is used only where the density-effect laws permit it; otherwise, the reciprocal-stopping correction is integrated and the inverse is solved with a safeguarded iteration. No neighboring-density material is substituted.
+
+For small fractional losses in water and patient media, a midpoint stopping evaluation approximates the finite-path mean: a step-start estimate predicts the midpoint energy, at which stopping is reevaluated. Larger losses and range-ending paths use Eq. (1). Stopping, residual range, inverse range, and mean loss therefore refer to the same unrestricted response. Additional heavy recoils outside the ordinary ion registry instead use their isotope-specific total electronic-plus-nuclear stopping response, as described in Section II.B.6.
+
+Electronic energy loss within water or the patient is deposited in the corresponding scoring voxel. Electrons and electromagnetic photons are not explicitly transported. This local-ionization approximation preserves the electronic energy removed from the ion but omits its subsequent nonlocal redistribution. It is particularly relevant to low-density tissues, interfaces, and minibeam valleys, where the range of ionization secondaries may be comparable to the spatial dose structure. Nuclear neutral energy is treated separately and is not converted into a local electronic deposit.
+
+### II.B.2. Primary energy-loss fluctuations
+
+Primary energy-loss fluctuations use algorithms adapted from the Geant4 Universal and Ion fluctuation models[8]. One shared sampling engine receives the total electronic mean loss, accepted true path, material excitation parameters, particle mass and charge, and both native variance responses. For a projectile of mass M and Lorentz factor \(\gamma\), the kinematic electron-transfer limit is
+
+\[
+ T_{\max}=
+ \frac{2m_ec^2\beta^2\gamma^2}
+ {1+2\gamma m_e/M+(m_e/M)^2}.
+\tag{2}
+\]
+
+This maximum is used as the fluctuation transfer limit, without a separate restricted-loss and hard-delta partition. For medium data exported at a reference transfer cut \(T_c\), the variance at the current density is converted to its unrestricted value using
 
 \[
  V_{\mathrm{full}}=V_{\mathrm{ref}}
  \frac{T_{\max}/\beta^2-T_{\max}/2}
  {T_{\max}/\beta^2-\min(T_c,T_{\max})/2}.
-\tag{1}
+\tag{3}
 \]
 
-Here, \(\beta\) is particle speed divided by the speed of light, and \(V_{\mathrm{ref}}\) includes density scaling and the native ion charge-fluctuation multiplier. Universal thin-layer sampling retains the native bounded Poisson tail. Ion low-energy and finite-loss corrections are included, and sampled losses are bounded by available kinetic energy. Primary fluctuations remain enabled in all standard configurations.
+Here, \(\beta\) is particle speed divided by the speed of light, and \(V_{\mathrm{ref}}\) includes density scaling and the native charge-fluctuation multiplier. The path variance is obtained by multiplying the variance per unit length by the accepted true path. Copper and air provide the unrestricted variances directly, rather than through this reference-cut conversion.
 
-Medium electromagnetic step proposals use the unrestricted residual range and the range difference corresponding to the allowed mean-loss fraction, with final-range smoothing near termination. Minibeam patient transport uses a 1% mean-loss fraction. Geometry, multiple scattering, and nuclear interactions can shorten the proposed path. There is no electron-production-cut ionization clock. Nuclear-rate and conditional-final-state calibrations are retained independently of electromagnetic stepping.
+Hydrogen-1 uses Universal sampling. Other ions use the response-selected Ion branch and its native transition to Universal sampling at higher kinetic energy. Universal sampling distinguishes thick-absorber and thin-layer regimes. The thick regime uses a truncated Gaussian or a moment-matched Gamma distribution according to the mean-to-standard-deviation ratio. The thin regime combines excitation and ionization contributions, retaining bounded explicit Poisson sampling of the ionization tail and a Gaussian treatment of its dense component. These internal samples define a total loss; they do not create electron tracks.
 
-Ionization energy in water and patient media is deposited locally in the corresponding scoring voxel, without explicit electron or electromagnetic-photon transport. This spatial approximation omits nonlocal redistribution by ionization secondaries; using unrestricted stopping preserves the mean electronic energy loss but does not recover that spatial redistribution. Its applicability is examined through heterogeneous-medium and minibeam dose comparisons. Upstream electronic losses follow the beamline energy-accounting convention described in Section II.C.
+The low-energy Ion branch uses its charge-dependent dispersion and finite-loss correction. According to the mean-to-standard-deviation ratio, it samples a truncated Gaussian, Gamma, or uniform distribution. In a Gamma branch, mean \(\mu\) and variance V determine shape \(k=\mu^2/V\) and scale \(\theta=V/\mu\); this branch belongs to the adapted fluctuation model and is not an independently added delta-loss distribution. For a sampled path, the final loss is bounded by the available kinetic energy; a path that exhausts the residual range terminates without an additional fluctuation draw. Thus, a shared engine does not imply identical proton and C12 distributions: the mass, charge, model selection, material parameters, and dispersions remain particle dependent.
 
-### II.B.2. Broadbeam scattering and stepping parameters
+Primary fluctuations are enabled in all standard configurations, including copper. Charged-secondary straggling is disabled by default in both the patient and upstream regions, so their electronic loss equals its finite-path mean. This approximation changes the secondary loss distribution while retaining secondary motion, Coulomb scattering, nuclear interactions, and the source energy spread.
 
-Broadbeam multiple Coulomb scattering follows a Gaussian Fermi–Eyges approximation, jointly sampling angular deflection and lateral displacement from scattering moments[9]. Coulomb scattering and strong-interaction nuclear elastic scattering are treated separately. The standard broadbeam ion step cap is 1.0 mm. The fast CT broadbeam path limits mean energy loss to 5% per step. These limits compete with geometry and interaction distances.
+### II.B.3. Step selection and boundary handling
+
+At each step, material and energy-dependent responses are evaluated before competing path limits are applied. Let f be the native range fraction, \(r_f\) the native final-range parameter, and \(\eta\) the allowed mean-loss fraction. For \(R(E)>r_f\), the electromagnetic proposal is
+
+\[
+ \ell_{\rm EM}=\min\!\left[
+ fR(E)+r_f(1-f)\!\left(2-\frac{r_f}{R(E)}\right),\;
+ R(E)-R((1-\eta)E)
+ \right].
+\tag{4}
+\]
+
+For \(R(E)\le r_f\), the proposal is the remaining range. This final-range treatment terminates the stopping tail rather than taking indefinitely shorter fractional-energy steps. Fast CT broadbeam transport uses \(\eta=0.05\), whereas minibeam patient transport uses \(\eta=0.01\). Other broadbeam settings retain their recorded mean-loss fraction. The parameters f and \(r_f\) are supplied by the species/material model, independently of the imposed spatial step cap.
+
+The electromagnetic proposal competes with the maximum step, material and scoring boundaries, scattering limits, and nuclear interaction distance. Fermi–Eyges transport uses geometric segment lengths; Urban transport distinguishes true path from the geometric chord. In the latter case, boundary-limited geometric motion is converted to a true path before energy loss and nuclear optical depth are evaluated. If a nuclear interaction further shortens that true path, the geometric motion and scattering update are finalized for the shortened path. The angular update is committed only after these limits have been resolved.
 
 | Transport region | Maximum ion step | Principal scattering treatment |
 |---|---:|---|
@@ -59,21 +97,85 @@ Broadbeam multiple Coulomb scattering follows a Gaussian Fermi–Eyges approxima
 
 These engine-enforced step caps are distinct from TOPAS secondary-production range cuts and ion termination energies. Slit air in CT carbon minibeams has a separate 0.2 mm cap; other air regions follow their respective input limits and boundary handling.
 
-### II.B.3. Nuclear competition and charged fragments
+Continuous losses are assigned to the traversed source voxel, while nuclear-vertex deposits use the collision location. Tracks reaching the patient-grid boundary are recorded as escaped; exterior energy is not deposited in a clamped edge voxel. The standard total-kinetic-energy termination threshold is 0.1 MeV. Residual kinetic energy at an in-medium termination is deposited locally, with a separate distinction from finite-path LET scoring. There is no electron-production-cut ionization clock.
 
-Macroscopic elastic and inelastic rates are formed from target-element number densities and the corresponding cross sections. Primary and charged secondary particles in water and patient media share a nuclear optical-depth algorithm. Each track independently samples
+### II.B.4. Broadbeam multiple Coulomb scattering
+
+Broadbeam scattering uses a Gaussian Fermi–Eyges approximation[9]. For one transverse axis, angular deflection \(\theta\) and lateral displacement y are sampled jointly. For a segment of length L and constant local scattering power \(\mathcal T\), their covariance is
+
+\[
+ \begin{pmatrix}
+ \langle\theta^2\rangle & \langle\theta y\rangle\\
+ \langle\theta y\rangle & \langle y^2\rangle
+ \end{pmatrix}
+ =\mathcal T
+ \begin{pmatrix}L&L^2/2\\L^2/2&L^3/3\end{pmatrix}.
+\tag{5}
+\]
+
+The two transverse axes are sampled in a local frame and transformed to world coordinates. The endpoint displacement therefore retains its correlation with the outgoing direction; scattering is not represented by an angular kick alone. Long transport steps can be divided into scattering segments, with energy at each segment midpoint estimated from the accepted energy loss. This scattering segmentation is distinct from the electromagnetic transport step and its maximum length.
+
+The Gaussian scattering power contains a core term proportional to \([E_sZ/(\beta pc)]^2/X_0\), where \(X_0\) is the local radiation length. In the standard Gaussian mode, the second moment of the calibrated tail component is added to this power rather than sampling individual tail events. Its nominal rate is scaled from water by the ratio of inverse radiation lengths. Proton, deuteron, triton, and alpha coefficients use species-specific homogeneous-water fits at 50, 150, and 300 MeV/u, with piecewise-linear interpolation and endpoint values outside that interval. C12 and ions without a separate fit use the fixed core energy 9.9 MeV, nominal water tail rate 0.0025 mm⁻¹, and tail scattering energy 2.4 MeV. These are effective scattering parameters, not an online evaluation of the full Geant4 angular distribution. Coulomb multiple scattering is separate from the strong-interaction nuclear elastic process below.
+
+### II.B.5. Nuclear rates and elastic–inelastic competition
+
+For nuclear channel c, the macroscopic rate is formed from target number densities and microscopic cross sections,
+
+\[
+ \Sigma_c(E)=\sum_t n_t\sigma_{c,t}(E),\qquad
+ P(t\mid c,E)=\frac{n_t\sigma_{c,t}(E)}{\Sigma_c(E)}.
+\tag{6}
+\]
+
+Composition-specific mass rates are scaled by the actual density to obtain rates per millimeter. Inelastic channels are masked to the explicitly supported projectile–target and energy domains; missing required coverage is not filled by another target or a local deposit. Elastic and inelastic rates are evaluated independently.
+
+Primary and charged secondary particles in water and patient media use the same optical-depth algorithm. Each track independently samples
 
 \[
  \tau=-\ln U,\qquad
  \Sigma_{\mathrm{tot}}=\Sigma_{\mathrm{el}}+\Sigma_{\mathrm{in}},
-\tag{2}
+\tag{7}
 \]
 
-where U is uniform. Optical depth is consumed along accepted paths using the current step's rate approximation. At an interaction, elastic or inelastic scattering is selected in proportion to its rate, followed by target selection from target-resolved rates. Residual optical depth is preserved across material boundaries and scheduler continuations, avoiding resampling caused solely by geometry crossing or execution order.
+where U is uniform. Over an accepted path, the optical-depth increment is approximated as \(\Sigma_{\rm tot}\ell\) using the current rate. If that increment exhausts the remaining depth, the path is shortened to \(\ell_{\rm nuc}=\tau_{\rm remaining}/\Sigma_{\rm tot}\). The process is then selected with probabilities \(\Sigma_{\rm el}/\Sigma_{\rm tot}\) and \(\Sigma_{\rm in}/\Sigma_{\rm tot}\), followed by target selection from the corresponding partial rates. Residual optical depth is preserved across boundaries and execution continuations. Each particle owns its own random optical depth; sharing the algorithm does not correlate different tracks' interaction distances.
 
-An inelastic event is drawn using the package-defined energy nodes and correlated final-state library and rotated as a whole into the current incident direction. This retains correlations within the sampled event. Supported charged products enter transport queues. Patient-medium secondary inelastic generations are limited to two. Reaching this limit suppresses new inelastic branches but preserves electromagnetic and elastic transport of existing tracks. Species explicitly assigned an electromagnetic-only policy follow that coverage policy.
+Primary inelastic proposals also use an integral-rate cache. The proposal rate is refreshed at material or density changes, after kinetic energy falls below 80% of its cached value, and after a proposed interaction. At a candidate, the post-loss inelastic rate supplies a rejection test against the cached proposal rate. Rejected candidates leave the surviving ion available for continued transport. Elastic rates do not enter that inelastic rejection denominator. This is a piecewise-rate transport approximation, rather than continuous integration of the energy-dependent cross section along each slowing trajectory.
 
-Nuclear elastic scattering uses sampled momentum transfer and two-body kinematics to generate the outgoing projectile and recoil. Kinematic masses follow the conventions of the corresponding packages, including the calibrated C12 A×amu convention, rather than interchanging them with nuclear-mass conventions. Registered charged species use the ordinary transport model; additional target recoils use their dedicated electronic-plus-nuclear stopping powers. Medium nuclear elastic scattering is enabled in all eight standard configurations, with copper nuclear elastic scattering also enabled in all four minibeam configurations. Nuclear neutral products are not transported. Their energy is recorded separately as untracked energy and is not deposited at the interaction site. The finite event library, secondary-generation limit, and omission of neutral transport remain model differences from full TOPAS transport.
+### II.B.6. Nuclear elastic scattering and recoil transport
+
+Nuclear elastic scattering is enabled in all eight standard configurations. After selecting the target element, adjacent energy-node contributions to the elastic rate determine the probability of selecting an angular sample from either node. A stored sample supplies the target isotope and normalized momentum transfer, equivalent to a center-of-mass scattering cosine. A uniform azimuth and relativistic two-body kinematics then generate both outgoing momenta at the current incident energy. In units with c=1,
+
+\[
+ s=(m_p+m_t)^2+2m_tE,\qquad
+ p_*=\frac{m_t\sqrt{E(E+2m_p)}}{\sqrt{s}},\qquad
+ E_R=\frac{p_*^2(1-\cos\theta_*)}{m_t},\qquad
+ E'_p=E-E_R.
+\tag{8}
+\]
+
+Here \(m_p\) and \(m_t\) denote projectile and target masses, \(p_*\) the center-of-mass momentum, and \(E_R\) the recoil kinetic energy. The sampled angular distribution remains essential: conservation laws determine the final-state kinematics once the angle is specified, but do not determine its probability. Package-specific masses are retained, including the calibrated C12 A×amu convention where required.
+
+Recoils in the ordinary charged-ion registry use its corresponding transport response and allowed nuclear channels. Additional target isotopes use dedicated unrestricted electronic-plus-nuclear stopping and a CSDA range derived from that total response. They are not assigned invented discrete nuclear rates. Electronic LET uses an independent electronic-only stopping table for those isotopes, excluding nuclear stopping from its numerator and denominator. Recoils below the termination threshold deposit their remaining energy locally; higher-energy transported recoils can redistribute dose before stopping.
+
+### II.B.7. Nuclear inelastic final states and charged fragments
+
+The installed primary proton event library records Binary Cascade events generated with QGSP_BIC_HP; the primary C12 library was generated with FTFP_INCLXX. The patient-secondary library was extracted with EM option 4 and ion Binary Cascade physics. These are the extraction configurations recorded with the libraries, distinct from the executed full-plan TOPAS reference lists described in Section II.E. Nuclear model identity is therefore retained per dataset rather than treating all Geant4-derived events as interchangeable.
+
+Inelastic final states are indexed by exact projectile (Z,A), target element, and incident energy per nucleon. For a query \(e=E/A\) between adjacent nodes \(e_0\) and \(e_1\), stochastic interpolation selects the upper node with
+
+\[
+ P(e_1\mid e)=\frac{e-e_0}{e_1-e_0},\qquad
+ P(e_0\mid e)=1-P(e_1\mid e).
+\tag{9}
+\]
+
+An event is then drawn uniformly from that node's library. Queries must lie within the exact channel domain, with a bracketing gap no larger than 5 MeV/u. Individual product energies are not rescaled to force an event generated at a node to match the query energy. The node mismatch and energy-accounting residual are retained in the model audit. This sampling preserves the library's event correlations but introduces finite-library and incident-energy-discretization approximations.
+
+One common random azimuth is applied to the complete event before its product directions are rotated into the current incident frame. Multiplicity and within-event energy–angle correlations are therefore retained, rather than drawing each product independently from separate marginal distributions. The recorded process-local deposit is scored at the interaction vertex. Supported charged products above cutoff enter subsequent transport with their own species, energy, direction, generation, and random identity; charged products below cutoff are deposited locally.
+
+Patient-medium secondary inelastic generations are limited to two. Reaching this limit suppresses new inelastic branches but preserves electromagnetic and permitted elastic transport of existing particles. Species assigned an electromagnetic-only policy retain that policy rather than acquiring unsupported reaction channels. The implemented species policy does not propagate Be6 residuals, and their energy remains in the untracked balance. A general radioactive-decay or capture chain is not simulated.
+
+Nuclear neutral products, including neutrons and nuclear photons, are not transported. Their energy and the remaining untracked reaction balance are recorded separately from deposited dose and escaped charged-particle energy; they are not added at the reaction vertex as surrogate local dose. The finite event library, energy-node mixture, secondary-generation limit, species policies, and omitted neutral transport remain explicit differences from native TOPAS transport.
 
 ## II.C. Extension to copper-collimated minibeams
 
@@ -85,13 +187,38 @@ The proton minibeam full plans use 60 mm of copper with 15 slits, a 0.5 mm slit 
 
 Upstream transport includes directly transmitted primaries, primaries scattered through copper, and charged nuclear products. Their joint position, direction, energy, and species distribution at patient entry is generated by this transport. A source containing only direct slit transmission or a fixed reusable phase-space cache is not substituted for the collimator. Original histories without transmission remain in the incident-particle normalization.
 
-### II.C.2. Minibeam electromagnetic transport and copper nuclear interactions
+### II.C.2. Urban scattering and true-to-geometric path conversion
 
-Minibeam scattering uses material- and species-dependent Urban data, including scattering mean free paths and true-to-geometric path conversion. In water and CT, registered charged ions use unrestricted stopping powers and consistent CSDA ranges and inverse ranges from continuous26 at actual density. The full response carries its energy-dependent effective charge, while scattering mean free paths and radiation lengths follow their respective density scaling. Copper, air, and additional recoil isotopes outside the registry use their corresponding data. Scattering is sampled in a local particle frame and transformed back to world coordinates.
+Minibeam patient transport and upstream primary transport use material- and species-dependent Urban scattering data. Inputs include the transport mean free path, radiation length, and angular-distribution parameters, together with the current unrestricted range. In CT, the electronic response is evaluated at the actual density, while scattering mean free paths and radiation lengths retain their own density scaling. Additional recoil isotopes use their matched total-stopping context. The water or CT ion stopping response is not replaced by copper data when a track passes between these regions.
 
-Copper and upstream-air electronic transport use independently extracted unrestricted stopping powers and native unrestricted fluctuation dispersions. For mean losses up to 2% of kinetic energy, the mean loss is evaluated from step-start stopping; larger losses use CSDA range inversion. Both calculations use the same electronic response. The shared fluctuation engine selects particle-dependent parameters from Z/A, the calibrated mass, and material response, with the maximum kinematic electron transfer as its transfer limit. Primary fluctuations remain enabled; charged-fragment fluctuations are disabled by default. Fragment scattering and nuclear transport are configured independently of fluctuation-model selection.
+Urban transport accounts for the difference between the microscopic true path \(\ell\) and the geometric advance g. In the constant-transport-mean-free-path limit,
 
-Energy loss, Coulomb scattering, nuclear elastic scattering, and inelastic reactions jointly determine the copper-exit distribution. Upstream electronic loss is removed from the charged beam and recorded separately from patient dose. Additional heavy recoil isotopes retain unrestricted electronic plus nuclear stopping and a CSDA range derived from their total stopping; only the electronic component contributes to electronic LET. Geometric and nuclear limits and the imposed maximum step caps remain in force.
+\[
+ g=\lambda_{\rm tr}\left(1-e^{-\ell/\lambda_{\rm tr}}\right),
+\tag{10}
+\]
+
+where \(\lambda_{\rm tr}\) is the transport mean free path. The implemented conversion also includes the energy-dependent mean-free-path branches. The true path controls electronic loss and nuclear optical depth; the geometric advance and sampled lateral displacement control motion. Near a slit sidewall, material boundary, or scoring face, the geometric distance is limited first and converted back to an admissible true path. This distinction prevents a geometric chord from being used as though it represented the complete scattering path.
+
+The angular sampler uses the Urban small-angle core and non-Gaussian tail, with its native transitions for very small or large scattering thickness. The angular width depends on radiation length and the model's pre/post-energy estimate. Angular deflection and lateral displacement are sampled in a particle-local frame, transformed to world coordinates, and constrained by geometric safety. Nuclear shortening of a proposed step precedes the final angular/lateral sample. Persistent boundary and range-limit state is retained between steps rather than reinitialized at each scheduler handoff. This is a data-driven implementation of Urban transport, not execution of the native Geant4 process manager.
+
+### II.C.3. Copper and air electronic energy loss
+
+Copper and upstream air use independently extracted unrestricted electronic stopping powers and both native fluctuation dispersions. The response covers the charged species produced by the copper event library, including its heavy fragments. For mean losses up to 2% of kinetic energy, loss is evaluated from step-start stopping; larger losses use CSDA range inversion. Both calculations use the same response. Below the first energy node, the prescribed square-root stopping continuation supplies the corresponding range integral; missing species or energies above coverage invalidate the calculation.
+
+The same Universal/Ion engine used in the patient samples upstream primary losses, with particle-dependent mass, charge, excitation parameters, and the maximum kinematic transfer. Copper/air variances are extracted directly at that transfer limit. Primary fluctuations remain enabled and charged-fragment fluctuations are disabled by default. Thus, turning off fragment straggling removes the full stochastic electronic-loss draw; it does not leave a separately sampled hard-delta term. Scattering and nuclear transport are selected independently of the fluctuation branch.
+
+Electronic energy lost in copper or upstream air is removed from the charged beam and recorded as a beamline loss, without adding it to patient dose or generating explicit electron tracks. Energy deposited by ions after entering the patient follows the local-ionization convention in Section II.B.1. Histories that stop upstream retain their place in the original incident-particle normalization. The 0.05 mm copper cap and separate slit-air limits constrain transport even when the electronic response would permit a longer step.
+
+### II.C.4. Copper nuclear interactions and charged products
+
+Copper nuclear elastic scattering is enabled in all four minibeam configurations. Primary interaction distance is sampled using the combined copper elastic and inelastic rate. After electronic slowing, the applicable rates determine the process at the candidate interaction. An elastic event samples a copper-isotope angular record and applies the two-body kinematics of Section II.B.6. The outgoing beam ion continues; the copper recoil energy is retained in the upstream energy balance rather than scored as patient dose. This upstream recoil treatment is distinct from explicit target-recoil transport inside the patient.
+
+Copper inelastic events are drawn from the copper-specific correlated library, with its exact projectile/target lookup and energy-node selection. Direct charged products and recorded charged continuations are followed through the remaining copper and air; their directions share the event rotation. Subsequent copper reactions are limited by a separate upstream generation limit, set to three in the standard minibeam configurations. Existing particles continue electromagnetic transport when further inelastic branching is suppressed. Copper-local deposits, neutral products, and remaining untracked reaction energy stay in the beamline balance.
+
+Carbon minibeams use independently extracted, species-resolved Urban and elastic data for copper fragments. The proton minibeam upstream-fragment path instead retains its Highland-based angular update; it is not silently identified with the carbon native-fragment path. Both use unrestricted electronic loss and retain their configured inelastic continuation. This distinction concerns copper-born products and does not change the common Urban transport of registered charged ions within the patient.
+
+Energy loss, Coulomb scattering, nuclear elastic scattering, and inelastic fragmentation jointly produce the patient-entry distribution. The full joint position–direction–energy–species state is passed downstream. Consequently, particles scattered out of copper and surviving charged reaction products can contribute to the patient dose, while purely geometric slit transmission is insufficient to represent the upstream model. No electron, neutral-particle, or unmodeled decay transport is implied by this charged-particle handoff.
 
 ## II.D. GPU implementation and scored quantities
 
@@ -112,7 +239,7 @@ Deposited energy is accumulated using FP32 GPU atomics. For voxel density ρ_i i
 \[
  m_i=\rho_i V_i\,10^{-6}\ {\rm kg},\qquad
  D_i=\frac{E_i\,1.602176634\times10^{-13}}{m_i}\frac{W}{N}.
-\tag{3}
+\tag{11}
 \]
 
 Batch and device contributions are summed after applying the same W/N factor; no additional batch-count multiplier is applied. References scored as cumulative dose for the simulated particles are compared using their corresponding source counts and cumulative scale, without imposing prescription normalization. Batch files are merged at higher precision on the host, which does not eliminate within-batch FP32 accumulation error.
@@ -125,7 +252,7 @@ Electronic LET is scored using a stopping-power track-length estimator. For each
  A_i=\sum_{k\in i}S_{e,k}^{\,2}\ell_k,\qquad
  B_i=\sum_{k\in i}S_{e,k}\ell_k,\qquad
  L_{d,i}=\frac{A_i}{B_i}.
-\tag{4}
+\tag{12}
 \]
 
 The ratio has units of MeV/mm, numerically equal to keV/µm. The electronic-loss expectation supplies the dose weight; sampled energy loss divided by step length is not substituted for stopping power. The estimator is not normalized by material density. Stopping for registered ions uses the same unrestricted response as transport. Additional recoils use a separate electronic-only stopping table matched to the isotope and energy coverage of their electronic-plus-nuclear transport table.
@@ -156,7 +283,7 @@ The current full-plan comparison uses unthresholded TOPAS dose scored after inde
 
 ### II.E.3. Matched TOPAS LET reference
 
-LET comparisons use a two-moment TOPAS scorer implementing Eq. (4), with track weights included in each moment. The scorer evaluates unrestricted electronic stopping from an immutable response extracted in a separate process using the reference Geant4 version, physics list, particle identities, and actual material compositions, densities, and excitation energies. Coverage includes the charged isotopes and materials encountered by the full plan. Material mismatches, missing isotopes, and energies outside the response are rejected. Stopping is not queried through mutable live Geant4 models during scoring, so the stopping lookup does not alter transport-model state or random-number consumption. The scoring threshold is matched to 0.1 MeV total kinetic energy.
+LET comparisons use a two-moment TOPAS scorer implementing Eq. (12), with track weights included in each moment. The scorer evaluates unrestricted electronic stopping from an immutable response extracted in a separate process using the reference Geant4 version, physics list, particle identities, and actual material compositions, densities, and excitation energies. Coverage includes the charged isotopes and materials encountered by the full plan. Material mismatches, missing isotopes, and energies outside the response are rejected. Stopping is not queried through mutable live Geant4 models during scoring, so the stopping lookup does not alter transport-model state or random-number consumption. The scoring threshold is matched to 0.1 MeV total kinetic energy.
 
 Pre-step stopping is a step-discretized estimator. The corrected carbon broadbeam reference uses native ionization range-step controls with a range fraction of 0.005 and final range of 0.1 nm, applied to light ions and GenericIon while leaving proton step controls unchanged. These range-relative controls are distinct from a spatial maximum step, production cut, or kinetic-energy cutoff. The executed step settings and nuclear elastic registration are retained with each reference. Dose agreement alone does not demonstrate LET step convergence; additive-moment stability under step refinement and Monte Carlo uncertainty must be examined separately.
 
@@ -176,7 +303,7 @@ Three-dimensional local gamma uses TOPAS as the reference[10]:
  \frac{[D_{\rm GPU}(\mathbf r')-D_{\rm ref}(\mathbf r)]^2}
  {[\delta D_{\rm ref}(\mathbf r)]^2}
  \right]^{1/2}.
-\tag{5}
+\tag{13}
 \]
 
 GPU dose is queried by trilinear interpolation, with γ≤1 indicating a pass. For pass-rate evaluation, the spatial search is confined to a sphere of radius \(\Delta r\), since points farther away cannot pass. The BODY mask selects reference evaluation points; GPU dose outside BODY within the search domain is not set to zero. Evaluation masks are fixed from the reference used for each reported comparison and are not reselected from low-statistics repeats.
@@ -186,13 +313,13 @@ GPU dose is queried by trilinear interpolation, with γ≤1 indicating a pass. F
 | Broadbeam | >10% of global reference Dmax | 3%/3 mm, 1%/1 mm, 3%/0 mm | 0.1 mm |
 | Minibeam | >0.4 Gy, i.e., 10% of a 4 Gy prescription | 3%/0.2 mm, 3%/0.1 mm, 3%/0 mm | 0.02 mm |
 
-The threshold selects the evaluation region only; the local dose tolerance remains the specified percentage of each point's reference dose. Zero-DTA analysis compares doses at the same position and is a local relative-dose-difference test, without the distance division in Eq. (5). The predefined broadbeam criterion is a local 1%/1 mm pass rate >99%. Minibeam submillimeter pass rates are reported directly rather than assessed using the broadbeam criterion. Exploratory analyses using other thresholds or geometric irradiation masks are identified separately.
+The threshold selects the evaluation region only; the local dose tolerance remains the specified percentage of each point's reference dose. Zero-DTA analysis compares doses at the same position and is a local relative-dose-difference test, without the distance division in Eq. (13). The predefined broadbeam criterion is a local 1%/1 mm pass rate >99%. Minibeam submillimeter pass rates are reported directly rather than assessed using the broadbeam criterion. Exploratory analyses using other thresholds or geometric irradiation masks are identified separately.
 
 Additional measures include spatial dose-difference distributions, target mean dose and dose–volume indices, and lateral profiles at different depths to examine minibeam peaks, valleys, and distal structure. Dose differences contain both random fluctuations and systematic discrepancies and are not treated as pure Monte Carlo uncertainty.
 
 ### II.F.2. LET comparisons and one-dimensional profiles
 
-Three-dimensional LET gamma uses the same definition as Eq. (5), replacing dose by \(L_d\), with TOPAS LET as the local reference. The evaluation region is BODY intersected with TOPAS dose greater than 10% of its global maximum. Dose defines the mask only; the percentage tolerance is relative to each point's reference LET. Broadbeam LET criteria are 3%/3 mm, 1%/1 mm, and 3%/0 mm, with a 0.1 mm search increment for nonzero distance criteria. Interpolation and spatial search are applied to the GPU LET field. Zero-GPU-denominator voxels within the reference mask are retained as failures; any zero-reference-LET points are identified separately because a local percentage tolerance is undefined there.
+Three-dimensional LET gamma uses the same definition as Eq. (13), replacing dose by \(L_d\), with TOPAS LET as the local reference. The evaluation region is BODY intersected with TOPAS dose greater than 10% of its global maximum. Dose defines the mask only; the percentage tolerance is relative to each point's reference LET. Broadbeam LET criteria are 3%/3 mm, 1%/1 mm, and 3%/0 mm, with a 0.1 mm search increment for nonzero distance criteria. Interpolation and spatial search are applied to the GPU LET field. Zero-GPU-denominator voxels within the reference mask are retained as failures; any zero-reference-LET points are identified separately because a local percentage tolerance is undefined there.
 
 Lateral LET profiles at selected geometric depths and central-ray profiles along depth complement voxelwise comparisons. All curves use the same physical coordinates, reference entrance, dose mask, and grid mapping. For the RT07575 carbon broadbeam example, geometric depth is measured from the central-ray BODY entrance along the incident beam direction; it is not water-equivalent depth or a separately shifted entrance for every lateral ray. Lateral profiles retain 0.5 mm sampling. The depth comparison shows both the raw central ray and a transverse pooled profile spanning 2.5×10 mm², retaining 0.5 mm depth sampling without smoothing along depth. Pooled LET is obtained by summing numerator and denominator over the same selected voxels before division. Pooling reduces visible statistical variation but does not replace the voxelwise gamma analysis.
 
@@ -204,7 +331,7 @@ GPU statistical uncertainty is estimated from independent full-plan batches with
  \widehat{\sigma}_{D}^{\,2}
  =\frac{B}{B-1}
  \left[\sum_b d_b^2-\frac{D^2}{B}\right].
-\tag{6}
+\tag{14}
 \]
 
 For unequal batch sizes, define a_b=N_b/N, Y_b=d_b/a_b, and q=Σ_b a_b². The implemented weighted batch estimator is
@@ -213,10 +340,10 @@ For unequal batch sizes, define a_b=N_b/N, Y_b=d_b/a_b, and q=Σ_b a_b². The im
  \widehat{\sigma}_{D}^{\,2}
  =\frac{q}{1-q}
  \left[\sum_b a_bY_b^2-D^2\right].
-\tag{7}
+\tag{15}
 \]
 
-Equation (7) reduces to Eq. (6) for equal-sized batches. It is used here for batches with nearly equal history counts and matched source composition, without assuming equal variance for arbitrarily imbalanced batches or different sources. Merging across devices retains batch counts, source proportions, and independent seeds.
+Equation (15) reduces to Eq. (14) for equal-sized batches. It is used here for batches with nearly equal history counts and matched source composition, without assuming equal variance for arbitrarily imbalanced batches or different sources. Merging across devices retains batch counts, source proportions, and independent seeds.
 
 TOPAS references with native per-history variance use those statistics, converted to final-dose variance according to the actual scorer definition. Variances from independent spots or recalculations are combined using squared dose-scaling factors. The three historical carbon broadbeam references lack stored native variance. For each, a matched 300,000-history TOPAS pilot preserves geometry, physics list, energy spectrum, and relative weights. Its standard error is extrapolated to the full history count by √(N_pilot/N_full), with both quantities expressed on the same full-plan dose scale. The original full-reference dose supplies the relative-error denominator, and the extrapolation is cross-checked against variance between original independent replicas. These entries are identified as estimates; pooled variance across mixed spots can be conservative for a fixed stratified spot allocation.
 
@@ -227,7 +354,7 @@ For a fixed evaluation region R, the root-mean-square relative standard error is
  \sqrt{\frac{1}{|R|}
  \sum_{i\in R}\frac{\widehat{\sigma}_i^2}{D_{{\rm ref},i}^2}}
  \ \%.
-\tag{8}
+\tag{16}
 \]
 
 GPU and TOPAS uncertainties are reported separately and, for independent simulations, combined through σ_diff²=σ_GPU²+σ_TOPAS². Percentiles and fractions of voxels below selected uncertainty limits are additionally reported where relevant. This is a regional summary of voxelwise one-standard-error values, not uncertainty in the regional mean or a guarantee for every voxel. Spatial correlations prevent direct conversion of voxel variances into confidence intervals for gamma pass rates or dose–volume indices. Finite-library uncertainty and physical-model bias are not included in these random-transport estimates.
@@ -241,7 +368,7 @@ LET uncertainty must retain covariance between its numerator and denominator. An
  =\frac{K}{K-1}
  \frac{\sum_b\left(A_{ib}-L_{d,i}B_{ib}\right)^2}
  {\left(\sum_b B_{ib}\right)^2}.
-\tag{9}
+\tag{17}
 \]
 
 The carbon broadbeam auxiliary calculation uses 20 independent groups. These histories provide an uncertainty estimate at the principal calculation's statistics and are not added to its dose or LET. The estimate is approximate for a finite number of groups, especially where rare high-LET recoils dominate. Voxelwise relative standard errors, regional RMS values, percentiles, and fractions below specified limits are reported within a fixed reference-dose mask.
@@ -273,4 +400,4 @@ Primary, copper/air upstream, and charged-secondary stage times provide the comp
 
 **Companion material, outside the manuscript Methods text:** [literature and writing analysis](docs/gpu_mc_methods_literature.md), [physics implementation comparison](docs/topas_gpu_physics_comparison.md), [unrestricted-loss model](docs/unrestricted_dedx.md), [LET estimator and matched scorer](docs/let_scoring.md), [data extraction](extensions/README.md), and [full-plan and uncertainty records](docs/full_plan_validation_20261017/README.md).
 
-**Author information required before submission:** case provenance and ethics approval or exemption; complete per-plan source, energy-layer, field, grid, and collimator tables; optimization objectives and solver settings; frozen reference-physics, compiler/driver, and CPU-model inventories; and completed LET reference statistics and step-refinement records. Clinical beam commissioning and independent acceptance of every configuration are not asserted without those records. Dose and LET pass rates, throughput, and measured uncertainty values belong in Results; this section defines how they are obtained.
+**Author information required before submission:** case provenance and ethics approval or exemption; complete per-plan source, energy-layer, field, grid, and collimator tables; optimization objectives and solver settings; full species-dependent scattering coefficients and electromagnetic range-step parameters; frozen reference-physics, compiler/driver, and CPU-model inventories; and completed LET reference statistics and step-refinement records. Clinical beam commissioning and independent acceptance of every configuration are not asserted without those records. Dose and LET pass rates, throughput, and measured uncertainty values belong in Results; this section defines how they are obtained.
