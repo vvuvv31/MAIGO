@@ -42,30 +42,6 @@ struct UrbanMcsContext {
     }
     bool valid() const { return record && factor>0 && std::isfinite(factor) &&
         density_ratio>0 && std::isfinite(density_ratio); }
-    float raw(unsigned kind,float x) const {
-        const auto* v=segments+record->offsets[kind];
-        unsigned lo=0,hi=record->counts[kind]-1;
-        while(lo<hi) {unsigned mid=(lo+hi+1)/2;if(v[mid].lower<=x)lo=mid;else hi=mid-1;}
-        return v[lo].value(x); // native vectors clamp outside their knot domain
-    }
-    float range(float energy) const {
-        float e=energy*record->mass_ratio;
-        float r=std::max(0.f,raw(1,e))/(factor*record->mass_ratio);
-        if(e<record->minimum_scaled_energy)r*=std::sqrt(std::max(0.f,e)/record->minimum_scaled_energy);
-        return r;
-    }
-    float dedx(float energy) const {
-        float e=energy*record->mass_ratio,d=raw(0,e)*factor;
-        if(e<record->minimum_scaled_energy)d*=std::sqrt(std::max(0.f,e)/record->minimum_scaled_energy);
-        return d;
-    }
-    float energy(float range_mm) const {
-        const float r=range_mm*factor*record->mass_ratio;
-        const float rmin=segments[record->offsets[2]].lower;
-        if(r<=0)return 0;
-        const float x=r/rmin;
-        return (r<rmin?record->minimum_scaled_energy*x*x:raw(2,r))/record->mass_ratio;
-    }
     float lambda(float energy_mev) const {
         return interpolate(mfps+record->mfp_offset,record->mfp_count,energy_mev)/density_ratio;
     }

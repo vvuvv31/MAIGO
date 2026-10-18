@@ -27,7 +27,7 @@
 // -------------------------------------------------------------------
 //
 // Adapted sampling algorithms from Geant4 11.3.2 G4IonFluctuations and
-// G4UniversalFluctuation. Research-only C12 building block, not production.
+// G4UniversalFluctuation. Shared unrestricted engine for medium and Cu/air total losses.
 #pragma once
 #include <cmath>
 #include <algorithm>
@@ -36,15 +36,16 @@
 #include "carbon/fluctuation_math.hpp"
 
 namespace carbon {
-template<class Real> struct RestrictedFluctuationInput {
+template<class Real> struct EnergyLossFluctuationInput {
     Real kinetic_MeV, mass_MeV, mean_MeV;
     // Raw G4IonFluctuations::Dispersion, BEFORE finite-loss correction.
     Real ion_dispersion, universal_dispersion;
-    Real cut_MeV, tmax_MeV, excitation_MeV, e0_MeV;
+    // Full kinematic transfer limit; this engine has no production-cut input.
+    Real tmax_MeV, excitation_MeV, e0_MeV;
 };
-template<class Real> struct RestrictedFluctuationDraw { Real loss{}; bool valid{false}; };
+template<class Real> struct EnergyLossFluctuationDraw { Real loss{}; bool valid{false}; };
 
-template<class Real, class Uniform, bool NativeNormal=false, bool NativeMath=false, bool InverseNormal=false, bool DenseTailGamma=false> class RestrictedFluctuationSampler {
+template<class Real, class Uniform, bool NativeNormal=false, bool NativeMath=false, bool InverseNormal=false> class EnergyLossFluctuationSampler {
     Uniform& uniform;
     int draws=0;
     bool good=true;
@@ -86,23 +87,23 @@ template<class Real, class Uniform, bool NativeNormal=false, bool NativeMath=fal
         if(mean<Real(.25)*sigma)return 2*u()*mean;
         return truncated_gaussian(mean,sigma);
     }
-    Real universal(const RestrictedFluctuationInput<Real>& p) {
-        Real mean=p.mean_MeV,cut=p.cut_MeV;
+    Real universal(const EnergyLossFluctuationInput<Real>& p) {
+        Real mean=p.mean_MeV,limit=p.tmax_MeV;
         if(mean<Real(1e-5))return mean;
-        if(mean>=10*cut && p.tmax_MeV<=2*cut) {
+        if(mean>=10*limit) {
             Real sigma=fluctuation_sqrt<NativeMath>(p.universal_dispersion),sn=mean/sigma;
             return sn>=2 ? truncated_gaussian(mean,sigma) : mean*gamma(sn*sn)/(sn*sn);
         }
-        if(cut<=p.e0_MeV)return mean;
-        Real scaling=std::min(1+Real(.0005)/cut,Real(1.5));mean/=scaling;
+        if(limit<=p.e0_MeV)return mean;
+        Real scaling=std::min(1+Real(.0005)/limit,Real(1.5));mean/=scaling;
         Real a1=0,e1=p.excitation_MeV;
-        if(cut>e1) {
+        if(limit>e1) {
             a1=mean*Real(.44)/e1;
             Real fw=a1<42 ? Real(.1)+Real(3.9)*fluctuation_sqrt<NativeMath>(a1/42) : Real(4);
             a1/=fw;e1*=fw;
         }
-        Real w1=cut/p.e0_MeV;
-        Real a3=Real(.56)*mean*(cut-p.e0_MeV)/(p.e0_MeV*cut*fluctuation_log<NativeMath>(w1));
+        Real w1=limit/p.e0_MeV;
+        Real a3=Real(.56)*mean*(limit-p.e0_MeV)/(p.e0_MeV*limit*fluctuation_log<NativeMath>(w1));
         if(a1<=0)a3/=Real(.56);
         Real loss=0;
         if(a1>8)loss+=glandz_gaussian(a1*e1,a1*e1*e1);
@@ -120,31 +121,20 @@ template<class Real, class Uniform, bool NativeNormal=false, bool NativeMath=fal
                 p3=8*(a3/(8+a3));
             }
             Real w3=alpha*p.e0_MeV;
-            if(cut>w3){
-                const Real w=(cut-w3)/cut;
-                if constexpr(DenseTailGamma) {
-                    if(p3>=4) {
-                        // Scoped CT broadbeam approximation: one aggregate Gamma,
-                        // same first two compound-Poisson moments. Does not
-                        // preserve the zero atom or higher-order tail law.
-                        const Real event_mean=w3*fluctuation_log<NativeMath>(cut/w3)/w;
-                        const Real tail_mean=p3*event_mean,tail_var=p3*w3*cut;
-                        const Real shape=tail_mean*(tail_mean/tail_var);
-                        loss+=tail_mean*gamma(shape)/shape;
-                    } else {int n=poisson(p3);for(int i=0;i<n && good;++i)loss+=w3/(1-w*u());}
-                } else {int n=poisson(p3);for(int i=0;i<n && good;++i)loss+=w3/(1-w*u());}
+            if(limit>w3){
+                const Real w=(limit-w3)/limit;
+                int n=poisson(p3);for(int i=0;i<n && good;++i)loss+=w3/(1-w*u());
             }
             if(var>0)loss+=glandz_gaussian(emean,var);
         }
         return loss*scaling;
     }
 public:
-    explicit RestrictedFluctuationSampler(Uniform& rng):uniform(rng){}
-    RestrictedFluctuationDraw<Real> sample(const RestrictedFluctuationInput<Real>& p, bool ion_model=true, Real ion_charge=Real(6)) {
+    explicit EnergyLossFluctuationSampler(Uniform& rng):uniform(rng){}
+    EnergyLossFluctuationDraw<Real> sample(const EnergyLossFluctuationInput<Real>& p, bool ion_model=true, Real ion_charge=Real(6)) {
         draws=0;good=true;
         if(!(p.kinetic_MeV>0 && p.mass_MeV>0 && p.mean_MeV>=0 &&
-             p.ion_dispersion>=0 && p.universal_dispersion>=0 && p.cut_MeV>0 &&
-             p.tmax_MeV>=p.cut_MeV && p.excitation_MeV>0 && p.e0_MeV>0))return {};
+             p.ion_dispersion>=0 && p.universal_dispersion>=0 && p.tmax_MeV>0 && p.excitation_MeV>0 && p.e0_MeV>0))return {};
         if(p.mean_MeV<=Real(1e-9))return {p.mean_MeV,true};
         Real loss;
         if(!ion_model || p.kinetic_MeV>Real(10.0/938.272013)*ion_charge*p.mass_MeV)loss=universal(p);

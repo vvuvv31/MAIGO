@@ -182,30 +182,6 @@
       ],
       "note": "NPZ is a generation auxiliary; runtime uses EMCNT001 and moments."
     },
-    "data/em/ions/delta_moments.bin": {
-      "family": "em",
-      "kind": "native_extraction_and_continuous_derivation",
-      "tools": [
-        "tools/unified_em/prepare.py",
-        "tools/unified_em/run_extract.py",
-        "tools/unified_em/compile_unified_em_package.py",
-        "tools/unified_em/synthesize_analytic_density.py",
-        "tools/unified_em/build_continuous_density.py"
-      ],
-      "note": "NPZ is a generation auxiliary; runtime uses EMCNT001 and moments."
-    },
-    "data/em/ions/delta_moments.metadata.json": {
-      "family": "em",
-      "kind": "native_extraction_and_continuous_derivation",
-      "tools": [
-        "tools/unified_em/prepare.py",
-        "tools/unified_em/run_extract.py",
-        "tools/unified_em/compile_unified_em_package.py",
-        "tools/unified_em/synthesize_analytic_density.py",
-        "tools/unified_em/build_continuous_density.py"
-      ],
-      "note": "NPZ is a generation auxiliary; runtime uses EMCNT001 and moments."
-    },
     "data/ionization/air/proton_rate.csv": {
       "family": "ionization",
       "kind": "native_extraction",
@@ -966,6 +942,26 @@
       "kind": "external_scene_input",
       "tools": [],
       "note": "Fixed CT/plan/beam definitions; not physics extension outputs."
+    },
+    "data/stopping/beamline/unrestricted.bin": {
+      "family": "beamline_em",
+      "kind": "native_unrestricted_electronic_response",
+      "tools": [
+        "beamline_em/CMakeLists.txt",
+        "beamline_em/extract.cpp",
+        "beamline_em/verify.py"
+      ],
+      "note": "G4_Cu/G4_AIR, 324 native charged ions; full electronic mean and Dispersion(tcut=Tmax), independent held-out validation, derived CSDA/inverse. No finite-cut or missing-data fallback."
+    },
+    "data/stopping/beamline/unrestricted.metadata.json": {
+      "family": "beamline_em",
+      "kind": "native_unrestricted_electronic_response",
+      "tools": [
+        "beamline_em/CMakeLists.txt",
+        "beamline_em/extract.cpp",
+        "beamline_em/verify.py"
+      ],
+      "note": "G4_Cu/G4_AIR, 324 native charged ions; full electronic mean and Dispersion(tcut=Tmax), independent held-out validation, derived CSDA/inverse. No finite-cut or missing-data fallback."
     }
   }
 }

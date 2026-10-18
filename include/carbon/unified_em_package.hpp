@@ -1,5 +1,4 @@
 #pragma once
-#include "carbon/primary_em_mean_candidate.hpp"
 #include "carbon/em_continuous_density.hpp"
 #include <array>
 #include <cstdint>
@@ -10,28 +9,30 @@ namespace carbon {
 // EMCNT001: 26 compositions and continuous density; all 18 charged ions.
 struct UnifiedEmMaterial { std::int32_t section; float density; };
 struct UnifiedEmSpecies { std::uint32_t z,a; };
+// Runtime-only data. The fixed EMCNT001 disk layout is decoded privately on
+// the host; retired restricted/rate/spline fields never enter these GPU views.
 struct UnifiedEmRecord {
-    float mass,ratio,cut,excitation,e0,spin,step_fraction,final_range,linear_limit;
-    float is_ion,form_factor,magnetic_moment2,lowest_kinetic,peak;
-    std::uint32_t node_offset,node_count,offsets[4],counts[4],z,a;
+    float mass,ratio,excitation,e0,step_fraction,final_range,linear_limit,is_ion,lowest_kinetic;
+    std::uint32_t node_offset,node_count,z,a;
 };
 struct UnifiedEmNode {
-    float energy,full,restricted,stopping,range,lambda,factor,correction;
-    float dispersion,universal_dispersion,q2,model,fluctuation;
+    float energy,full,factor,dispersion,universal_dispersion,fluctuation;
 };
 static_assert(sizeof(UnifiedEmMaterial)==8 && sizeof(UnifiedEmSpecies)==8);
-static_assert(sizeof(UnifiedEmRecord)==104 && sizeof(UnifiedEmNode)==52);
+static_assert(sizeof(UnifiedEmRecord)==52 && sizeof(UnifiedEmNode)==24);
 class UnifiedEmPackage {
 public:
     std::vector<UnifiedEmMaterial> materials;
     std::vector<UnifiedEmSpecies> species;
     std::vector<UnifiedEmRecord> records;
     std::vector<UnifiedEmNode> nodes;
-    std::vector<EmCubicSegmentCandidate<float>> segments;
     std::vector<EmContinuousDescriptor> continuous_descriptors;
-    std::vector<float> continuous_scalars, continuous_ranges;
-    unsigned continuous_degree{}, continuous_scalar_count{};
-    std::vector<unsigned> continuous_lengths;
+    std::vector<float> continuous_scalars;
+    unsigned continuous_scalar_count{};
+    // Derived once from native unrestricted electronic stopping. Same node
+    // offsets as nodes; units are mm at each composition's reference density.
+    // This is runtime-owned data, not a change to the EMCNT001 file schema.
+    std::vector<float> unrestricted_ranges;
     static UnifiedEmPackage load(const std::filesystem::path&);
 };
 } // namespace carbon

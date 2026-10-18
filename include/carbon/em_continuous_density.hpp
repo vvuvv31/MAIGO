@@ -4,13 +4,12 @@
 #include <cstdint>
 namespace carbon {
 // One descriptor per composition/ion; no material-density response directory.
+// Runtime projection: file-only rate/range directories stay in the host reader.
 struct EmContinuousDescriptor {
-    float log_min,log_max,base_density,base_cut,base_coefficient;
+    float log_min,log_max,base_cut;
     float base_c,base_m,base_a,base_x0,base_x1,base_d0;
-    float rate_max_energy;
-    std::uint32_t range_offset,range_count,rate_offset,rate_count;
 };
-static_assert(sizeof(EmContinuousDescriptor)==64);
+static_assert(sizeof(EmContinuousDescriptor)==36);
 struct EmContinuousMaterial {
     float cut,coefficient,c,m,a,x0,x1,d0;
 };
@@ -23,10 +22,5 @@ inline EmContinuousMaterial em_continuous_material(const float* table,unsigned c
     EmContinuousMaterial out{};float* dst=&out.cut;
     for(unsigned k=0;k<8;++k)dst[k]=table[8*i+k]+w*(table[8*(i+1)+k]-table[8*i+k]);
     return out;
-}
-inline float em_chebyshev(const float* coeff,unsigned degree,float x) {
-    float a=0,b=0;
-    for(unsigned k=degree-1;k>0;--k){const float t=2*x*a-b+coeff[k];b=a;a=t;}
-    return x*a-b+coeff[0];
 }
 } // namespace carbon

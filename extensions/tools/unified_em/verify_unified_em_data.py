@@ -35,8 +35,4 @@ def verify(package):
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('package',nargs='?',type=Path,default=Path(__file__).resolve().parents[3]/'data/em/ions/continuous26.bin')
-    parser.add_argument("--core-only",action="store_true",help="Verify the source package before generating delta moments")
     args=parser.parse_args();verify(args.package)
-    if not args.core_only:
-        from verify_delta_moments import verify as verify_moments
-        verify_moments(args.package.parent/"delta_moments.bin",args.package)

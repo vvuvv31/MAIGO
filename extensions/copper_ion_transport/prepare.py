@@ -64,7 +64,6 @@ def main():
     parser.add_argument('--urban-package', type=Path, required=True)
     parser.add_argument('--nuclear-package', type=Path, required=True)
     parser.add_argument('--output-dir', type=Path, required=True)
-    parser.add_argument('--constants', type=Path, required=True)
     parser.add_argument('--jobs', type=int, default=4)
     parser.add_argument('--dense-nodes', type=int, default=8193)
     parser.add_argument('--validation-nodes', type=int, default=1025)
@@ -72,7 +71,6 @@ def main():
     build, output = args.build_dir.resolve(), args.output_dir.resolve()
     build.mkdir(parents=True, exist_ok=True)
     output.mkdir(parents=True, exist_ok=False)
-    args.constants.parent.mkdir(parents=True, exist_ok=True)
     species = required_species(args.urban_package, args.nuclear_package)
     species_file = output/'species.txt'
     species_file.write_text(''.join(f'{z} {a}\n' for z, a in species))
@@ -93,8 +91,7 @@ def main():
         subprocess.run([str(build/'validate_urban'), str(packed/'urban_mcs_candidate.bin'),
             str(packed/'probes.bin'), str(packed/'mfp_probes.bin')], stdout=log, stderr=subprocess.STDOUT, check=True)
     (output/'copper_fragments.bin').write_bytes((packed/'urban_mcs_candidate.bin').read_bytes())
-    subprocess.run([str(build/'extract'), str(species_file), str(output/'fragments.csv'),
-                    str(args.constants.resolve())], check=True)
+    subprocess.run([str(build/'extract'), str(species_file), str(output/'fragments.csv')], check=True)
     write_metadata(output, species, args)
 
 if __name__ == '__main__':

@@ -21,14 +21,11 @@ unclamped validity and exact face ownership remain authoritative. Other
 configurations keep their existing stages. All current paths use local ionization deposition; no electron/photon
 transport packages or configuration switches remain.
 
-Stages15/21/22 use a step-start delta first moment for the proton primary, retaining
-the current continuous26 rate, variance, restricted-loss slope and fluctuations.
-The two nearby-energy delta evaluations are omitted. Secondary particles and
-other stages keep the slope correction. The executed specialization sets
-`primary_first_order_delta_enabled`, so quality reports declare the approximation
-only when it ran. RT07575 head full-plan TOPAS qualification and measured
-throughput are recorded in `docs/proton_ct_first_order_delta_20261009.md`;
-this qualification applies to the patient-interior broadbeam dose gate.
+All medium and beamline pipelines now use one unrestricted Universal/Ion loss draw and
+range-based stepping. They share native full stopping, unrestricted variance,
+CSDA/inverse and final-range termination; no stage-specific delta moment or
+ionization-clock implementation remains. Cu/air use their required full
+electronic response; Urban scattering and nuclear models remain independent. See [unrestricted transport](unrestricted_dedx.md).
 
 Policies own primary workgroup size, default history chunk selection, secondary
 segment length and tail threshold. Broadbeam policies also select their

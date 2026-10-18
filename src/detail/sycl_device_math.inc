@@ -471,6 +471,11 @@ struct UrbanVoxelAxis {
 inline float urban_voxel_face(const int i, const int count,
                               const float lo, const float hi,
                               const float pitch) noexcept {
+    // The CT box owns its outer faces. Reconstructing an endpoint from the
+    // rounded centre can move it inward by an ulp on translated grids,
+    // leaving an in-box track with no valid boundary voxel.
+    if (i == 0) return lo;
+    if (i == count) return hi;
     // Centre anchoring preserves the exact x=0 face in the symmetric TOPAS
     // grid. Adjacent cells call this same expression for their shared face.
     return sycl::fma(static_cast<float>(i) - 0.5F * count, pitch,
@@ -894,7 +899,7 @@ struct UrbanV2LimitProposal {
     int exit_path{-1};
 };
 
-// One active C12 loss context supplies R(E), E(R), and restricted DEDX.
+// One active full-loss context supplies unrestricted R(E), E(R), and dE/dx.
 // The old E/7.2 and E/64.5 values came from an unbound G4VMscModel fallback
 // and are not production data. All Urban range consumers use this same table.
 inline float urban_v2_current_range_mm(const UrbanV2Material& mat,
@@ -1713,7 +1718,7 @@ inline CorrelatedScatteringStep copper_urban_v2_propose_and_sample(
     const float pos_x_mm, const float pos_y_mm, const float pos_z_mm,
     const float dir_x, const float dir_y, const float dir_z,
     const UrbanV2GeomCtx& geom, const bool at_boundary,
-    UrbanV2TrackState& state, const UrbanMcsContext& loss_context,
+    UrbanV2TrackState& state, const UrbanLossContext& loss_context,
     const float density_g_per_cm3, const float radiation_length_g_per_cm2,
     const float amplitude_scale, const std::uint64_t seed,
     const std::uint64_t history_id, const std::uint64_t outer_step,

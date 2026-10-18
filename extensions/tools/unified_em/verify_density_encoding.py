@@ -63,25 +63,3 @@ def verify_em(stream, nm, ns, nr, nn, nv):
     if offset != nn or any(bases[b] != b for b in bases):
         raise ValueError('Incomplete/chained EM density bases')
     end(stream)
-
-
-def verify_delta(stream, nr, nn):
-    bases, counts = [], []
-    offset = 0
-    for i in range(nr):
-        begin, count, identity, base, ratio = struct.unpack('<IIIIf', read(stream, 20))
-        if not (identity == i and begin == offset and 2 <= count <= nn and offset+count <= nn and base < nr and base % 18 == i % 18 and np.isfinite(ratio) and ratio > 0):
-            raise ValueError('Invalid delta density directory')
-        bases.append(base)
-        counts.append(count)
-        offset += count
-        if base == i:
-            a = np.frombuffer(read(stream, 8*count), '<f4')
-            if not np.all(np.isfinite(a) & (a >= 0)):
-                raise ValueError('Invalid delta density base')
-        else:
-            field(stream, count)
-            field(stream, count)
-    if offset != nn or any(bases[b] != b or counts[b] != counts[i] for i, b in enumerate(bases)):
-        raise ValueError('Incomplete/chained delta density bases')
-    end(stream)

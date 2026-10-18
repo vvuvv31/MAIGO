@@ -86,10 +86,7 @@
                    minibeam_event_counts_host.data(),
                    minibeam_event_counts_host.size());
         queue.wait_and_throw();
-        if (copper_native_fluctuations || copper_native_fragment_transport) {
-            if(air_ion_count)std::cout<<"AIR_IONIZATION_CLOCK steps="
-                <<minibeam_event_counts_host[air_ion_step_slot]<<" proposals="
-                <<minibeam_event_counts_host[air_ion_proposal_slot]<<'\n';
+        {
             std::cout << (primary_atomic_number == 1 && primary_mass_number == 1
                              ? "COPPER_PROTON_LOSS_QUALITY failures=" : "COPPER_ION_LOSS_QUALITY failures=")
                       << minibeam_event_counts_host[copper_proton_loss_failure_slot]
@@ -148,7 +145,7 @@
         {
         std::array<std::uint64_t,kUnifiedEmAuditCounters*kUnifiedEmAuditShards> shard_audit{};
         queue.copy(unified_audit,shard_audit.data(),shard_audit.size()).wait_and_throw();
-        std::uint64_t audit[8]{};
+        std::uint64_t audit[kUnifiedEmAuditCounters]{};
         for(unsigned shard=0;shard<kUnifiedEmAuditShards;++shard)
             for(unsigned counter=0;counter<kUnifiedEmAuditCounters;++counter)
                 audit[counter]+=shard_audit[static_cast<std::size_t>(counter)*kUnifiedEmAuditShards+shard];
@@ -157,14 +154,14 @@
             unsigned count=0;queue.copy(unified_failure_count,&count,1).wait_and_throw();
             std::vector<UnifiedEmFailureRecord> records(std::min(count,16u));
             queue.copy(unified_failure_records,records.data(),records.size()).wait_and_throw();
-            for(const auto& f:records)std::cerr<<"[unified-em-failure] reason="<<f.reason<<" section="<<f.section<<" Z="<<f.z<<" A="<<f.a<<" kinetic_MeV="<<f.energy<<" density="<<f.density<<" step_mm="<<f.step<<" mean="<<f.d0<<" delta_mean="<<f.d1<<" delta_variance="<<f.d2<<"\n";
+            for(const auto& f:records)std::cerr<<"[unified-em-failure] reason="<<f.reason<<" section="<<f.section<<" Z="<<f.z<<" A="<<f.a<<" kinetic_MeV="<<f.energy<<" density="<<f.density<<" step_mm="<<f.step<<" mean="<<f.d0<<" variance="<<f.d1<<" tmax="<<f.d2<<"\n";
             std::cerr<<"[runtime-rejected-kernel] primary_s="<<primary_kernel_seconds<<" secondary_s="<<secondary_kernel_seconds<<" histories="<<number_of_histories<<"\n";
             throw std::runtime_error("Unified EM missing domain or sampling failure; dose rejected");
         }
         mem_tracker.free(unified_failure_count);mem_tracker.free(unified_failure_records);
 
         mem_tracker.free(unified_energy_index);mem_tracker.free(unified_materials);mem_tracker.free(unified_species);mem_tracker.free(unified_records);
-        mem_tracker.free(unified_nodes);mem_tracker.free(unified_segments);mem_tracker.free(unified_audit);
+        mem_tracker.free(unified_nodes);mem_tracker.free(unified_audit);
 
     }
     std::uint64_t schneider_inelastic_host = 0;
@@ -238,6 +235,7 @@
             .wait_and_throw();
     }
 
+    free_device(recoil_stopping.full_nodes);free_device(recoil_stopping.full_ranges);
     free_device(dose_device);
     std::vector<float> let_numerator_host, let_denominator_host;
     if (let_numerator_device) {
@@ -272,13 +270,11 @@
     free_device(minibeam_fragment_miss_joint_energy_device);
     free_device(minibeam_fragment_miss_joint_depth_device);
     free_device(minibeam_fragment_miss_joint_remaining_device);
-    free_device(minibeam_copper_sp_energies_device);
-    free_device(minibeam_copper_sp_values_device);
 
-    free_device(air_ion_e_device);
-    free_device(air_ion_rate_device);
-    free_device(minibeam_air_sp_energies_device);
-    free_device(minibeam_air_sp_values_device);
+    if(!beamline_em_resident) {
+        free_device(beamline_em.materials);free_device(beamline_em.species);free_device(beamline_em.records);
+        free_device(beamline_em.nodes);free_device(beamline_em.ranges);
+    }
     free_device(minibeam_copper_xs_energies_device);
     free_device(minibeam_copper_xs_values_device);
     free_device(minibeam_copper_elastic_device);
@@ -311,16 +307,6 @@
     free_device(schneider_track_count_device);
 
     TransportResult result;
-    if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam>)
-        result.primary_first_order_delta_enabled=broadbeam_ct_primary_specialize;
-    if constexpr (std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>) {
-        result.carbon_secondary_first_order_delta_enabled=broadbeam_ct_secondary_specialize;
-    }
-    if constexpr (BroadBeam) {
-        if constexpr (std::is_same_v<Pipeline, pipelines::ProtonBroadbeam>)
-            result.ct_primary_first_order_restricted_enabled=broadbeam_ct_primary_specialize;
-        result.ct_secondary_first_order_restricted_enabled=broadbeam_ct_secondary_specialize;
-    }
     if constexpr(BroadBeam) result.ct_broadbeam_step_cap_enabled=enable_ct_grid;
 
     result.primary_elastic_interactions=elastic_counts_host[0];

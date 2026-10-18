@@ -1,6 +1,5 @@
 #pragma once
 
-#include "carbon/delta_moments_data.hpp"
 #include "carbon/inelastic_package_v3.hpp"
 #include "carbon/unified_em_package.hpp"
 #include "carbon/immutable_input_cache.hpp"
@@ -81,15 +80,13 @@ inline LoadedCinel03 take_cinel03(const std::filesystem::path& path) {
 
 struct UnifiedEmRequest {
     std::filesystem::path package_file;
-    std::filesystem::path delta_file;
 
     [[nodiscard]] std::string key() const {
-        return input_cache_key(package_file) + "|" + input_cache_key(delta_file);
+        return input_cache_key(package_file);
     }
     [[nodiscard]] std::shared_ptr<const UnifiedEmPackage> load() const {
         auto package = std::make_shared<const UnifiedEmPackage>(
             UnifiedEmPackage::load(package_file));
-        validate_delta_moments(delta_file, package->nodes.size());
         return package;
     }
 };

@@ -2,7 +2,6 @@
 #include "carbon/input_dependencies.hpp"
 #include "carbon/charged_species.hpp"
 #include "carbon/secondary_schedule.hpp"
-#include "carbon/delta_moments_data.hpp"
 #include "carbon/host_prefetch.hpp"
 #include "carbon/runtime_timing.hpp"
 #include "carbon/unified_em_view.hpp"
@@ -14,7 +13,7 @@
 #include "carbon/hadronic_rate_cache.hpp"
 #include "carbon/ct_grid.hpp"
 #include "carbon/device.hpp"
-#include "carbon/copper_fluctuation.hpp"
+#include "carbon/beamline_fluctuation.hpp"
 #include "carbon/inelastic.hpp"
 #include "carbon/multiple_scattering.hpp"
 #include "carbon/particle.hpp"
@@ -96,8 +95,6 @@ constexpr std::size_t copper_ion_first_failure_slot = 161; // claim + reason/ZA/
 constexpr std::size_t copper_fragment_urban_slot = 160;
 constexpr std::size_t copper_fragment_elastic_slot = 158;
 constexpr std::size_t copper_ion_transport_failure_slot = 159;
-constexpr std::size_t air_ion_proposal_slot = 156;
-constexpr std::size_t air_ion_step_slot = 157;
 constexpr std::size_t copper_proton_loss_failure_slot = 153;
 constexpr std::size_t copper_proton_primary_loss_slot = 154;
 constexpr std::size_t copper_proton_fragment_loss_slot = 155;
@@ -253,46 +250,6 @@ inline float minibeam_linear_table(const float* energies, const float* values,
     return values[low] + fraction * (values[high] - values[low]);
 }
 
-inline float minibeam_copper_ion_stopping(
-    const float* energies, const float* carbon_values, std::uint32_t count,
-    const float* species_ratios, const std::uint8_t* species_present,
-    float kinetic_energy_MeV, int atomic_number, int mass_number,
-    int reference_atomic_number) noexcept {
-    if (!energies || !carbon_values || count < 2 || atomic_number <= 0 ||
-        mass_number <= 0) return 0.0F;
-    const auto energy_u = kinetic_energy_MeV / static_cast<float>(mass_number);
-    std::uint32_t low = 0;
-    if (energy_u >= energies[count - 1]) {
-        low = count - 2;
-    } else if (energy_u > energies[0]) {
-        std::uint32_t high = count - 1;
-        while (high - low > 1) {
-            const auto middle = low + (high - low) / 2;
-            if (energies[middle] <= energy_u) low = middle;
-            else high = middle;
-        }
-    }
-    const auto fraction = sycl::clamp(
-        (energy_u - energies[low]) / (energies[low + 1] - energies[low]),
-        0.0F, 1.0F);
-    const auto carbon_stopping = carbon_values[low] + fraction *
-        (carbon_values[low + 1] - carbon_values[low]);
-    const auto species = static_cast<std::size_t>(atomic_number) *
-        IonStoppingPowerTables::mass_stride + static_cast<std::size_t>(mass_number);
-    if (species_ratios && species_present &&
-        atomic_number < static_cast<int>(IonStoppingPowerTables::atomic_number_slots) &&
-        mass_number < static_cast<int>(IonStoppingPowerTables::mass_stride) &&
-        species_present[species] != 0) {
-        const auto base = species * count;
-        const auto ratio = species_ratios[base + low] + fraction *
-            (species_ratios[base + low + 1] - species_ratios[base + low]);
-        return carbon_stopping * ratio;
-    }
-    const auto charge = static_cast<float>(atomic_number);
-    return carbon_stopping * charge * charge /
-        static_cast<float>(reference_atomic_number * reference_atomic_number);
-}
-
 inline float minibeam_copper_ion_inelastic_rate(
     const float* values, const std::uint8_t* species_present,
     std::uint32_t grid_size, float minimum_energy, float inverse_step,
@@ -425,7 +382,6 @@ struct alignas(16) SecondaryResumeStateT {
     int pending_sec_voxel{};
     std::uint64_t unified_secondary_counter{};
     // Preserve optical depth and the rate cache across scheduler slices.
-    UnifiedEmClock urban_ionization_clock{};
     UnifiedEmState unified_secondary_state{};
     float nuclear_tau_remaining{};
     bool nuclear_tau_active{};
@@ -469,11 +425,11 @@ inline void record_unified_em_failure(unsigned* count,UnifiedEmFailureRecord* re
     sycl::atomic_ref<unsigned,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> counter(*count);
     const auto slot=counter.fetch_add(1);if(slot<16)records[slot]={reason,section,z,a,energy,density,step,d0,d1,d2};
 }
-// The eight diagnostic counters are spread across logical threads so a warp's
+// Four EM counters are spread across logical threads so a warp's
 // same-index increments do not serialize on one global address. Counter i lane
-// s lives at global[i*kShards+s]; readback sums the shards into eight counters.
+// s lives at global[i*kShards+s]: failures, primary/secondary draws, loss microMeV.
 inline constexpr unsigned kUnifiedEmAuditShards = CARBON_EM_AUDIT_SHARDS;
-inline constexpr unsigned kUnifiedEmAuditCounters = 8;
+inline constexpr unsigned kUnifiedEmAuditCounters = 4;
 #include "detail/sycl_device_math.inc"
 #include "detail/sycl_urban_global.inc"
 
@@ -1089,10 +1045,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
 }
 
 UnifiedEmRequest unified_em_request(const TransportConfig& config) {
-    return {config.em_package_file,
-            config.em_delta_moments_file.empty()
-                ? config.em_package_file.parent_path() / delta_moments_filename
-                : config.em_delta_moments_file};
+    return {config.em_package_file};
 }
 
 template<class Pipeline>

@@ -21,7 +21,6 @@
         "ct_schneider_secondary_rate_file": "data/nuclear/schneider/secondary/inelastic_rates.bin",
         "ct_schneider_secondary_cinel03_file": "data/nuclear/schneider/secondary/final_states.bin",
         "ct_schneider_physics_bundle_file": "data/nuclear/schneider/carbon/bundle.json",
-        "em_delta_moments_file": "data/em/ions/delta_moments.bin",
         "em_package_file": "data/em/ions/continuous26.bin",
         "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/carbon/final_states.bin"
       },
@@ -32,8 +31,6 @@
         "data/elastic/schneider/carbon/recoil_stopping.metadata.json",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
-        "data/em/ions/delta_moments.bin",
-        "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
         "data/nuclear/schneider/carbon/bundle.json",
         "data/nuclear/schneider/carbon/final_states.bin",
@@ -71,15 +68,11 @@
         "ct_schneider_secondary_rate_file": "data/nuclear/schneider/secondary/inelastic_rates.bin",
         "ct_schneider_secondary_cinel03_file": "data/nuclear/schneider/secondary/final_states.bin",
         "ct_schneider_physics_bundle_file": "data/nuclear/schneider/carbon/bundle.json",
-        "em_delta_moments_file": "data/em/ions/delta_moments.bin",
         "em_package_file": "data/em/ions/continuous26.bin",
         "urban_mcs_package_file": "data/scattering/urban/ct_copper.bin",
-        "minibeam_copper_stopping_power_file": "data/stopping/copper/carbon.csv",
-        "minibeam_air_stopping_power_file": "data/stopping/air/carbon.csv",
         "minibeam_copper_cross_section_file": "data/nuclear/copper/carbon/primary_rate.csv",
         "minibeam_copper_elastic_file": "data/elastic/copper/carbon/primary.csv",
         "minibeam_copper_inclxx_file": "data/nuclear/copper/carbon/cascade.cinpkg",
-        "minibeam_copper_ion_stopping_power_file": "data/stopping/copper/ions_carbon.csv",
         "minibeam_copper_ion_cross_section_file": "data/nuclear/copper/ion_cross_sections.csv",
         "minibeam_air_urban_package_file": "data/scattering/urban/air.bin",
         "ct_grid_file": "inputs/lung_minibeam/ct.bin",
@@ -87,7 +80,8 @@
         "all_ion_elastic_file": "data/elastic/schneider/carbon/all_ion.bin",
         "elastic_recoil_stopping_file": "data/elastic/schneider/carbon/recoil_stopping.bin",
         "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv",
-        "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin"
+        "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin",
+        "minibeam_em_package_file": "data/stopping/beamline/unrestricted.bin"
       },
       "files": [
         "data/elastic/copper/carbon/fragments.csv",
@@ -99,8 +93,6 @@
         "data/elastic/schneider/carbon/recoil_stopping.metadata.json",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
-        "data/em/ions/delta_moments.bin",
-        "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
         "data/nuclear/copper/carbon/cascade.cinpkg",
         "data/nuclear/copper/carbon/primary_rate.csv",
@@ -120,10 +112,8 @@
         "data/scattering/urban/copper_fragments.bin",
         "data/scattering/urban/copper_fragments.metadata.json",
         "data/scattering/urban/ct_copper.bin",
-        "data/stopping/air/carbon.csv",
-        "data/stopping/air/carbon.metadata.json",
-        "data/stopping/copper/carbon.csv",
-        "data/stopping/copper/ions_carbon.csv",
+        "data/stopping/beamline/unrestricted.bin",
+        "data/stopping/beamline/unrestricted.metadata.json",
         "data/stopping/schneider/carbon.bin",
         "data/stopping/schneider/carbon.metadata.json",
         "data/stopping/water/carbon.csv",
@@ -147,7 +137,6 @@
         "ct_schneider_secondary_rate_file": "data/nuclear/schneider/secondary/inelastic_rates.bin",
         "ct_schneider_secondary_cinel03_file": "data/nuclear/schneider/secondary/final_states.bin",
         "ct_schneider_physics_bundle_file": "data/nuclear/schneider/carbon/bundle.json",
-        "em_delta_moments_file": "data/em/ions/delta_moments.bin",
         "em_package_file": "data/em/ions/continuous26.bin",
         "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/carbon/final_states.bin"
       },
@@ -158,8 +147,6 @@
         "data/elastic/schneider/carbon/recoil_stopping.metadata.json",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
-        "data/em/ions/delta_moments.bin",
-        "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
         "data/materials/water/material.json",
         "data/nuclear/schneider/carbon/bundle.json",
@@ -188,15 +175,11 @@
       "ion_scattering": "urban_v2",
       "inputs": {
         "tps_spots_file": "inputs/water_minibeam/carbon/spots.csv",
-        "minibeam_copper_stopping_power_file": "data/stopping/copper/carbon.csv",
-        "minibeam_air_stopping_power_file": "data/stopping/air/carbon.csv",
         "minibeam_copper_cross_section_file": "data/nuclear/copper/carbon/primary_rate.csv",
         "minibeam_copper_elastic_file": "data/elastic/copper/carbon/primary.csv",
         "minibeam_copper_inclxx_file": "data/nuclear/copper/carbon/cascade.cinpkg",
-        "minibeam_copper_ion_stopping_power_file": "data/stopping/copper/ions_carbon.csv",
         "minibeam_copper_ion_cross_section_file": "data/nuclear/copper/ion_cross_sections.csv",
         "em_package_file": "data/em/ions/continuous26.bin",
-        "em_delta_moments_file": "data/em/ions/delta_moments.bin",
         "unified_water_material_file": "data/materials/water/material.json",
         "ct_schneider_primary_rate_file": "data/nuclear/schneider/carbon/inelastic_rates.bin",
         "ct_schneider_secondary_rate_file": "data/nuclear/schneider/secondary/inelastic_rates.bin",
@@ -209,7 +192,8 @@
         "ct_schneider_primary_cinel03_file": "data/nuclear/schneider/carbon/final_states.bin",
         "urban_mcs_package_file": "data/scattering/urban/ct_copper.bin",
         "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv",
-        "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin"
+        "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin",
+        "minibeam_em_package_file": "data/stopping/beamline/unrestricted.bin"
       },
       "files": [
         "data/elastic/copper/carbon/fragments.csv",
@@ -221,8 +205,6 @@
         "data/elastic/schneider/carbon/recoil_stopping.metadata.json",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
-        "data/em/ions/delta_moments.bin",
-        "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
         "data/materials/water/material.json",
         "data/nuclear/copper/carbon/cascade.cinpkg",
@@ -243,10 +225,8 @@
         "data/scattering/urban/copper_fragments.bin",
         "data/scattering/urban/copper_fragments.metadata.json",
         "data/scattering/urban/ct_copper.bin",
-        "data/stopping/air/carbon.csv",
-        "data/stopping/air/carbon.metadata.json",
-        "data/stopping/copper/carbon.csv",
-        "data/stopping/copper/ions_carbon.csv",
+        "data/stopping/beamline/unrestricted.bin",
+        "data/stopping/beamline/unrestricted.metadata.json",
         "data/stopping/schneider/carbon.bin",
         "data/stopping/schneider/carbon.metadata.json",
         "data/stopping/water/carbon.csv",
@@ -267,7 +247,6 @@
         "ct_schneider_secondary_rate_file": "data/nuclear/schneider/secondary/inelastic_rates.bin",
         "ct_schneider_secondary_cinel03_file": "data/nuclear/schneider/secondary/final_states.bin",
         "ct_schneider_physics_bundle_file": "data/nuclear/schneider/proton/bundle.json",
-        "em_delta_moments_file": "data/em/ions/delta_moments.bin",
         "em_package_file": "data/em/ions/continuous26.bin",
         "all_ion_elastic_file": "data/elastic/schneider/proton/all_ion.bin",
         "elastic_recoil_stopping_file": "data/elastic/schneider/proton/recoil_stopping.bin",
@@ -284,8 +263,6 @@
         "data/elastic/schneider/proton/recoil_stopping.metadata.json",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
-        "data/em/ions/delta_moments.bin",
-        "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
         "data/nuclear/schneider/proton/bundle.json",
         "data/nuclear/schneider/proton/final_states.bin",
@@ -322,22 +299,18 @@
         "ct_schneider_secondary_rate_file": "data/nuclear/schneider/secondary/inelastic_rates.bin",
         "ct_schneider_secondary_cinel03_file": "data/nuclear/schneider/secondary/final_states.bin",
         "ct_schneider_physics_bundle_file": "data/nuclear/schneider/proton/bundle.json",
-        "em_delta_moments_file": "data/em/ions/delta_moments.bin",
         "em_package_file": "data/em/ions/continuous26.bin",
         "urban_mcs_package_file": "data/scattering/urban/ct_copper.bin",
-        "minibeam_copper_stopping_power_file": "data/stopping/copper/proton.csv",
-        "minibeam_air_stopping_power_file": "data/stopping/air/proton.csv",
         "minibeam_copper_cross_section_file": "data/nuclear/copper/proton/primary_rate.csv",
         "minibeam_copper_elastic_file": "data/elastic/copper/proton/primary.csv",
         "minibeam_copper_inclxx_file": "data/nuclear/copper/proton/cascade.cinpkg",
-        "minibeam_copper_ion_stopping_power_file": "data/stopping/copper/ions_proton.csv",
         "minibeam_copper_ion_cross_section_file": "data/nuclear/copper/ion_cross_sections.csv",
         "minibeam_air_urban_package_file": "data/scattering/urban/air.bin",
-        "minibeam_air_ionization_rate_file": "data/ionization/air/proton_rate.csv",
         "ct_grid_file": "inputs/lung_minibeam/ct.bin",
         "ct_schneider_file": "data/materials/schneider/hu_to_material.txt",
         "all_ion_elastic_file": "data/elastic/schneider/proton/all_ion.bin",
-        "elastic_recoil_stopping_file": "data/elastic/schneider/proton/recoil_stopping.bin"
+        "elastic_recoil_stopping_file": "data/elastic/schneider/proton/recoil_stopping.bin",
+        "minibeam_em_package_file": "data/stopping/beamline/unrestricted.bin"
       },
       "files": [
         "data/elastic/copper/proton/primary.csv",
@@ -347,9 +320,6 @@
         "data/elastic/schneider/proton/recoil_stopping.metadata.json",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
-        "data/em/ions/delta_moments.bin",
-        "data/em/ions/delta_moments.metadata.json",
-        "data/ionization/air/proton_rate.csv",
         "data/materials/schneider/hu_to_material.txt",
         "data/nuclear/copper/ion_cross_sections.csv",
         "data/nuclear/copper/proton/cascade.cinpkg",
@@ -368,9 +338,8 @@
         "data/nuclear/schneider/secondary/inelastic_rates.metadata.json",
         "data/scattering/urban/air.bin",
         "data/scattering/urban/ct_copper.bin",
-        "data/stopping/air/proton.csv",
-        "data/stopping/copper/ions_proton.csv",
-        "data/stopping/copper/proton.csv",
+        "data/stopping/beamline/unrestricted.bin",
+        "data/stopping/beamline/unrestricted.metadata.json",
         "data/stopping/schneider/proton.bin",
         "data/stopping/schneider/proton.metadata.json",
         "data/stopping/water/proton.csv",
@@ -393,7 +362,6 @@
         "ct_schneider_secondary_rate_file": "data/nuclear/schneider/secondary/inelastic_rates.bin",
         "ct_schneider_secondary_cinel03_file": "data/nuclear/schneider/secondary/final_states.bin",
         "ct_schneider_physics_bundle_file": "data/nuclear/schneider/proton/bundle.json",
-        "em_delta_moments_file": "data/em/ions/delta_moments.bin",
         "em_package_file": "data/em/ions/continuous26.bin",
         "all_ion_elastic_file": "data/elastic/schneider/proton/all_ion.bin",
         "elastic_recoil_stopping_file": "data/elastic/schneider/proton/recoil_stopping.bin"
@@ -405,8 +373,6 @@
         "data/elastic/schneider/proton/recoil_stopping.metadata.json",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
-        "data/em/ions/delta_moments.bin",
-        "data/em/ions/delta_moments.metadata.json",
         "data/materials/schneider/hu_to_material.txt",
         "data/materials/water/material.json",
         "data/nuclear/schneider/proton/bundle.json",
@@ -441,20 +407,16 @@
         "ct_schneider_secondary_rate_file": "data/nuclear/schneider/secondary/inelastic_rates.bin",
         "ct_schneider_secondary_cinel03_file": "data/nuclear/schneider/secondary/final_states.bin",
         "ct_schneider_physics_bundle_file": "data/nuclear/schneider/proton/bundle.json",
-        "em_delta_moments_file": "data/em/ions/delta_moments.bin",
         "em_package_file": "data/em/ions/continuous26.bin",
         "all_ion_elastic_file": "data/elastic/schneider/proton/all_ion.bin",
         "elastic_recoil_stopping_file": "data/elastic/schneider/proton/recoil_stopping.bin",
-        "minibeam_copper_stopping_power_file": "data/stopping/copper/proton.csv",
-        "minibeam_air_stopping_power_file": "data/stopping/air/proton.csv",
         "minibeam_copper_cross_section_file": "data/nuclear/copper/proton/primary_rate.csv",
         "minibeam_copper_elastic_file": "data/elastic/copper/proton/primary.csv",
         "minibeam_copper_inclxx_file": "data/nuclear/copper/proton/cascade.cinpkg",
-        "minibeam_copper_ion_stopping_power_file": "data/stopping/copper/ions_proton.csv",
         "minibeam_copper_ion_cross_section_file": "data/nuclear/copper/ion_cross_sections.csv",
         "minibeam_air_urban_package_file": "data/scattering/urban/air.bin",
-        "minibeam_air_ionization_rate_file": "data/ionization/air/proton_rate.csv",
-        "urban_mcs_package_file": "data/scattering/urban/ct_copper.bin"
+        "urban_mcs_package_file": "data/scattering/urban/ct_copper.bin",
+        "minibeam_em_package_file": "data/stopping/beamline/unrestricted.bin"
       },
       "files": [
         "data/elastic/copper/proton/primary.csv",
@@ -464,9 +426,6 @@
         "data/elastic/schneider/proton/recoil_stopping.metadata.json",
         "data/em/ions/continuous26.bin",
         "data/em/ions/continuous26.metadata.json",
-        "data/em/ions/delta_moments.bin",
-        "data/em/ions/delta_moments.metadata.json",
-        "data/ionization/air/proton_rate.csv",
         "data/materials/schneider/hu_to_material.txt",
         "data/materials/water/material.json",
         "data/nuclear/copper/ion_cross_sections.csv",
@@ -486,9 +445,8 @@
         "data/nuclear/schneider/secondary/inelastic_rates.metadata.json",
         "data/scattering/urban/air.bin",
         "data/scattering/urban/ct_copper.bin",
-        "data/stopping/air/proton.csv",
-        "data/stopping/copper/ions_proton.csv",
-        "data/stopping/copper/proton.csv",
+        "data/stopping/beamline/unrestricted.bin",
+        "data/stopping/beamline/unrestricted.metadata.json",
         "data/stopping/schneider/proton.bin",
         "data/stopping/schneider/proton.metadata.json",
         "data/stopping/water/proton.csv",
@@ -514,12 +472,6 @@
     },
     "data/em/ions/continuous26.metadata.json": {
       "bytes": 4619
-    },
-    "data/em/ions/delta_moments.bin": {
-      "bytes": 30750944
-    },
-    "data/em/ions/delta_moments.metadata.json": {
-      "bytes": 599
     },
     "data/materials/schneider/hu_to_material.txt": {
       "bytes": 37352
@@ -614,11 +566,11 @@
     "data/scattering/urban/ct_copper.bin": {
       "bytes": 752387952
     },
-    "data/stopping/copper/carbon.csv": {
-      "bytes": 58528
+    "data/stopping/beamline/unrestricted.bin": {
+      "bytes": 85458416
     },
-    "data/stopping/copper/ions_carbon.csv": {
-      "bytes": 6826481
+    "data/stopping/beamline/unrestricted.metadata.json": {
+      "bytes": 11457
     },
     "inputs/lung_minibeam/ct.bin": {
       "bytes": 152964248
@@ -686,9 +638,6 @@
     "data/elastic/copper/proton/primary.csv": {
       "bytes": 21282756
     },
-    "data/ionization/air/proton_rate.csv": {
-      "bytes": 591080
-    },
     "data/nuclear/copper/proton/cascade.cinpkg": {
       "bytes": 878775520
     },
@@ -697,13 +646,7 @@
     },
     "data/nuclear/copper/proton/primary_rate.csv": {
       "bytes": 95386
-    },
-    "data/stopping/copper/ions_proton.csv": {
-      "bytes": 4358434
-    },
-    "data/stopping/copper/proton.csv": {
-      "bytes": 88565
     }
   },
-  "total_unique_bytes": 4758361441
+  "total_unique_bytes": 4801156683
 }

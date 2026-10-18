@@ -418,11 +418,6 @@ static_assert(sizeof(SchneiderUnsupportedTrack) == 24, "unsupported-track layout
 struct TransportResult {
     bool conditional_copper_response_enabled{false};
     // True only when the dedicated local-electron CT proton primary ran.
-    bool primary_first_order_delta_enabled{false};
-    bool carbon_primary_first_order_delta_enabled{false};
-    bool carbon_secondary_first_order_delta_enabled{false};
-    bool ct_primary_first_order_restricted_enabled{false};
-    bool ct_secondary_first_order_restricted_enabled{false};
     bool ct_broadbeam_step_cap_enabled{false};
 
     EnergyAccountingLedger energy_ledger{};

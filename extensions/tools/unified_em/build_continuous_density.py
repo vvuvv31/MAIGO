@@ -7,9 +7,7 @@ analytical model. Training densities are not stored as transport EM states.
 from pathlib import Path
 import argparse,json,struct,subprocess,time
 import numpy as np
-from synthesize_analytic_density import rebuild,reference_record,eval_segments
-from probe_analytic_density import RD
-from build_delta_moments import mean_values,rd as DRD
+from synthesize_analytic_density import rebuild,reference_record,eval_segments,RD
 
 DEG=24; SAMPLES=64; SCALARS=257; RATE_KNOTS=257
 
@@ -31,7 +29,7 @@ def build(bases,section_file,helper,output):
  (output/'material_inputs.txt').write_text('\n'.join(inp)+'\n')
  subprocess.run([str(helper.resolve()),str(output/'material_inputs.txt'),str(output/'material_metadata.txt')],check=True)
  metadata=np.loadtxt(output/'material_metadata.txt').reshape(26,SCALARS+SAMPLES+1,13)
- materials=[];records=[];nodes=[];vectors=[];deltas=[];descriptors=[];coeffs=[];no=vo=co=0
+ materials=[];records=[];nodes=[];vectors=[];descriptors=[];coeffs=[];no=vo=co=0
  for si,s in enumerate(range(-1,25)):
   rho=float(b[f'meta_{s}'][1]);materials.append((s,rho));lo,hi=rho_bounds[s]
   # Scalar grid stores cut, electron density coefficient and Sternheimer parameters.
@@ -66,11 +64,9 @@ def build(bases,section_file,helper,output):
    r['u'][0]=no;r['u'][1]=len(bn);no+=len(bn)
    for k,v in enumerate(bv):r['u'][2+k]=vo;r['u'][6+k]=len(v);vo+=len(v);vectors.append(v)
    records.append(r);nodes.append(bn)
-   dr=np.frombuffer(r.tobytes(),dtype=DRD)[0]
-   deltas.append(np.column_stack([mean_values(dr,bn.astype(float),moment=j) for j in [1,2]]).astype('<f4'))
   print(f'composition {s}: {time.monotonic()-start:.1f}s',flush=True)
  nodes=np.concatenate(nodes);vectors=np.concatenate(vectors);records=np.array(records,dtype=RD)
- em=output/'continuous26.bin';delta=output/'delta_moments.bin'
+ em=output/'continuous26.bin'
  # EMCNT001 standard base layout followed by continuous-density extension.
  with em.open('wb') as f:
   f.write(struct.pack('<8s6I',b'EMCNT001',1,26,18,468,len(nodes),len(vectors)))
@@ -79,8 +75,7 @@ def build(bases,section_file,helper,output):
   # Packed descriptor: twelve floats plus four unsigned ints.
   for d in descriptors:f.write(struct.pack('<12f4I',*d))
   f.write(metadata[:,:SCALARS,3:11].astype('<f4').tobytes());f.write(np.concatenate(coeffs).tobytes())
- with delta.open('wb') as f:f.write(struct.pack('<8sII',b'EMDMOMT2',2,len(nodes)));f.write(np.concatenate(deltas).tobytes())
- report=dict(schema='EMCNT001',version=1,composition_states=26,ion_species=18,density_response_states=0,range_density_degree=DEG-1,material_scalar_samples=SCALARS,em_bytes=em.stat().st_size,delta_bytes=delta.stat().st_size,no_target_density_responses=True,elapsed_seconds=time.monotonic()-start)
+ report=dict(schema='EMCNT001',version=1,composition_states=26,ion_species=18,density_response_states=0,range_density_degree=DEG-1,material_scalar_samples=SCALARS,em_bytes=em.stat().st_size,no_target_density_responses=True,elapsed_seconds=time.monotonic()-start)
  em_meta=dict(schema='EMCNT001',version=1,package_bytes=em.stat().st_size,
   materials=[dict(name='Water_75eV' if sec==-1 else f'Schneider_{sec}',section=sec,density_g_cm3=rho) for sec,rho in materials],
   species_za=b['species'].tolist(),records=468,nodes=len(nodes),segments=len(vectors),
@@ -88,10 +83,7 @@ def build(bases,section_file,helper,output):
   encoding='26 composition bases + continuous cut/density correction and integral polynomials',
   reference_water='Water_75eV; mean excitation energy75eV',generator=__file__,
   validation_status='candidate; validate components and transport/dose before installation')
- delta_meta=dict(schema='EMDMOMT2',version=2,bytes=delta.stat().st_size,nodes=len(nodes),records=468,
-  units=['MeV/mm','MeV^2/mm'],encoding='Composition reference moments; continuous runtime moments use the native spectrum',generator=__file__)
  em.with_suffix('.metadata.json').write_text(json.dumps(em_meta,indent=2)+'\n')
- delta.with_suffix('.metadata.json').write_text(json.dumps(delta_meta,indent=2)+'\n')
  (output/'continuous_density.json').write_text(json.dumps(report,indent=2)+'\n')
  print(json.dumps(report),flush=True)
 if __name__=='__main__':

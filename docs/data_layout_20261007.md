@@ -7,19 +7,19 @@
 | 目录 | 内容 |
 |---|---|
 | `data/materials/{water,schneider}` | 水材料描述、HU 映射、材料辐射长度 |
-| `data/em/ions` | continuous26 离子 EM、delta moments、生成辅助 composition bases |
+| `data/em/ions` | continuous26 离子 EM、生成辅助 composition bases |
 | `data/let/schneider` | 可选 LET 专用反冲电子阻止本领；不参与输运，八个剂量预设不依赖 |
 | `data/nuclear/schneider/{proton,carbon,secondary}` | 主/次级核反应率、final states、bundle 和 sidecars |
 | `data/nuclear/copper/{proton,carbon}` | 铜中的主粒子反应率与级联；共享离子截面在上层 |
 | `data/elastic/{schneider,copper}` | 各粒子校准的弹性散射、反冲 stopping |
 | `data/stopping/{water,air,copper,schneider}` | 各材料的参考 stopping 表及辅助提取表 |
 | `data/scattering/urban` | CT/铜与空气的 Urban 包 |
-| `data/ionization/air` | 质子空气电离率 |
+| `data/stopping/beamline` | Cu／空气 324 物种的非受限电子响应 BLEM0001 |
 | `inputs/rt07575_head/{proton,carbon}` | 独立的两套头部 CT、beam model、spots |
 | `inputs/lung_minibeam` | 两个 CT minibeam 共用的独立肺部 benchmark |
 | `inputs/water_minibeam/carbon` | 碳水 minibeam 的 TPS spots |
 
-质子和碳离子的铜 fragment stopping 表分别为 `ions_proton.csv`、`ions_carbon.csv`，没有合并。显式电子／光子包已从当前依赖中移除。未创建旧目录的兼容链接或旧路径查找逻辑。
+当前铜／空气输运使用 `stopping/beamline/unrestricted.bin`；旧的独立铜 stopping CSV 为离线辅助资产，不再是运行依赖。显式电子／光子包已从当前依赖中移除。未创建旧目录的兼容链接或旧路径查找逻辑。
 
 149 个原始文件均有迁移记录，其中 5 个历史生成/清理记录移入 `docs/data_provenance/`；其余 144 个保留为安装资源。另外新增 `data/manifest.json`。辅助生成资源仍被保留，manifest 不宣称其每一个文件都是运行必需输入。
 
@@ -57,4 +57,4 @@ python3 scripts/check_data_manifest.py
 
 ## 反冲阻止本领的运行时依赖
 
-额外靶反冲的步长与实际能损均使用当前 `ELRSP001` 同位素/材料阻止本领包，并乘实际介质密度。已删除 `particle_stopping_power_file` 及独立水参考 LUT 的运行路径。`data/stopping/water/ions.csv` 保留为铜 δ fraction 的显式离线校准参考，属于生成辅助资产，不再属于八个预设的运行时依赖。铜物种 CSV 与其校准保持不变。
+额外靶反冲的步长与实际能损均使用当前 `ELRSP001` 同位素/材料阻止本领包，并乘实际介质密度。已删除 `particle_stopping_power_file` 及独立水参考 LUT 的运行路径。`data/stopping/water/ions.csv` 保留为铜 δ fraction 的显式离线校准参考，属于生成辅助资产，不再属于八个预设的运行时依赖。旧铜物种 CSV 仅保留为历史生成辅助资源。额外反冲的 Urban 切步使用该完整总阻止表派生的 CSDA，不再查询受限射程。

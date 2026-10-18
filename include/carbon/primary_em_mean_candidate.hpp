@@ -23,29 +23,4 @@ template<class Real> struct EmCubicSegmentCandidate {
     }
 };
 
-template<class Real> struct PrimaryRestrictedMeanCandidate {
-    Real energy_loss{};
-    bool stopped{false};
-};
-
-// Callbacks use the SAME prestep dynamic mass/charge state for range inversion.
-// correction(midpoint, basic_loss, step) returns the complete corrected loss,
-// not an extra correction to already-corrected unrestricted stopping.
-// Inputs and table domains must be validated by the caller before device use.
-template<class Real,class InverseRange,class Correction>
-PrimaryRestrictedMeanCandidate<Real> primary_restricted_mean_candidate(
-    Real kinetic,Real step,Real prestep_restricted_stopping,Real range,
-    InverseRange&& inverse_range,Correction&& correction,Real linear_limit=Real(.02)) {
-    if(step<=0)return {};
-    if(step>=range)return {kinetic,true};
-    Real loss=prestep_restricted_stopping*step;
-    bool use_range=loss>linear_limit*kinetic;
-    if(use_range){Real de=kinetic-inverse_range(range-step);if(de>0)loss=de;}
-    if(loss>=kinetic)return {kinetic,true};
-    Real midpoint=std::max(kinetic-loss*Real(.5),kinetic*Real(.5));
-    Real corrected=correction(midpoint,loss,step);
-    if(corrected>kinetic || 2*corrected<loss)corrected=loss;
-    corrected=std::max(Real(0),corrected);
-    return {std::min(kinetic,corrected),corrected>=kinetic};
-}
 } // namespace carbon

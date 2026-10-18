@@ -63,7 +63,7 @@
     DeviceMemoryTracker mem_tracker{queue, device_memory_budget_bytes};
 
     const auto free_device = [&](auto* pointer) {
-        mem_tracker.free(pointer);
+        mem_tracker.free(const_cast<void*>(static_cast<const void*>(pointer)));
     };
 
     const auto number_of_histories = config.number_of_histories;
@@ -155,7 +155,6 @@
     UnifiedEmFailureRecord* unified_failure_records=nullptr;
     UnifiedEmRecord* unified_records=nullptr;
     UnifiedEmNode* unified_nodes=nullptr;
-    EmCubicSegmentCandidate<float>* unified_segments=nullptr;
     std::uint64_t* unified_audit=nullptr;
 
     const bool global_urban=!BroadBeam && config.multiple_scattering_model=="urban_v2";
@@ -229,7 +228,7 @@
         urban_species_host=package.species;
         urban_device.ct_density_scaling=config.urban_ct_density_scaling;
         if(config.urban_ct_density_scaling)
-            std::cout<<"[urban-v2] CT continuous26 restricted loss/range; native MSC density scaling; additional elastic recoils retain their separate native context\n";
+            std::cout<<"[urban-v2] CT continuous26 unrestricted loss/range; native MSC density scaling; additional elastic recoils retain their separate native context\n";
         urban_step_counts=mem_tracker.allocate<std::uint64_t>(2*package.species.size());
         if(!urban_step_counts)throw std::bad_alloc();
         queue.fill(urban_step_counts,std::uint64_t{0},2*package.species.size()).wait_and_throw();
@@ -274,10 +273,6 @@
         air_urban_projectile = package.view().projectile(config.primary_atomic_number, config.primary_mass_number);
         if (package.materials.size() != 1 || package.materials[0].section != -3 || air_urban_projectile < 0)
             throw std::invalid_argument("Air Urban requires a G4_AIR (-3) bank containing source ZA");
-        if (!config.minibeam_air_ionization_rate_file.empty() &&
-            (std::abs(package.materials[0].density-0.00120479F)>1e-9F ||
-             std::abs(package.materials[0].production_cut_mm-0.05F)>1e-7F))
-            throw std::invalid_argument("Air ionization clock and Urban material/cut must match");
         config.require_primary_reference_mass(package.species[air_urban_projectile].mass_mev, "Air Urban package");
         auto resident=retain_physics_device ? resident_tables(context->impl_->resident_air,
             input_cache_key(config.minibeam_air_urban_package_file),"air") : nullptr;
@@ -294,8 +289,7 @@
     bool nonion_primary_package_safe=true;
     {
         const std::string unified_em_signature =
-            input_cache_key(config.em_package_file)+"|"+
-            input_cache_key(unified_em_request(config).delta_file);
+            input_cache_key(config.em_package_file);
         std::shared_ptr<const UnifiedEmPackage> unified_package;
         bool unified_em_cache_hit=false;
         if(context!=nullptr){
@@ -306,7 +300,7 @@
             }
         }
         if(!unified_package){
-            // The prefetch result includes package and delta-sidecar validation.
+            // The prefetch result includes strict native package validation.
             unified_package=runtime_call("unified_em_package_load_verify",[&]{return take_unified_em(unified_em_request(config));});
             if(context!=nullptr){
                 auto& cached=context->impl_->unified_em_cache;
@@ -339,9 +333,7 @@
         std::cout<<"[physics-cache] unified_em="<<(unified_em_cache_hit?"hit":"miss")
                  <<" nodes="<<package.nodes.size()<<"\n";
         RuntimeScope t_em_device("setup_em_device_upload");
-        if(uses_urban_package)std::cout<<"[urban-ionization-clock] native proposal clock limits true transport paths; aggregate energy law unchanged\n";
-        std::cout<<"[delta-moments] condensed_partition_v1; aggregate Gamma; nodes="
-                 <<package.nodes.size()<<"\n";
+        std::cout<<"[medium-em] full Universal/Ion loss; unrestricted variance; range-based step; no delta-moment sidecar\n";
         unified_failure_count=mem_tracker.allocate<unsigned>(1);
         unified_failure_records=mem_tracker.allocate<UnifiedEmFailureRecord>(16);
         if(!unified_failure_count || !unified_failure_records)throw std::bad_alloc();
@@ -353,25 +345,23 @@
             unified_energy_index=upload("energy_index",index);
         }
         unified_materials=upload("materials",package.materials);unified_species=upload("species",package.species);
-        unified_records=upload("records",package.records);unified_nodes=upload("nodes",package.nodes);unified_segments=upload("segments",package.segments);
+        unified_records=upload("records",package.records);unified_nodes=upload("nodes",package.nodes);
         unified_audit=mem_tracker.allocate<std::uint64_t>(kUnifiedEmAuditCounters*kUnifiedEmAuditShards);if(!unified_audit)throw std::bad_alloc();
         queue.fill(unified_audit,std::uint64_t{0},kUnifiedEmAuditCounters*kUnifiedEmAuditShards).wait_and_throw();
 
-        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_segments,unified_energy_index
+        unified_device={unified_materials,unified_species,unified_records,unified_nodes,unified_energy_index
         };
         if(!package.continuous_descriptors.empty()) {
             unified_device.continuous_descriptors=upload("continuous_descriptors",package.continuous_descriptors);
             unified_device.continuous_scalars=upload("continuous_scalars",package.continuous_scalars);
-            unified_device.continuous_ranges=upload("continuous_ranges",package.continuous_ranges);
-            unified_device.continuous_lengths=upload("continuous_lengths",package.continuous_lengths);
-            unified_device.continuous_degree=package.continuous_degree;
+            unified_device.unrestricted_ranges=upload("unrestricted_ranges",package.unrestricted_ranges);
             unified_device.continuous_scalar_count=package.continuous_scalar_count;
             std::cout<<"[em-continuous-density] compositions="<<package.materials.size()
-                     <<" density_response_states=0 range_degree="<<package.continuous_degree-1<<"\n";
+                     <<" density_response_states=0 range=unrestricted-prefix"<<"\n";
         }
 
         t_em_device.finish();
-        std::cout<<"[unified-em] all 18 charged ions; water + Schneider continuous density; native particle step parameters plus 1% combined mean-loss guard; local aggregate delta deposition; density cut-onset/patient accuracy validation pending\n";
+        std::cout<<"[unified-em] unrestricted electronic stopping/range for all 18 charged ions; water + Schneider continuous density; single unrestricted fluctuation draw; residual-range stepping\n";
     }
     // One host-table cache per process for the Schneider nuclear packages.
     // Reset only when
@@ -452,25 +442,16 @@
             if(enable_ct_grid && !use_unified_water) {
                 RuntimeScope fields_setup("setup_ct_exact_material_fields");
                 const auto key=geometry_key+"|"+input_cache_key(config.em_package_file)+"|"+
-                    input_cache_key(unified_em_request(config).delta_file)+"|"+device_name+((std::is_same_v<Pipeline,pipelines::CarbonBroadbeam> || std::is_same_v<Pipeline,pipelines::CarbonMinibeam>)?"|ct_exact_fields_range_C12_v1":"|ct_exact_fields_range_v2");
+                    device_name+"|ct_exact_fields_unrestricted_v1";
                 auto resident=context ? resident_tables(context->impl_->resident_ct_fields,key,"ct_exact_fields") : nullptr;
                 std::uint16_t* voxel_tuples=nullptr;
                 UnifiedEmCtFields* fields=nullptr;
-                float* range_values=nullptr;unsigned* range_offsets=nullptr;
-                std::vector<UnifiedEmSpecies> range_species(18);
-                queue.copy(unified_device.species,range_species.data(),range_species.size()).wait_and_throw();
-                int range_ion=-1;
-                constexpr int range_z=(std::is_same_v<Pipeline,pipelines::CarbonBroadbeam> || std::is_same_v<Pipeline,pipelines::CarbonMinibeam>)?6:1;
-                constexpr int range_a=(std::is_same_v<Pipeline,pipelines::CarbonBroadbeam> || std::is_same_v<Pipeline,pipelines::CarbonMinibeam>)?12:1;
-                for(int i=0;i<18;++i)if(range_species[i].z==range_z && range_species[i].a==range_a)range_ion=i;
-                if(range_ion<0)throw std::runtime_error("Exact range cache requires projectile package coverage");
                 unsigned tuple_count=0;
                 if(resident && resident->contains("ready")) {
                     voxel_tuples=resident->template get<std::uint16_t>("voxels");
                     fields=resident->template get<UnifiedEmCtFields>("fields");
                     tuple_count=static_cast<unsigned>(resident->blocks.at("fields").count/18);
-                    range_values=resident->template get<float>("range_values");
-                    range_offsets=resident->template get<unsigned>("range_offsets");
+
                 } else {
                     std::unordered_map<std::uint64_t,std::uint16_t> directory;
                     std::vector<std::uint16_t> indices(voxel_count);
@@ -510,27 +491,11 @@
                             if(state.valid){const auto p=state.point();value.material=p.material;value.coordinate=p.continuous_coordinate;}
                             fields[i]=value;
                         }).wait_and_throw();
-                        std::vector<EmContinuousDescriptor> descriptors(468);
-                        queue.copy(source.continuous_descriptors,descriptors.data(),descriptors.size()).wait_and_throw();
-                        std::vector<unsigned> offsets(tuple_count+1);
-                        for(unsigned t=0;t<tuple_count;++t)offsets[t+1]=offsets[t]+descriptors[(sections[t]+1)*18+range_ion].range_count;
-                        range_offsets=upload_fields("range_offsets",offsets);
-                        range_values=upload_fields("range_values",std::vector<float>(offsets.back()));
-                        queue.parallel_for(sycl::range<1>(tuple_count),[=](sycl::id<1> id) {
-                            const unsigned t=id[0];
-                            const auto state=source.select(section[t],rho[t],range_ion);
-                            if(!state.valid)return;
-                            const auto p=state.point();const float x=2*p.continuous_coordinate-1;
-                            for(unsigned j=0;j<p.continuous->range_count;++j)
-                                range_values[range_offsets[t]+j]=em_chebyshev(p.continuous_range+j*(p.continuous_degree+1)+1,p.continuous_lengths?p.continuous_lengths[j]:p.continuous_degree,x);
-                        }).wait_and_throw();
-                        std::cout<<"[ct-exact-range-nodes] values="<<offsets.back()<<" bytes="<<offsets.back()*sizeof(float)<<"\n";
                         if(resident)resident->upload("ready",std::vector<unsigned>{1},mem_tracker);
                     }
                 }
                 unified_device.ct_fields=fields;unified_device.ct_fields_voxels=voxel_tuples;
                 unified_device.ct_fields_count=tuple_count;
-                unified_device.ct_range_values=range_values;unified_device.ct_range_offsets=range_offsets;unified_device.ct_range_ion=range_ion;
                 std::cout<<"[ct-exact-material-fields] tuples="<<tuple_count<<" voxels="<<voxel_count
                          <<" enabled="<<(fields!=nullptr)<<"\n";
             }
@@ -577,6 +542,28 @@
         if(!keys||!se||!sv)throw std::bad_alloc();
         queue.copy(stop.keys.data(),keys,stop.keys.size());queue.copy(stop.energies.data(),se,stop.energies.size());queue.copy(stop.values.data(),sv,stop.values.size()).wait_and_throw();
         recoil_stopping={keys,se,sv,static_cast<std::uint32_t>(stop.keys.size()/2),static_cast<std::uint32_t>(stop.energies.size())};
+        // Integrate the actual full total-stopping recoil response, so Urban
+        // never queries its separate restricted-loss vectors for these ions.
+        std::vector<BeamlineEmNode> full_nodes(stop.values.size());
+        std::vector<double> full_ranges(stop.values.size());
+        const auto ne=stop.energies.size();
+        for(unsigned p=0;p<stop.keys.size()/2;++p)for(unsigned m=0;m<26;++m) {
+            const auto base=(p*26+m)*ne;double range=0;
+            for(unsigned j=0;j<ne;++j) {
+                const float energy=stop.energies[j]*stop.keys[2*p+1];
+                const float sp=stop.values[base+j];full_nodes[base+j]={energy,sp,0,0};
+                if(!j)range=2.*energy/sp;
+                else range+=linear_stopping_path(double(energy)-full_nodes[base+j-1].energy,
+                    double(full_nodes[base+j-1].stopping),double(sp));
+                full_ranges[base+j]=range;
+                if(!std::isfinite(range) || !(range>0) || (j&&full_ranges[base+j]<=full_ranges[base+j-1]))
+                    throw std::runtime_error("Invalid unrestricted recoil CSDA range");
+            }
+        }
+        auto* fn=mem_tracker.allocate<BeamlineEmNode>(full_nodes.size());
+        auto* fr=mem_tracker.allocate<double>(full_ranges.size());if(!fn||!fr)throw std::bad_alloc();
+        queue.copy(full_nodes.data(),fn,full_nodes.size());queue.copy(full_ranges.data(),fr,full_ranges.size()).wait_and_throw();
+        recoil_stopping.full_nodes=fn;recoil_stopping.full_ranges=fr;
         if (!config.letd_output_prefix.empty()) {
             // Transport uses total stopping. Electronic LET requires its own bank,
             // with identical isotope/grid coverage and no nuclear stopping component.
@@ -639,17 +626,30 @@
 
     }
     const bool minibeam_copper_transport = !BroadBeam && config.enable_minibeam;
-    float* minibeam_copper_sp_energies_device = nullptr;
-    float* minibeam_copper_sp_values_device = nullptr;
-    std::uint32_t minibeam_copper_sp_count = 0;
-
-    float* air_ion_e_device=nullptr;
-    float* air_ion_rate_device=nullptr;
-    std::uint32_t air_ion_count=0;
-    float air_ion_peak=0;
-    float* minibeam_air_sp_energies_device = nullptr;
-    float* minibeam_air_sp_values_device = nullptr;
-    std::uint32_t minibeam_air_sp_count = 0;
+    BeamlineEmView beamline_em{};
+    int beamline_primary=-1;
+    std::shared_ptr<ResidentPhysicsTables> beamline_em_resident;
+    if (minibeam_copper_transport) {
+        const auto& p=inputs.get<BeamlineEmPackage>(input_cache_key(config.minibeam_em_package_file),
+            [&]{return BeamlineEmPackage::load(config.minibeam_em_package_file);});
+        const int source=p.view().projectile(config.primary_atomic_number,config.primary_mass_number);
+        beamline_primary=source;
+        if(source<0)throw std::runtime_error("Full beamline EM package lacks source ZA");
+        config.require_primary_reference_mass(p.species[source].mass_MeV,"Full beamline EM package");
+        for(const auto& ion:copper_fragment_species_host)
+            if(p.view().projectile(ion.z,ion.a)<0)
+                throw std::runtime_error("Full beamline EM lacks a native Cu fragment");
+        if(retain_physics_device)beamline_em_resident=resident_tables(context->impl_->resident_beamline_em,
+            input_cache_key(config.minibeam_em_package_file),"beamline-em");
+        auto upload=[&]<class T>(const char* name,const std::vector<T>&v){
+            if(beamline_em_resident)return beamline_em_resident->upload(name,v,mem_tracker);
+            auto* ptr=mem_tracker.allocate<T>(v.size());if(!ptr)throw std::bad_alloc();
+            queue.copy(v.data(),ptr,v.size()).wait_and_throw();return ptr;
+        };
+        beamline_em={upload("materials",p.materials),upload("species",p.species),upload("records",p.records),
+            upload("nodes",p.nodes),upload("ranges",p.ranges),unsigned(p.species.size())};
+        std::cout<<"[beamline-em] unrestricted electronic mean/range/dispersion; species="<<p.species.size()<<'\n';
+    }
     float* minibeam_copper_xs_energies_device = nullptr;
     float* minibeam_copper_xs_values_device = nullptr;
     std::uint32_t minibeam_copper_xs_count = 0;
@@ -661,8 +661,6 @@
     std::uint32_t minibeam_copper_elastic_bracket_bins = 0;
     float minibeam_copper_elastic_bracket_first_energy = 0.0F;
     float minibeam_copper_elastic_bracket_inverse_width = 0.0F;
-    float* minibeam_copper_ion_sp_ratios_device = nullptr;
-    std::uint8_t* minibeam_copper_ion_sp_present_device = nullptr;
     float* minibeam_copper_ion_xs_device = nullptr;
     std::uint8_t* minibeam_copper_ion_xs_present_device = nullptr;
     std::uint32_t minibeam_copper_ion_xs_grid_size = 0;
@@ -691,35 +689,7 @@
         // Both temporary host vectors must survive their asynchronous copies.
         queue.copy(v.data(), out_values, v.size()).wait_and_throw();
     };
-    if (!config.minibeam_air_ionization_rate_file.empty()) {
-        int z=0,a=0;double density=0,cut=0,peak=0;std::string material;
-        std::ifstream meta(config.minibeam_air_ionization_rate_file);
-        std::string line;
-        while(std::getline(meta,line)) {
-            std::istringstream in(line);std::string marker,key;in>>marker>>key;
-            if(marker!="#")continue;
-            if(key=="projectile_z")in>>z;else if(key=="projectile_a")in>>a;
-            else if(key=="material")in>>material;else if(key=="density_g_cm3")in>>density;
-            else if(key=="production_cut_mm")in>>cut;else if(key=="peak_energy_MeV")in>>peak;
-        }
-        if(z!=config.primary_atomic_number || a!=config.primary_mass_number ||
-           material!="G4_AIR" || std::abs(density-0.00120479)>1e-10 ||
-           std::abs(cut-0.05)>1e-12 || !(peak>0) || !std::isfinite(peak))
-            throw std::runtime_error("Air ionization rate metadata mismatch");
-        const auto& rates=inputs.get<CrossSectionTable>(input_cache_key(config.minibeam_air_ionization_rate_file),
-            [&]{return CrossSectionTable::from_csv(config.minibeam_air_ionization_rate_file);});
-        if(rates.energies().front()*a>config.energy_cutoff_MeV ||
-           rates.energies().back()*a<config.initial_energy_MeVu*a)
-            throw std::runtime_error("Air ionization rate energy domain does not cover source");
-        upload_float_pair(rates.energies(),rates.values(),air_ion_e_device,air_ion_rate_device);
-        air_ion_count=static_cast<std::uint32_t>(rates.energies().size());air_ion_peak=static_cast<float>(peak);
-        std::cout<<"[air-ionization-clock] native proposal rate; aggregate air energy law unchanged\n";
-    }
     if (minibeam_copper_transport) {
-        const auto& copper_sp = inputs.get<StoppingPowerTable>(input_cache_key(config.minibeam_copper_stopping_power_file),
-            [&] { return StoppingPowerTable::from_csv(config.minibeam_copper_stopping_power_file); });
-        const auto& air_sp = inputs.get<StoppingPowerTable>(input_cache_key(config.minibeam_air_stopping_power_file),
-            [&] { return StoppingPowerTable::from_csv(config.minibeam_air_stopping_power_file); });
         const auto& copper_xs = inputs.get<CrossSectionTable>(input_cache_key(config.minibeam_copper_cross_section_file),
             [&] { return CrossSectionTable::from_csv(config.minibeam_copper_cross_section_file); });
         const auto& elastic = inputs.get<std::vector<CopperElasticRecord>>(input_cache_key(config.minibeam_copper_elastic_file),
@@ -738,18 +708,8 @@
                 queue.copy(bank.offsets.data(),copper_fragment_elastic_offsets,bank.offsets.size()).wait_and_throw();
             }
         }
-        std::vector<float> copper_ion_sp_ratios;
-        std::vector<std::uint8_t> copper_ion_sp_present;
         std::vector<float> copper_ion_xs;
         std::vector<std::uint8_t> copper_ion_xs_present;
-        if (!config.minibeam_copper_ion_stopping_power_file.empty()) {
-            const auto& ion_stopping = inputs.get<IonStoppingPowerTables>(
-                input_cache_key(config.minibeam_copper_ion_stopping_power_file) + "|base=" +
-                input_cache_key(config.minibeam_copper_stopping_power_file), [&] {
-                    return IonStoppingPowerTables::from_csv(config.minibeam_copper_ion_stopping_power_file, copper_sp); });
-            copper_ion_sp_ratios = ion_stopping.ratios_to_carbon();
-            copper_ion_sp_present = ion_stopping.species_present();
-        }
         if (!config.minibeam_copper_ion_cross_section_file.empty()) {
             const auto& ion_xs = inputs.get<IonCrossSectionTables>(input_cache_key(config.minibeam_copper_ion_cross_section_file),
             [&] { return IonCrossSectionTables::from_csv(config.minibeam_copper_ion_cross_section_file); });
@@ -763,26 +723,12 @@
         const auto& loaded_cascade = inputs.get<LoadedCinel03>(input_cache_key(config.minibeam_copper_inclxx_file),
             [&] { return take_cinel03(config.minibeam_copper_inclxx_file); });
         const auto& tables = *loaded_cascade.tables;
-        upload_float_pair(copper_sp.energies(), copper_sp.values(),
-                          minibeam_copper_sp_energies_device,
-                          minibeam_copper_sp_values_device);
-        minibeam_copper_sp_count = static_cast<std::uint32_t>(copper_sp.energies().size());
-        upload_float_pair(air_sp.energies(), air_sp.values(),
-                          minibeam_air_sp_energies_device,
-                          minibeam_air_sp_values_device);
-        minibeam_air_sp_count = static_cast<std::uint32_t>(air_sp.energies().size());
         upload_float_pair(copper_xs.energies(), copper_xs.values(),
                           minibeam_copper_xs_energies_device,
                           minibeam_copper_xs_values_device);
         minibeam_copper_xs_count = static_cast<std::uint32_t>(copper_xs.energies().size());
         minibeam_copper_elastic_device =
             mem_tracker.allocate<CopperElasticRecord>(elastic.size());
-        if (!copper_ion_sp_ratios.empty()) {
-            minibeam_copper_ion_sp_ratios_device =
-                mem_tracker.allocate<float>(copper_ion_sp_ratios.size());
-            minibeam_copper_ion_sp_present_device =
-                mem_tracker.allocate<std::uint8_t>(copper_ion_sp_present.size());
-        }
         if (!copper_ion_xs.empty()) {
             minibeam_copper_ion_xs_device =
                 mem_tracker.allocate<float>(copper_ion_xs.size());
@@ -800,9 +746,6 @@
         minibeam_copper_products_device =
             mem_tracker.allocate<Cinel03DeviceProduct>(tables.products.size());
         if (!minibeam_copper_elastic_device ||
-            (!copper_ion_sp_ratios.empty() &&
-             (!minibeam_copper_ion_sp_ratios_device ||
-              !minibeam_copper_ion_sp_present_device)) ||
             (!copper_ion_xs.empty() &&
              (!minibeam_copper_ion_xs_device ||
               !minibeam_copper_ion_xs_present_device)) ||
@@ -812,14 +755,6 @@
             throw std::bad_alloc();
         }
         queue.copy(elastic.data(), minibeam_copper_elastic_device, elastic.size());
-        if (!copper_ion_sp_ratios.empty()) {
-            queue.copy(copper_ion_sp_ratios.data(),
-                       minibeam_copper_ion_sp_ratios_device,
-                       copper_ion_sp_ratios.size());
-            queue.copy(copper_ion_sp_present.data(),
-                       minibeam_copper_ion_sp_present_device,
-                       copper_ion_sp_present.size());
-        }
         if (!copper_ion_xs.empty()) {
             queue.copy(copper_ion_xs.data(), minibeam_copper_ion_xs_device,
                        copper_ion_xs.size());
@@ -871,7 +806,7 @@
         minibeam_copper_node_count = static_cast<std::uint32_t>(tables.energy_nodes.size());
         minibeam_copper_event_count = static_cast<std::uint32_t>(tables.interactions.size());
         minibeam_copper_product_count = static_cast<std::uint32_t>(tables.products.size());
-        std::cout << "[minibeam-copper] stopping=" << minibeam_copper_sp_count
+        std::cout << "[minibeam-copper] unrestricted_species=" << beamline_em.species_count
                   << " inelastic-rate=" << minibeam_copper_xs_count
                   << " elastic-events=" << minibeam_copper_elastic_count
                   << " INCLXX-events/products=" << minibeam_copper_event_count
@@ -1294,19 +1229,12 @@
     const auto minibeam_copper_fragment_cascade_generations =
         config.minibeam_copper_fragment_cascade_generations;
     const auto minibeam_copper_enable_mcs = config.minibeam_copper_enable_mcs;
-    const bool copper_native_fluctuations =
-        config.minibeam_copper_straggling_model == "g4_delta";
     const bool copper_native_fragment_transport =
         config.minibeam_copper_fragment_native_transport;
-    const bool copper_primary_native_mean = config.minibeam_copper_primary_native_mean_loss;
     const auto minibeam_copper_enable_energy_straggling =
         config.minibeam_copper_enable_energy_straggling;
-    const auto minibeam_copper_straggling_scale =
-        static_cast<float>(config.minibeam_copper_straggling_scale);
     const auto minibeam_copper_fragment_enable_energy_straggling =
         config.minibeam_copper_fragment_enable_energy_straggling;
-    const auto minibeam_copper_fragment_straggling_scale =
-        static_cast<float>(config.minibeam_copper_fragment_straggling_scale);
     const auto minibeam_copper_enable_elastic =
         config.minibeam_copper_enable_elastic;
     const auto minibeam_copper_enable_inelastic =

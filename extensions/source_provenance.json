@@ -4,9 +4,33 @@
   "files": [
     {
       "file": "README.md",
-      "installed_sha256": "9ba806bf23468be303dfffc925d227bef428e3302f24cf34630c5016918aab7c",
+      "installed_sha256": "3aca2932688349e042d927846eee5598ca84a3cd7b394de11f2bf73a922987c9",
       "status": "authored_or_curated",
-      "maintenance_note": "2026-10-15: remove retired explicit electron/photon transport tooling."
+      "maintenance_note": "2026-10-18: unrestricted electronic response and removal of retired delta-sidecar/probe tooling."
+    },
+    {
+      "file": "beamline_em/CMakeLists.txt",
+      "installed_sha256": "03940f516db3086a23a84fd84a63d7e2fe0542a417be023d791540aca21fcc9a",
+      "status": "authored_or_curated",
+      "maintenance_note": "2026-10-18: native unrestricted Cu/air electronic response extraction."
+    },
+    {
+      "file": "beamline_em/README.md",
+      "installed_sha256": "7f69ae0ad910c76b42e93242164352b79c8702b22b656dfbfa171301eb0ba39c",
+      "status": "authored_or_curated",
+      "maintenance_note": "2026-10-18: native unrestricted Cu/air electronic response extraction."
+    },
+    {
+      "file": "beamline_em/extract.cpp",
+      "installed_sha256": "e0e2ddf3c538817d4aaa5b63f98cd6700c987524f04667aeaaad3c5a9c77d496",
+      "status": "authored_or_curated",
+      "maintenance_note": "2026-10-18: native unrestricted Cu/air electronic response extraction."
+    },
+    {
+      "file": "beamline_em/verify.py",
+      "installed_sha256": "f082fb6e1b114c3f37c7781c3ad4ef6afc00210a06cc22f25333336ed2039460",
+      "status": "authored_or_curated",
+      "maintenance_note": "2026-10-18: native unrestricted Cu/air electronic response extraction."
     },
     {
       "file": "build_native.sh",
@@ -28,8 +52,8 @@
     {
       "file": "copper_ion_transport/README.md",
       "status": "authored_or_curated",
-      "installed_sha256": "173b7086aac8f550b16dfe3e9e81d70723778ba203ccbf7e1310406a44ef180a",
-      "maintenance_note": "2026-10-17: remove obsolete fluctuation validator and its build/documentation entries; retain held-out Urban validation."
+      "installed_sha256": "6310d514eff9a2ce9ee244a7f4cd1a7dca34ae79534181f4fb16162e31c84155",
+      "maintenance_note": "2026-10-18: unrestricted electronic response and removal of retired delta-sidecar/probe tooling."
     },
     {
       "file": "copper_ion_transport/build_extract.sh",
@@ -39,8 +63,8 @@
     {
       "file": "copper_ion_transport/extract.cpp",
       "status": "authored_or_curated",
-      "installed_sha256": "f337bafe0a27536439b298598d70edf09e11a87df1cfdda4cc3cbf861a543b17",
-      "maintenance_note": "2026-10-17: stop emitting unused copper_e0_MeV; retain independently calibrated transport constants."
+      "installed_sha256": "82766d66f735eb3ce83e5815cd60b16fecea9da87ae33c82760c811153c92e9e",
+      "maintenance_note": "2026-10-18: unrestricted electronic response and removal of retired delta-sidecar/probe tooling."
     },
     {
       "file": "copper_ion_transport/native_setup.hpp",
@@ -50,13 +74,14 @@
     {
       "file": "copper_ion_transport/prepare.py",
       "status": "authored_or_curated",
-      "installed_sha256": "a11599cc017049ff97c42cceca411e7adf9779e3a7f087529b9d94cd93ee392d"
+      "installed_sha256": "189cdeb9434bd066c5b42f7419a3f024cbace29629f0e048690e900f2244cf08",
+      "maintenance_note": "2026-10-18: unrestricted electronic response and removal of retired delta-sidecar/probe tooling."
     },
     {
       "file": "coverage.json",
-      "installed_sha256": "f3b8fa01a2dd45a7de3bd9fcb5a104431530e86f9501c01e0bc2dad337cd25c2",
+      "installed_sha256": "ca686ca25129a0ec1fd035b911e61deefbcb7387fb1734e721804d6c034a769e",
       "status": "authored_or_curated",
-      "maintenance_note": "2026-10-15: remove retired explicit electron/photon transport tooling."
+      "maintenance_note": "2026-10-18: unrestricted electronic response and removal of retired delta-sidecar/probe tooling."
     },
     {
       "file": "native/CMakeLists.txt",
@@ -543,8 +568,9 @@
       "file": "tools/general_ion_elastic/prepare_campaign.py",
       "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/tools/general_ion_elastic/prepare_campaign.py",
       "source_sha256": "d0a66036671c861e3eab5f70d277ca6c9fa09062aeb478fdcb7e9d774f4718af",
-      "installed_sha256": "d0a66036671c861e3eab5f70d277ca6c9fa09062aeb478fdcb7e9d774f4718af",
-      "status": "copied"
+      "installed_sha256": "3ea40a53d70b46e4e6ebec3433bd1376d15e0613c37ce1e897e8cd14f742448f",
+      "status": "adapted",
+      "maintenance_note": "2026-10-18: unrestricted electronic response and removal of retired delta-sidecar/probe tooling."
     },
     {
       "file": "tools/general_ion_elastic/run_campaign.py",
@@ -705,15 +731,9 @@
       "file": "tools/unified_em/build_continuous_density.py",
       "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/tools/unified_em/build_continuous_density.py",
       "source_sha256": "12baf328d4cf19103f8eeb24faa59c1855ae29c304991f3ec0acd72daa686f14",
-      "installed_sha256": "0df651dc03a291561c9df9b4b7fdd160cfff0adbef9f307e7e70446c26b6aa82",
-      "status": "adapted"
-    },
-    {
-      "file": "tools/unified_em/build_delta_moments.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/tools/unified_em/build_delta_moments.py",
-      "source_sha256": "4cc73f43996d7fe0733bfc2ba34a0b744b36a4072453104b1f7d33f45059fa01",
-      "installed_sha256": "2fae8e1829db4b7e43877e9dfec8c809d387599eaedc22528320bf13ab9675b9",
-      "status": "adapted"
+      "installed_sha256": "a9d2457549d0f37bd4c05c86c69b7e9023a565d4b7b52f5f792997609adc3037",
+      "status": "adapted",
+      "maintenance_note": "2026-10-18: unrestricted electronic response and removal of retired delta-sidecar/probe tooling."
     },
     {
       "file": "tools/unified_em/compile_unified_em_package.py",
@@ -727,13 +747,6 @@
       "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/tools/unified_em/prepare.py",
       "source_sha256": "c611a96fef5ebf2445c5ef37354751ebfbaf5116d07c4ce402c7d139f4726fc2",
       "installed_sha256": "f88b0dd383527b480048b66c4cb13132a1211964a92ef2f0b6f4a292319286ba",
-      "status": "adapted"
-    },
-    {
-      "file": "tools/unified_em/probe_analytic_density.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/tools/unified_em/probe_analytic_density.py",
-      "source_sha256": "2aafa1b481ac4b3c2463a662b7e3da990eb848c63ad93d5610c23902aeeeeb5f",
-      "installed_sha256": "26685e1b97180c1119223b674b55da1112bf7c985c4411151bf55b3979b87a6f",
       "status": "adapted"
     },
     {
@@ -761,29 +774,25 @@
       "file": "tools/unified_em/synthesize_analytic_density.py",
       "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/tools/unified_em/synthesize_analytic_density.py",
       "source_sha256": "fa19f926234eacfe12ea9be87ba45914bed54b84dff33b7fdcaed95de4403a7c",
-      "installed_sha256": "8b7ca323ddbac1f9146cdcdbb62b2aa74865601736bd13c6b0f8cb497a6850a6",
-      "status": "adapted"
-    },
-    {
-      "file": "tools/unified_em/verify_delta_moments.py",
-      "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/tools/unified_em/verify_delta_moments.py",
-      "source_sha256": "2b1f11e10964d2b97c630489521b8ebc4461134f4570389bf511c3732da2ddc8",
-      "installed_sha256": "d0e526381d51d5323ad15d2e16b2241d0a56521affb606f61107b6849655d66f",
-      "status": "adapted"
+      "installed_sha256": "112af98dcc4dbec8dfd9b0512c170e2b617f1be27cb3349b3930f43bef1b7e2a",
+      "status": "adapted",
+      "maintenance_note": "2026-10-18: unrestricted electronic response and removal of retired delta-sidecar/probe tooling."
     },
     {
       "file": "tools/unified_em/verify_density_encoding.py",
       "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/tools/unified_em/verify_density_encoding.py",
       "source_sha256": "5e196e91a4b00885e49db73fadb0c94db27ee1b86aade53a6233032df15dfb29",
-      "installed_sha256": "5e196e91a4b00885e49db73fadb0c94db27ee1b86aade53a6233032df15dfb29",
-      "status": "copied"
+      "installed_sha256": "efbfb0142e1c9aa2f284a6f6b24914216d29d79d2174b750b8c354fde1b949e9",
+      "status": "adapted",
+      "maintenance_note": "2026-10-18: unrestricted electronic response and removal of retired delta-sidecar/probe tooling."
     },
     {
       "file": "tools/unified_em/verify_unified_em_data.py",
       "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/tools/unified_em/verify_unified_em_data.py",
       "source_sha256": "39b8b26b7562ffbb364c62969f25cb91781e960c110c8e0f728fab9ad32d80ba",
-      "installed_sha256": "da8006dea3ad2e611487ed7030898d534cb167a4b954162c192f2f6621459ae8",
-      "status": "adapted"
+      "installed_sha256": "9b585c617cb4be577f22fd577a2321e0fccbe39a34f4018b9ca9d78f1a5136b0",
+      "status": "adapted",
+      "maintenance_note": "2026-10-18: unrestricted electronic response and removal of retired delta-sidecar/probe tooling."
     },
     {
       "file": "tools/urban/extract_ct_urban.cc",
@@ -813,8 +822,9 @@
       "file": "tools/urban/validate_urban.cpp",
       "source": "/mnt/sdb/wuwei/MAIGO_review_fix_20260923/benchmark/carbonminibeam/test_urban_mcs_reference.cpp",
       "source_sha256": "951cf3543abd5b20380f204520646742c4157703112abc7a11aeb2556753fc4b",
-      "installed_sha256": "3958517215138ba421ef1b1c76baeb64dbc3176327c4e80bb8feca1e851b14f8",
-      "status": "adapted"
+      "installed_sha256": "40971dc5266f4391e96026b6382397bc7581ebb01eaa86a0f78ff2168a0aeb7e",
+      "status": "adapted",
+      "maintenance_note": "2026-10-18: unrestricted electronic response and removal of retired delta-sidecar/probe tooling."
     },
     {
       "file": "topas/LICENSE_NOTICE.md",
@@ -827,8 +837,9 @@
       "file": "topas/all_ion_elastic/AllIonElasticDump.cc",
       "source": "/mnt/sdb/wuwei/MAIGO_minibeam/extensions/topas/all_ion_elastic/AllIonElasticDump.cc",
       "source_sha256": "657c522e34b08296a75db5f1b35b39120931829ac8816f080c4e51fa4d9eff87",
-      "installed_sha256": "657c522e34b08296a75db5f1b35b39120931829ac8816f080c4e51fa4d9eff87",
-      "status": "copied"
+      "installed_sha256": "d193f1e40804c00c2c73a23c3839ee7e3909b1b5468b4b2e9c53f208ee96458b",
+      "status": "adapted",
+      "maintenance_note": "2026-10-18: unrestricted electronic response and removal of retired delta-sidecar/probe tooling."
     },
     {
       "file": "topas/all_ion_elastic/AllIonElasticDump.hh",

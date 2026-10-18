@@ -17,7 +17,7 @@
 | proton_ct_minibeam | proton 主粒子表 | Cu/空气、独立 lung benchmark CT |
 | carbon_ct_minibeam | carbon 主粒子表 | Cu/空气、独立 lung benchmark CT |
 
-共同包族包括 EMCNT001 continuous26、delta moments、次级核反应及 Urban。每个预设实际展开的文件路径以 [preset_dependencies.json](../docs/preset_dependencies.json) 为准。RT07575 是 head case，CT、源、权重、放置、准直器及归一化必须成套使用；lung minibeam 不能称为 RT07575 全计划验证。
+共同包族包括 EMCNT001 continuous26、BLEM0001 铜／空气完整电子响应、次级核反应及 Urban。每个预设实际展开的文件路径以 [preset_dependencies.json](../docs/preset_dependencies.json) 为准。RT07575 是 head case，CT、源、权重、放置、准直器及归一化必须成套使用；lung minibeam 不能称为 RT07575 全计划验证。
 
 覆盖清单区分物理提取、离线派生、静态定义和外部输入。CT、计划 spots、beam model 不是物理扩展输出；这里不加入 DICOM 转换或 TOPAS 文本计划 replay。
 
@@ -34,6 +34,7 @@
 | `topas/common/` | 核反应捕获、Schneider rate/stopping、主粒子材料查询、材料 JSON |
 | `topas/unified_em/` | 全离子 native EM；与 common 的同名 stopping scorer 分开链接 |
 | `topas/all_ion_elastic/` | 弹性联合分布/反冲，含冻结 carbon 实现 |
+| `beamline_em/` | [铜／空气非受限电子响应提取](beamline_em/README.md) |
 | `copper_ion_transport/` | [碳微束铜碎片弹性提取与涨落验证](copper_ion_transport/README.md) |
 | `native/` | Geant4 原生工具 CMake 项目 |
 | `tools/` | 各包族 campaign 驱动、编译器和验证器 |
@@ -105,7 +106,7 @@ python3 extensions/tools/unified_em/build_continuous_density.py \
   --helper "$MAIGO_NATIVE/material_metadata" --output "$MAIGO_KIT_WORK/continuous26-packed"
 ```
 
-最后输出目录内是 `continuous26.bin`、`delta_moments.bin` 及 `.metadata.json`，审核后成套复制到候选 `data/em/ions/`。用 `verify_unified_em_data.py PACKAGE` 检查两包；单独 moments 可用 `build_delta_moments.py --source ... --output ...` 派生。native 多密度只用于离线拟合，最终连续密度规律不储存 transport density states。保留当前 native spline/conditional 规律及明确的 hard-rate 校准近似。
+最后输出目录内是 `continuous26.bin` 及其 `.metadata.json`，审核后复制到候选 `data/em/ions/`。用 `verify_unified_em_data.py PACKAGE` 检查结构。运行时由 full 响应生成非受限射程，并换算非受限涨落方差；不再生成或加载 δ 矩侧包。native 多密度只用于离线拟合，最终连续密度规律不储存 transport density states。保留当前 native spline/conditional 规律及明确的 hard-rate 校准近似。
 
 ## 5. 核反应及 rates
 
@@ -254,7 +255,7 @@ Schneider radiation-length JSON 可从 CT native 元数据 section、density、r
 
 ## 9. 电子／光子包移除
 
-当前运行时仅保留离子 EM 能损和局部沉积，不再提取或安装电子／光子输运包。continuous26 和 delta moments 的提取仍按第 4 节执行。
+当前运行时仅保留离子 EM 能损和局部沉积，不再提取或安装电子／光子输运包。continuous26 的提取按第 4 节执行；铜／空气完整响应按 `beamline_em/README.md` 执行，不生成 δ 矩侧包。
 
 ## 10. 检查、安装和验证范围
 

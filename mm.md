@@ -6,15 +6,15 @@ Manuscript theme: GPU Monte Carlo: From Broadbeam to Minibeam. [中文版](mm_zh
 
 ### II.A.1. Computational framework and scope
 
-MAIGO was developed as a GPU Monte Carlo dose engine for proton and carbon-ion broadbeam irradiation and extended to minibeams formed by a copper slit collimator. The engine uses data-driven condensed-history charged-particle transport, combining frequent soft interactions into transport steps and sampling nuclear interactions and the applicable discrete processes stochastically. Separating the physical model from its parallel implementation is also characteristic of established proton and carbon-ion GPU Monte Carlo engines[1–4]. The extension studied here concerns continuous transport through the collimator, air, and patient, together with evaluation of submillimeter lateral dose structure. Upstream collimator modeling and verification are treated separately from transport within the patient[5].
+MAIGO was developed as a GPU Monte Carlo engine for proton and carbon-ion broadbeam dose calculation and extended to minibeams formed by a copper slit collimator. Condensed-history electromagnetic transport is combined with stochastic nuclear interactions and subsequent transport of charged fragments. These computational strategies are also used in established GPU proton and carbon-ion engines[1–4]. The minibeam extension explicitly transports particles through the collimator, air, and patient to resolve the lateral dose structure. Upstream collimator modeling is distinguished from transport within the patient, as in GPU aperture-modeling studies[5].
 
-Incident particles are protons (Z=1, A=1) or C12 ions (Z=6, A=12). Supported charged nuclear fragments are transported subsequently. The scored quantity is absorbed dose to medium; LET, RBE, and biological dose are outside the present scope. The combinations of projectile, water or CT medium, and broadbeam or minibeam irradiation define eight standard configurations. Patient full-plan calculations retain their case-specific sources, weights, and geometries rather than substituting the flat-source phantom configuration.
+Incident particles are protons (Z=1, A=1) or C12 ions (Z=6, A=12). Supported charged nuclear fragments are transported subsequently. The scored quantities are absorbed dose to medium and, when requested, dose-averaged electronic linear energy transfer (LET). RBE and biological dose are outside the present scope. The combinations of projectile, water or CT medium, and broadbeam or minibeam irradiation define eight standard configurations. Patient full-plan calculations retain their case-specific sources, weights, and geometries; the default CT minibeam phantom configuration is a separate benchmark.
 
 ### II.A.2. Material representation and physics data
 
 Patient CT images are converted offline to a regular voxel grid containing its origin, voxel spacing, mass density, and material identifiers. Hounsfield units are mapped to density and one of 25 tissue elemental compositions using the Schneider method[6]. A Water_75eV reference with a mean excitation energy of 75 eV provides the twenty-sixth electromagnetic composition. Electromagnetic parameters are evaluated for the tissue composition and actual density, including density-dependent effects; tissues are not represented solely by mass-density scaling of water.
 
-Physics data are generated with offline tools based on OpenTOPAS 4.2.3 and Geant4 11.3.2[7,8]. They include restricted ion stopping powers, ranges and inverse ranges, energy-loss fluctuation and hard-ionization parameters, multiple-scattering parameters, nuclear interaction rates, and final-state data. The continuous-density ion electromagnetic tables are termed continuous26. Nuclear inelastic interactions are represented by finite correlated event libraries; nuclear elastic data contain total rates, target isotopes, and momentum-transfer samples. The GPU queries these data rather than evaluating the Geant4 intranuclear cascade online.
+Physics data are generated offline using OpenTOPAS 4.2.3 and Geant4 11.3.2[7,8]. The active transport data comprise unrestricted electronic stopping powers, energy-loss fluctuation parameters, multiple-scattering parameters, nuclear interaction rates, and final-state data. Consistent continuous-slowing-down approximation (CSDA) ranges and inverse ranges are derived from the stopping response. The continuous-density ion electromagnetic model, termed continuous26, covers the 25 tissue compositions and water. Copper and upstream air have independently extracted electronic response data. Nuclear inelastic interactions are represented by finite correlated event libraries; nuclear elastic data contain total rates, target isotopes, and momentum-transfer samples. The GPU samples these data rather than evaluating a Geant4 intranuclear cascade online.
 
 Each package specifies its projectile, composition, and energy coverage. Required channels and query ranges are checked before simulation; another material or local energy deposition is not substituted for missing required physics. Inputs, physics-data checksums, program version, source allocation, and seeds are retained for each calculation. Extraction and reference-dose versions are recorded separately because a shared data origin does not imply stepwise-equivalent transport.
 
@@ -28,22 +28,24 @@ For reoptimized physical-dose plans, A denotes the dose-influence matrix per inc
 
 ### II.B.1. Step selection, mean energy loss, and fluctuations
 
-Each charged track carries position, direction, kinetic energy, species, and random identity. Electromagnetic parameters are prepared from the current composition, density, and energy. Geometric boundaries, the maximum step, mean-loss limits, scattering-related limits, nuclear interaction distances, and applicable ionization proposal clocks compete to determine the accepted step. Geometry queries and scoring-voxel assignment are handled separately to distinguish material boundaries from scoring boundaries. The maximum step is therefore not the mean realized step.
+Each charged track carries position, direction, kinetic energy, species, and random identity. Electromagnetic parameters are evaluated for the current composition, density, and energy. Geometric boundaries, the maximum step, mean-loss limits, scattering-related limits, and nuclear interaction distances compete to determine the accepted step. Geometry queries and scoring-voxel assignment distinguish material boundaries from scoring boundaries. The imposed maximum step is therefore not the mean realized step.
 
-Continuous loss is computed from composition-specific restricted stopping powers. Small losses use the corresponding stepping approximation; larger losses are obtained from residual-range inversion. Restricted losses and above-threshold delta energy transfers are evaluated separately to avoid double counting. All standard configurations retain primary energy-loss fluctuations. Charged secondaries in water and patient media use mean restricted and aggregate delta losses by default, while their motion, scattering, and permitted nuclear interactions remain active.
+The mean ionization loss is computed from composition-specific unrestricted electronic stopping powers. In water and patient media, small losses use midpoint integration; larger losses are obtained by subtracting the accepted path from the residual CSDA range and inverting the result. The range integrates the reciprocal of the linearly interpolated stopping response. Stopping and range are evaluated at the actual density using continuous Sternheimer density-effect corrections. Primary energy-loss fluctuations are sampled from this total mean. Charged secondaries use the unrestricted mean loss without straggling by default, while their motion, scattering, and permitted nuclear interactions remain active.
 
-Aggregate delta transfers are sampled from their mean μ and variance v. Where the two-moment Gamma approximation applies,
+One shared fluctuation engine selects the Universal or Ion parameters and corrections from particle identity, mass, and material response. It uses the kinematic maximum electron transfer \(T_{\max}\) as the transfer limit, without a separate soft-loss and hard-delta partition. For medium data exported at a reference transfer cut \(T_c\), the variance at the current density is converted to its unrestricted value using
 
 \[
- k=\frac{\mu^2}{v},\qquad \theta=\frac{v}{\mu}.
+ V_{\mathrm{full}}=V_{\mathrm{ref}}
+ \frac{T_{\max}/\beta^2-T_{\max}/2}
+ {T_{\max}/\beta^2-\min(T_c,T_{\max})/2}.
 \tag{1}
 \]
 
-This approximation preserves the first two moments but not the zero-collision probability or all higher moments of individual transfers. In the dedicated proton CT broadbeam path, the dense restricted-fluctuation tail with Poisson mean at least 4 is also replaced by a moment-matched Gamma draw; low-count tails retain explicit sampling. This treatment is not extended to carbon primaries or minibeams.
+Here, \(\beta\) is particle speed divided by the speed of light, and \(V_{\mathrm{ref}}\) includes density scaling and the native ion charge-fluctuation multiplier. Universal thin-layer sampling retains the native bounded Poisson tail. Ion low-energy and finite-loss corrections are included, and sampled losses are bounded by available kinetic energy. Primary fluctuations remain enabled in all standard configurations.
 
-For dedicated CT broadbeam transport, proton primaries use step-start restricted stopping powers and delta first moments without their within-step energy-slope corrections. Carbon primaries retain both corrections. Step-start approximations for charged carbon fragments are controlled separately. The executed branches and existing calibration approximations for hard-interaction rates and conditional final states are retained with the calculation records.
+Medium electromagnetic step proposals use the unrestricted residual range and the range difference corresponding to the allowed mean-loss fraction, with final-range smoothing near termination. Minibeam patient transport uses a 1% mean-loss fraction. Geometry, multiple scattering, and nuclear interactions can shorten the proposed path. There is no electron-production-cut ionization clock. Nuclear-rate and conditional-final-state calibrations are retained independently of electromagnetic stepping.
 
-Ionization energy in water and patient media is deposited locally in the corresponding scoring voxel, without explicit electron or electromagnetic-photon transport. This is a spatial dose approximation that omits nonlocal redistribution by ionization secondaries. Its applicability is assessed through heterogeneous-medium and minibeam dose comparisons, rather than inferred from agreement in mean energy loss. Hard-delta energy in copper follows the beamline removal convention described in Section II.C.
+Ionization energy in water and patient media is deposited locally in the corresponding scoring voxel, without explicit electron or electromagnetic-photon transport. This spatial approximation omits nonlocal redistribution by ionization secondaries; using unrestricted stopping preserves the mean electronic energy loss but does not recover that spatial redistribution. Its applicability is examined through heterogeneous-medium and minibeam dose comparisons. Upstream electronic losses follow the beamline energy-accounting convention described in Section II.C.
 
 ### II.B.2. Broadbeam scattering and stepping parameters
 
@@ -85,13 +87,13 @@ Upstream transport includes directly transmitted primaries, primaries scattered 
 
 ### II.C.2. Minibeam electromagnetic transport and copper nuclear interactions
 
-Minibeam scattering uses material- and species-dependent Urban data, including scattering mean free paths and true-to-geometric path conversion. In CT, restricted stopping powers, ranges, and inverse ranges are evaluated from continuous26 at the actual density. The pre-step charge correction is fixed within a step, while scattering mean free paths and radiation lengths follow their respective density scaling. Copper, air, and additional recoil isotopes outside the registry use their corresponding data. Scattering is sampled in a local particle frame and transformed back to world coordinates.
+Minibeam scattering uses material- and species-dependent Urban data, including scattering mean free paths and true-to-geometric path conversion. In water and CT, registered charged ions use unrestricted stopping powers and consistent CSDA ranges and inverse ranges from continuous26 at actual density. The full response carries its energy-dependent effective charge, while scattering mean free paths and radiation lengths follow their respective density scaling. Copper, air, and additional recoil isotopes outside the registry use their corresponding data. Scattering is sampled in a local particle frame and transformed back to world coordinates.
 
-Restricted primary fluctuations in copper are evaluated by a shared sampling engine. Z/A, mass, and effective charge select the proton Universal or ion fluctuation parameters and corrections; a common entry does not imply identical physical parameters. Copper primary fluctuations remain enabled and restricted fragment fluctuations are disabled by default. The native copper-fragment path in carbon configurations retains hard-delta Poisson and energy-spectrum sampling. Native fragment transport is controlled independently of the primary fluctuation selection and retains its own calibration.
+Copper and upstream-air electronic transport use independently extracted unrestricted stopping powers and native unrestricted fluctuation dispersions. For mean losses up to 2% of kinetic energy, the mean loss is evaluated from step-start stopping; larger losses use CSDA range inversion. Both calculations use the same electronic response. The shared fluctuation engine selects particle-dependent parameters from Z/A, the calibrated mass, and material response, with the maximum kinematic electron transfer as its transfer limit. Primary fluctuations remain enabled; charged-fragment fluctuations are disabled by default. Fragment scattering and nuclear transport are configured independently of fluctuation-model selection.
 
-Energy loss, scattering, nuclear elastic scattering, and inelastic reactions jointly determine the copper-exit distribution. Hard-delta energy in copper is removed from the charged beam and recorded in the beamline energy ledger. The corresponding electrons are not explicitly transported and their energy is not added to patient dose. Patient transport retains the local ionization deposition described in Section II.B. Increasing a geometric step cap does not remove the existing ionization segmentation clock.
+Energy loss, Coulomb scattering, nuclear elastic scattering, and inelastic reactions jointly determine the copper-exit distribution. Upstream electronic loss is removed from the charged beam and recorded separately from patient dose. Additional heavy recoil isotopes retain unrestricted electronic plus nuclear stopping and a CSDA range derived from their total stopping; only the electronic component contributes to electronic LET. Geometric and nuclear limits and the imposed maximum step caps remain in force.
 
-## II.D. GPU implementation and dose scoring
+## II.D. GPU implementation and scored quantities
 
 ### II.D.1. Execution structure, random numbers, and resident batches
 
@@ -115,11 +117,28 @@ Deposited energy is accumulated using FP32 GPU atomics. For voxel density ρ_i i
 
 Batch and device contributions are summed after applying the same W/N factor; no additional batch-count multiplier is applied. References scored as cumulative dose for the simulated particles are compared using their corresponding source counts and cumulative scale, without imposing prescription normalization. Batch files are merged at higher precision on the host, which does not eliminate within-batch FP32 accumulation error.
 
+### II.D.3. Dose-averaged electronic LET
+
+Electronic LET is scored using a stopping-power track-length estimator. For each finite charged-ion segment k in voxel i, \(S_{e,k}\) is the unrestricted linear electronic stopping power at the pre-step kinetic energy and \(\ell_k\) is the accepted true path length. The two additive moments and their ratio are
+
+\[
+ A_i=\sum_{k\in i}S_{e,k}^{\,2}\ell_k,\qquad
+ B_i=\sum_{k\in i}S_{e,k}\ell_k,\qquad
+ L_{d,i}=\frac{A_i}{B_i}.
+\tag{4}
+\]
+
+The ratio has units of MeV/mm, numerically equal to keV/µm. The electronic-loss expectation supplies the dose weight; sampled energy loss divided by step length is not substituted for stopping power. The estimator is not normalized by material density. Stopping for registered ions uses the same unrestricted response as transport. Additional recoils use a separate electronic-only stopping table matched to the isotope and energy coverage of their electronic-plus-nuclear transport table.
+
+All transported charged ions, including primary ions, fragments, and recoils, contribute within the patient or water scoring medium. Upstream copper/air segments, nuclear-vertex deposits, zero-path termination deposits, and untracked neutral energy do not contribute. The LET scoring population uses the same 0.1 MeV total-kinetic-energy threshold as the standard ion transport cutoff. LET is therefore defined for scored finite tracks and is not obtained by dividing a stopping-weighted sum by the complete absorbed-dose image.
+
+Both moments are accumulated with FP32 GPU atomics, saved independently, and summed across fields, batches, and devices before taking their ratio. LET images are neither averaged directly nor multiplied by prescription-dose normalization. A zero denominator denotes no scored track and is retained as such during analysis. Enabling the scorer does not change transport physics or random draws, although additional atomic operations can change accumulation order and the last bits of the scored dose.
+
 ## II.E. Full-plan reference calculations and comparison design
 
 ### II.E.1. Cases, grids, and simulated histories
 
-Full-plan comparisons include RT07575 (Head 1), RT06423 (Head 2), and 20022516 (Lung 1), covering head anatomy and heterogeneous low-density lung. Broadbeam calculations omit the copper slit collimator, whereas minibeam calculations retain their plan-specific collimators and fields. CT, source optics, spot energies and weights, placement, geometry, and normalization are matched within each comparison. The table defines the currently completed matched full-plan dataset. Counts are simulated incident histories for each engine, not the total physical particles prescribed.
+Full-plan dose comparisons include RT07575 (Head 1), RT06423 (Head 2), and 20022516 (Lung 1), covering head anatomy and heterogeneous low-density lung. Broadbeam calculations omit the copper slit collimator, whereas minibeam calculations retain their plan-specific collimators and fields. CT, source optics, spot energies and weights, placement, geometry, and normalization are matched within each comparison. The table specifies the archived full-plan dose-reference dataset and its matched historical GPU statistics. Calculations using the unrestricted-loss revision are identified by their own version and history count; historical GPU agreement is not assigned to a newer implementation. Counts are simulated incident histories, not the total physical particles prescribed.
 
 | Case | Proton broadbeam | Carbon broadbeam | Proton minibeam | Carbon minibeam |
 |---|---:|---:|---:|---:|
@@ -135,7 +154,15 @@ TOPAS uses the corresponding materials, source, and geometry with DoseToMedium s
 
 The current full-plan comparison uses unthresholded TOPAS dose scored after independent transport with plan-weighted source allocation. Weighted dose-influence matrices used during optimization are separately identified auxiliary data and do not replace full recalculation. Original-TPS-weight carbon broadbeam references retain their cumulative simulated-dose scale; optimized minibeams retain the corresponding per-irradiation scale. Differences between native TOPAS transport and the GPU finite event library, local ionization deposition, mean secondary losses, and omitted nuclear neutral transport are retained when interpreting dose discrepancies.
 
-## II.F. Dose agreement, statistical uncertainty, and computational performance
+### II.E.3. Matched TOPAS LET reference
+
+LET comparisons use a two-moment TOPAS scorer implementing Eq. (4), with track weights included in each moment. The scorer evaluates unrestricted electronic stopping from an immutable response extracted in a separate process using the reference Geant4 version, physics list, particle identities, and actual material compositions, densities, and excitation energies. Coverage includes the charged isotopes and materials encountered by the full plan. Material mismatches, missing isotopes, and energies outside the response are rejected. Stopping is not queried through mutable live Geant4 models during scoring, so the stopping lookup does not alter transport-model state or random-number consumption. The scoring threshold is matched to 0.1 MeV total kinetic energy.
+
+Pre-step stopping is a step-discretized estimator. The corrected carbon broadbeam reference uses native ionization range-step controls with a range fraction of 0.005 and final range of 0.1 nm, applied to light ions and GenericIon while leaving proton step controls unchanged. These range-relative controls are distinct from a spatial maximum step, production cut, or kinetic-energy cutoff. The executed step settings and nuclear elastic registration are retained with each reference. Dose agreement alone does not demonstrate LET step convergence; additive-moment stability under step refinement and Monte Carlo uncertainty must be examined separately.
+
+The LET campaign is separate from the archived dose-only dataset. RT07575 defines the four-mode comparison design, with completed modes, reference versions, and incident histories reported individually. The corrected carbon broadbeam reference is divided into five independent replicas of 25,927,634 histories each, for a planned total of 129,638,170. Preliminary comparisons use one completed replica and a GPU calculation with the same 25,927,634 histories and integer spot allocation. Incomplete references are identified explicitly; planned totals do not represent completed four-mode validation.
+
+## II.F. Dose and LET agreement, statistical uncertainty, and computational performance
 
 ### II.F.1. Evaluation regions and local gamma
 
@@ -149,21 +176,27 @@ Three-dimensional local gamma uses TOPAS as the reference[10]:
  \frac{[D_{\rm GPU}(\mathbf r')-D_{\rm ref}(\mathbf r)]^2}
  {[\delta D_{\rm ref}(\mathbf r)]^2}
  \right]^{1/2}.
-\tag{4}
+\tag{5}
 \]
 
-GPU dose is queried by trilinear interpolation, with γ≤1 indicating a pass. The BODY mask selects reference evaluation points; GPU dose outside BODY within the search domain is not set to zero. Evaluation masks are fixed from the final reference and are not reselected from low-statistics repeats.
+GPU dose is queried by trilinear interpolation, with γ≤1 indicating a pass. For pass-rate evaluation, the spatial search is confined to a sphere of radius \(\Delta r\), since points farther away cannot pass. The BODY mask selects reference evaluation points; GPU dose outside BODY within the search domain is not set to zero. Evaluation masks are fixed from the reference used for each reported comparison and are not reselected from low-statistics repeats.
 
 | Mode | Reference-dose threshold within BODY | Reported local criteria | Spatial search increment |
 |---|---|---|---:|
 | Broadbeam | >10% of global reference Dmax | 3%/3 mm, 1%/1 mm, 3%/0 mm | 0.1 mm |
 | Minibeam | >0.4 Gy, i.e., 10% of a 4 Gy prescription | 3%/0.2 mm, 3%/0.1 mm, 3%/0 mm | 0.02 mm |
 
-The threshold selects the evaluation region only; the local dose tolerance remains the specified percentage of each point's reference dose. Zero-DTA analysis compares doses at the same position and is a local relative-dose-difference test, without the distance division in Eq. (4). The predefined broadbeam criterion is a local 1%/1 mm pass rate >99%. Minibeam submillimeter pass rates are reported directly rather than assessed using the broadbeam criterion. Exploratory analyses using other thresholds or geometric irradiation masks are identified separately.
+The threshold selects the evaluation region only; the local dose tolerance remains the specified percentage of each point's reference dose. Zero-DTA analysis compares doses at the same position and is a local relative-dose-difference test, without the distance division in Eq. (5). The predefined broadbeam criterion is a local 1%/1 mm pass rate >99%. Minibeam submillimeter pass rates are reported directly rather than assessed using the broadbeam criterion. Exploratory analyses using other thresholds or geometric irradiation masks are identified separately.
 
 Additional measures include spatial dose-difference distributions, target mean dose and dose–volume indices, and lateral profiles at different depths to examine minibeam peaks, valleys, and distal structure. Dose differences contain both random fluctuations and systematic discrepancies and are not treated as pure Monte Carlo uncertainty.
 
-### II.F.2. Uncertainty in both calculations
+### II.F.2. LET comparisons and one-dimensional profiles
+
+Three-dimensional LET gamma uses the same definition as Eq. (5), replacing dose by \(L_d\), with TOPAS LET as the local reference. The evaluation region is BODY intersected with TOPAS dose greater than 10% of its global maximum. Dose defines the mask only; the percentage tolerance is relative to each point's reference LET. Broadbeam LET criteria are 3%/3 mm, 1%/1 mm, and 3%/0 mm, with a 0.1 mm search increment for nonzero distance criteria. Interpolation and spatial search are applied to the GPU LET field. Zero-GPU-denominator voxels within the reference mask are retained as failures; any zero-reference-LET points are identified separately because a local percentage tolerance is undefined there.
+
+Lateral LET profiles at selected geometric depths and central-ray profiles along depth complement voxelwise comparisons. All curves use the same physical coordinates, reference entrance, dose mask, and grid mapping. For the RT07575 carbon broadbeam example, geometric depth is measured from the central-ray BODY entrance along the incident beam direction; it is not water-equivalent depth or a separately shifted entrance for every lateral ray. Lateral profiles retain 0.5 mm sampling. The depth comparison shows both the raw central ray and a transverse pooled profile spanning 2.5×10 mm², retaining 0.5 mm depth sampling without smoothing along depth. Pooled LET is obtained by summing numerator and denominator over the same selected voxels before division. Pooling reduces visible statistical variation but does not replace the voxelwise gamma analysis.
+
+### II.F.3. Dose uncertainty in both calculations
 
 GPU statistical uncertainty is estimated from independent full-plan batches with matched source composition. For B equal-statistics batches whose contributions d_b have already been scaled by the campaign-wide W/N, D=Σ_b d_b and
 
@@ -171,7 +204,7 @@ GPU statistical uncertainty is estimated from independent full-plan batches with
  \widehat{\sigma}_{D}^{\,2}
  =\frac{B}{B-1}
  \left[\sum_b d_b^2-\frac{D^2}{B}\right].
-\tag{5}
+\tag{6}
 \]
 
 For unequal batch sizes, define a_b=N_b/N, Y_b=d_b/a_b, and q=Σ_b a_b². The implemented weighted batch estimator is
@@ -180,10 +213,10 @@ For unequal batch sizes, define a_b=N_b/N, Y_b=d_b/a_b, and q=Σ_b a_b². The im
  \widehat{\sigma}_{D}^{\,2}
  =\frac{q}{1-q}
  \left[\sum_b a_bY_b^2-D^2\right].
-\tag{6}
+\tag{7}
 \]
 
-Equation (6) reduces to Eq. (5) for equal-sized batches. It is used here for batches with nearly equal history counts and matched source composition, without assuming equal variance for arbitrarily imbalanced batches or different sources. Merging across devices retains batch counts, source proportions, and independent seeds.
+Equation (7) reduces to Eq. (6) for equal-sized batches. It is used here for batches with nearly equal history counts and matched source composition, without assuming equal variance for arbitrarily imbalanced batches or different sources. Merging across devices retains batch counts, source proportions, and independent seeds.
 
 TOPAS references with native per-history variance use those statistics, converted to final-dose variance according to the actual scorer definition. Variances from independent spots or recalculations are combined using squared dose-scaling factors. The three historical carbon broadbeam references lack stored native variance. For each, a matched 300,000-history TOPAS pilot preserves geometry, physics list, energy spectrum, and relative weights. Its standard error is extrapolated to the full history count by √(N_pilot/N_full), with both quantities expressed on the same full-plan dose scale. The original full-reference dose supplies the relative-error denominator, and the extrapolation is cross-checked against variance between original independent replicas. These entries are identified as estimates; pooled variance across mixed spots can be conservative for a fixed stratified spot allocation.
 
@@ -194,18 +227,34 @@ For a fixed evaluation region R, the root-mean-square relative standard error is
  \sqrt{\frac{1}{|R|}
  \sum_{i\in R}\frac{\widehat{\sigma}_i^2}{D_{{\rm ref},i}^2}}
  \ \%.
-\tag{7}
+\tag{8}
 \]
 
 GPU and TOPAS uncertainties are reported separately and, for independent simulations, combined through σ_diff²=σ_GPU²+σ_TOPAS². Percentiles and fractions of voxels below selected uncertainty limits are additionally reported where relevant. This is a regional summary of voxelwise one-standard-error values, not uncertainty in the regional mean or a guarantee for every voxel. Spatial correlations prevent direct conversion of voxel variances into confidence intervals for gamma pass rates or dose–volume indices. Finite-library uncertainty and physical-model bias are not included in these random-transport estimates.
 
-### II.F.3. Timing and run validity
+### II.F.4. LET uncertainty
 
-Performance is reported separately for RTX 2080 Ti, RTX A6000, and L4 devices where used. Executables contain native device code compiled ahead of time for the corresponding architecture, with runtime PTX JIT disabled. Compilation is excluded from dose-calculation time. Cold start extends from new-process launch to the first saved dose batch, including input reading, device initialization, physics-data upload, and first-batch calculation. Steady-state throughput is the total incident histories in subsequent batches divided by their cumulative wall time within the same process, including the corresponding audits and dose output. Kernel-only timing does not replace end-to-end throughput. If the file-system cache is not explicitly cleared, process cold start is not interpreted as a cold physical-disk cache.
+LET uncertainty must retain covariance between its numerator and denominator. An auxiliary GPU campaign uses independent, nearly equal-statistics full-plan groups with matched source proportions and a total history count equal to that of the principal calculation. Let \(A_{ib}\) and \(B_{ib}\) be the two voxel moments in group b, let K be the number of groups, and define \(L_{d,i}=\sum_b A_{ib}/\sum_b B_{ib}\). A batch-based first-order ratio-variance estimate is
 
-Large campaigns distribute histories across GPUs according to measured throughput while preserving campaign-wide source allocation and normalization. Per-device and aggregate multi-device throughput are reported separately. TOPAS single-node 56-thread throughput is total histories divided by cumulative node computation time. Historical CPU records are distinguished from contemporaneous measurements. Results with different grids, physics, statistical precision, or timing boundaries are not pooled into one speedup.
+\[
+ \widehat{\sigma}_{L_{d,i}}^{\,2}
+ =\frac{K}{K-1}
+ \frac{\sum_b\left(A_{ib}-L_{d,i}B_{ib}\right)^2}
+ {\left(\sum_b B_{ib}\right)^2}.
+\tag{9}
+\]
 
-Primary, copper/air upstream, and charged-secondary stage times provide the computational breakdown. When an algorithm changes the stochastic estimator, time to comparable statistical precision is also considered. Each batch is checked for completed histories, species transport status, physics-table coverage, energy accounting, finite nonnegative dose, completed queues, and zero overflow. Run audits and matched GPU implementation checks establish computational validity; independent TOPAS dose comparisons assess agreement between models.
+The carbon broadbeam auxiliary calculation uses 20 independent groups. These histories provide an uncertainty estimate at the principal calculation's statistics and are not added to its dose or LET. The estimate is approximate for a finite number of groups, especially where rare high-LET recoils dominate. Voxelwise relative standard errors, regional RMS values, percentiles, and fractions below specified limits are reported within a fixed reference-dose mask.
+
+A single TOPAS LET image does not provide the covariance required for voxelwise LET standard errors. Reference LET uncertainty is estimated only when independent paired numerator/denominator replicas or equivalent covariance statistics are available. Equal GPU and TOPAS history counts are not assumed to imply equal precision. Where both estimates are available, independent GPU and TOPAS LET variances are added for the difference; model bias, response interpolation, step discretization, and FP32 accumulation error remain separate from Monte Carlo standard error.
+
+### II.F.5. Timing and run validity
+
+Performance is reported separately for each GPU model, with RTX 2080 Ti, RTX A6000, and L4 measurements identified individually. Executables contain native device code compiled ahead of time for the corresponding architecture, with runtime PTX JIT disabled. Compilation is excluded from calculation time. Cold start extends from new-process launch to the first saved batch, including input reading, device initialization, physics-data upload, calculation, and output. Steady-state throughput is the total incident histories in subsequent batches divided by their cumulative wall time within the same process, including audits and output. Kernel-only timing does not replace end-to-end throughput. If the file-system cache is not explicitly cleared, process cold start is not interpreted as a cold physical-disk cache. Dose-only and dose-plus-LET timings are distinguished; their scoring overhead is compared with matched histories, source, batch size, physics, and timing boundaries.
+
+Large campaigns distribute histories across GPUs according to measured throughput while preserving campaign-wide source allocation and normalization. Per-device and aggregate multi-device throughput are reported separately. TOPAS single-node throughput is total histories divided by cumulative node computation time, with 56-thread cluster and 96-thread local calculations identified separately. Historical CPU records are distinguished from contemporaneous measurements. Results with different grids, physics, statistical precision, or timing boundaries are not pooled into one speedup.
+
+Primary, copper/air upstream, and charged-secondary stage times provide the computational breakdown. When an algorithm changes the stochastic estimator, time to comparable statistical precision is also considered. Each batch is checked for completed histories, species transport status, physics-table coverage, energy accounting, finite nonnegative dose, completed queues, and zero overflow. LET additionally requires finite nonnegative additive moments and consistent zero denominators. Run audits and matched GPU implementation checks establish computational validity; independent TOPAS dose and LET comparisons assess agreement between models.
 
 ## References
 
@@ -222,6 +271,6 @@ Primary, copper/air upstream, and charged-secondary stage times provide the comp
 
 ---
 
-**Companion material, outside the manuscript Methods text:** [literature and writing analysis](docs/gpu_mc_methods_literature.md), [physics implementation comparison](docs/topas_gpu_physics_comparison.md), [data extraction](extensions/README.md), and [full-plan and uncertainty records](docs/full_plan_validation_20261017/README.md).
+**Companion material, outside the manuscript Methods text:** [literature and writing analysis](docs/gpu_mc_methods_literature.md), [physics implementation comparison](docs/topas_gpu_physics_comparison.md), [unrestricted-loss model](docs/unrestricted_dedx.md), [LET estimator and matched scorer](docs/let_scoring.md), [data extraction](extensions/README.md), and [full-plan and uncertainty records](docs/full_plan_validation_20261017/README.md).
 
-**Author information required before submission:** case provenance and ethics approval or exemption; complete per-plan source, energy-layer, field, grid, and collimator tables; optimization objectives and solver settings; and frozen reference-physics, compiler/driver, and CPU-model inventories. Clinical beam commissioning and independent acceptance of every configuration are not asserted without those records. Dose pass rates, throughput, and measured uncertainty values belong in Results; this section defines how they are obtained.
+**Author information required before submission:** case provenance and ethics approval or exemption; complete per-plan source, energy-layer, field, grid, and collimator tables; optimization objectives and solver settings; frozen reference-physics, compiler/driver, and CPU-model inventories; and completed LET reference statistics and step-refinement records. Clinical beam commissioning and independent acceptance of every configuration are not asserted without those records. Dose and LET pass rates, throughput, and measured uncertainty values belong in Results; this section defines how they are obtained.

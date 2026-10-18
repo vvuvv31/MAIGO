@@ -6,7 +6,6 @@
 #include "carbon/ct_grid.hpp"
 #include "carbon/min_json.hpp"
 #include "carbon/schneider_rate_table.hpp"
-#include "carbon/delta_moments_data.hpp"
 #include "carbon/secondary_rate_table.hpp"
 
 #include <algorithm>
@@ -674,16 +673,8 @@ void TransportConfig::validate() const {
                 "must be finite");
         }
         {
-            if (minibeam_copper_stopping_power_file.empty()) {
-                throw std::invalid_argument(
-                    "minibeam copper_em requires "
-                    "minibeam_copper_stopping_power_file");
-            }
-            if (minibeam_air_stopping_power_file.empty()) {
-                throw std::invalid_argument(
-                    "minibeam copper_em requires "
-                    "minibeam_air_stopping_power_file");
-            }
+            if (minibeam_em_package_file.empty())
+                throw std::invalid_argument("Minibeam requires a full Cu/air electronic response package");
             if (minibeam_copper_enable_nuclear_attenuation &&
                 minibeam_copper_cross_section_file.empty()) {
                 throw std::invalid_argument(
@@ -695,19 +686,6 @@ void TransportConfig::validate() const {
                 throw std::invalid_argument(
                     "minibeam Copper INCLXX requires minibeam_copper_inclxx_file");
             }
-            if (minibeam_copper_primary_native_mean_loss &&
-                (run_mode == RunMode::production || multiple_scattering_model != "urban_v2" ||
-                 !minibeam_copper_enable_mcs ||
-                 !minibeam_copper_enable_energy_straggling ||
-                 minibeam_copper_straggling_model != "g4_delta"))
-                throw std::invalid_argument("Native Cu primary mean requires Urban v2 and finite-cut fluctuations");
-            if (minibeam_copper_straggling_model != "clipped_gaussian" &&
-                minibeam_copper_straggling_model != "g4_delta")
-                throw std::invalid_argument("Unknown copper straggling model");
-            if (minibeam_copper_straggling_model == "g4_delta" &&
-                !(primary_atomic_number == 1 && primary_mass_number == 1) &&
-                !minibeam_copper_primary_native_mean_loss)
-                throw std::invalid_argument("Cu ion fluctuations require a native restricted primary mean");
             if (minibeam_copper_fragment_native_transport &&
                 (minibeam_copper_fragment_urban_package_file.empty() ||
                  (minibeam_copper_enable_elastic && minibeam_copper_fragment_elastic_file.empty())))
@@ -715,16 +693,10 @@ void TransportConfig::validate() const {
             if (minibeam_copper_fragment_native_transport &&
                 (run_mode == RunMode::production || multiple_scattering_model != "urban_v2" ||
                  !minibeam_copper_enable_mcs ||
-                 std::abs(minibeam_copper_density_g_per_cm3 - 8.96) > 1e-5 ||
-                 minibeam_copper_fragment_straggling_scale != 1.0))
-                throw std::invalid_argument("Native Cu fragment transport requires research/smoke, Urban v2, G4_Cu density and unit fragment straggling scale");
-            if (minibeam_copper_straggling_model != "clipped_gaussian" &&
-                std::abs(minibeam_copper_density_g_per_cm3 - 8.96) > 1e-5)
-                throw std::invalid_argument("Native copper cut is pinned to G4_Cu at 8.96 g/cm3");
-            if (minibeam_copper_straggling_model != "clipped_gaussian" &&
-                (run_mode == RunMode::production || minibeam_copper_straggling_scale != 1.0 ||
-                 minibeam_copper_fragment_straggling_scale != 1.0))
-                throw std::invalid_argument("Native copper fluctuation requires research/smoke and unit straggling scales");
+                 std::abs(minibeam_copper_density_g_per_cm3 - 8.96) > 1e-5))
+                throw std::invalid_argument("Native Cu fragment transport requires research/smoke, Urban v2, G4_Cu density");
+            if (std::abs(minibeam_copper_density_g_per_cm3 - 8.96) > 1e-5)
+                throw std::invalid_argument("Full Cu electronic response requires G4_Cu at 8.96 g/cm3");
             if (minibeam_copper_enable_elastic &&
                 minibeam_copper_elastic_file.empty()) {
                 throw std::invalid_argument(
@@ -735,16 +707,11 @@ void TransportConfig::validate() const {
                   minibeam_copper_max_step_mm > 0.0 &&
                   minibeam_copper_mcs_scale > 0.0 &&
                   minibeam_copper_fragment_mcs_scale > 0.0 &&
-                  minibeam_copper_fragment_cascade_generations <= 3U &&
-                  minibeam_copper_straggling_scale > 0.0 &&
-                  minibeam_copper_fragment_straggling_scale > 0.0) ||
-                !std::isfinite(minibeam_copper_mcs_scale) ||
-                !std::isfinite(minibeam_copper_fragment_mcs_scale) ||
-                !std::isfinite(minibeam_copper_straggling_scale) ||
-                !std::isfinite(minibeam_copper_fragment_straggling_scale)) {
-                throw std::invalid_argument(
-                    "minibeam Copper density, radiation length, max step, and "
-                    "MCS/straggling scales must be finite and positive");
+                  minibeam_copper_fragment_cascade_generations <= 3U) ||
+                !std::isfinite(minibeam_copper_density_g_per_cm3 +
+                  minibeam_copper_radiation_length_g_per_cm2 + minibeam_copper_max_step_mm +
+                  minibeam_copper_mcs_scale + minibeam_copper_fragment_mcs_scale)) {
+                throw std::invalid_argument("Copper density, radiation length, step and MCS scales must be finite and positive");
             }
         }
     }
@@ -1192,9 +1159,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.em_package_file=parse_path(values,"em_package_file",config.em_package_file);
     if (!config.em_package_file.empty())
         config.em_package_file=resolve_input_path_from_config(config.em_package_file,path);
-    config.em_delta_moments_file=parse_path(values,"em_delta_moments_file",config.em_delta_moments_file);
-    if(!config.em_delta_moments_file.empty())
-        config.em_delta_moments_file=resolve_input_path_from_config(config.em_delta_moments_file,path);
     config.maximum_step_mm = parse_number(values, "maximum_step_mm", config.maximum_step_mm);
     config.maximum_relative_energy_loss =
         parse_number(values, "maximum_relative_energy_loss", config.maximum_relative_energy_loss);
@@ -1439,22 +1403,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_collimator_angle_deg = parse_number(
         values, "minibeam_collimator_angle_deg",
         config.minibeam_collimator_angle_deg);
-    config.minibeam_copper_stopping_power_file = parse_path(
-        values, "minibeam_copper_stopping_power_file",
-        config.minibeam_copper_stopping_power_file);
-    config.minibeam_air_stopping_power_file = parse_path(
-        values, "minibeam_air_stopping_power_file",
-        config.minibeam_air_stopping_power_file);
     config.minibeam_air_slit_max_step_mm = parse_number(values, "minibeam_air_slit_max_step_mm", config.minibeam_air_slit_max_step_mm);
     if (!(config.minibeam_air_slit_max_step_mm > 0.0) || !std::isfinite(config.minibeam_air_slit_max_step_mm))
         throw std::invalid_argument("Air slit max step must be finite and positive");
+    config.minibeam_em_package_file = parse_path(values, "minibeam_em_package_file", config.minibeam_em_package_file);
     config.minibeam_air_urban_package_file = parse_path(values,
         "minibeam_air_urban_package_file", config.minibeam_air_urban_package_file);
-    config.minibeam_air_ionization_rate_file = parse_path(values,
-        "minibeam_air_ionization_rate_file", config.minibeam_air_ionization_rate_file);
-    if (!config.minibeam_air_ionization_rate_file.empty() &&
-        (!config.enable_minibeam || config.run_mode==RunMode::production))
-        throw std::invalid_argument("Air ionization clock requires a research/smoke minibeam and a pinned rate table");
     config.minibeam_copper_density_g_per_cm3 = parse_number(
         values, "minibeam_copper_density_g_per_cm3",
         config.minibeam_copper_density_g_per_cm3);
@@ -1476,23 +1430,12 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_copper_enable_energy_straggling = parse_bool(
         values, "minibeam_copper_enable_energy_straggling",
         config.minibeam_copper_enable_energy_straggling);
-    config.minibeam_copper_primary_native_mean_loss = parse_bool(
-        values, "minibeam_copper_primary_native_mean_loss",
-        config.minibeam_copper_primary_native_mean_loss);
     config.minibeam_copper_fragment_native_transport = parse_bool(
         values, "minibeam_copper_fragment_native_transport",
         config.minibeam_copper_fragment_native_transport);
-    if (const auto it = values.find("minibeam_copper_straggling_model"); it != values.end())
-        config.minibeam_copper_straggling_model = it->second;
-    config.minibeam_copper_straggling_scale = parse_number(
-        values, "minibeam_copper_straggling_scale",
-        config.minibeam_copper_straggling_scale);
     config.minibeam_copper_fragment_enable_energy_straggling = parse_bool(
         values, "minibeam_copper_fragment_enable_energy_straggling",
         config.minibeam_copper_fragment_enable_energy_straggling);
-    config.minibeam_copper_fragment_straggling_scale = parse_number(
-        values, "minibeam_copper_fragment_straggling_scale",
-        config.minibeam_copper_fragment_straggling_scale);
     config.minibeam_copper_mcs_scale = parse_number(
         values, "minibeam_copper_mcs_scale",
         config.minibeam_copper_mcs_scale);
@@ -1520,9 +1463,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.minibeam_copper_fragment_elastic_file = parse_path(
         values, "minibeam_copper_fragment_elastic_file",
         config.minibeam_copper_fragment_elastic_file);
-    config.minibeam_copper_ion_stopping_power_file = parse_path(
-        values, "minibeam_copper_ion_stopping_power_file",
-        config.minibeam_copper_ion_stopping_power_file);
     config.minibeam_copper_ion_cross_section_file = parse_path(
         values, "minibeam_copper_ion_cross_section_file",
         config.minibeam_copper_ion_cross_section_file);

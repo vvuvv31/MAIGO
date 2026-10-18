@@ -30,7 +30,6 @@ dose_to_medium_type: mhd
 dose_to_medium_name: dose
 LET: false
 device: cuda
-em_delta_moments_file: data/em/ions/delta_moments.bin
 em_package_file: data/em/ions/continuous26.bin
 enable_energy_straggling: true
 enable_secondary_energy_straggling: false
@@ -66,23 +65,16 @@ minibeam_copper_radiation_length_g_per_cm2: 12.8627968
 minibeam_copper_enable_mcs: true
 minibeam_copper_enable_elastic: true
 minibeam_copper_enable_energy_straggling: true
-minibeam_copper_straggling_scale: 1.0
 minibeam_copper_mcs_scale: 1.0
 minibeam_copper_fragment_mcs_scale: 1.0
 minibeam_copper_fragment_enable_energy_straggling: false
-minibeam_copper_fragment_straggling_scale: 1.0
 minibeam_copper_fragment_cascade_generations: 3
 minibeam_copper_enable_nuclear_attenuation: true
-minibeam_copper_stopping_power_file: data/stopping/copper/carbon.csv
-minibeam_air_stopping_power_file: data/stopping/air/carbon.csv
 minibeam_copper_cross_section_file: data/nuclear/copper/carbon/primary_rate.csv
 minibeam_copper_elastic_file: data/elastic/copper/carbon/primary.csv
 minibeam_copper_inclxx_file: data/nuclear/copper/carbon/cascade.cinpkg
-minibeam_copper_ion_stopping_power_file: data/stopping/copper/ions_carbon.csv
 minibeam_copper_ion_cross_section_file: data/nuclear/copper/ion_cross_sections.csv
 minibeam_air_urban_package_file: data/scattering/urban/air.bin
-minibeam_copper_straggling_model: g4_delta
-minibeam_copper_primary_native_mean_loss: true
 minibeam_copper_fragment_native_transport: true
 minibeam_primary_specialization: false
 ct_grid_file: inputs/lung_minibeam/ct.bin
@@ -98,3 +90,5 @@ initial_energy_MeVu: 250
 minibeam_air_slit_max_step_mm: 0.2
 minibeam_copper_fragment_elastic_file: data/elastic/copper/carbon/fragments.csv
 minibeam_copper_fragment_urban_package_file: data/scattering/urban/copper_fragments.bin
+
+minibeam_em_package_file: data/stopping/beamline/unrestricted.bin

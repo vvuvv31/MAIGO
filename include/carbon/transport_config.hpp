@@ -1,7 +1,6 @@
 #pragma once
 
 #include "carbon/particle.hpp"
-#include "carbon/delta_moments_data.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -140,8 +139,6 @@ struct TransportConfig {
     double depth_bin_width_mm{0.0};
     // The sole water/Schneider CT energy-loss model.
     std::filesystem::path em_package_file{};
-    // Empty selects delta_moments.bin next to em_package_file.
-    std::filesystem::path em_delta_moments_file{};
     double broadbeam_maximum_mean_loss_fraction{0.01};
     // Config loading overrides ion caps by mode: broadbeam 1mm, minibeam 0.5mm.
     double maximum_step_mm{1.0};
@@ -289,12 +286,8 @@ struct TransportConfig {
     // required by some opposed-field patient apertures.
     double minibeam_slit_offset_mm{0.0};
     double minibeam_collimator_angle_deg{0.0};
-    // Copper electromagnetic-only development mode. The table is absolute
-    // electronic dE/dx in MeV/mm at the native material density.
-    std::filesystem::path minibeam_copper_stopping_power_file{};
-    std::filesystem::path minibeam_air_stopping_power_file{};
-    // Native ionization proposal clock for primary air transport.
-    std::filesystem::path minibeam_air_ionization_rate_file{};
+    // Native unrestricted electronic response for all beamline ions: Cu + air.
+    std::filesystem::path minibeam_em_package_file{};
     // Primary beamline air transport, independent of the water MCS selector.
     double minibeam_air_slit_max_step_mm{1.0e6};
     std::filesystem::path minibeam_air_urban_package_file{};
@@ -311,16 +304,10 @@ struct TransportConfig {
     // Sample Bohr energy-loss fluctuations step-by-step in Copper.  This is
     // independent of downstream ion straggling; both default to enabled.
     bool minibeam_copper_enable_energy_straggling{true};
-    double minibeam_copper_straggling_scale{1.0};
-    // Native Cu fluctuations select projectile parameters inside the shared engine.
-    std::string minibeam_copper_straggling_model{"clipped_gaussian"};
-    // Native restricted mean law for the configured primary in Cu.
-    bool minibeam_copper_primary_native_mean_loss{false};
     // Species Urban/elastic fragment transport is independent of primary fluctuations.
     bool minibeam_copper_fragment_native_transport{false};
     // Separate Copper fragment control, enabled in all default minibeams.
     bool minibeam_copper_fragment_enable_energy_straggling{false};
-    double minibeam_copper_fragment_straggling_scale{1.0};
     // Amplitude scale for the selected Copper MCS model. The legacy Highland
     // benchmark uses 0.785; the slab-constrained model uses 1.0.
     double minibeam_copper_mcs_scale{0.785};
@@ -339,7 +326,6 @@ struct TransportConfig {
     std::filesystem::path minibeam_copper_elastic_file{};
     std::filesystem::path minibeam_copper_fragment_elastic_file{};
     std::filesystem::path minibeam_copper_fragment_urban_package_file{};
-    std::filesystem::path minibeam_copper_ion_stopping_power_file{};
     std::filesystem::path minibeam_copper_ion_cross_section_file{};
     // Used by spots_geometry_mode=minibeam_pbs_y to map TOPAS world Y to
     // canonical GPU depth: gpu_z = world_y - this value.

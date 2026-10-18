@@ -72,7 +72,7 @@ struct SyclTransportContext::Impl {
 
     void clear() noexcept {
         schneider_device=CachedSchneiderDevice{};
-        resident_em.reset();resident_urban.reset();resident_air.reset();resident_copper_ions.reset();resident_ct_fields.reset();
+        resident_beamline_em.reset();resident_em.reset();resident_urban.reset();resident_air.reset();resident_copper_ions.reset();resident_ct_fields.reset();
         const auto release = [this](auto*& pointer) {
             if (pointer != nullptr) {
                 sycl::free(pointer, queue);
@@ -102,7 +102,7 @@ struct SyclTransportContext::Impl {
     CachedCtGeometry ct_geometry;
     CachedUnifiedEm unified_em_cache;
     std::shared_ptr<ResidentPhysicsTables> resident_em, resident_urban, resident_air, resident_copper_ions;
-    std::shared_ptr<ResidentPhysicsTables> resident_ct_fields;
+    std::shared_ptr<ResidentPhysicsTables> resident_ct_fields, resident_beamline_em;
     // Published only after complete upload and source/mass validation.
     // All particle/scoring/diagnostic buffers remain owned by each shard.
     struct CachedSchneiderDevice {

@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <vector>
 #include "carbon/nuclear_elastic_scattering.hpp"
+#include "carbon/beamline_em.hpp"
 namespace carbon {
 inline constexpr std::array<std::array<int,2>,18> elastic_projectiles{{
  {1,1},{1,2},{1,3},{2,3},{2,4},{2,6},{3,6},{3,7},{4,7},{4,9},{4,10},
@@ -86,6 +87,15 @@ namespace carbon {
 struct ElasticRecoilStoppingView {
  const std::int32_t* keys{};const float* energies{};const float* values{};
  std::uint32_t np{},ne{};
+ // Derived full total-stopping CSDA for additional heavy recoils. ELRSP001
+ // already contains unrestricted electronic + separate nuclear stopping;
+ // electronic LET continues to use the independent LERSP001 bank.
+ const BeamlineEmNode* full_nodes{};const double* full_ranges{};
+ BeamlineEmPoint loss_point(int p,int section,float density) const {
+  if(!full_nodes || !full_ranges || p<0 || p>=int(np) || section<0 || section>=26)return {};
+  const auto base=(p*26+section)*ne;
+  return {full_nodes+base,full_ranges+base,ne,{},density};
+ }
  int projectile(int z,int a)const noexcept{for(unsigned i=0;i<np;++i)if(keys[2*i]==z&&keys[2*i+1]==a)return i;return -1;}
  float stopping(int p,int section,float e)const noexcept{
   if(p<0||p>=static_cast<int>(np)||section<0||section>=26||!std::isfinite(e)||e<energies[0]||e>energies[ne-1])return -1;

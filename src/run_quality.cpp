@@ -84,34 +84,19 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
     report.mode = config.run_mode;
     if (!config.enable_secondary_energy_straggling)
         report.approximations.push_back({"secondary_mean_energy_loss",
-            "Charged secondaries retain transport, scattering and nuclear reactions but use mean continuous26 restricted and aggregated delta losses. RT07575 CT proton broadbeam/minibeam and carbon broadbeam have scoped paired validation; carbon minibeam is under verification.",1.,0.});
+            "Charged secondaries retain transport, scattering and nuclear reactions but use the continuous26 unrestricted electronic mean loss without fluctuation draws. Qualification of this mean-loss revision remains configuration-specific.",1.,0.});
     if (config.enable_minibeam && !config.minibeam_copper_fragment_enable_energy_straggling)
-        report.approximations.push_back({"copper_fragment_restricted_fluctuations_disabled",
-            "Cu fragment restricted loss uses its mean; Cu primary fluctuations follow the primary switch. Native carbon Cu fragments retain hard-delta Poisson/spectrum sampling. Carbon minibeam dose acceptance remains pending.",1.,0.});
+        report.approximations.push_back({"copper_fragment_full_fluctuations_disabled",
+            "Cu/air fragment full electronic loss uses its mean without fluctuation or separate delta draws; Cu primary full fluctuations follow the primary switch. Carbon minibeam dose acceptance remains pending.",1.,0.});
     if(result.conditional_copper_response_enabled)
         report.approximations.push_back({"conditional_copper_response_accuracy_pending",
             "Research170MeV Cu interior conditional event bank; coherent zero/output events, charged entries at water and explicit untracked Cu neutral products. Absolute0.1x1mm entrance bins without translations; finite-bank dose/gamma accuracy not certified.",1.,0.});
-    if(result.primary_first_order_delta_enabled)
-        report.approximations.push_back({"proton_ct_primary_first_order_delta",
-            "Dedicated local-electron proton CT broadbeam primary uses the step-start continuous26 delta first moment without its within-step energy-slope correction; current rate, variance and restricted-loss correction remain active; fluctuations follow the configured primary/secondary switches. Patient TOPAS gamma qualification is configuration-specific",1.,0.});
-    if(result.carbon_primary_first_order_delta_enabled)
-        report.approximations.push_back({"carbon_ct_primary_first_order_delta",
-            "Dedicated local-electron carbon CT broadbeam primary uses the step-start continuous26 delta first moment without its within-step delta slope correction; current rate, variance and restricted-loss correction remain active; fluctuations follow the configured primary/secondary switches. Patient TOPAS qualification is configuration-specific",1.,0.});
-    if(result.carbon_secondary_first_order_delta_enabled)
-        report.approximations.push_back({"carbon_ct_secondary_first_order_delta",
-            "Dedicated local-electron carbon CT broadbeam charged fragments use the step-start continuous26 delta first moment without its within-step delta slope correction; all charged species, current rate, variance and restricted-loss correction remain active; fluctuations follow the configured primary/secondary switches. Patient TOPAS qualification is configuration-specific",1.,0.});
     if(result.ct_broadbeam_step_cap_enabled)
         report.approximations.push_back({"ct_broadbeam_ion_step_cap",
             "Configured maximum ion step is enforced before CT face and nuclear competition for primary and charged fragments; FP32 Fermi-Eyges retained; ion fluctuations follow the configured primary/secondary switches",
             config.maximum_step_mm,0.});
-    if(result.ct_primary_first_order_restricted_enabled)
-        report.approximations.push_back({"ct_broadbeam_primary_step_start_restricted_mean",
-            "Dedicated local-electron CT broadbeam primary uses step-start restricted stopping without its within-step stopping-slope correction. Nominal stopping/range, ion charge correction, full range-derived terminals, nominal delta moments and hard rates remain active; fluctuations follow the configured primary/secondary switches. Patient TOPAS qualification is configuration-specific",1.,0.});
-    if(result.ct_secondary_first_order_restricted_enabled)
-        report.approximations.push_back({"ct_broadbeam_fragment_step_start_restricted_mean",
-            "Dedicated local-electron carbon CT broadbeam charged fragments use step-start restricted stopping without its within-step stopping-slope correction. Nominal stopping/range, ion charge correction, full range-derived terminals, nominal delta moments and hard rates remain active; fluctuations follow the configured primary/secondary switches. Patient TOPAS qualification is configuration-specific",1.,0.});
-    report.approximations.push_back({"condensed_delta_partition_v1",
-            "User-authorized 2026-09-15: aggregate Gamma delta loss from pinned first/second moments, analytic Poisson partition mean correction, no explicit delta-electron energy jumps; local deposition, configured combined mean-loss guard (default 1%); higher spectrum moments and patient BODY Gamma not validated",1.,0.});
+    report.approximations.push_back({"unrestricted_electronic_csda",
+            "Water/CT registered ions use native continuous26 unrestricted electronic stopping; CSDA and inverse derive from the same full response with continuous density-effect correction. Small losses use midpoint integration; larger losses use residual-range inversion. One Universal/Ion draw uses that full mean, native unrestricted dispersion and Tmax. Residual-range stepping has no medium ionization proposal clock. Cu/air use their native unrestricted electronic response; additional elastic recoils retain full electronic plus nuclear stopping",1.,0.});
 
     if (config.secondary_species_grouping && config.enable_inelastic &&
         config.enable_secondary_transport)
@@ -127,22 +112,22 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                 : "experimental scheduling interval; production default is 16; not a new TOPAS Gamma validation"),
             1., 0.});
     report.approximations.push_back({"unified_material_em_accuracy_pending",
-            "Unified water/Schneider EM for all 18 charged ions; local delta deposition unless an explicit spatial response is enabled; production execution authorized, density cut-onset and patient Gamma accuracy gates remain pending",1.,0.});
+            "Unified water/Schneider unrestricted electronic EM for all 18 charged ions; all ionization loss deposited locally; full-plan dose qualification remains configuration-specific",1.,0.});
 
     if(!config.all_ion_elastic_file.empty()) {
         report.approximations.push_back({"all_ion_elastic_candidate",
             "Finite TOPAS elastic event bank; additional heavy recoil isotopes use total stopping and MCS with EM-only transport; patient gamma and bank convergence validation pending",1.,0.});
     }
-    if (config.enable_minibeam && config.minibeam_copper_straggling_model == "g4_delta") {
+    if (config.enable_minibeam) {
         report.approximations.push_back({"copper_native_fluctuation",
-            "Shared native Cu loss engine selects primary parameters by ZA; restricted/total means and calibrated hard-delta sampling remain explicit. Delta electrons are beamline energy sinks",1.,0.});
+            "Cu/air use native unrestricted electronic stopping, consistent range/inverse and full Universal/Ion fluctuations; no explicit delta transfers. Beamline losses remain explicit sinks",1.,0.});
     }
     if (config.enable_minibeam && config.minibeam_copper_fragment_native_transport) {
         report.approximations.push_back({"copper_ion_transport",
-            "Cu charged fragments use native restricted mean, independently configured restricted fluctuations plus calibrated hard delta transfers, species Urban scattering and finite species elastic banks. This fragment path is independent of the primary fluctuation selector. Delta electrons and nuclear neutrals remain beamline energy sinks. Elastic bank convergence and carbon minibeam dose acceptance remain pending",1.,0.});
+            "Cu charged fragments use full electronic stopping and optional full fluctuations, species Urban scattering and finite species elastic banks. Beamline losses and nuclear neutrals remain explicit sinks. Elastic bank convergence and carbon minibeam dose acceptance remain pending",1.,0.});
     } else if (config.enable_minibeam) {
         report.approximations.push_back({"minibeam_copper_candidate",
-            "Copper primary transport uses the configured source ZA, elastic bank and nuclear event package; charged nuclear products use species stopping tables with source-charge-scaled fallback in Copper and Highland secondary MCS. Nuclear neutrals remain an explicit beamline energy sink; dose acceptance pending",1.,0.});
+            "Copper primary transport uses the configured source ZA, elastic bank and nuclear event package; charged nuclear products use full native species electronic response in Copper and Highland secondary MCS. Nuclear neutrals remain an explicit beamline energy sink; dose acceptance pending",1.,0.});
     }
 
     if(config.fermi_eyges_gaussian_only)

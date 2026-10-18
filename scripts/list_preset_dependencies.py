@@ -21,10 +21,6 @@ def inventory(root):
         for key, value in cfg.items():
             if isinstance(value, str) and value.startswith(('data/', 'inputs/')):
                 dependencies[key] = value
-        # The unified loss model resolves this default even if absent in YAML.
-        if cfg.get('em_package_file'):
-            dependencies.setdefault('em_delta_moments_file',
-                                    str(Path(cfg['em_package_file']).parent/'delta_moments.bin'))
         expanded = set(dependencies.values())
         if cfg.get('enable_ct_grid') or cfg.get('unified_water_material_file'):
             expanded.add(cfg.get('ct_schneider_file', 'data/materials/schneider/hu_to_material.txt'))

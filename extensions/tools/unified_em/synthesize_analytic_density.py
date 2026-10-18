@@ -8,8 +8,67 @@ the existing runtime interface. No density residuals, target splines or cuts are
 from pathlib import Path
 import argparse,json,struct,time
 import numpy as np
-from probe_analytic_density import read,predict,RD
-from build_delta_moments import mean_values,rd as DELTA_RD
+# These native disk-field reconstructions are used only while producing the
+# fixed EMCNT001 payload. The runtime decodes its active unrestricted fields;
+# it neither loads reconstructed rates/splines onto the GPU nor samples delta
+# electrons. Keep disk generation separate from the transport implementation.
+EXPONENTS=np.array([0,1,1,1,-1,1,0,1,1,1,0,0,0])
+RD=np.dtype([('f','<f4',(14,)),('u','<u4',(12,))])
+
+def read(path):
+    with path.open('rb') as f:h=struct.unpack('<8s6I',f.read(32))
+    assert h[0]==b'EMJOINT1' and h[1]==1
+    nm,ns,nr,nn,nv=h[2:]
+    mats=np.memmap(path,mode='r',offset=32,dtype=[('s','<i4'),('d','<f4')],shape=(nm,))
+    rec=np.memmap(path,mode='r',offset=32+8*(nm+ns),dtype=RD,shape=(nr,))
+    nodes=np.memmap(path,mode='r',offset=32+8*(nm+ns)+104*nr,dtype='<f4',shape=(nn,13))
+    vec=np.memmap(path,mode='r',offset=32+8*(nm+ns)+104*nr+52*nn,dtype='<f4',shape=(nv,6))
+    return h,mats,rec,nodes,vec
+
+def density_effect(x,meta):
+    c,m,a,x0,x1,d0=meta[5:11]
+    return np.where(x>=x1,2*np.log(10)*x-c,
+           np.where(x>=x0,2*np.log(10)*x-c+a*np.maximum(x1-x,0)**m,
+                    d0*10**(2*(x-x0))))
+
+def kinematics(e,r):
+    mass,spin=float(r['f'][0]),float(r['f'][5]);k=e*int(r['u'][-1]);u=k/mass
+    bg2=u*(u+2);beta=bg2/(u+1)**2
+    ratio=.51099891/mass
+    tm=2*.51099891*bg2/(1+2*(u+1)*ratio+ratio*ratio)
+    return beta,tm,(k+mass)**2,bg2,spin
+
+def delta_integral(e,r,cut):
+    beta,tm,total2,bg2,spin=kinematics(e,r);c=np.minimum(cut,tm)
+    den=1/c-1/tm-beta/tm*np.log(tm/c)
+    if spin>0:den+=.5*(tm-c)/total2
+    return np.maximum(den,0)
+
+def predict(base,r,mb,mt,method,clamp_stopping=True):
+    ratio=mt[2]/mb[2];p=base.astype(float)*ratio**EXPONENTS
+    if method=='linear':return p
+    beta,tm,total2,bg2,spin=kinematics(base[:,0].astype(float),r)
+    cb=np.minimum(mb[3],tm);ct=np.minimum(mt[3],tm)
+    x=.5*np.log10(bg2);dd=density_effect(x,mt)-density_effect(x,mb)
+    # G4 alpha tables use q2 normalized to alpha's nominal charge, whereas
+    # generic-ion/proton tables store the absolute effective charge square.
+    alpha=int(r['u'][-2])==2 and int(r['u'][-1])==4
+    coeff=mt[4]*base[:,10]*(4 if alpha else 1)/beta
+    # Same-composition shell/Barkas/effective-charge data remain in the base.
+    change=coeff*(np.log(ct/cb)-beta*(ct-cb)/tm)
+    if spin>0:change+=coeff*.25*(ct*ct-cb*cb)/total2
+    density_change=-coeff*dd
+    p[:,1]+=density_change
+    p[:,2]+=change+density_change
+    p[:,3]+=change+density_change
+    # Born delta rate recalculated from the target cut, including zero support.
+    p[:,5]=coeff*delta_integral(base[:,0].astype(float),r,mt[3])
+    # IonFluc's material-only extra charge factor cancels between densities.
+    vr=(tm/beta-.5*ct)/(tm/beta-.5*cb)
+    p[:,8]*=vr;p[:,9]*=vr
+    if clamp_stopping:p[:,[1,2,3]]=np.maximum(p[:,[1,2,3]],0)
+    return p
+
 
 def extract(source,output,lossless=False):
     h,m,r,n,v=read(source);ns=h[3];data={'materials':np.array(m),'species':np.array(np.memmap(source,mode='r',offset=32+8*h[2],dtype='<u4',shape=(ns,2)))}
@@ -140,7 +199,7 @@ def rebuild(r,bn,bv,mb,mt):
     rec['f'][13]=lx[np.argmax(rates)]/(int(r['u'][-1])*float(r['f'][1]))
     return rec,pn.astype('<f4'),[v.astype('<f4') for v in [vs,vr,vi,vl]]
 
-def synthesize(bases,metadata,output,delta_output):
+def synthesize(bases,metadata,output):
     start=time.monotonic()
     # Inflate each composition array once, not once per target density.
     with np.load(bases) as archive:bank={k:archive[k] for k in archive.files}
@@ -151,12 +210,10 @@ def synthesize(bases,metadata,output,delta_output):
             np.allclose(meta[:,2],mats['d'],rtol=1e-7,atol=0) and np.all(meta[:,3:5]>0)):
         raise ValueError('Formula metadata registry/cut/electron-density mismatch')
     output.parent.mkdir(parents=True,exist_ok=True)
-    if output.exists() or delta_output.exists():raise FileExistsError('Use new candidate output paths')
+    if output.exists():raise FileExistsError('Use new candidate output paths')
     nr=len(mats)*ns;nn=sum(len(bank[f'n_{int(m["s"])}_{i}']) for m in mats for i in range(ns))
     # Temporary node payload is mmap-backed; preserve partial evidence on error.
     payload=output.with_suffix('.nodes.tmp');nodes=np.memmap(payload,mode='w+',dtype='<f4',shape=(nn,13))
-    delta=np.memmap(delta_output,mode='w+',offset=16,dtype='<f4',shape=(nn,2))
-    with delta_output.open('r+b') as f:f.write(struct.pack('<8sII',b'EMDMOMT2',2,nn))
     records=[];vectors=[];off=voff=0
     for mid,m in enumerate(mats):
         s=int(m['s']);bid=int(bank[f'meta_{s}'][0])
@@ -166,25 +223,20 @@ def synthesize(bases,metadata,output,delta_output):
             rec['u'][0]=off;rec['u'][1]=len(n)
             for k,a in enumerate(v):rec['u'][2+k]=voff;rec['u'][6+k]=len(a);voff+=len(a);vectors.append(a)
             records.append(rec);nodes[off:off+len(n)]=n
-            dr=np.frombuffer(rec.tobytes(),dtype=DELTA_RD)[0]
-            for moment in [1,2]:
-                values=mean_values(dr,n.astype(float),moment=moment)
-                if not (np.isfinite(values).all() and np.all(values>=0)):raise ValueError('Invalid reconstructed delta moments')
-                delta[off:off+len(n),moment-1]=values
             off+=len(n)
         if mid%20==0:print(f'{mid}/{len(mats)} densities, {time.monotonic()-start:.1f}s',flush=True)
-    nodes.flush();delta.flush()
+    nodes.flush()
     with output.open('xb') as f:
         f.write(struct.pack('<8s6I',b'EMJOINT1',1,len(mats),ns,nr,nn,voff))
         f.write(mats.tobytes());f.write(species.tobytes());f.write(np.array(records,dtype=RD).tobytes())
         # Stream without duplicating the expanded node matrix in RAM.
         for begin in range(0,nn,100000):f.write(nodes[begin:begin+100000].tobytes())
         for a in vectors:f.write(a.tobytes())
-    del nodes,delta;payload.unlink()
+    del nodes;payload.unlink()
     report=dict(scope='26 response bases + formula-derived cut/density corrections; offline-expanded runtime compatibility interface',
         base_file=str(bases),metadata=str(metadata),base_bytes=bases.stat().st_size,
         response_compositions=26,density_residual_tables=0,materials=len(mats),species=ns,nodes=nn,segments=voff,
-        em_package=str(output),delta_package=str(delta_output),elapsed_seconds=time.monotonic()-start,
+        em_package=str(output),elapsed_seconds=time.monotonic()-start,
         no_target_response_input=True,default_promoted=False)
     output.with_suffix('.metadata.json').write_text(json.dumps(report,indent=2)+'\n');print(json.dumps(report,indent=2),flush=True)
 
@@ -195,8 +247,8 @@ if __name__=='__main__':
     m=sub.add_parser('material-inputs');m.add_argument('--bases',type=Path,required=True)
     m.add_argument('--section-metadata',type=Path,default=Path('data/stopping/schneider/carbon.metadata.json'));m.add_argument('--output',type=Path,required=True)
     s=sub.add_parser('synthesize');s.add_argument('--bases',type=Path,required=True);s.add_argument('--metadata',type=Path,required=True)
-    s.add_argument('--output',type=Path,required=True);s.add_argument('--delta-output',type=Path,required=True)
+    s.add_argument('--output',type=Path,required=True)
     a=p.parse_args()
     if a.command=='extract':extract(a.source,a.output,a.lossless)
     elif a.command=='material-inputs':material_inputs(a.bases,a.section_metadata,a.output)
-    else:synthesize(a.bases,a.metadata,a.output,a.delta_output)
+    else:synthesize(a.bases,a.metadata,a.output)

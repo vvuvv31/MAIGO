@@ -21,9 +21,10 @@ average of sampled `dE/dl`, an average over electrons, or a mass stopping power
 normalized by density. GPU `S_e` uses the native unrestricted electronic
 `full` response in continuous26, evaluated at the same pre-step energy, with
 linear density scaling and the continuous Sternheimer density-effect correction.
-It is separate from the calibrated restricted-loss/aggregate-delta estimator
-used to transport ions; changing the LET estimator does not change that loss
-estimator or its random draws. Native low-energy model transitions remain
+The same unrestricted response now sets the total mean ionization loss and
+CSDA range used by medium transport. Medium fluctuations use one unrestricted Universal/Ion draw
+with that mean; LET still scores expected stopping at pre-step energy rather than
+the sampled loss. Enabling LET alone does not change transport or its random draws. Native low-energy model transitions remain
 limited by the existing response-node interpolation; this is not a claim of
 exact stopping at every energy.
 Generic recoils use a separate **electronic-only** recoil table selected with

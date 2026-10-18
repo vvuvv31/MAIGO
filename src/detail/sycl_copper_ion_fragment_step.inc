@@ -22,14 +22,27 @@ const auto f_count = [&](std::size_t slot) {
         minibeam_event_counts_device[slot]).fetch_add(1U);
 };
 if (!f_in_copper) {
+    const auto response=beamline_em.at(1,beamline_em.projectile(f_charge,f_a));
+    if(!response.valid()){f_fail(4);break;}
+    f_path=sycl::fmin(f_path,response.range(f_energy));
+    const auto mean=response.mean_loss(f_energy,f_path);
+    std::uint64_t draw_index=0;
+    auto uniform=[&](){return (rng::random_u32(f_seed ^ 0xA17B09D5C628E341ULL,f_stream,
+        (std::uint64_t(f_step)<<32)|draw_index++,124)>>8)*0x1p-24f;};
+    const auto ion=beamline_em.projectile(f_charge,f_a);
+    const auto draw=sample_beamline_fluctuation(f_energy,beamline_em.species[ion].mass_MeV,
+        f_charge,f_a,mean,f_path,response,minibeam_copper_fragment_enable_energy_straggling,uniform);
+    if(!draw.valid){f_fail(5);break;}
+    f_energy=sycl::fmax(0.f,f_energy-draw.loss);
     f_x += f_path * f_direction.x;
     f_y += f_path * f_direction.y;
     f_z += f_path * f_direction.z;
     f_at_boundary = true;
 } else {
     const auto f_species = copper_fragment_urban_device.projectile(f_charge, f_a);
-    const auto f_context = copper_fragment_urban_device.at(
+    UrbanLossContext f_context = copper_fragment_urban_device.at(
         copper_fragment_urban_device.material(-2, minibeam_copper_density), f_species, f_energy);
+    f_context.beamline_point=beamline_em.at(0,beamline_em.projectile(f_charge,f_a));
     if (f_species < 0 || !f_context.valid()) { f_fail(1); break; }
     const auto f_mass = copper_fragment_urban_device.species[f_species].mass_mev;
     const CopperElasticRecord* f_bank = nullptr;
@@ -97,11 +110,8 @@ if (!f_in_copper) {
     std::uint64_t f_draw_index = 0;
     auto f_uniform = [&]() { return (rng::random_u32(
         f_seed, f_stream, (std::uint64_t(f_step) << 32) | f_draw_index++, 124) >> 8) * 0x1p-24f; };
-    const auto f_draw = sample_copper_fluctuation(
-        {f_energy, f_mass, f_charge, f_a, f_context.factor, f_mean, f_path,
-         minibeam_copper_density, CopperMeanLoss::restricted,
-         minibeam_copper_fragment_enable_energy_straggling,
-         CopperFluctuationContext::native_ion_fragment}, f_uniform);
+    const auto f_draw=sample_beamline_fluctuation(f_energy,f_mass,f_charge,f_a,f_mean,f_path,
+        f_context.beamline_point,minibeam_copper_fragment_enable_energy_straggling,f_uniform);
     f_count(f_draw.valid ? copper_proton_fragment_loss_slot : copper_proton_loss_failure_slot);
     if (!f_draw.valid) break;
     if (f_draw.loss >= f_energy - energy_cutoff_MeV) { f_energy = 0; break; }

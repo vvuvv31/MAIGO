@@ -3,7 +3,7 @@
 // kUrbanBeamlinePath describes upstream physics, independent of water/CT downstream.
 // Include contract: inside the primary device kernel, before medium transport.
 // Advance through slit air/Cu, create Cu child tasks, and preserve the original
-// history/seed in the medium-entry record. Cu delta/recoil losses stay in the
+// history/seed in the medium-entry record. Cu/air electronic and recoil losses stay in the
 // beamline sink; this fragment must not score them into the patient dose grid.
                 if constexpr (kPrimaryStage != primary_stage::medium) {
                 const bool beamline_resume=kKernelStage == primary_stage::beamline_queued_children && use_beamline_continuation && beamline_resuming;
@@ -146,8 +146,6 @@
                     minibeam_block_center_z + 0.5F * minibeam_block_thickness;
                 UrbanV2TrackState air_urban_state{};
                 std::uint64_t air_urban_step = 0;
-                DiscreteDeltaClockCandidate<float> air_ion_clock;
-                float air_ion_threshold=std::numeric_limits<float>::max(),air_ion_rate=0;
 
                 bool air_urban_boundary = true;
                 auto advance_air = [&](const float boundary_path, const UrbanV2SafetyCtx& safety, const float ceiling) {
@@ -160,26 +158,10 @@
                     material.projectile_z = primary_atomic_number;
                     material.projectile_a = primary_mass_number;
                     material.mass_mev = air_urban_device.species[air_urban_projectile].mass_mev;
-                    float ion_distance=std::numeric_limits<float>::infinity();
-                    if(air_ion_count) {
-                        if(energy_MeV<air_ion_e_device[0]*primary_mass_number ||
-                           energy_MeV>air_ion_e_device[air_ion_count-1]*primary_mass_number) {
-                            urban_record_first_failure(minibeam_event_counts_device,rng_history,air_urban_step,0U,106);
-                            return false;
-                        }
-                        if(energy_MeV<=air_ion_peak) {
-                            if(energy_MeV*1.25F<air_ion_threshold)air_ion_threshold=energy_MeV;
-                        } else if(energy_MeV<air_ion_threshold)air_ion_threshold=sycl::fmax(air_ion_peak,.8F*energy_MeV);
-                        air_ion_rate=minibeam_linear_table(air_ion_e_device,air_ion_rate_device,air_ion_count,
-                            air_ion_threshold*inverse_mass_number);
-                        if(!air_ion_clock.active)
-                            air_ion_clock.arm(-sycl::log(sycl::fmax(0x1p-24F,rng::msc_unit_strict(
-                                spot_seed ^ 0xB3E520A174C968DFULL,rng_history,air_urban_step,125U))));
-                        ion_distance=air_ion_clock.distance(air_ion_rate);
-                    }
+                    material.loss_context.beamline_point = beamline_em.at(1,beamline_primary);
                     const auto step = urban_v2_propose_and_sample(
                         Direction3F{direction_x,direction_y,direction_z}, energy_MeV,
-                        sycl::fmin(ceiling,ion_distance), boundary_path, position_x_mm,position_y_mm,position_z_mm,
+                        ceiling, boundary_path, position_x_mm,position_y_mm,position_z_mm,
                         direction_x,direction_y,direction_z,safety,air_urban_boundary,air_urban_state,
                         material,1.0F,spot_seed ^ 0xA17B09D5C628E341ULL,rng_history,air_urban_step++,0U,50);
                     const int reason = step.limit_reason < 0 ? -step.limit_reason : urban_step_field_reason(step);
@@ -188,24 +170,22 @@
                             air_urban_step,0U,reason ? reason : 104);
                         return false;
                     }
-                    if(air_ion_count) {
-                        const bool proposed=step.final_true_path_mm>=ion_distance;
-                        air_ion_clock.consume(step.final_true_path_mm,air_ion_rate,proposed);
-                        sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
-                            sycl::memory_scope::device,sycl::access::address_space::global_space>(
-                                minibeam_event_counts_device[air_ion_step_slot]).fetch_add(1U);
-                        if(proposed)sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
-                            sycl::memory_scope::device,sycl::access::address_space::global_space>(
-                                minibeam_event_counts_device[air_ion_proposal_slot]).fetch_add(1U);
-                    }
                     position_x_mm += step.final_geom_path_mm*direction_x + step.displacement_mm.x;
                     position_y_mm += step.final_geom_path_mm*direction_y + step.displacement_mm.y;
                     position_z_mm += step.final_geom_path_mm*direction_z + step.displacement_mm.z;
                     direction_x=step.direction.x; direction_y=step.direction.y; direction_z=step.direction.z;
                     air_urban_boundary=step.boundary_crossed;
-                    const auto stopping = minibeam_linear_table(minibeam_air_sp_energies_device,
-                        minibeam_air_sp_values_device,minibeam_air_sp_count,energy_MeV*inverse_mass_number);
-                    auto loss=sycl::fmin(energy_MeV,stopping*step.final_true_path_mm);
+                    const auto response=material.loss_context.beamline_point;
+                    const auto mean=response.mean_loss(energy_MeV,step.final_true_path_mm);
+                    std::uint64_t draw_index=0;
+                    auto uniform=[&](){return (rng::random_u32(spot_seed ^ 0xA17B09D5C628E341ULL,
+                        rng_history,(air_urban_step<<32)|draw_index++,124)>>8)*0x1p-24f;};
+                    const auto draw=sample_beamline_fluctuation(energy_MeV,primary_rest_mass_MeV,
+                        primary_atomic_number,primary_mass_number,mean,step.final_true_path_mm,
+                        response,minibeam_copper_enable_energy_straggling,uniform);
+                    if(!draw.valid){urban_record_first_failure(minibeam_event_counts_device,
+                        rng_history,air_urban_step,0U,107);return false;}
+                    auto loss=sycl::fmin(energy_MeV,draw.loss);
                     if (energy_MeV-loss <= energy_cutoff_MeV) loss=energy_MeV;
                     energy_MeV-=loss; beamline_air_loss_MeV+=loss;
                     return true;
@@ -228,7 +208,6 @@
                     energy_MeV=saved.energy_MeV;position_x_mm=saved.position_x_mm;position_y_mm=saved.position_y_mm;position_z_mm=saved.position_z_mm;
                     direction_x=saved.direction_x;direction_y=saved.direction_y;direction_z=saved.direction_z;
                     beamline_air_loss_MeV=saved.air_loss_MeV;air_urban_state=saved.air_urban_state;air_urban_step=saved.air_urban_step;
-                    air_ion_clock=saved.air_ion_clock;air_ion_threshold=saved.air_ion_threshold;air_ion_rate=saved.air_ion_rate;
                     air_urban_boundary=saved.air_boundary;
                 }
                 if (minibeam_air_urban && !beamline_resume) {
@@ -282,7 +261,7 @@
                     urban_v2_geom.slit_offset_mm = minibeam_slit_offset;
                     urban_v2_geom.block_entrance_z_mm = minibeam_block_entrance_z;
                     urban_v2_geom.block_exit_z_mm = minibeam_block_exit_z;
-                    UrbanMcsContext copper_loss_context{};
+                    UrbanLossContext copper_loss_context{};
                     // (touch accumulators live at history scope:
                     // beamline_ever_in_copper_hist / beamline_cu_true_path_hist_mm)
                     if(beamline_resume) {
@@ -306,7 +285,6 @@
                                 saved.energy_MeV=energy_MeV;saved.position_x_mm=position_x_mm;saved.position_y_mm=position_y_mm;saved.position_z_mm=position_z_mm;
                                 saved.direction_x=direction_x;saved.direction_y=direction_y;saved.direction_z=direction_z;
                                 saved.air_loss_MeV=beamline_air_loss_MeV;saved.air_urban_state=air_urban_state;saved.air_urban_step=air_urban_step;
-                                saved.air_ion_clock=air_ion_clock;saved.air_ion_threshold=air_ion_threshold;saved.air_ion_rate=air_ion_rate;
                                 saved.air_boundary=air_urban_boundary;saved.ever_in_copper=beamline_ever_in_copper_hist;
                                 saved.incident_energy_MeV=incident_beamline_energy;saved.air_loss_at_entry_MeV=air_loss_at_block_entry;saved.removed_energy_MeV=removed_energy;
                                 saved.beamline_step=beamline_step;saved.nuclear_tau_remaining=copper_nuclear_tau_remaining;saved.nuclear_tau_active=copper_nuclear_tau_active;
@@ -348,7 +326,6 @@
                                   0.5F * minibeam_slit_length,
                                   minibeam_slit_offset, nominal_path_step)
                             : nominal_path_step;
-                        const auto axial_step = path_step * direction_z;
                         const auto midpoint_x =
                             position_x_mm + 0.5F * path_step * direction_x;
                         const auto midpoint_y =
@@ -360,38 +337,18 @@
                             minibeam_slit_pitch, 0.5F * minibeam_slit_length,
                             minibeam_slit_offset);
                         if (!in_copper) {
-                            if (minibeam_air_urban) {
-                                UrbanV2SafetyCtx safety{}; safety.kind=0; safety.cu=urban_v2_geom;
-                                air_urban_boundary=air_urban_boundary || urban_v2_prev_in_cu;
-                                if (!advance_air(path_step,safety,air_slit_max_step)) break;
-                                ++beamline_step;
-                                urban_v2_prev_in_cu=false;
-                                continue;
-                            }
-                            position_x_mm += path_step * direction_x;
-                            position_y_mm += path_step * direction_y;
-                            position_z_mm += axial_step;
-                            const auto air_loss = sycl::fmin(
-                                energy_MeV,
-                                minibeam_linear_table(
-                                    minibeam_air_sp_energies_device,
-                                    minibeam_air_sp_values_device,
-                                    minibeam_air_sp_count,
-                                    energy_MeV * inverse_mass_number) *
-                                    path_step);
-                            energy_MeV -= air_loss;
-                            beamline_air_loss_MeV += air_loss;
-                            ++beamline_step;
-                            urban_v2_prev_in_cu = false;
-                            continue;
+                            UrbanV2SafetyCtx safety{};safety.kind=0;safety.cu=urban_v2_geom;
+                            air_urban_boundary=air_urban_boundary||urban_v2_prev_in_cu;
+                            if(!advance_air(path_step,safety,air_slit_max_step))break;
+                            ++beamline_step;urban_v2_prev_in_cu=false;continue;
                         }
                         if (minibeam_air_urban) { air_urban_boundary=true; beamline_ever_in_copper_hist=true; }
 
                         const auto energy_u = energy_MeV * inverse_mass_number;
-                        const auto stopping = minibeam_linear_table(
-                            minibeam_copper_sp_energies_device,
-                            minibeam_copper_sp_values_device,
-                            minibeam_copper_sp_count, energy_u);
+                        copper_loss_context = urban_device.at(
+                            urban_device.material(-2,minibeam_copper_density),
+                            urban_device.projectile(primary_atomic_number,primary_mass_number),energy_MeV);
+                        copper_loss_context.beamline_point = beamline_em.at(0,beamline_primary);
                         const auto rate_elastic_index = minibeam_elastic_nearest_bracketed(
                             minibeam_copper_elastic_device,
                             minibeam_copper_elastic_count, energy_u,
@@ -449,6 +406,7 @@
                                         urban_device.material(-2, minibeam_copper_density),
                                         urban_device.projectile(primary_atomic_number, primary_mass_number),
                                         energy_MeV);
+                                    copper_loss_context.beamline_point=beamline_em.at(0,beamline_primary);
                                 }
                                 correlated_scattering =
                                     copper_urban_v2_propose_and_sample(
@@ -536,90 +494,22 @@
                             correlated_scattering.displacement_mm.y;
                         position_z_mm += geom_advance_mm * direction_z +
                             correlated_scattering.displacement_mm.z;
-                        const auto predictor_loss = stopping * true_loss_path_mm;
-                        const auto midpoint_energy_u = sycl::fmax(
-                            0.0F, (energy_MeV - 0.5F * predictor_loss) *
-                                      inverse_mass_number);
-                        const auto midpoint_stopping =
-                            minibeam_linear_table(
-                                minibeam_copper_sp_energies_device,
-                                minibeam_copper_sp_values_device,
-                                minibeam_copper_sp_count, midpoint_energy_u);
-                        const auto mean_loss = midpoint_stopping * true_loss_path_mm;
-                        float native_restricted_mean = -1.0F;
-                        if (copper_primary_native_mean) {
-                            const auto context = copper_loss_context;
-                            if (!context.valid()) {
-                                urban_record_first_failure(minibeam_event_counts_device,
-                                    rng_history, beamline_step, 0U, 8);
-                                break;
-                            }
-                            const auto range = context.range(energy_MeV);
-                            if (true_loss_path_mm >= range) {
-                                // G4VEnergyLossProcess stops without fluctuating
-                                // when the accepted true path reaches its range.
-                                removed_energy += energy_MeV;
-                                energy_MeV = 0.0F;
-                                break;
-                            }
-                            native_restricted_mean = context.dedx(energy_MeV) * true_loss_path_mm;
-                            if (native_restricted_mean > 0.02F * energy_MeV) {
-                                const auto decrement = energy_MeV -
-                                    context.energy(range - true_loss_path_mm);
-                                if (decrement > 0.0F) native_restricted_mean = decrement;
-                            }
-                        }
-                        auto proposed_loss = mean_loss;
-                        // The native proton fluctuation below replaces this
-                        // Gaussian loss (or stops the run); its counter-based
-                        // draws 48/49 are not consumed by anything else.
-                        if (minibeam_copper_enable_energy_straggling &&
-                            !copper_native_fluctuations) {
-                            constexpr float copper_z_over_a_rel_water =
-                                (29.0F / 63.546F) / 0.55509F;
-                            const auto effective_charge =
-                                ion_effective_charge_device(primary_atomic_number, midpoint_energy_u);
-                            const auto variance =
-                                condensed_total_loss_variance_MeV2_device(
-                                    midpoint_energy_u, primary_mass_number, effective_charge,
-                                    true_loss_path_mm, minibeam_copper_density,
-                                    copper_z_over_a_rel_water);
-                            const auto gaussian_u0 = sycl::fmax(
-                                rng::uniform01(spot_seed, rng_history,
-                                               beamline_step, 48),
-                                1.0e-12F);
-                            const auto gaussian_u1 = rng::uniform01(
-                                spot_seed, rng_history, beamline_step, 49);
-                            constexpr float two_pi = 6.2831853071795864769F;
-                            const auto gaussian =
-                                sycl::sqrt(-2.0F * sycl::log(gaussian_u0)) *
-                                sycl::cos(two_pi * gaussian_u1);
-                            proposed_loss = sycl::fmax(
-                                0.0F, mean_loss + minibeam_copper_straggling_scale *
-                                    sycl::sqrt(sycl::fmax(0.0F, variance)) * gaussian);
-                        }
-                        if (minibeam_copper_enable_energy_straggling) {
-                            if (copper_native_fluctuations) {
-                                std::uint64_t draw_index = 0;
-                                auto uniform = [&]() { return (rng::random_u32(
-                                    spot_seed, rng_history, (std::uint64_t(beamline_step) << 32) | draw_index++, 124) >> 8) * 0x1p-24f; };
-                                const bool proton = primary_atomic_number == 1 && primary_mass_number == 1;
-                                const auto draw = sample_copper_fluctuation<
-                                          std::is_same_v<Pipeline,pipelines::ProtonMinibeam>>(
-                                        {energy_MeV, primary_rest_mass_MeV,
-                                         primary_atomic_number, primary_mass_number,
-                                         proton ? 1.f : copper_loss_context.factor,
-                                         native_restricted_mean>=0 ? native_restricted_mean : mean_loss,
-                                         true_loss_path_mm, minibeam_copper_density,
-                                         native_restricted_mean>=0 ? CopperMeanLoss::restricted : CopperMeanLoss::total,
-                                         true}, uniform);
-                                sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
-                                    sycl::memory_scope::device, sycl::access::address_space::global_space>(
-                                    minibeam_event_counts_device[draw.valid ? copper_proton_primary_loss_slot : copper_proton_loss_failure_slot]).fetch_add(1U);
-                                if (!draw.valid) break; // host rejects the entire run
-                                proposed_loss = draw.loss;
-                            }
-                        }
+                        const auto response=copper_loss_context.beamline_point;
+                        const auto range=response.range(energy_MeV);
+                        if(true_loss_path_mm>=range){removed_energy+=energy_MeV;energy_MeV=0;break;}
+                        const auto mean_loss=response.mean_loss(energy_MeV,true_loss_path_mm);
+                        std::uint64_t draw_index=0;
+                        auto uniform=[&](){return (rng::random_u32(spot_seed,rng_history,
+                            (std::uint64_t(beamline_step)<<32)|draw_index++,124)>>8)*0x1p-24f;};
+                        const auto draw=sample_beamline_fluctuation<
+                            std::is_same_v<Pipeline,pipelines::ProtonMinibeam>>(
+                            energy_MeV,primary_rest_mass_MeV,primary_atomic_number,primary_mass_number,
+                            mean_loss,true_loss_path_mm,response,minibeam_copper_enable_energy_straggling,uniform);
+                        sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,
+                            sycl::memory_scope::device,sycl::access::address_space::global_space>(
+                            minibeam_event_counts_device[draw.valid?copper_proton_primary_loss_slot:copper_proton_loss_failure_slot]).fetch_add(1U);
+                        if(!draw.valid)break;
+                        const auto proposed_loss=draw.loss;
                         if (proposed_loss >=
                             energy_MeV - energy_cutoff_MeV) {
                             removed_energy += energy_MeV;

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <array>
 namespace carbon {
-inline constexpr std::array<std::string_view,158> preset_keys{
+inline constexpr std::array<std::string_view,135> preset_keys{
     "LET",
     "letd_output_prefix",
     "letd_recoil_electronic_stopping_file",
@@ -27,7 +27,6 @@ inline constexpr std::array<std::string_view,158> preset_keys{
     "dose_to_medium_name",
     "dose_to_medium_type",
     "elastic_recoil_stopping_file",
-    "em_delta_moments_file",
     "em_package_file",
     "emittance_correlation_x",
     "emittance_correlation_y",
@@ -58,9 +57,8 @@ inline constexpr std::array<std::string_view,158> preset_keys{
     "maximum_relative_energy_loss",
     "maximum_step_mm",
     "minibeam",
-    "minibeam_air_ionization_rate_file",
+    "minibeam_em_package_file",
     "minibeam_air_slit_max_step_mm",
-    "minibeam_air_stopping_power_file",
     "minibeam_air_urban_package_file",
     "minibeam_collimator_angle_deg",
     "minibeam_collimator_center_to_isocenter_mm",
@@ -79,17 +77,11 @@ inline constexpr std::array<std::string_view,158> preset_keys{
     "minibeam_copper_fragment_enable_energy_straggling",
     "minibeam_copper_fragment_mcs_scale",
     "minibeam_copper_fragment_native_transport",
-    "minibeam_copper_fragment_straggling_scale",
     "minibeam_copper_inclxx_file",
     "minibeam_copper_ion_cross_section_file",
-    "minibeam_copper_ion_stopping_power_file",
     "minibeam_copper_max_step_mm",
     "minibeam_copper_mcs_scale",
-    "minibeam_copper_primary_native_mean_loss",
-    "minibeam_copper_straggling_model",
     "minibeam_copper_radiation_length_g_per_cm2",
-    "minibeam_copper_stopping_power_file",
-    "minibeam_copper_straggling_scale",
     "minibeam_primary_specialization",
     "minibeam_radius_mm",
     "minibeam_slit_count",

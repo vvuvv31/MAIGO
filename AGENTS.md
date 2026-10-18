@@ -10,13 +10,21 @@
   benchmark; do not report them as RT07575 head full-plan validation.
 - Explicit electron/photon transport and its packages are removed. Ionization
   energy is deposited locally in water/CT. Preserve EMCNT001 continuous26 ion
-  EM, aggregate delta loss, primary fluctuations and the current ionization
-  segmentation clock. Copper delta energy retains its beamline sink convention.
+  EM and its native unrestricted electronic stopping for water/CT total mean
+  loss, LET and consistent CSDA/Urban range/inverse. Medium fluctuations use
+  one native Universal/Ion draw with the full mean, unrestricted dispersion
+  and Tmax; no soft/delta partition, delta-moment sidecar or medium ionization
+  proposal clock. Preserve primary fluctuations and residual-range/mean-loss
+  stepping, with final-range termination and all geometry/nuclear limits.
+  Cu/air use BLEM0001 full electronic stopping, consistent CSDA/inverse
+  and native full dispersion with Tmax. No beamline hard-delta sampling or
+  ionization proposal clock remains. Beamline electronic loss is an explicit
+  energy sink. Extra recoils retain full electronic + nuclear ELRSP001 stopping
+  and its derived CSDA; electronic LET uses LERSP001.
   Water reference is Water_75eV (I=75 eV).
 - All eight defaults enable primary ion fluctuations and disable secondary
   energy-loss straggling. Minibeams retain Cu primary fluctuations and disable
-  Cu fragment restricted fluctuations; native carbon Cu hard-delta sampling
-  remains. RT07575 CT proton broadbeam/minibeam and carbon broadbeam have
+  Cu/air fragment full-loss fluctuations. No separate delta draw remains. RT07575 CT proton broadbeam/minibeam and carbon broadbeam have
   scoped paired validation; carbon minibeam is under verification. Ion step caps
   are forced to 1.0 mm broadbeam and 0.5 mm minibeam in water and CT.
   Minibeam copper is forced to 0.05 mm; these override YAML step-cap values.
@@ -49,13 +57,21 @@
   matched old baseline. Absolute TOPAS gamma is reported separately. Carbon
   minibeam dose accuracy remains deferred; runtime audits remain required.
 - The clean-repository regression is a matched GPU implementation check,
-  not new TOPAS acceptance. Explicit calibration approximations of continuous26
-  hard rates/conditional terminals remain unchanged.
+  not new TOPAS acceptance. Nuclear rate and conditional-final-state
+  calibrations remain unchanged. Stored continuous26 hard-rate coefficients
+  retain private host file-schema validation but do not enter GPU nodes,
+  interpolation or medium ionization steps. Keep disk-only wire types separate
+  from compact runtime views; discard validated unused spline/coefficient buffers.
 - Release configurations use `max_secondary_inelastic_generations` and
-  unified Cu fluctuations (`g4_delta`, primary parameters selected by ZA).
+  shared unrestricted Cu/air fluctuations (particle parameters selected by ZA).
+  Minibeams require `minibeam_em_package_file`; old finite-cut model/mean
+  selectors, straggling scales, Cu stopping-ratio CSV readers and air
+  ionization-rate keys are retired, with no compatibility aliases.
   Native Cu fragment transport has its own `minibeam_copper_fragment_native_transport`
   switch; do not select fragment packages or transport from the fluctuation model.
-  Preserve independently extracted native-fragment calibration, including H1.
+  Preserve independently extracted native-fragment scattering/elastic data.
+  Full fluctuation parameters use native material response and particle mass/ZA,
+  including H1; never reconstruct a restricted soft/hard split.
   Do not restore old species-named model aliases or retired scorer keys.
   YAML source identity requires explicit Z/A, energies use `initial_energy_MeVu`,
   and TPS CSV uses `energy_MeV,x_mm,y_mm,weight`. Urban loss/range/MFP uses only

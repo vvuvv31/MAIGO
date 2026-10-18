@@ -49,8 +49,8 @@ inline UrbanGlobalProposal urban_global_prepare(
     Direction3F position,Direction3F direction,UrbanVoxelCell cell,
     bool boundary,UrbanV2TrackState state,std::uint64_t seed,std::uint64_t history,
     std::uint64_t step,float actual_density=0.f,
-    const UnifiedEmPoint* ct_loss=nullptr,float ct_loss_factor=0.f,
-    bool ct_elastic_recoil=false) {
+    const UnifiedEmPoint* ct_loss=nullptr,
+    const BeamlineEmPoint* recoil_loss=nullptr) {
     UrbanGlobalProposal p{};p.state=state;p.cell=cell;p.position=position;p.direction=direction;p.energy=energy;
     UrbanLossContext context=view.at(material,ion,energy);
     if(!context.valid() || !cell.valid || !(true_ceiling>0))return p;
@@ -59,23 +59,18 @@ inline UrbanGlobalProposal urban_global_prepare(
     if(view.ct_density_scaling && m.section>=0) {
         if(!(actual_density>0) || !sycl::isfinite(actual_density))return p;
         density_ratio=actual_density/m.density;
-        // A fixed range cut changes the electron production threshold with
-        // density. Reuse continuous26's corrected restricted loss/range;
-        // linear density scaling remains correct for native MSC MFP/radlen.
-        if(ct_elastic_recoil) {
-            // Additional elastic-recoil isotopes use ELRSP001 stopping,
-            // not the continuous26 ion registry. Preserve their separate
-            // native Urban context; never substitute it for a missing
-            // continuous26 context of a supported transported ion.
-            context.factor*=density_ratio;
-        } else {
+        // Energy loss uses unrestricted continuous26 stopping/range;
+        // native MSC MFP/radlen retain their own linear density scaling.
+        if(recoil_loss)context.beamline_point=*recoil_loss;
+        else {
             if(!ct_loss)return p;
             context.ct_point=ct_loss;
-            context.ct_factor=ct_loss_factor;
         }
         context.density_ratio=density_ratio;
         if(!context.valid())return p;
     }
+    if (ct_loss) context.ct_point=ct_loss;
+    if (recoil_loss) context.beamline_point=*recoil_loss;
     p.material.loss_context=context;p.material.zeff=m.zeff;
     p.material.radlen_mm=m.radiation_length_mm/density_ratio;p.material.projectile_z=s.z;
     p.material.projectile_a=s.a;p.material.mass_mev=s.mass_mev;

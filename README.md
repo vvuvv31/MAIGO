@@ -417,23 +417,22 @@ bookkeeping are retained. See the
 
 Release presets retain primary energy-loss straggling and disable secondary
 straggling by default (`enable_secondary_energy_straggling: false`). Minibeams
-also disable restricted Cu fragment straggling; Cu primary fluctuations remain
-on. Native carbon Cu fragments retain hard-delta sampling. Scoped RT07575 CT
+also disable Cu/air fragment full-loss straggling; Cu/air primary fluctuations remain
+on. There is no separate hard-delta draw. Scoped RT07575 CT
 validation is recorded for proton broadbeam/minibeam and carbon broadbeam;
 **carbon minibeam is under verification**. This status does not establish
 water/other-patient acceptance. See [validation scope and measured effects](docs/secondary_straggling.md).
 
-The electron-off proton CT broadbeam primary uses a moment-matched Gamma for
-dense restricted-ionization tails; primary fluctuations remain on. Low-count
-tails and other pipelines retain explicit Poisson marks. See [scope and paired
-results](docs/proton_ct_broadbeam_dense_tail_gamma_20261013.md).
-For the combined CT broadbeam sampling, range-cache and recoil-loss changes,
-see the [direct throughput comparison and dose limits](docs/broadbeam_fluctuation_optimization_20261013.md).
+All implemented medium and Cu/air loss paths now use unrestricted stopping;
+fluctuating tracks use a single full Universal/Ion draw and
+range-based stepping. Earlier dense-tail Gamma and restricted-range performance
+reports describe historical implementations; see the [current model and checks](docs/unrestricted_dedx.md).
 Carbon CT broadbeam also precomputes elastic totals for primary and fragment
 species; see [scope, paired timings and validation limits](docs/carbon_broadbeam_elastic_totals_20261013.md).
-Electron-off proton/carbon CT minibeams now reuse actual CT material/range
-fields and analytic range inversion; elastic total caches cover proton primary
-and carbon primary/fragments. See [matched full-plan measurements and dose limits](docs/minibeam_ct_cache_optimization_20261013.md).
+Proton/carbon CT minibeams reuse exact actual-density material fields and
+elastic total caches for proton primary and carbon primary/fragments. Historical
+restricted-range optimization measurements are recorded in the
+[matched full-plan report](docs/minibeam_ct_cache_optimization_20261013.md).
 
 Each row has the matching `config/<preset>.yaml`. Default CT minibeams are lung
 benchmarks, **not RT07575 head full plans**. Broadbeam caps ion steps at 1.0 mm
@@ -441,9 +440,22 @@ and minibeam at 0.5 mm in both water and CT.
 Minibeam copper retains its separate 0.05 mm cap. All use continuous26 ion EM;
 ionization loss is deposited locally in the medium. Explicit electron/photon
 transport, birth/joint response packages, queues and configuration keys are
-removed. Continuous26 ion EM, primary fluctuations, aggregate delta loss and
-the ionization segmentation clock remain unchanged. Copper delta energy keeps
-its existing beamline sink convention. See [removal scope](docs/no_electron_transport_20261015.md).
+removed. Water/CT registered ions now use native unrestricted electronic dE/dx
+for total mean loss, LET, CSDA range and Urban loss queries. The range is derived
+from the existing continuous26 full-response nodes, with continuous actual-density
+corrections. Cu/air require the new full electronic response
+`data/stopping/beamline/unrestricted.bin` (`BLEM0001`, 324 species). Older asset
+archives need this package added; its extraction recipe is in
+[extensions/beamline_em](extensions/beamline_em/README.md). One Universal/Ion draw uses the full mean, unrestricted dispersion and the
+kinematic transfer limit Tmax. Medium stepping uses residual-range and mean-loss
+limits, without an electron-production-cut clock or delta-moment sidecar.
+Primary fluctuations remain enabled. The EMCNT001 reader validates the fixed
+disk layout, then retains compact runtime nodes/records/descriptors; unused
+restricted/rate fields and spline coefficients do not enter GPU loss queries.
+Generic recoils retain unrestricted electronic+nuclear total stopping and use a
+consistent derived CSDA. Cu/air electronic losses remain beamline energy sinks. See
+[unrestricted transport](docs/unrestricted_dedx.md) and
+[electron removal scope](docs/no_electron_transport_20261015.md).
 
 `src/main.cpp` handles startup, `cli.cpp` parses the small CLI, `run_session.cpp`
 owns source preparation/context reuse/output, `batch_run.cpp` allocates the
@@ -474,17 +486,16 @@ sampler: elastic and inelastic rates compete through one clock per track. Second
 continuation preserves the remaining depth and draw counter; the inelastic generation
 limit does not disable elastic scattering.
 
-All four minibeams select `minibeam_copper_straggling_model: g4_delta` and use one
-[shared Cu fluctuation engine](docs/copper_fluctuation_engine.md). Primary ZA
-selects proton or ion parameters; total/restricted mean-loss types remain explicit.
-`minibeam_copper_primary_native_mean_loss` independently selects the primary mean.
-`minibeam_copper_fragment_native_transport` independently selects native Cu
-fragment Urban and species elastic packages (carbon defaults: `true`; proton:
-`false`). Changing the primary fluctuation model does not select fragment
-transport or its packages. Native ion fragments retain their extracted
-calibration, including proton fragments. The two old species-named model values
-are removed; custom configurations must use `g4_delta` and the explicit fragment
-switch. Additional source species are not enabled.
+All four minibeams share an [unrestricted Cu/air fluctuation engine](docs/copper_fluctuation_engine.md).
+Particle identity and mass select Universal/Ion parameters; full native material
+response supplies the mean loss, variance and CSDA. Primary fluctuations remain
+on, fragment fluctuations default off. No finite-cut mean selector, separate
+hard-delta sampler or air ionization clock remains. The retired model, scale,
+mean and stopping-CSV keys are rejected, rather than mapped to old behavior.
+`minibeam_em_package_file` selects the required full response.
+`minibeam_copper_fragment_native_transport` independently selects Cu fragment
+Urban/species elastic transport (carbon defaults `true`; proton `false`).
+Source species remain proton/C12; charged fragment transport remains generic.
 See [Cu ion extraction and limits](extensions/copper_ion_transport/README.md).
 
 The data/inputs are local external assets and are excluded from Git. The

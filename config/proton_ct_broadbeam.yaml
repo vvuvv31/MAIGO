@@ -38,7 +38,6 @@ dose_to_medium_type: mhd
 dose_to_medium_name: dose
 LET: false
 device: cuda
-em_delta_moments_file: data/em/ions/delta_moments.bin
 em_package_file: data/em/ions/continuous26.bin
 enable_energy_straggling: true
 enable_secondary_energy_straggling: false

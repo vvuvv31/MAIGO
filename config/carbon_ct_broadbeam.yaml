@@ -53,7 +53,6 @@ ct_schneider_primary_rate_file: data/nuclear/schneider/carbon/inelastic_rates.bi
 ct_schneider_secondary_rate_file: data/nuclear/schneider/secondary/inelastic_rates.bin
 ct_schneider_secondary_cinel03_file: data/nuclear/schneider/secondary/final_states.bin
 ct_schneider_physics_bundle_file: data/nuclear/schneider/carbon/bundle.json
-em_delta_moments_file: data/em/ions/delta_moments.bin
 em_package_file: data/em/ions/continuous26.bin
 enable_energy_straggling: true
 enable_secondary_energy_straggling: false

@@ -1,7 +1,7 @@
 // Include contract: follows primary inside transport_pipeline<Pipeline>.
 // Drain charged-particle generations, including children appended by earlier
 // secondary generations. Grouping changes index order, never particle identity;
-// checkpoints retain pending dose, nuclear/ionization clocks and RNG counters.
+// checkpoints retain pending dose, shared nuclear optical depth and RNG counters.
 // Generation bounds distinguish already scheduled particles from new births.
     double secondary_kernel_seconds = 0.0;
     const bool segment_secondaries = config.secondary_step_chunking;
@@ -257,7 +257,6 @@
                                     transport_z,transport_a);
                               }())
                             : -1;
-                        UnifiedEmClock unified_secondary_clock;
                         std::uint64_t unified_secondary_counter=0;
                         // Diagnostic species profile: 20 slots x {steps,
                         // short-range steps, deposited uMeV}. Zero production
@@ -355,7 +354,6 @@
                             pending_sec_bin=saved.pending_sec_bin;
                             pending_sec_voxel=saved.pending_sec_voxel;
                             unified_secondary_counter=saved.unified_secondary_counter;
-                            unified_secondary_clock=saved.urban_ionization_clock;
                             unified_secondary_state=saved.unified_secondary_state;
                             unified_secondary_state.tables=&unified_device;
                             nuclear_tau_remaining=saved.nuclear_tau_remaining;
@@ -421,28 +419,23 @@
                                 unified_secondary_escaped_ct = true;
                                 break;
                             }
-                            auto recoil_linear_sp = [&](float energy_mevu) {
-                                const float value = recoil_stopping.stopping(
-                                    recoil_sp_idx, sec_in_ct ? sec_ct_material : 25, energy_mevu);
-                                if (!(value > 0.0F)) {
-                                    for (const int slot : {2, 6})
-                                        sycl::atomic_ref<std::uint32_t, sycl::memory_order::relaxed,
-                                            sycl::memory_scope::device, sycl::access::address_space::global_space>(
-                                            elastic_audit[slot]).fetch_add(1);
-                                    return -1.0F;
+                            BeamlineEmPoint recoil_loss{};
+                            float recoil_sp_at_start=0.f;
+                            if(generic_recoil) {
+                                recoil_loss=recoil_stopping.loss_point(recoil_sp_idx,
+                                    sec_in_ct?sec_ct_material:25,sec_local_density_g_per_cm3);
+                                recoil_sp_at_start=recoil_loss.dedx(sec_e);
+                                if(!(recoil_sp_at_start>0) || !sycl::isfinite(recoil_sp_at_start)) {
+                                    for(const int slot:{2,6})sycl::atomic_ref<std::uint32_t,
+                                        sycl::memory_order::relaxed,sycl::memory_scope::device,
+                                        sycl::access::address_space::global_space>(elastic_audit[slot]).fetch_add(1);
+                                    break;
                                 }
-                                return value * sec_local_density_g_per_cm3;
-                            };
-                            float recoil_sp_at_start = 0.0F;
-                            if (generic_recoil) {
-                                recoil_sp_at_start = recoil_linear_sp(sec_e_u);
-                                if (!(recoil_sp_at_start > 1.0e-6F)) break;
                             }
 
                             float sec_step_mm = maximum_step_mm;
                             UnifiedEmPointStep unified_secondary_pre;
                             UnifiedEmPoint unified_secondary_point;
-                            float unified_secondary_rate=0,unified_secondary_distance=std::numeric_limits<float>::infinity();
                             if(unified_secondary){
                                 const int section=(kProductionSecondaryPath ? true : enable_ct_grid)?(sec_in_ct?int(sec_ct_material):-2):-1;
                                 if(!unified_secondary_state.valid || unified_secondary_state.section!=section ||
@@ -451,24 +444,10 @@
                                 if(!unified_secondary_state.covers(sec_e)){
                                     record_unified_em_failure(unified_failure_count,unified_failure_records,3,section,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,0);
                                     unified_secondary_count(0);break;}
-                                if constexpr(kCarbonCtPointReuse) {
-                                    // Same-step view only; never retained across continuation.
-                                    unified_secondary_point=unified_secondary_state.point();
-                                    const auto point_pre=unified_secondary_point.template prepare<
-                                        true, true, true>(sec_e);
-                                    unified_secondary_pre=point_pre;
-                                } else unified_secondary_pre=unified_secondary_state.prepare(sec_e);
-                                if(sec_global_urban) {
-                                    unified_secondary_rate=unified_secondary_clock.update(unified_secondary_state,sec_e,
-                                        unified_secondary_pre.factor);
-                                    if(!unified_secondary_clock.clock.active)
-                                        unified_secondary_clock.clock.arm(-sycl::log(sycl::fmax(unified_secondary_uniform(),0x1p-24f)));
-                                    unified_secondary_distance=unified_secondary_clock.clock.distance(unified_secondary_rate);
-                                }
-                                sec_step_mm=sycl::fmin(unified_secondary_state.step(unified_secondary_pre),unified_secondary_distance);
-                                // Bound combined mean loss, not the old restricted range alone.
-                                const float delta_sp=unified_secondary_pre.delta_stopping;
-                                if(delta_sp>0) sec_step_mm=sycl::fmin(sec_step_mm,maximum_mean_loss_fraction*sec_e/sycl::fmax(1e-12f,delta_sp+unified_secondary_pre.stopping));
+                                unified_secondary_point=unified_secondary_state.point();
+                                unified_secondary_pre=unified_secondary_point.prepare(sec_e);
+                                sec_step_mm=unified_secondary_point.loss_step(sec_e,
+                                    unified_secondary_pre,maximum_mean_loss_fraction);
                             }
 
                             if constexpr(BroadBeam) if((kProductionSecondaryPath ? true : enable_ct_grid) && !sec_global_urban)
@@ -532,14 +511,13 @@
                                         voxel_bins_x,voxel_bins_y,number_of_bins,urban_water_half_width_mm);
                                 const auto view=urban_device;
                                 const int material=view.material(sec_in_ct?int(sec_ct_material):-1,sec_local_density_g_per_cm3);
-                                if(sec_in_ct && unified_secondary)unified_secondary_point=unified_secondary_state.point();
+                                if(unified_secondary)unified_secondary_point=unified_secondary_state.point();
                                 sec_urban_proposal=urban_global_prepare(view,material,sec_global_urban_ion,sec_e,
                                     sycl::fmin(sec_step_mm,maximum_step_mm),
                                     {sec_x,sec_y,sec_z},{sec_dx,sec_dy,sec_dz},cell,
                                     sec_global_urban_boundary,sec_urban_persist,2026,frag.rng_stream,sec_steps,
                                     sec_local_density_g_per_cm3,
-                                    sec_in_ct && unified_secondary?&unified_secondary_point:nullptr,
-                                    unified_secondary?unified_secondary_pre.factor:0.f,generic_recoil);
+                                    unified_secondary?&unified_secondary_point:nullptr,generic_recoil?&recoil_loss:nullptr);
                                 if(!sec_urban_proposal.valid) {
                                     record_unified_em_failure(unified_failure_count,unified_failure_records,100,
                                         sec_in_ct?int(sec_ct_material):-1,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
@@ -656,10 +634,6 @@
                             }
 
                             if(sec_global_urban) {
-                                if(unified_secondary) {
-                                    const bool ionization_proposal=sec_step_mm>=unified_secondary_distance;
-                                    unified_secondary_clock.clock.consume(sec_step_mm,unified_secondary_rate,ionization_proposal);
-                                }
                                 sec_urban_scattering=urban_global_finalize(sec_urban_proposal,sec_step_mm,2026,frag.rng_stream,sec_steps);
                                 const int reason=urban_step_field_reason(sec_urban_scattering);
                                 if(reason) {
@@ -677,14 +651,10 @@
 
                             float dE = 0.0F;
                             if (generic_recoil) {
-                                const auto mid_e_u = sycl::fmax(
-                                    recoil_stopping.energies[0],
-                                    (sec_e - 0.5F * recoil_sp_at_start * sec_step_mm) * frag_inv_a);
-                                const auto stopping=recoil_linear_sp(mid_e_u);
-                                if (!(stopping > 0.0F)) break;
-                                // Use the same isotope/material/unit-density
-                                // recoil package as the step-start limiter.
-                                dE = sycl::fmin(stopping * sec_step_mm, sec_e);
+                                dE=recoil_loss.mean_loss(sec_e,sec_step_mm);
+                                if(!(dE>=0) || !sycl::isfinite(dE)) {
+                                    unified_secondary_count(0);break;
+                                }
                             }
 
                             // CINEL02 packages are captured at hadronic PostStepDoIt:
@@ -697,7 +667,7 @@
                             if(unified_secondary && !(sec_global_urban && sec_urban_scattering.range_terminal)){
                                 auto draw=[&]() {
                                     if constexpr(kCarbonCtPointReuse)
-                                        return unified_em_explicit_loss<false,true>(unified_secondary_state,
+                                        return unified_em_loss<false,true>(unified_secondary_state,
                                             sec_e,sec_step_mm,enable_secondary_energy_straggling,
                                             unified_secondary_pre,unified_secondary_uniform,&unified_secondary_point);
                                     else return unified_em_loss(unified_secondary_state,sec_e,sec_step_mm,
@@ -705,9 +675,9 @@
                                 }();
                                 if(!draw.valid){
                                     record_unified_em_failure(unified_failure_count,unified_failure_records,40+static_cast<int>(draw.failure_stage),unified_secondary_state.section,transport_z,transport_a,sec_e,sec_local_density_g_per_cm3,sec_step_mm);
-                                    unified_secondary_count(0);unified_secondary_count(7);break;}
-                                dE=draw.loss;unified_secondary_count(2);unified_secondary_count(3,draw.proposed);unified_secondary_count(4,draw.accepted);
-                                unified_secondary_count(5,static_cast<std::uint64_t>(draw.continuous*1e6f));unified_secondary_count(6,static_cast<std::uint64_t>(draw.delta*1e6f));
+                                    unified_secondary_count(0);break;}
+                                dE=draw.loss;unified_secondary_count(2);
+                                unified_secondary_count(3,static_cast<std::uint64_t>(draw.loss*1e6f));
                             }
                             const auto post_em_e = sycl::fmax(0.0F, sec_e - dE);
                             if (let_numerator_device) {
@@ -1483,7 +1453,6 @@
                             saved.pending_sec_bin=pending_sec_bin;
                             saved.pending_sec_voxel=pending_sec_voxel;
                             saved.unified_secondary_counter=unified_secondary_counter;
-                            saved.urban_ionization_clock=unified_secondary_clock;
                             saved.unified_secondary_state=unified_secondary_state;
                             saved.nuclear_tau_remaining=nuclear_tau_remaining;
                             saved.nuclear_tau_active=nuclear_tau_active;

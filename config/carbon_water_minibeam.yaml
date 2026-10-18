@@ -55,25 +55,17 @@ minibeam_copper_radiation_length_g_per_cm2: 12.8628
 minibeam_copper_enable_mcs: true
 minibeam_copper_enable_elastic: true
 minibeam_copper_enable_energy_straggling: true
-minibeam_copper_straggling_model: g4_delta
-minibeam_copper_primary_native_mean_loss: true
 minibeam_copper_fragment_native_transport: true
-minibeam_copper_straggling_scale: 1.0
 minibeam_copper_mcs_scale: 1.0
 minibeam_copper_fragment_mcs_scale: 1.0
 minibeam_copper_fragment_enable_energy_straggling: false
-minibeam_copper_fragment_straggling_scale: 1.0
 minibeam_copper_fragment_cascade_generations: 3
 minibeam_copper_enable_nuclear_attenuation: true
-minibeam_copper_stopping_power_file: data/stopping/copper/carbon.csv
-minibeam_air_stopping_power_file: data/stopping/air/carbon.csv
 minibeam_copper_cross_section_file: data/nuclear/copper/carbon/primary_rate.csv
 minibeam_copper_elastic_file: data/elastic/copper/carbon/primary.csv
 minibeam_copper_inclxx_file: data/nuclear/copper/carbon/cascade.cinpkg
-minibeam_copper_ion_stopping_power_file: data/stopping/copper/ions_carbon.csv
 minibeam_copper_ion_cross_section_file: data/nuclear/copper/ion_cross_sections.csv
 em_package_file: data/em/ions/continuous26.bin
-em_delta_moments_file: data/em/ions/delta_moments.bin
 unified_water_material_file: data/materials/water/material.json
 ct_schneider_primary_rate_file: data/nuclear/schneider/carbon/inelastic_rates.bin
 ct_schneider_secondary_rate_file: data/nuclear/schneider/secondary/inelastic_rates.bin
@@ -108,3 +100,5 @@ urban_mcs_package_file: data/scattering/urban/ct_copper.bin
 urban_water_half_width_mm: 2000
 minibeam_copper_fragment_elastic_file: data/elastic/copper/carbon/fragments.csv
 minibeam_copper_fragment_urban_package_file: data/scattering/urban/copper_fragments.bin
+
+minibeam_em_package_file: data/stopping/beamline/unrestricted.bin

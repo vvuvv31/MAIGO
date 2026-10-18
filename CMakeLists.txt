@@ -35,7 +35,6 @@ add_library(carbon_core
     src/config.cpp
     src/cross_section.cpp
     src/ct_grid.cpp
-    src/delta_moments_data.cpp
     src/device.cpp
     src/inelastic_package_v3.cpp
     src/io.cpp
@@ -52,6 +51,7 @@ add_library(carbon_core
     src/transport_metrics.cpp
     src/transport_sycl.cpp
     src/unified_em_package.cpp
+    src/beamline_em.cpp
     src/urban_mcs_package.cpp
 )
 target_include_directories(carbon_core PUBLIC include PRIVATE src)

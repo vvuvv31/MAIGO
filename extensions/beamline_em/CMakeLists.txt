@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.22)
+project(BeamlineEmExtraction LANGUAGES CXX)
+find_package(Geant4 11.3.2 EXACT REQUIRED)
+include(${Geant4_USE_FILE})
+add_executable(extract extract.cpp)
+target_compile_features(extract PRIVATE cxx_std_20)
+target_link_libraries(extract PRIVATE ${Geant4_LIBRARIES})
