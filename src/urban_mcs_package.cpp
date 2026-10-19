@@ -6,6 +6,16 @@
 #include <stdexcept>
 
 namespace carbon {
+namespace {
+// URBANV22 disk ABI stays private and fully validated. Native loss splines
+// and factors are not the active unrestricted loss model in the runtime.
+struct DiskUrbanMcsRecord {
+    float mass_ratio, minimum_scaled_energy;
+    std::uint32_t node_offset, node_count, mfp_offset, mfp_count;
+    std::uint32_t offsets[3], counts[3];
+};
+static_assert(sizeof(DiskUrbanMcsRecord)==48);
+}
 UrbanMcsPackage UrbanMcsPackage::load(const std::filesystem::path& path) {
     std::ifstream stream(path,std::ios::binary);
     char magic[8];std::array<std::uint32_t,7> header{};
@@ -20,12 +30,14 @@ UrbanMcsPackage UrbanMcsPackage::load(const std::filesystem::path& path) {
     if(bytes!=std::filesystem::file_size(path) || bytes>4ULL*1024*1024*1024)
         throw std::runtime_error("Urban MSC package size is invalid");
     UrbanMcsPackage result;
-    result.materials.resize(nm);result.species.resize(ns);result.records.resize(nr);
-    result.nodes.resize(nn);result.mfps.resize(nf);result.segments.resize(ng);
+    result.materials.resize(nm);result.species.resize(ns);result.mfps.resize(nf);
+    std::vector<DiskUrbanMcsRecord> records(nr);
+    std::vector<UrbanMcsNode> nodes(nn);
+    std::vector<EmCubicSegmentCandidate<float>> segments(ng);
     auto read=[&](auto& v){stream.read(reinterpret_cast<char*>(v.data()),
         static_cast<std::streamsize>(v.size()*sizeof(v[0])));};
-    read(result.materials);read(result.species);read(result.records);
-    read(result.nodes);read(result.mfps);read(result.segments);
+    read(result.materials);read(result.species);read(records);
+    read(nodes);read(result.mfps);read(segments);
     if(!stream)throw std::runtime_error("Truncated Urban MSC package");
     std::set<std::pair<int,float>> material_keys;
     for(const auto& m:result.materials)
@@ -48,25 +60,58 @@ UrbanMcsPackage UrbanMcsPackage::load(const std::filesystem::path& path) {
                 throw std::runtime_error("Invalid Urban factor/MFP nodes");
         }
     };
-    for(const auto& r:result.records) {
+    for(const auto& r:records) {
         if(!(r.mass_ratio>0 && r.minimum_scaled_energy>0) ||
            !std::isfinite(r.mass_ratio+r.minimum_scaled_energy))
             throw std::runtime_error("Invalid Urban mass scaling");
-        check_nodes(result.nodes,r.node_offset,r.node_count);
+        check_nodes(nodes,r.node_offset,r.node_count);
         check_nodes(result.mfps,r.mfp_offset,r.mfp_count);
         for(unsigned k=0;k<3;++k) {
             if(!r.counts[k] || std::uint64_t(r.offsets[k])+r.counts[k]>ng)
                 throw std::runtime_error("Invalid Urban spline bounds");
             for(unsigned j=0;j<r.counts[k];++j) {
-                const auto& s=result.segments[r.offsets[k]+j];
+                const auto& s=segments[r.offsets[k]+j];
                 if(!(s.lower>0 && s.upper>s.lower && s.y0>0 && s.ythird>0 &&
                      s.ytwothirds>0 && s.y1>0) ||
                    !std::isfinite(s.lower+s.upper+s.y0+s.ythird+s.ytwothirds+s.y1) ||
-                   (j && s.lower!=result.segments[r.offsets[k]+j-1].upper))
+                   (j && s.lower!=segments[r.offsets[k]+j-1].upper))
                     throw std::runtime_error("Invalid Urban native spline interval");
             }
         }
     }
+    // Every factor and spline was checked above, even though the active
+    // unrestricted model no longer consumes either numerical payload.
+    // Certify that native FP32 factor interpolation is positive/finite for
+    // every finite energy inside its original support, not just at nodes.
+    // The 64-epsilon margin bounds subtraction/division/lerp roundoff; normal
+    // gaps avoid FTZ zero denominators. Unusual curves retain their exact
+    // original numerical guard instead of broadening accepted support.
+    result.records.reserve(records.size());
+    bool needs_native_guards=false;
+    for (const auto& r : records) {
+        const auto* begin=nodes.data()+r.node_offset;
+        float minimum=begin[0].value,maximum=minimum;
+        bool normal_gaps=true;
+        for (unsigned j=1;j<r.node_count;++j) {
+            minimum=std::min(minimum,begin[j].value);
+            maximum=std::max(maximum,begin[j].value);
+            normal_gaps=normal_gaps && begin[j].energy-begin[j-1].energy>=
+                std::numeric_limits<float>::min();
+        }
+        const bool certified=normal_gaps &&
+            minimum>=16.f*std::numeric_limits<float>::min() &&
+            maximum<=std::numeric_limits<float>::max()/8.f &&
+            minimum>64.f*std::numeric_limits<float>::epsilon()*maximum;
+        UrbanMcsRecord compact{begin[0].energy,begin[r.node_count-1].energy,
+            r.mfp_offset,r.mfp_count,0,0};
+        if (!certified) {
+            needs_native_guards=true;
+            compact.guard_offset=r.node_offset;
+            compact.guard_count=r.node_count;
+        }
+        result.records.push_back(compact);
+    }
+    if (needs_native_guards) result.factor_guards=std::move(nodes);
     return result;
 }
 } // namespace carbon

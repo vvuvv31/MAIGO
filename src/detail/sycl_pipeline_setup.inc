@@ -223,7 +223,8 @@
             queue.copy(values.data(),ptr,values.size()).wait_and_throw();return ptr;
         };
         urban_device={upload("materials",package.materials),upload("species",package.species),upload("records",package.records),
-            upload("nodes",package.nodes),upload("mfps",package.mfps),upload("segments",package.segments),
+            upload("mfps",package.mfps),
+            package.factor_guards.empty()?nullptr:upload("factor_guards",package.factor_guards),
             static_cast<unsigned>(package.materials.size()),static_cast<unsigned>(package.species.size())};
         urban_species_host=package.species;
         urban_device.ct_density_scaling=config.urban_ct_density_scaling;
@@ -255,8 +256,8 @@
             queue.copy(values.data(),ptr,values.size()).wait_and_throw();return ptr;
         };
         copper_fragment_urban_device={upload("materials",package.materials),upload("species",package.species),
-            upload("records",package.records),upload("nodes",package.nodes),upload("mfps",package.mfps),
-            upload("segments",package.segments),static_cast<unsigned>(package.materials.size()),static_cast<unsigned>(package.species.size())};
+            upload("records",package.records),upload("mfps",package.mfps),
+            package.factor_guards.empty()?nullptr:upload("factor_guards",package.factor_guards),static_cast<unsigned>(package.materials.size()),static_cast<unsigned>(package.species.size())};
         copper_fragment_species_host=package.species;
         std::cout<<"[copper-ion-packages] native_fragment_species="<<package.species.size()<<'\n';
     }
@@ -282,7 +283,8 @@
             queue.copy(values.data(),ptr,values.size()).wait_and_throw();return ptr;
         };
         air_urban_device={upload("materials",package.materials),upload("species",package.species),upload("records",package.records),
-            upload("nodes",package.nodes),upload("mfps",package.mfps),upload("segments",package.segments),
+            upload("mfps",package.mfps),
+            package.factor_guards.empty()?nullptr:upload("factor_guards",package.factor_guards),
             static_cast<unsigned>(package.materials.size()),static_cast<unsigned>(package.species.size())};
         std::cout << "[air-urban] primary beamline G4_AIR\n";
     }

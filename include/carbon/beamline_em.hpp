@@ -58,11 +58,14 @@ struct BeamlineEmPoint {
         return l.energy+linear_stopping_energy(float(path-ranges[lo]),l.stopping,
             (r.stopping-l.stopping)/(r.energy-l.energy));
     }
-    float mean_loss(float e,float path) const {
-        const float r=range(e);
+    // Only for an already validated same-energy/material Urban proposal.
+    float mean_loss_with_range(float e,float path,float r) const {
         if(path>=r)return e;
         const float loss=dedx(e)*path;
         return loss>.02f*e ? e-energy(r-path) : loss;
+    }
+    float mean_loss(float e,float path) const {
+        return mean_loss_with_range(e,path,range(e));
     }
 };
 struct BeamlineEmView {

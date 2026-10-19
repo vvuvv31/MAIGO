@@ -920,7 +920,8 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step_with_range(
     const float pre_step_range_mm,
     const std::uint64_t seed, const std::uint64_t history_id,
     const std::uint64_t outer_step,
-    const std::uint32_t segment_index) noexcept {
+    const std::uint32_t segment_index,
+    const float prepared_lambda_mm = -1.0F) noexcept {
     UrbanV2LimitProposal out{};
     // Fix C2: the MSC-domain RNG proof requires outer_step < 2^22 and
     // segment_index < 1024, so step_index = outer*1024+segment < 2^32.
@@ -933,11 +934,15 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step_with_range(
     if (!(t_input_true_mm > 0.0F) || !(epre_mev > 0.0F)) {
         return out;
     }
-    bool range_supported = false;
-    const float table_range = urban_v2_current_range_mm(
-        mat, epre_mev, range_supported);
+    // The shared orchestrator has just validated both same-energy values.
+    // Other callers retain the native checked lookup path. Never reuse a
+    // value across energy/material changes or transport steps.
+    bool range_supported = prepared_lambda_mm > 0.0F;
+    const float table_range = range_supported ? pre_step_range_mm :
+        urban_v2_current_range_mm(mat, epre_mev, range_supported);
     const float range = pre_step_range_mm;
-    const float lambda0 = urban_v2_transport_mfp(mat, epre_mev);
+    const float lambda0 = prepared_lambda_mm > 0.0F ? prepared_lambda_mm :
+        urban_v2_transport_mfp(mat, epre_mev);
     const float range_tolerance = 4.0F * urban_ulp_above(table_range);
     if (!range_supported || !(range > 0.0F) || !sycl::isfinite(range) ||
         sycl::fabs(range - table_range) > range_tolerance ||
@@ -1614,7 +1619,8 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
     const float t_ext = user_ceiling_mm;
     auto limit = copper_urban_v2_limit_step_with_range(
         t_ext, epre_mev, mat, safety_start, at_boundary, state,
-        pre_step_range, seed, history_id, outer_step, segment_index);
+        pre_step_range, seed, history_id, outer_step, segment_index,
+        lambda0_now);
     if (!limit.valid) {
         result.limit_reason = -105; return result;
     }

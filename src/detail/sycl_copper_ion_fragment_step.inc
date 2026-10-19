@@ -103,7 +103,7 @@ if (!f_in_copper) {
     f_y += f_scattering.final_geom_path_mm * f_direction.y + f_scattering.displacement_mm.y;
     f_z += f_scattering.final_geom_path_mm * f_direction.z + f_scattering.displacement_mm.z;
     if (f_terminal_tau) *f_terminal_tau += f_native_inelastic_rate * f_path;
-    const auto f_range = f_context.range(f_energy);
+    const auto f_range = f_scattering.current_range_mm;
     if (f_path >= f_range) { f_energy = 0; break; }
     auto f_mean = f_context.dedx(f_energy) * f_path;
     if (f_mean > 0.02F * f_energy) f_mean = f_energy - f_context.energy(f_range - f_path);

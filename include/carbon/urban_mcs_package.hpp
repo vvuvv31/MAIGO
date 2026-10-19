@@ -15,22 +15,21 @@ struct UrbanMcsMaterial {
 };
 struct UrbanMcsSpecies { std::uint32_t z, a; float mass_mev; };
 struct UrbanMcsRecord {
-    float mass_ratio, minimum_scaled_energy;
-    std::uint32_t node_offset, node_count, mfp_offset, mfp_count;
-    std::uint32_t offsets[3], counts[3]; // native DEDX, range, inverse range
+    float minimum_energy, maximum_energy; // exact native factor support
+    std::uint32_t mfp_offset, mfp_count;
+    std::uint32_t guard_offset, guard_count; // nonzero only for uncertified FP32 curves
 };
 struct UrbanMcsNode { float energy, value; };
 static_assert(sizeof(UrbanMcsMaterial)==20 && sizeof(UrbanMcsSpecies)==12);
-static_assert(sizeof(UrbanMcsRecord)==48 && sizeof(UrbanMcsNode)==8);
+static_assert(sizeof(UrbanMcsRecord)==24 && sizeof(UrbanMcsNode)==8);
 
-// One active step, with its dynamic charge/density factor held fixed across
-// all range, stopping and inverse queries, as in G4VEnergyLossProcess.
+// Native Urban supplies MSC and its exact energy-support contract only.
+// Unrestricted continuous26/BLEM/ELRSP supplies all electronic loss/range.
+// The discarded native factor is not a stopping/scattering correction here.
 struct UrbanMcsContext {
     const UrbanMcsRecord* record{};
-    const UrbanMcsNode* nodes{};
     const UrbanMcsNode* mfps{};
-    const EmCubicSegmentCandidate<float>* segments{};
-    float factor{};
+    bool energy_supported{};
     float density_ratio{1.f}; // actual/reference, fixed for the active step
     static float interpolate(const UrbanMcsNode* v,unsigned n,float e) {
         if(!v || n<2 || e<v[0].energy || e>v[n-1].energy)
@@ -40,7 +39,7 @@ struct UrbanMcsContext {
         float t=(e-v[lo].energy)/(v[hi].energy-v[lo].energy);
         return v[lo].value+t*(v[hi].value-v[lo].value);
     }
-    bool valid() const { return record && factor>0 && std::isfinite(factor) &&
+    bool valid() const { return record && energy_supported &&
         density_ratio>0 && std::isfinite(density_ratio); }
     float lambda(float energy_mev) const {
         return interpolate(mfps+record->mfp_offset,record->mfp_count,energy_mev)/density_ratio;
@@ -50,9 +49,8 @@ struct UrbanMcsView {
     const UrbanMcsMaterial* materials{};
     const UrbanMcsSpecies* species{};
     const UrbanMcsRecord* records{};
-    const UrbanMcsNode* nodes{};
     const UrbanMcsNode* mfps{};
-    const EmCubicSegmentCandidate<float>* segments{};
+    const UrbanMcsNode* factor_guards{};
     std::uint32_t material_count{}, species_count{};
     bool ct_density_scaling{false};
     int projectile(int z,int a) const {
@@ -83,8 +81,12 @@ struct UrbanMcsView {
     UrbanMcsContext at(int m,int ion,float energy) const {
         if(m<0 || ion<0 || unsigned(m)>=material_count || unsigned(ion)>=species_count)return {};
         auto* r=records+std::uint64_t(m)*species_count+ion;
-        const float f=UrbanMcsContext::interpolate(nodes+r->node_offset,r->node_count,energy);
-        return {r,nodes,mfps,segments,f};
+        bool supported=std::isfinite(energy) && energy>=r->minimum_energy && energy<=r->maximum_energy;
+        if (supported && r->guard_count) {
+            const float f=UrbanMcsContext::interpolate(factor_guards+r->guard_offset,r->guard_count,energy);
+            supported=f>0 && std::isfinite(f);
+        }
+        return {r,mfps,supported};
     }
 };
 class UrbanMcsPackage {
@@ -92,11 +94,10 @@ class UrbanMcsPackage {
     std::vector<UrbanMcsMaterial> materials;
     std::vector<UrbanMcsSpecies> species;
     std::vector<UrbanMcsRecord> records;
-    std::vector<UrbanMcsNode> nodes,mfps;
-    std::vector<EmCubicSegmentCandidate<float>> segments;
+    std::vector<UrbanMcsNode> mfps,factor_guards;
     static UrbanMcsPackage load(const std::filesystem::path&);
     UrbanMcsView view() const {
-        return {materials.data(),species.data(),records.data(),nodes.data(),mfps.data(),segments.data(),
+        return {materials.data(),species.data(),records.data(),mfps.data(),factor_guards.data(),
             static_cast<std::uint32_t>(materials.size()),static_cast<std::uint32_t>(species.size())};
     }
 };

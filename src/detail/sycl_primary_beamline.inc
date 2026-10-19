@@ -176,7 +176,8 @@
                     direction_x=step.direction.x; direction_y=step.direction.y; direction_z=step.direction.z;
                     air_urban_boundary=step.boundary_crossed;
                     const auto response=material.loss_context.beamline_point;
-                    const auto mean=response.mean_loss(energy_MeV,step.final_true_path_mm);
+                    const auto mean=response.mean_loss_with_range(energy_MeV,
+                        step.final_true_path_mm,step.current_range_mm);
                     std::uint64_t draw_index=0;
                     auto uniform=[&](){return (rng::random_u32(spot_seed ^ 0xA17B09D5C628E341ULL,
                         rng_history,(air_urban_step<<32)|draw_index++,124)>>8)*0x1p-24f;};
@@ -495,9 +496,11 @@
                         position_z_mm += geom_advance_mm * direction_z +
                             correlated_scattering.displacement_mm.z;
                         const auto response=copper_loss_context.beamline_point;
-                        const auto range=response.range(energy_MeV);
+                        const auto range=urban_v2_proposal ? correlated_scattering.current_range_mm :
+                            response.range(energy_MeV);
                         if(true_loss_path_mm>=range){removed_energy+=energy_MeV;energy_MeV=0;break;}
-                        const auto mean_loss=response.mean_loss(energy_MeV,true_loss_path_mm);
+                        const auto mean_loss=response.mean_loss_with_range(
+                            energy_MeV,true_loss_path_mm,range);
                         std::uint64_t draw_index=0;
                         auto uniform=[&](){return (rng::random_u32(spot_seed,rng_history,
                             (std::uint64_t(beamline_step)<<32)|draw_index++,124)>>8)*0x1p-24f;};
