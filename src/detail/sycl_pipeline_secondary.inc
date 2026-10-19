@@ -106,6 +106,12 @@
                                                         unsigned active_size) {
                 constexpr bool kProductionSecondaryPath =
                     decltype(production_path_tag)::value;
+                // Dedicated CT minibeams use segmented FE for patient charged
+                // secondaries. Primary and Cu/air workers retain their models;
+                // water and generic medium workers retain their Urban route.
+                constexpr bool kMinibeamSecondaryFe = !BroadBeam &&
+                    (std::is_same_v<Pipeline, pipelines::ProtonMinibeam> ||
+                     std::is_same_v<Pipeline, pipelines::CarbonMinibeam>);
                 constexpr bool kCarbonCtPointReuse = kProductionSecondaryPath &&
                     std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>;
                 constexpr bool kCachedElasticTotals = kCarbonCtPointReuse ||
@@ -280,7 +286,8 @@
                         UrbanV2TrackState sec_urban_persist{};
                         bool sec_urban_born = true;
                         bool sec_global_urban_boundary=true;
-                        const bool sec_global_urban=!BroadBeam && global_urban;
+                        const bool sec_global_urban=!BroadBeam && global_urban &&
+                            !(kMinibeamSecondaryFe && enable_ct_grid);
                         const int sec_global_urban_ion=sec_global_urban?
                             urban_device.projectile(transport_z,transport_a):-1;
                         std::uint64_t local_sec_rate_queries = 0;
@@ -450,7 +457,9 @@
                                     unified_secondary_pre,maximum_mean_loss_fraction);
                             }
 
-                            if constexpr(BroadBeam) if((kProductionSecondaryPath ? true : enable_ct_grid) && !sec_global_urban)
+                            // Urban enforces the cap internally. FE must keep the
+                            // same outer cap as well as its scattering subsegments.
+                            if constexpr(BroadBeam || kMinibeamSecondaryFe) if((kProductionSecondaryPath ? true : enable_ct_grid) && !sec_global_urban)
                                 sec_step_mm=sycl::fmin(sec_step_mm,maximum_step_mm);
 
                             bool depth_boundary_limited = false;

@@ -1159,8 +1159,8 @@
         ? schneider_ct_device_ctx.water_radiation_length_g_cm2 : water_radiation_length_g_per_cm2;
     const auto enable_multiple_scattering = BroadBeam || config.enable_multiple_scattering;
     const auto enable_ct_material_mcs = config.enable_ct_material_mcs;
-    // Fermi-Eyges MCS applies to every charged ion with species-water
-    // parameters; otherwise global Urban v2 handles all charged ions.
+    // Primary MCS selection. Dedicated CT minibeam medium secondaries
+    // select shared FE independently in the secondary phase.
     const bool primary_fermi_eyges =
         BroadBeam || config.multiple_scattering_model == "fermi_eyges";
     const bool fe_gaussian_only=config.fermi_eyges_gaussian_only;

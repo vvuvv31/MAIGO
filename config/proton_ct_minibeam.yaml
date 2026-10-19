@@ -12,6 +12,7 @@ maximum_relative_energy_loss: 0.005
 energy_cutoff_MeV: 0.1
 enable_voxel_scoring: true
 enable_multiple_scattering: true
+# Patient primary model; dedicated CT medium secondaries use segmented FE.
 multiple_scattering_model: urban_v2
 fermi_eyges_max_segment_mm: 0.1
 enable_inelastic: true

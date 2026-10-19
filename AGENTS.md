@@ -33,7 +33,13 @@
   projectile-specific all-ion elastic and recoil stopping packages. All four
   minibeams also enable copper-collimator nuclear elastic scattering.
 - All four minibeams use fixed compact scheduling, with no scheduler selector
-  configuration key. Carbon water retains its TPS CSV
+  configuration key. Dedicated proton/carbon CT minibeams use Urban for
+  patient primaries and shared segmented FE for patient-medium charged
+  secondaries, including upstream products after patient entry. Preserve the
+  0.5 mm outer cap and configured FE segment limit (release default 0.1 mm).
+  Copper/air workers keep their existing scattering models; water and generic
+  minibeam medium workers retain Urban. This is a release default, not an
+  experimental CMake/YAML switch. Carbon water retains its TPS CSV
   source, emittance and generic Urban water medium kernel. Preserve physical/
   source behavior in refactors. Generic charged fragment species are required.
 - Continuous batches reuse one GPU context/packages. Allocate plan weights

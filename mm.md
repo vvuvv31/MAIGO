@@ -92,16 +92,17 @@ The electromagnetic proposal competes with the maximum step, material and scorin
 | Transport region | Maximum ion step | Principal scattering treatment |
 |---|---:|---|
 | Water/CT broadbeam | 1.0 mm | Gaussian Fermi–Eyges |
-| Water/CT minibeam | 0.5 mm | Urban data-driven transport |
+| CT minibeam | 0.5 mm | Urban primaries; segmented Fermi–Eyges charged secondaries |
+| Water minibeam | 0.5 mm | Urban data-driven transport |
 | Minibeam copper collimator | 0.05 mm | Copper-specific Urban and nuclear elastic scattering |
 
 These engine-enforced step caps are distinct from TOPAS secondary-production range cuts and ion termination energies. Slit air in CT carbon minibeams has a separate 0.2 mm cap; other air regions follow their respective input limits and boundary handling.
 
 Continuous losses are assigned to the traversed source voxel, while nuclear-vertex deposits use the collision location. Tracks reaching the patient-grid boundary are recorded as escaped; exterior energy is not deposited in a clamped edge voxel. The standard total-kinetic-energy termination threshold is 0.1 MeV. Residual kinetic energy at an in-medium termination is deposited locally, with a separate distinction from finite-path LET scoring. There is no electron-production-cut ionization clock.
 
-### II.B.4. Broadbeam multiple Coulomb scattering
+### II.B.4. Fermi–Eyges multiple Coulomb scattering
 
-Broadbeam scattering uses a Gaussian Fermi–Eyges approximation[9]. For one transverse axis, angular deflection \(\theta\) and lateral displacement y are sampled jointly. For a segment of length L and constant local scattering power \(\mathcal T\), their covariance is
+Broadbeam scattering uses a Gaussian Fermi–Eyges approximation[9]. Dedicated CT minibeams also use the shared segmented Fermi–Eyges operator for patient-medium charged secondaries, with their configured tail treatment, while retaining Urban for patient primaries. This includes charged products entering the patient from upstream; their preceding copper/air transport retains its own scattering model. For one transverse axis, angular deflection \(\theta\) and lateral displacement y are sampled jointly. For a segment of length L and constant local scattering power \(\mathcal T\), their covariance is
 
 \[
  \begin{pmatrix}
@@ -189,7 +190,7 @@ Upstream transport includes directly transmitted primaries, primaries scattered 
 
 ### II.C.2. Urban scattering and true-to-geometric path conversion
 
-Minibeam patient transport and upstream primary transport use material- and species-dependent Urban scattering data. Inputs include the transport mean free path, radiation length, and angular-distribution parameters, together with the current unrestricted range. In CT, the electronic response is evaluated at the actual density, while scattering mean free paths and radiation lengths retain their own density scaling. Additional recoil isotopes use their matched total-stopping context. The water or CT ion stopping response is not replaced by copper data when a track passes between these regions.
+Minibeam patient primaries and upstream primaries use material- and species-dependent Urban scattering data. Water and generic minibeam patient-medium secondaries retain Urban, whereas dedicated CT minibeam patient-medium charged secondaries use segmented Fermi–Eyges with a 0.5 mm outer step cap and a separate 0.1 mm release-default scattering segment limit. Inputs to Urban include the transport mean free path, radiation length, and angular-distribution parameters, together with the current unrestricted range. In CT, the electronic response is evaluated at the actual density, while scattering mean free paths and radiation lengths retain their own density scaling. Additional recoil isotopes use their matched total-stopping context. The water or CT ion stopping response is not replaced by copper data when a track passes between these regions.
 
 Urban transport accounts for the difference between the microscopic true path \(\ell\) and the geometric advance g. In the constant-transport-mean-free-path limit,
 
@@ -216,7 +217,7 @@ Copper nuclear elastic scattering is enabled in all four minibeam configurations
 
 Copper inelastic events are drawn from the copper-specific correlated library, with its exact projectile/target lookup and energy-node selection. Direct charged products and recorded charged continuations are followed through the remaining copper and air; their directions share the event rotation. Subsequent copper reactions are limited by a separate upstream generation limit, set to three in the standard minibeam configurations. Existing particles continue electromagnetic transport when further inelastic branching is suppressed. Copper-local deposits, neutral products, and remaining untracked reaction energy stay in the beamline balance.
 
-Carbon minibeams use independently extracted, species-resolved Urban and elastic data for copper fragments. The proton minibeam upstream-fragment path instead retains its Highland-based angular update; it is not silently identified with the carbon native-fragment path. Both use unrestricted electronic loss and retain their configured inelastic continuation. This distinction concerns copper-born products and does not change the common Urban transport of registered charged ions within the patient.
+Carbon minibeams use independently extracted, species-resolved Urban and elastic data for copper fragments. The proton minibeam upstream-fragment path instead retains its Highland-based angular update; it is not silently identified with the carbon native-fragment path. Both use unrestricted electronic loss and retain their configured inelastic continuation. This distinction concerns transport before patient entry. After entry, dedicated CT minibeams use Urban for primaries and the shared segmented Fermi–Eyges operator for charged secondaries.
 
 Energy loss, Coulomb scattering, nuclear elastic scattering, and inelastic fragmentation jointly produce the patient-entry distribution. The full joint position–direction–energy–species state is passed downstream. Consequently, particles scattered out of copper and surviving charged reaction products can contribute to the patient dose, while purely geometric slit transmission is insufficient to represent the upstream model. No electron, neutral-particle, or unmodeled decay transport is implied by this charged-particle handoff.
 

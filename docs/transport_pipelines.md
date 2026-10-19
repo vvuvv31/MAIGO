@@ -31,8 +31,16 @@ Policies own primary workgroup size, default history chunk selection, secondary
 segment length and tail threshold. Broadbeam policies also select their
 projectile-specific CT primary stage. Explicit YAML history chunks remain
 strictly authoritative. CT and water continue to select the existing medium
-implementation and package behavior within each pipeline; the selector changes implementation, not the physical profile. Unknown values
+implementation and package behavior within each pipeline. The CT minibeam
+secondary scattering policy is described below. Unknown values
 and source/beam-mode mismatches are rejected before transport.
+
+Dedicated proton/carbon CT minibeams additionally select segmented FE for
+patient-medium charged secondaries, with Urban retained for primaries. Water
+and generic minibeams retain their existing Urban medium route. Thus selecting
+`generic` is not physically equivalent to a dedicated CT minibeam's secondary
+scattering policy. Copper/air transport is independent of this medium policy.
+See [the adopted policy and full-plan comparisons](ct_minibeam_secondary_fe.md).
 
 Custom configurations may omit `transport_pipeline` or set it to `generic`.
 Copies of a release YAML retain its explicit dedicated selection; remove that
@@ -76,8 +84,11 @@ that pipeline and call it from the corresponding shared phase. Medium-specific
 workgroup selection can be tuned in `primary_workgroup(ct)`. Do not specialize
 the secondary species to the source or duplicate shared physics tables.
 
-Validate shared changes using `scripts/validate_presets.py` against a frozen
-pre-change binary and all eight defaults. Matched source allocation, seeds,
+Validate shared implementation changes using `scripts/validate_presets.py`
+against a frozen binary with the same physical models and all eight defaults.
+For adoption of a changed model, compare its integrated implementation with
+the validated research implementation; assess model differences separately
+using matched full-plan dose comparisons. Matched source allocation, seeds,
 discrete audits, dose, energy, EM coverage, completion and zero overflow must
 pass. Performance work additionally requires independent continuous-batch
 comparisons after reading `failed.md`; smoke/regression timing is not a

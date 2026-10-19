@@ -76,7 +76,9 @@ RT07575 头部原优化完整计划：proton 487 spots、carbon 400 spots（90°
 
 ## 合并到 clean 与完整构建检查
 
-2026-10-19 将接受的同步长查询复用、紧凑 Urban 运行时视图与现有离线因子校验工具选择性合并到 clean。CMake FE 实验选项和次级 FE 输运代码未合并；主/次级仍采用原 Urban，所有 YAML、物理开关、源与步长设置不变。
+2026-10-19 将接受的同步长查询复用、紧凑 Urban 运行时视图与现有离线因子校验工具选择性合并到 clean。该次合并未包含 CMake FE 实验选项和次级 FE 输运代码，主/次级仍采用原 Urban，所有 YAML、物理开关、源与步长设置不变。
+
+后续在完整计划高统计量比较后，另行采用了专用 CT 微束患者带电次级 FE 默认路径，见 [采用范围与对照](ct_minibeam_secondary_fe.md)。本页的计时和零 gamma 变化仍描述此前全 Urban 查询／运行时视图优化，不代表 FE 模型切换的结果。
 
 从合并前 git 快照重新构建全五管线基线，与合并后的完整 Release 程序直接匹配检查。显式 sm_75 AOT，所有 GPU 执行 CUDA_DISABLE_PTX_JIT=1；现有 `build/carbon_mc` 已更新。八个发布预设，以及 generic 质子 CT 宽束/微束、碳 CT/水微束，每配置每版连续两批、每批 20,000 histories 全部通过，共 960,000 histories。这是低统计量实现回归，不重新声称吞吐或 TOPAS 验收。
 

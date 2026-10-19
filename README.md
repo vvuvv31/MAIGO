@@ -393,8 +393,18 @@ Pipeline layout is documented in [transport pipelines](docs/transport_pipelines.
 | carbon_ct_broadbeam | RT07575 head TPS CSV → Gaussian FE → C12 CT kernel | Same policy |
 | proton_water_minibeam | Flat source → compact copper/air → Urban water | Local deposition; nuclear neutrals untracked |
 | carbon_water_minibeam | TPS CSV → compact copper/air → Urban water | Local deposition |
-| proton_ct_minibeam | Flat source → compact copper/air → Urban proton CT | Local deposition |
-| carbon_ct_minibeam | Flat source → compact copper/air → Urban CT | Local deposition; dose accuracy deferred |
+| proton_ct_minibeam | Flat source → compact copper/air → Urban primary / FE charged secondaries in CT | Local deposition |
+| carbon_ct_minibeam | Flat source → compact copper/air → Urban primary / FE charged secondaries in CT | Local deposition; dose accuracy deferred |
+
+Dedicated CT minibeams use Urban for patient primaries and segmented
+Fermi–Eyges (FE) for patient-medium charged secondaries, including charged
+products entering from upstream. The patient step cap remains 0.5 mm; FE
+subsegments follow `fermi_eyges_max_segment_mm` (release default 0.1 mm),
+with the existing FE tail treatment. Copper/air workers keep their existing
+scattering models; water and generic minibeam medium workers retain Urban.
+The YAML `multiple_scattering_model: urban_v2` therefore describes the CT
+minibeam primary model, not the secondary model. See the
+[full-plan comparisons and adoption scope](docs/ct_minibeam_secondary_fe.md).
 
 Ion step caps are forced during configuration loading: **broadbeam 1.0 mm**,
 **minibeam 0.5 mm**, and **minibeam copper 0.05 mm**, for both water and CT.
