@@ -242,8 +242,12 @@ struct UnifiedEmPoint {
         const float first=pre.stopping*length;
         if (first>record->linear_limit*kinetic)
             return std::clamp(kinetic-unrestricted_energy(pre.range-length), 0.f, kinetic);
-        // Midpoint integration of total electronic stopping. Range inversion
-        // handles the larger finite-loss steps and the stopping endpoint.
+        // G4VEnergyLossProcess uses step-start stopping below linear_limit
+        // for non-ion models (including protons). A midpoint query here shifts
+        // the finite-step mean and accumulates a depth bias in heterogeneous CT.
+        if (record->is_ion == 0.f) return std::min(kinetic, first);
+        // Ion models retain their charge-dependent midpoint response.
+        // Larger losses and the stopping endpoint use range inversion above.
         const float mid=std::max(.5f*kinetic,kinetic-.5f*first);
         return std::min(kinetic,unrestricted_electronic_stopping(mid)*length);
     }

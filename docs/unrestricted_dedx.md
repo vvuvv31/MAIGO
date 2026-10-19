@@ -9,8 +9,14 @@ Medium ionization segmentation is replaced by unrestricted range-based stepping.
 
 ## Mean and fluctuations
 
-A segment has one total mean electronic loss. Water/CT small losses use a midpoint
-stopping evaluation; larger losses use residual CSDA range inversion. Cu/air
+A segment has one total mean electronic loss. For water/CT, non-ion models
+(including protons) use step-start unrestricted stopping when the first-order
+loss does not exceed the record's native `linear_limit`. Ion models retain
+their charge-dependent midpoint evaluation in that branch. Both use residual
+unrestricted CSDA range inversion above `linear_limit`, and deposit the remaining
+kinetic energy at the range endpoint. The non-ion/ion distinction is the
+package's Geant4 model flag, not the particle's electric charge or CT density.
+Cu/air
 use step-start full stopping for losses up to 2% of kinetic energy and the
 full-range inverse for larger losses.
 One shared Universal/Ion sampler receives that full mean and the kinematic
