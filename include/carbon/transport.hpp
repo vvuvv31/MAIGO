@@ -416,7 +416,6 @@ struct SchneiderUnsupportedTrack {
 static_assert(sizeof(SchneiderUnsupportedTrack) == 24, "unsupported-track layout");
 
 struct TransportResult {
-    bool conditional_copper_response_enabled{false};
     // True only when the dedicated local-electron CT proton primary ran.
     bool ct_broadbeam_step_cap_enabled{false};
 

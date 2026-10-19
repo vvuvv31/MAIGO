@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <array>
 namespace carbon {
-inline constexpr std::array<std::string_view,135> preset_keys{
+inline constexpr std::array<std::string_view,137> preset_keys{
     "LET",
     "letd_output_prefix",
     "letd_recoil_electronic_stopping_file",
@@ -94,7 +94,9 @@ inline constexpr std::array<std::string_view,135> preset_keys{
     "nuclear_model",
     "number_of_histories",
     "primary_atomic_number",
+    "primary_kinematic_mass_MeV",
     "primary_mass_number",
+    "primary_nuclear_mass_MeV",
     "primary_stopping_power_file",
     "random_seed",
     "run_mode",

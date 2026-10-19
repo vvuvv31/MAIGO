@@ -226,17 +226,9 @@
             constexpr bool kMinibeamCtCache =
                 (std::is_same_v<Pipeline, pipelines::ProtonMinibeam> ||
                  std::is_same_v<Pipeline, pipelines::CarbonMinibeam>);
-            constexpr bool kSharedCtCell =
-                kKernelStage == primary_stage::carbon_ct_shared_cell ||
-                kKernelStage == primary_stage::proton_ct_shared_cell_begin ||
-                kKernelStage == primary_stage::proton_ct_shared_cell_resume;
-            constexpr bool kLocalProtonCtPath =
-                kKernelStage == primary_stage::proton_ct ||
-                kKernelStage == primary_stage::proton_ct_shared_cell_begin ||
-                kKernelStage == primary_stage::proton_ct_shared_cell_resume;
-            constexpr bool kLocalCarbonCtPath =
-                kKernelStage == primary_stage::carbon_ct ||
-                kKernelStage == primary_stage::carbon_ct_shared_cell;
+            constexpr bool kSharedCtCell = primary_stage::uses_shared_ct_cell(kKernelStage);
+            constexpr bool kLocalProtonCtPath = primary_stage::is_proton_ct(kKernelStage);
+            constexpr bool kLocalCarbonCtPath = primary_stage::is_carbon_ct(kKernelStage);
             constexpr bool kSpecializedCtPath = kLocalProtonCtPath || kLocalCarbonCtPath;
             constexpr bool kPrimaryElasticTotals =
                 kLocalProtonCtPath ||
@@ -249,18 +241,9 @@
             constexpr int kFoldZ = kLocalProtonCtPath ? 1 : kLocalCarbonCtPath ? 6 : 0;
             constexpr int kFoldA = kLocalProtonCtPath ? 1 : kLocalCarbonCtPath ? 12 : 0;
             static_assert(!kBroadBeamCtPath || BroadBeam);
-            constexpr bool kContinuation =
-                kKernelStage == primary_stage::minibeam_ct_begin ||
-                kKernelStage == primary_stage::minibeam_ct_resume ||
-                kKernelStage == primary_stage::proton_ct_shared_cell_begin ||
-                kKernelStage == primary_stage::proton_ct_shared_cell_resume;
-            constexpr bool kResume = kKernelStage == primary_stage::minibeam_ct_resume ||
-                                     kKernelStage == primary_stage::proton_ct_shared_cell_resume;
-            constexpr int kPrimaryStage = (kContinuation && !BroadBeam) ? primary_stage::medium
-                                          : kKernelStage == primary_stage::beamline_queued_children
-                                              ? primary_stage::beamline
-                                          : kBroadBeamCtPath ? primary_stage::full_transport
-                                                             : kKernelStage;
+            constexpr bool kContinuation = primary_stage::is_continuation(kKernelStage);
+            constexpr bool kResume = primary_stage::is_resume(kKernelStage);
+            constexpr int kPrimaryStage = primary_stage::transport_body(kKernelStage, BroadBeam);
             constexpr bool kUniformWaterPrimaryPath = decltype(uniform_water_path_tag)::value;
             // Host eligibility requires global Urban for every split beamline.
             // Downstream CT material handling must not select upstream physics.
@@ -366,8 +349,8 @@
                 };
                 std::uint64_t local_schneider_rate_queries = 0;
                 std::uint32_t steps = 0;
-                // Research-only water Urban state (one fMinimal track per
-                // primary history; first water segment starts at a boundary).
+                // Persistent Urban state per primary. Keep the step limiter
+                // across physical steps; an entering track starts at a boundary.
                 UrbanV2TrackState global_urban_state{};
                 bool global_urban_boundary=true;
                 const int global_urban_ion=(kUniformWaterPrimaryPath || global_urban)?urban_device.projectile(primary_atomic_number,primary_mass_number):-1;
@@ -847,11 +830,9 @@
                                     (enable_ct_material_mcs),
                                     water_radiation_length_g_per_cm2));
                         }
-                        // Generic primary FE path. Yields to the minibeam water
-                        // branch below when a non-legacy minibeam primary
-                        // model is selected (FE-tail or Urban v2); otherwise
-                        // the minibeam branch would be dead code whenever the
-                        // generic fermi_eyges model is on.
+                        // Urban has already sampled the accepted step; reuse
+                        // that endpoint. The FE branch samples its own endpoint
+                        // only when the primary is not on the Urban route.
                         if((kUniformWaterPrimaryPath || global_urban)) {
                             direction_x=global_urban_scattering.direction.x;
                             direction_y=global_urban_scattering.direction.y;
@@ -861,8 +842,6 @@
                             urban_global_count(urban_step_counts,global_urban_ion,false);
                         } else if (primary_fermi_eyges
                         ) {
-                            auto observation_path_mm = -1.0F;
-
                             const auto correlated =
                                 ion_fermi_eyges_transport_step(
                                     Direction3F{direction_x, direction_y,
@@ -874,7 +853,7 @@
                                     radiation_length_g_per_cm2, spot_seed,
                                     rng_history,
                                     static_cast<std::uint64_t>(steps), 40U,
-                                    observation_path_mm, primary_fe_mass_per_u, fe_gaussian_only);
+                                    primary_fe_mass_per_u, fe_gaussian_only);
 
                             direction_x = correlated.direction.x;
                             direction_y = correlated.direction.y;

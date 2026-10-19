@@ -1,10 +1,12 @@
 # MAIGO_clean
 
 - This is a production-only runtime with eight proton/carbon ×
-  water/CT × broadbeam/minibeam release presets in `config/`. Custom proton/C12
-  configurations may use the generic pipeline with the same validated packages. Do not reintroduce old
-  package readers, diagnostic build modes, CPU transport stubs, generic source
-  species, TOPAS text-plan replay or DICOM conversion into this runtime.
+  water/CT × broadbeam/minibeam release presets in `config/`. Custom ion
+  configurations may use the generic pipeline with matching packages. Other
+  primary ions require explicit kinematic/nuclear masses; retain calibrated
+  proton/C12 conventions and all package identity/mass/coverage checks. Do not
+  reintroduce old package readers, diagnostic build modes, CPU transport stubs,
+  TOPAS text-plan replay or DICOM conversion into this runtime.
 - RT07575 is a **head** case. Its CT, source, weights, placement, collimator and
   normalization must stay together. Default CT minibeams use a separate lung
   benchmark; do not report them as RT07575 head full-plan validation.

@@ -1,5 +1,11 @@
 // Native Cu fragment step shared by primary-born and cascade transport.
-// Caller binds f_* aliases; break rejects this history and the host rejects dose.
+// Include contract: the caller binds f_* aliases inside a fragment loop.
+// Mutable: energy, position, direction, path/rate/collision, optical depth,
+// Urban state and boundary flag. Identity/material inputs are read-only.
+// f_terminal_tau is null for direct children, or points to the omitted
+// inelastic optical-depth ledger at the cascade generation limit.
+// A failure increments a fatal counter, then break exits the caller's track
+// loop. The host rejects that dose; the fragment must not resume afterward.
 const auto f_fail = [&](unsigned reason) {
     sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
         sycl::memory_scope::device, sycl::access::address_space::global_space>(

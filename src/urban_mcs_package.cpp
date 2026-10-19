@@ -1,4 +1,5 @@
 #include "carbon/urban_mcs_package.hpp"
+#include "detail/native_spline_wire.hpp"
 #include <array>
 #include <cstring>
 #include <fstream>
@@ -33,7 +34,7 @@ UrbanMcsPackage UrbanMcsPackage::load(const std::filesystem::path& path) {
     result.materials.resize(nm);result.species.resize(ns);result.mfps.resize(nf);
     std::vector<DiskUrbanMcsRecord> records(nr);
     std::vector<UrbanMcsNode> nodes(nn);
-    std::vector<EmCubicSegmentCandidate<float>> segments(ng);
+    std::vector<detail::NativeSplineSegment> segments(ng);
     auto read=[&](auto& v){stream.read(reinterpret_cast<char*>(v.data()),
         static_cast<std::streamsize>(v.size()*sizeof(v[0])));};
     read(result.materials);read(result.species);read(records);

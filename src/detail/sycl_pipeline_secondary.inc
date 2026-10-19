@@ -110,8 +110,7 @@
                 // secondaries. Primary and Cu/air workers retain their models;
                 // water and generic medium workers retain their Urban route.
                 constexpr bool kMinibeamSecondaryFe = !BroadBeam &&
-                    (std::is_same_v<Pipeline, pipelines::ProtonMinibeam> ||
-                     std::is_same_v<Pipeline, pipelines::CarbonMinibeam>);
+                    uses_ct_minibeam_secondary_fe(Pipeline::name, true);
                 constexpr bool kCarbonCtPointReuse = kProductionSecondaryPath &&
                     std::is_same_v<Pipeline, pipelines::CarbonBroadbeam>;
                 constexpr bool kCachedElasticTotals = kCarbonCtPointReuse ||
@@ -264,25 +263,29 @@
                               }())
                             : -1;
                         std::uint64_t unified_secondary_counter=0;
-                        // Diagnostic species profile: 20 slots x {steps,
-                        // short-range steps, deposited uMeV}. Zero production
-                        // impact (compiled out when profiling is off).
-
                         UnifiedEmState unified_secondary_state;
-                        auto unified_secondary_uniform=[&](){return (rng::random_u32(2026,frag.rng_stream,unified_secondary_counter++,121)>>8)*0x1p-24f;};
-                        auto unified_secondary_count=[&](int index,std::uint64_t count=1){
-                            if(count==0)return; // zero-increment diagnostics must not touch globals
-                            sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space> a(unified_audit[static_cast<std::size_t>(index)*kUnifiedEmAuditShards+active_pos%kUnifiedEmAuditShards]);a.fetch_add(count);
+                        auto unified_secondary_uniform = [&]() {
+                            return (rng::random_u32(2026, frag.rng_stream,
+                                unified_secondary_counter++, 121) >> 8) * 0x1p-24f;
+                        };
+                        auto unified_secondary_count = [&](int index, std::uint64_t count = 1) {
+                            // Zero-increment diagnostics must not touch globals.
+                            if (count == 0) return;
+                            sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                sycl::memory_scope::device,
+                                sycl::access::address_space::global_space> a(
+                                    unified_audit[static_cast<std::size_t>(index) *
+                                        kUnifiedEmAuditShards + active_pos % kUnifiedEmAuditShards]);
+                            a.fetch_add(count);
                         };
                         float nuclear_tau_remaining = 0.0F;
                         bool nuclear_tau_active = false;
                         std::uint32_t nuclear_tau_rng_step = 0;
                         uint32_t sec_steps = 0;
                         const uint32_t kSecondaryMaxSteps = 30000U;
-                        // Fix C4: one fMinimal track per secondary (persists
-                        // across macro steps like the primary state; the old
-                        // per-macro-step rebuild pinned tlimit at 1e10, so
-                        // secondaries were never MSC-limited at low E).
+                        // One persistent Urban track per secondary. Preserve
+                        // its range/step limit across steps and continuations;
+                        // rebuilding it would discard the low-energy MSC limit.
                         UrbanV2TrackState sec_urban_persist{};
                         bool sec_urban_born = true;
                         bool sec_global_urban_boundary=true;
@@ -459,8 +462,10 @@
 
                             // Urban enforces the cap internally. FE must keep the
                             // same outer cap as well as its scattering subsegments.
-                            if constexpr(BroadBeam || kMinibeamSecondaryFe) if((kProductionSecondaryPath ? true : enable_ct_grid) && !sec_global_urban)
-                                sec_step_mm=sycl::fmin(sec_step_mm,maximum_step_mm);
+                            if constexpr (BroadBeam || kMinibeamSecondaryFe) {
+                                if ((kProductionSecondaryPath ? true : enable_ct_grid) && !sec_global_urban)
+                                    sec_step_mm = sycl::fmin(sec_step_mm, maximum_step_mm);
+                            }
 
                             bool depth_boundary_limited = false;
                             if (!sec_global_urban && sec_dz > 1.0e-6F) {
@@ -1329,8 +1334,6 @@
                                     schneider_diag_increment_device(
                                         schneider_diag_device,
                                         route_slot);
-                                    auto observation_path_mm = -1.0F;
-
                                     const auto correlated =
                                         ion_fermi_eyges_transport_step(
                                             Direction3F{collision_input_dx,
@@ -1345,7 +1348,7 @@
                                             sec_radiation_length_g_per_cm2,
                                             2026, frag.rng_stream,
                                             static_cast<std::uint64_t>(sec_steps),
-                                            100U, observation_path_mm,
+                                            100U,
                                             static_cast<float>(nucleon_rest_mass_MeV), fe_gaussian_only);
 
                                     sec_x += correlated.displacement_mm.x;

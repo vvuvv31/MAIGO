@@ -11,7 +11,8 @@ All four minibeams require `minibeam_em_package_file`, normally
 `data/stopping/beamline/unrestricted.bin`. The package covers native Cu and air
 for all 324 transported Cu fragment species. Missing species, invalid data or
 out-of-domain energies reject the run; no charge-squared stopping fallback is
-used. Source support remains proton/C12.
+used. Other primary ions use the generic pipeline with explicit source masses
+and matching coverage in every required package, including primary nuclear data.
 
 The package contains native `ComputeElectronicDEDX` and native Ion/Universal
 `Dispersion(tcut=Tmax)` per unit true path. Material I/e0 and the active

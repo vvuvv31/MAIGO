@@ -22,6 +22,11 @@ existing FE tail configuration is preserved. `multiple_scattering_model:
 urban_v2` continues to select the primary model; no secondary model selector
 or experimental build switch is added to the release runtime.
 
+The shared policy is named in `include/carbon/scattering_policy.hpp`.
+Startup `[medium-mcs]` and the `medium_scattering` object in
+`quality_report.json` report the effective primary and secondary medium
+models independently. They do not describe copper/air scattering.
+
 The switch changes secondary trajectories and their resulting step and
 interaction counts. It is a scattering approximation, not an algebraic
 rewrite of Urban. It retains unrestricted stopping/ranges, primary

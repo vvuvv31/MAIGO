@@ -82,15 +82,14 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                                       const TransportResult& result) {
     RunQualityReport report;
     report.mode = config.run_mode;
+    report.primary_medium_scattering = config.primary_medium_scattering_model();
+    report.secondary_medium_scattering = config.secondary_medium_scattering_model();
     if (!config.enable_secondary_energy_straggling)
         report.approximations.push_back({"secondary_mean_energy_loss",
             "Charged secondaries retain transport, scattering and nuclear reactions but use the continuous26 unrestricted electronic mean loss without fluctuation draws. Qualification of this mean-loss revision remains configuration-specific.",1.,0.});
     if (config.enable_minibeam && !config.minibeam_copper_fragment_enable_energy_straggling)
         report.approximations.push_back({"copper_fragment_full_fluctuations_disabled",
             "Cu/air fragment full electronic loss uses its mean without fluctuation or separate delta draws; Cu primary full fluctuations follow the primary switch. Carbon minibeam dose acceptance remains pending.",1.,0.});
-    if(result.conditional_copper_response_enabled)
-        report.approximations.push_back({"conditional_copper_response_accuracy_pending",
-            "Research170MeV Cu interior conditional event bank; coherent zero/output events, charged entries at water and explicit untracked Cu neutral products. Absolute0.1x1mm entrance bins without translations; finite-bank dose/gamma accuracy not certified.",1.,0.});
     if(result.ct_broadbeam_step_cap_enabled)
         report.approximations.push_back({"ct_broadbeam_ion_step_cap",
             "Configured maximum ion step is enforced before CT face and nuclear competition for primary and charged fragments; FP32 Fermi-Eyges retained; ion fluctuations follow the configured primary/secondary switches",
@@ -104,12 +103,10 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             "GPU species index grouping; RNG identities preserved; production integration authorized; RT07575 scheduling dose difference 0.0203% of peak remains under investigation", 1., 0.});
     if (config.secondary_step_chunking)
         report.approximations.push_back({
-            kSecondarySegmentSteps == 16 ? "secondary_step_chunking_accepted" : "secondary_step_chunking_candidate",
+            "secondary_step_chunking_accepted",
             std::to_string(kSecondarySegmentSteps) +
             " complete iterations per launch, stable survivor index compaction, tail below 8192; " +
-            (kSecondarySegmentSteps == 16
-                ? "user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)"
-                : "experimental scheduling interval; production default is 16; not a new TOPAS Gamma validation"),
+            "user-accepted 2026-09-15 production interval; RT07575 compact+16 dose difference 0.00033% of peak vs 64-step (not a new TOPAS Gamma validation)",
             1., 0.});
     report.approximations.push_back({"unified_material_em_accuracy_pending",
             "Unified water/Schneider unrestricted electronic EM for all 18 charged ions; all ionization loss deposited locally; full-plan dose qualification remains configuration-specific",1.,0.});
@@ -556,6 +553,11 @@ void write_run_quality_report_json(const std::filesystem::path& path,
     append_json_string(output, report.status());
     output << ",\n  \"run_mode\": ";
     append_json_string(output, run_mode_name(report.mode));
+    output << ",\n  \"medium_scattering\": {\"primary\": ";
+    append_json_string(output, report.primary_medium_scattering);
+    output << ", \"secondary\": ";
+    append_json_string(output, report.secondary_medium_scattering);
+    output << "}";
     output << ",\n  \"accepted\": " << (report.accepted ? "true" : "false")
            << ",\n  \"absolute_physical_energy_residual_MeV\": ";
     write_json_number(output, report.absolute_physical_energy_residual_MeV);

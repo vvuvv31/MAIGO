@@ -158,6 +158,8 @@
     std::uint64_t* unified_audit=nullptr;
 
     const bool global_urban=!BroadBeam && config.multiple_scattering_model=="urban_v2";
+    std::cout << "[medium-mcs] primary=" << config.primary_medium_scattering_model()
+              << " secondary=" << config.secondary_medium_scattering_model() << '\n';
     const bool uses_urban_package=global_urban;
     const bool retain_physics_device = context != nullptr;
     const auto nuclear_input_key = [](const std::filesystem::path& path) {
@@ -166,6 +168,10 @@
     };
     const std::string schneider_signature =
         std::to_string(config.primary_atomic_number)+":"+std::to_string(config.primary_mass_number)+"|"+
+        std::to_string(config.primary_ion().rest_mass_MeV)+"|"+
+        std::to_string(resolve_primary_mass_MeV(config.primary_atomic_number,
+            config.primary_mass_number, PrimaryMassConvention::Nuclear,
+            config.primary_nuclear_mass_MeV))+"|"+
         nuclear_input_key(config.ct_schneider_primary_rate_file)+"|"+
         nuclear_input_key(config.ct_schneider_primary_cinel03_file)+"|"+
         nuclear_input_key(config.ct_schneider_secondary_rate_file)+"|"+
@@ -1050,24 +1056,19 @@
     const bool ct_minibeam_split = !BroadBeam && config.enable_minibeam &&
         config.enable_ct_grid;
     // The shared beamline and generic material-aware stage 4 retain the
-    // projectile ZA and total kinetic energy in their runtime state. C12 may
-    // use this handoff with its own pinned packages and the shared Cu-child queue.
-    const bool ct_minibeam_projectile_supported =
-        (config.primary_atomic_number == 1 && config.primary_mass_number == 1) ||
-        (config.primary_atomic_number == 6 && config.primary_mass_number == 12);
+    // projectile ZA and total kinetic energy in their runtime state. Source
+    // compatibility is checked against the packages, not a species whitelist.
     if(ct_minibeam_split && (config.run_mode!=RunMode::research ||
         config.enable_tps_source || config.enable_tps_coordinate_system ||
-        !ct_minibeam_projectile_supported ||
         config.multiple_scattering_model!="urban_v2" ||
         !config.enable_secondary_transport))
-        throw std::invalid_argument("CT split minibeam requires research proton/C12 Urban copper transport without TPS/replay");
-    // Proton and C12 CT Cu/air charged children are queued after the
+        throw std::invalid_argument("CT split minibeam requires research Urban copper transport without TPS/replay");
+    // CT Cu/air charged children are queued after the
     // compact beamline launch instead of inline in the primary kernel.
     const bool queue_copper_primary_children = !BroadBeam && config.run_mode==RunMode::research &&
         config.enable_minibeam && (!config.enable_ct_grid || ct_minibeam_split) && !config.enable_tps_source &&
         !config.enable_tps_coordinate_system &&
-        ((config.primary_atomic_number==1 && config.primary_mass_number==1) ||
-         (ct_minibeam_split && config.primary_atomic_number==6 && config.primary_mass_number==12)) &&
+        ((config.primary_atomic_number==1 && config.primary_mass_number==1) || ct_minibeam_split) &&
         config.multiple_scattering_model=="urban_v2" &&
         config.enable_secondary_transport &&
         (config.minibeam_primary_specialization || ct_minibeam_split);
@@ -1075,7 +1076,7 @@
     // Retain the configured secondary cap and reject any overflow without truncation.
     const auto copper_primary_child_capacity=std::min<std::size_t>(max_secondaries,
         std::max<std::size_t>(4096,
-            (config.primary_atomic_number==6 ? 16 : 2)*number_of_histories));
+            (config.primary_atomic_number==1 && config.primary_mass_number==1 ? 2 : 16)*number_of_histories));
     auto* copper_primary_child_tasks=queue_copper_primary_children
         ? mem_tracker.allocate<CopperPrimaryChildTask>(copper_primary_child_capacity) : nullptr;
     auto* copper_primary_child_counts=queue_copper_primary_children
@@ -1251,9 +1252,11 @@
         static_cast<float>(config.primary_ion().rest_mass_MeV);
     // FE is calibrated per nucleon; copper uses the same FP32 A*amu product
     // as the production beamline model. Package mass checks use nuclear mass.
-    const float primary_fe_mass_per_u = config.primary_atomic_number == 1
+    const float primary_fe_mass_per_u = config.primary_atomic_number == 1 && primary_mass_number == 1
         ? static_cast<float>(config.primary_ion().rest_mass_MeV)
-        : static_cast<float>(ion_nucleon_rest_mass_MeV);
+        : config.primary_atomic_number == 6 && primary_mass_number == 12
+            ? static_cast<float>(ion_nucleon_rest_mass_MeV)
+            : static_cast<float>(config.primary_ion().rest_mass_MeV / primary_mass_number);
     const float primary_copper_scattering_mass_MeV = primary_mass_number * primary_fe_mass_per_u;
 
     std::cout << "[input-cache] hits=" << inputs.hits-input_hits_before

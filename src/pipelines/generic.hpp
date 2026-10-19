@@ -3,7 +3,7 @@
 
 namespace carbon::pipelines {
 // One general pipeline family, with the existing broadbeam/reference physics modes.
-// Its source remains restricted to proton/C12; secondary fragments remain generic.
+// Source ZA is runtime data; all required packages must cover that primary ion.
 template <bool BroadBeam> struct Generic {
     static constexpr const char *name = "generic";
     static constexpr bool broadbeam = BroadBeam;

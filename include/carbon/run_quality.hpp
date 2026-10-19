@@ -20,6 +20,10 @@ struct QualityIssue {
 struct RunQualityReport {
     RunMode mode{RunMode::research};
     bool accepted{false};
+    // Effective patient-medium scattering, resolved from configuration and
+    // dedicated-pipeline policy; these names do not describe Cu/air transport.
+    std::string primary_medium_scattering;
+    std::string secondary_medium_scattering;
     // Physical closure includes deposited, escaped and explicitly untracked energy.
     double absolute_physical_energy_residual_MeV{};
     double physical_relative_energy_residual{};

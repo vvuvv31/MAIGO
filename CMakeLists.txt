@@ -23,7 +23,7 @@ option(CARBON_ENABLE_PROTON_BROADBEAM "Compile proton broadbeam transport" ON)
 option(CARBON_ENABLE_PROTON_MINIBEAM "Compile proton minibeam transport" ON)
 option(CARBON_ENABLE_CARBON_BROADBEAM "Compile carbon broadbeam transport" ON)
 option(CARBON_ENABLE_CARBON_MINIBEAM "Compile carbon minibeam transport" ON)
-option(CARBON_ENABLE_GENERIC "Compile generic proton/C12 transport" ON)
+option(CARBON_ENABLE_GENERIC "Compile generic ion transport" ON)
 if(NOT (CARBON_ENABLE_PROTON_BROADBEAM OR CARBON_ENABLE_PROTON_MINIBEAM OR
         CARBON_ENABLE_CARBON_BROADBEAM OR CARBON_ENABLE_CARBON_MINIBEAM OR CARBON_ENABLE_GENERIC))
     message(FATAL_ERROR "Enable at least one transport pipeline")
@@ -55,8 +55,7 @@ add_library(carbon_core
     src/urban_mcs_package.cpp
 )
 target_include_directories(carbon_core PUBLIC include PRIVATE src)
-target_compile_definitions(carbon_core PUBLIC
-    CARBON_EM_AUDIT_SHARDS=64 CARBON_SECONDARY_SEGMENT_STEPS=16)
+target_compile_definitions(carbon_core PUBLIC CARBON_EM_AUDIT_SHARDS=64)
 foreach(pipeline PROTON_BROADBEAM PROTON_MINIBEAM CARBON_BROADBEAM CARBON_MINIBEAM GENERIC)
     message(STATUS "Transport pipeline ${pipeline}: ${CARBON_ENABLE_${pipeline}}")
     target_compile_definitions(carbon_core PRIVATE

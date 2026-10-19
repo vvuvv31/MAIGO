@@ -5,8 +5,8 @@
 //   - for helpers below, typically inside the file-local anonymous namespace
 //   - SYCL headers and carbon/* headers already included by the parent .cpp
 //
-// Keep body text bit-identical to the historical legacy definitions so OFF/ON
-// isolation remains numerically stable.
+// Numerical expressions and RNG dimensions are part of the matched transport
+// contract. Preserve their operation order during structural refactors.
 
 bool is_uniform_grid(const std::vector<double>& energies) {
     const auto expected_step = energies[1] - energies[0];
@@ -205,16 +205,8 @@ Direction3F scatter_direction(const Direction3F direction,
 struct CorrelatedScatteringStep {
     Direction3F direction;
     Direction3F displacement_mm;
-    // Optional state at an interior path fraction.  This is sampled from the
-    // Gaussian bridge conditional on the already sampled end state, so asking
-    // for a diagnostic crossing cannot change the transported endpoint.  Tail
-    // events contribute only when their sampled location precedes the crossing.
-    Direction3F observation_direction{};
-    Direction3F observation_displacement_mm{};
-    bool observation_valid{false};
-    // Explicit urban_v2 step proposal/finalization (R4).  Defaults keep the
-    // legacy highland/fermi_eyges/urban paths bit-identical: consumers that
-    // do not understand the contract must ignore these fields.
+    // Urban-only proposal/finalization metadata. FE and Highland populate
+    // the endpoint fields above and leave this metadata at its defaults.
     // proposed_t: MSC true-path proposal; final_t: resolved true length used
     //   for loss/fluctuation/reaction paths; final_g: geometric length used
     //   for position advance; delta: stable (t-g) saved on the conversion
@@ -236,7 +228,7 @@ struct CorrelatedScatteringStep {
     bool energy_prediction_valid{true};
     float pre_step_energy_mev{0.0F};
     float predicted_internal_energy_mev{0.0F};
-    // Fix C1: set when any numeric guard repaired a conversion result
+    // Set when any numeric guard repaired a conversion result
     // (g>t rounding fixup, finalize clamp trips). Counted by the transport
     // kernel into a diagnostic slot; reachable-domain tests assert zero.
     bool numeric_guard_tripped{false};
@@ -253,7 +245,7 @@ struct CorrelatedScatteringStep {
     float current_range_mm{0.0F};
 };
 
-// Stable small-angle sample (Fix B).  one_minus_cth is computed DIRECTLY
+// Stable small-angle sample. one_minus_cth is computed DIRECTLY
 // from each sampling expression, never as 1-cth after the float cth has
 // rounded to 1.  Only the near-+1 branches need this; far-from-1 branches
 // carry the algebraically identical form for uniformity.
@@ -923,7 +915,7 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step_with_range(
     const std::uint32_t segment_index,
     const float prepared_lambda_mm = -1.0F) noexcept {
     UrbanV2LimitProposal out{};
-    // Fix C2: the MSC-domain RNG proof requires outer_step < 2^22 and
+    // The MSC-domain RNG proof requires outer_step < 2^22 and
     // segment_index < 1024, so step_index = outer*1024+segment < 2^32.
     // Rejected here, BEFORE any draw (limiter dims 58/59); the transport
     // fatal path fires on !valid.
@@ -1059,17 +1051,12 @@ inline UrbanV2LimitProposal copper_urban_v2_limit_step_with_range(
     return out;
 }
 
-// Research-only Urban v2 for the Copper collimator.  Fixes the confirmed
-// inequivalences of copper_urban_msc_step against the active Geant4 11.3.2
-// branch (GenericIon -> UrbanMsc, StepLim=Minimal, DispFlag:1, Alg96=1):
-//   D1/D2 Alg96 SampleDisplacement with rmax = sqrt(t^2 - z^2)
-//   D3   z -> t conversion (ComputeTrueStepLength, par1<0 branch)
-//   D6   step-end energy prediction
-//   D7   FP32-stable delta = t - z, log1p/expm1
-// The caller supplies the geometric step and an isotropic safety.  It is not
-// wired to a production default.
-// ---------------------------------------------------------------------------
-// Full SampleScattering mirror (Phase 4, Geant4 11.3.2 :777-820 +
+// Shared Urban scattering sampler, matched to the active Geant4 11.3.2
+// GenericIon branch (StepLim=Minimal, DispFlag=1, Alg96=1). It is used by the
+// Cu/air and medium Urban wrappers. The caller resolves the accepted true
+// path, geometric advance and safety before sampling angular/displacement
+// changes; step-end energy prediction uses the matching loss context.
+// Full SampleScattering mirror (Geant4 11.3.2 :777-820 +
 // SampleCosineTheta :824-968 with effective-tau, relloss, tsmall/extreme,
 // geometric-mean invbetacp and lambdaeff). t_final_mm is the DoIt-level
 // resolved true length; the caller (propose_and_sample) owns the GPIL/DoIt
@@ -1466,7 +1453,7 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
 // [g_final, t_msc]. Untruncated steps return t_msc untouched (the
 // geomStepLength == zPathLength shortcut) with the proposal delta.
 // delta_out_mm is the stable (t-g) OF THE TAKEN BRANCH (fix B4/C1).
-// Fix C1: t is CONSTRUCTED from the stable delta (t = g + delta), never
+// t is CONSTRUCTED from the stable delta (t = g + delta), never
 // from an unstable log that a t<g pseudo-clamp then deletes. The old
 // t = -lambda*log(1-g/lambda) rounds to 0 for tiny g/lambda, and the old
 // `if (t<g){t=g;delta=0}` discarded the recovered small quantity. The old
@@ -1592,7 +1579,7 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
     const std::uint32_t segment_index,
     const std::uint32_t random_dimension) noexcept {
     CorrelatedScatteringStep result{direction, Direction3F{0.0F, 0.0F, 0.0F}};
-    // Fix C2: same address-proof guard as the limiter (see above); invalid
+    // Same RNG address guard as the limiter (see above); invalid
     // proposals carry proposal_valid=false with NO draws consumed.
     if (!(segment_index < 1024U) || !(outer_step < (1ULL << 22))) {
         result.limit_reason = -101; return result;
@@ -1628,7 +1615,7 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
     const float g_final =
         g_prop < boundary_path_mm ? g_prop : boundary_path_mm;
     const bool truncated = (g_final < g_prop);
-    // Fix B4: (t, g, delta) come from ONE branch. finalize returns the
+    // (t, g, delta) come from ONE branch. finalize returns the
     // branch-consistent delta; the old par1<0-only re-inversion of g_final
     // (wrong on the range branch at Bragg end) is deleted. The old
     // `t_final > t_ext` clamp is deleted too: t_final <= t_msc <= t_ext by
@@ -1652,7 +1639,7 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
     result.pre_step_energy_mev = epre_mev;
     result.range_terminal =
         t_ext >= limit.range_mm && t_final >= limit.range_mm;
-    // Fix C2.3 counting: ONLY finalize-class trips (t<g / t>t_msc clamp
+    // Count ONLY finalize-class trips (t<g / t>t_msc clamp
     // repairs, which indicate real inconsistency) set the numeric-guard
     // flag. The limiter's sub-ulp chord repair (z snapped to t with delta
     // kept) is normal reference-class protection firing on ~7% of
@@ -1693,7 +1680,7 @@ CorrelatedScatteringStep urban_v2_propose_and_sample(
     result.pre_step_energy_mev = epre_mev;
     result.range_terminal =
         t_ext >= limit.range_mm && t_final >= limit.range_mm;
-    // Fix C2.3 counting: ONLY finalize-class trips (t<g / t>t_msc clamp
+    // Count ONLY finalize-class trips (t<g / t>t_msc clamp
     // repairs, which indicate real inconsistency) set the numeric-guard
     // flag. The limiter's sub-ulp chord repair (z snapped to t with delta
     // kept) is normal reference-class protection firing on ~7% of
@@ -1823,7 +1810,6 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
     const float radiation_length_g_per_cm2, const std::uint64_t seed,
     const std::uint64_t history_id, const std::uint64_t step_index,
     const std::uint32_t random_dimension,
-    const float observation_fraction = -1.0F,
     const float mass_per_u = static_cast<float>(nucleon_rest_mass_MeV),
     const bool gaussian_only = false) noexcept {
     CorrelatedScatteringStep result{direction, Direction3F{0.0F, 0.0F, 0.0F}};
@@ -1894,74 +1880,6 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
         0.5F * path_length_mm * local_theta_y +
         independent_displacement_sigma * displacement_normal.y;
 
-    const auto has_observation =
-        observation_fraction > 0.0F && observation_fraction < 1.0F;
-    auto observation_theta_x = 0.0F;
-    auto observation_theta_y = 0.0F;
-    auto observation_displacement_x = 0.0F;
-    auto observation_displacement_y = 0.0F;
-    if (has_observation) {
-        // Integrated Brownian-motion bridge for (theta(t), y(t)) conditional
-        // on the sampled (theta(L), y(L)).  Work in units where T=L=1;
-        // rescaling below restores sqrt(TL) and sqrt(TL^3).
-        const auto r = observation_fraction;
-        const auto r2 = r * r;
-        const auto r3 = r2 * r;
-        const auto c00 = r;
-        const auto c01 = r - 0.5F * r2;
-        const auto c10 = 0.5F * r2;
-        const auto c11 = 0.5F * r2 - r3 / 6.0F;
-        const auto k00 = 4.0F * c00 - 6.0F * c01;
-        const auto k01 = -6.0F * c00 + 12.0F * c01;
-        const auto k10 = 4.0F * c10 - 6.0F * c11;
-        const auto k11 = -6.0F * c10 + 12.0F * c11;
-        const auto conditional_var_theta = sycl::fmax(
-            0.0F, r - (k00 * c00 + k01 * c01));
-        const auto conditional_cov =
-            0.5F * r2 - (k00 * c10 + k01 * c11);
-        const auto conditional_var_displacement = sycl::fmax(
-            0.0F, r3 / 3.0F - (k10 * c10 + k11 * c11));
-        const auto bridge_normal0 = normal_pair(random_dimension + 8U);
-        const auto bridge_normal1 = normal_pair(random_dimension + 10U);
-        const auto l00 = sycl::sqrt(conditional_var_theta);
-        const auto l10 = l00 > 0.0F ? conditional_cov / l00 : 0.0F;
-        const auto l11 = sycl::sqrt(sycl::fmax(
-            0.0F, conditional_var_displacement - l10 * l10));
-        const auto theta_scale = core_theta_sigma;
-        const auto displacement_scale =
-            core_theta_sigma * path_length_mm;
-        const auto normalized_final_displacement_x =
-            local_displacement_x / displacement_scale;
-        const auto normalized_final_displacement_y =
-            local_displacement_y / displacement_scale;
-        const auto normalized_final_theta_x =
-            local_theta_x / theta_scale;
-        const auto normalized_final_theta_y =
-            local_theta_y / theta_scale;
-        const auto bridge_theta_x =
-            k00 * normalized_final_theta_x +
-            k01 * normalized_final_displacement_x +
-            l00 * bridge_normal0.x;
-        const auto bridge_theta_y =
-            k00 * normalized_final_theta_y +
-            k01 * normalized_final_displacement_y +
-            l00 * bridge_normal0.y;
-        const auto bridge_displacement_x =
-            k10 * normalized_final_theta_x +
-            k11 * normalized_final_displacement_x +
-            l10 * bridge_normal0.x + l11 * bridge_normal1.x;
-        const auto bridge_displacement_y =
-            k10 * normalized_final_theta_y +
-            k11 * normalized_final_displacement_y +
-            l10 * bridge_normal0.y + l11 * bridge_normal1.y;
-        observation_theta_x = theta_scale * bridge_theta_x;
-        observation_theta_y = theta_scale * bridge_theta_y;
-        observation_displacement_x =
-            displacement_scale * bridge_displacement_x;
-        observation_displacement_y =
-            displacement_scale * bridge_displacement_y;
-    }
-
     // Knuth's exact Poisson draw has no event-count truncation. The configured
     // mean is about 2.5e-4 per normal 0.1 mm step, so the expected loop cost is
     // negligible. Conditional event locations are uniform along the step.
@@ -1991,16 +1909,6 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
         local_theta_y += tail_theta_y;
         local_displacement_x += remaining_path * tail_theta_x;
         local_displacement_y += remaining_path * tail_theta_y;
-        if (has_observation && location <= observation_fraction) {
-            observation_theta_x += tail_theta_x;
-            observation_theta_y += tail_theta_y;
-            const auto observation_remaining_path =
-                path_length_mm * (observation_fraction - location);
-            observation_displacement_x +=
-                observation_remaining_path * tail_theta_x;
-            observation_displacement_y +=
-                observation_remaining_path * tail_theta_y;
-        }
     }
 
     const auto parent_norm = sycl::sqrt(
@@ -2033,23 +1941,13 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
         local_displacement_x * u.z + local_displacement_y * v.z};
     result.direction = rotate_local_direction(
         local_theta_x, local_theta_y, 1.0F, direction);
-    if (has_observation) {
-        result.observation_displacement_mm = Direction3F{
-            observation_displacement_x * u.x + observation_displacement_y * v.x,
-            observation_displacement_x * u.y + observation_displacement_y * v.y,
-            observation_displacement_x * u.z + observation_displacement_y * v.z};
-        result.observation_direction = rotate_local_direction(
-            observation_theta_x, observation_theta_y, 1.0F, direction);
-        result.observation_valid = true;
-    }
     return result;
 }
 
 // Advance one complete ion material step with the local FE process. This is
-// the common broad-beam/minibeam entry point. When an interior observation
-// path is supplied, the helper returns the conditional bridge state while the
-// caller remains responsible only for scorer storage. The returned endpoint
+// the common broad-beam/minibeam entry point. The returned endpoint
 // displacement is relative to a straight drift along the input direction.
+// Segment order, endpoint samples and RNG addresses are shared by both modes.
 // p/d/t/He-4 use their independent water tables. C12 and other uncalibrated
 // ions retain the C12-water candidate, with charge/(beta*p) scaling.
 
@@ -2061,7 +1959,6 @@ CorrelatedScatteringStep ion_fermi_eyges_transport_step(
     const float radiation_length_g_per_cm2, const std::uint64_t seed,
     const std::uint64_t history_id, const std::uint64_t transport_step_index,
     const std::uint32_t random_dimension,
-    const float observation_path_mm = -1.0F,
     const float mass_per_u = static_cast<float>(nucleon_rest_mass_MeV),
     const bool gaussian_only = false) noexcept {
     CorrelatedScatteringStep result{
@@ -2070,7 +1967,6 @@ CorrelatedScatteringStep ion_fermi_eyges_transport_step(
 
     auto segment_direction = direction;
     auto total_offset = Direction3F{0.0F, 0.0F, 0.0F};
-    auto observation_total_offset = Direction3F{0.0F, 0.0F, 0.0F};
     auto traversed_mm = 0.0F;
     std::uint32_t segment_index = 0U;
     while (traversed_mm < path_length_mm) {
@@ -2081,35 +1977,13 @@ CorrelatedScatteringStep ion_fermi_eyges_transport_step(
         const auto segment_energy = sycl::fmax(
             0.0F, kinetic_energy_before_loss_MeV -
                       energy_fraction * sampled_energy_loss_MeV);
-        const auto observes_this_segment =
-            observation_path_mm >= traversed_mm &&
-            observation_path_mm <= traversed_mm + segment_mm;
-        const auto observation_fraction = observes_this_segment
-            ? sycl::clamp(
-                  (observation_path_mm - traversed_mm) / segment_mm,
-                  1.0e-6F, 1.0F - 1.0e-6F)
-            : -1.0F;
         const auto segment = water_ion_fermi_eyges_tail_step(
             segment_direction, segment_energy, atomic_number, mass_number,
             segment_mm,
             density_g_per_cm3, radiation_length_g_per_cm2, seed, history_id,
             transport_step_index * 1024U + segment_index,
-            random_dimension, observation_fraction,
+            random_dimension,
             mass_per_u, gaussian_only);
-        if (segment.observation_valid) {
-            const auto local_path = observation_fraction * segment_mm;
-            observation_total_offset.x =
-                total_offset.x + segment_direction.x * local_path +
-                segment.observation_displacement_mm.x;
-            observation_total_offset.y =
-                total_offset.y + segment_direction.y * local_path +
-                segment.observation_displacement_mm.y;
-            observation_total_offset.z =
-                total_offset.z + segment_direction.z * local_path +
-                segment.observation_displacement_mm.z;
-            result.observation_direction = segment.observation_direction;
-            result.observation_valid = true;
-        }
         total_offset.x += segment_direction.x * segment_mm +
                           segment.displacement_mm.x;
         total_offset.y += segment_direction.y * segment_mm +
@@ -2125,11 +1999,5 @@ CorrelatedScatteringStep ion_fermi_eyges_transport_step(
         total_offset.x - direction.x * path_length_mm,
         total_offset.y - direction.y * path_length_mm,
         total_offset.z - direction.z * path_length_mm};
-    if (result.observation_valid) {
-        result.observation_displacement_mm = Direction3F{
-            observation_total_offset.x - direction.x * observation_path_mm,
-            observation_total_offset.y - direction.y * observation_path_mm,
-            observation_total_offset.z - direction.z * observation_path_mm};
-    }
     return result;
 }

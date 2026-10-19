@@ -2,6 +2,7 @@
 #include "carbon/input_dependencies.hpp"
 #include "carbon/charged_species.hpp"
 #include "carbon/secondary_schedule.hpp"
+#include "carbon/scattering_policy.hpp"
 #include "carbon/host_prefetch.hpp"
 #include "carbon/runtime_timing.hpp"
 #include "carbon/unified_em_view.hpp"
@@ -122,17 +123,12 @@ constexpr std::size_t minibeam_fragment_ignored_probability_micro_slot = 112;
 constexpr std::size_t minibeam_fragment_generation_interaction_slot = 121;
 constexpr std::size_t minibeam_fragment_generation_hit_slot = 124;
 constexpr std::size_t minibeam_fragment_generation_miss_slot = 127;
-// Diagnostic: water-Urban subdivision iterations beyond any physical need
-// (legit worst case ~200 micro-segments for sub-table-floor energies; normal
-// use needs <= 4). Trips indicate a non-progress pathology, never physics.
-// Diagnostic: secondary-C12 Urban step entries (proves the research branch
-// executes; the cap slot above only fires on pathology).
 // Hard failure: invalid Urban proposal, zero-progress segment, or
-// subdivision-cap trip (fix B5). Any nonzero count fails the run (throw on
+// subdivision-cap trip. Any nonzero count fails the run (throw on
 // host): a partial space path with full-macro-step energy loss must never
 // pass as a successful dose. Structured record via the slot + throw message.
 constexpr std::size_t minibeam_water_urban_fatal_slot = 137;
-// Diagnostic: C1 finalize-class numeric-guard trips (t<g / t>t_msc clamp
+// Diagnostic: finalize-class numeric-guard trips (t<g / t>t_msc clamp
 // repairs in finalize_true). These indicate real conversion inconsistency
 // and must be zero in smoke; the trips are counted but non-fatal (the
 // repair itself is rounding-only and safe). The limiter's sub-ulp chord
@@ -140,16 +136,14 @@ constexpr std::size_t minibeam_water_urban_fatal_slot = 137;
 // reference-class protection with a proven <= 1 ulp bound and is
 // intentionally not counted here.
 constexpr std::size_t minibeam_urban_numeric_guard_slot = 138;
-// First-failure record (fix C2.3): 139 = claim flag (0/1), 140 = history id,
+// First-failure record: 139 = claim flag (0/1), 140 = history id,
 // 141 = (outer_step<<32)|segment_index, 142 = reason code. Written once via
 // CAS by the first failing work-item; the host reports it and fails the run.
 constexpr std::size_t minibeam_urban_firstfail_claim_slot = 139;
 constexpr std::size_t minibeam_urban_firstfail_history_slot = 140;
 constexpr std::size_t minibeam_urban_firstfail_stepseg_slot = 141;
 constexpr std::size_t minibeam_urban_firstfail_reason_slot = 142;
-// Diagnostic: sub-ulp remainder completions (FP32 granularity, position
-// error < 2 ulp of the macro step; counted, non-fatal).
-// First numeric-guard evidence (fix C2.3 investigation): 144 = claim flag,
+// First numeric-guard evidence: 144 = claim flag,
 // 145 = site tag (1 Cu, 2 water primary, 3 secondary), 146..151 = float
 // bits of (g_final, g_prop, t_msc, lambda0, range, par1), 152 = float bits
 // of par3. First trip only; lets the host reproduce the exact inputs.
@@ -433,7 +427,7 @@ inline constexpr unsigned kUnifiedEmAuditCounters = 4;
 #include "detail/sycl_device_math.inc"
 #include "detail/sycl_urban_global.inc"
 
-// Fix C2.3: Urban accepted-step contract checks (device-side).
+// Urban accepted-step contract checks (device-side).
 // Reason codes (0 = accept): 1 invalid proposal (includes the RNG
 // outer/segment guard reject), 2 non-positive g, 3 non-finite t/g/delta,
 // 4 g > t, 5 delta outside [0, t], 6 FP32 stall (traversed+g == traversed)

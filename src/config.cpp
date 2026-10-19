@@ -1,5 +1,6 @@
 #include <initializer_list>
 #include "carbon/transport_config.hpp"
+#include "carbon/scattering_policy.hpp"
 #include "carbon/preset_keys.hpp"
 #include "carbon/source_parameters.hpp"
 #include "carbon/cross_section.hpp"
@@ -283,7 +284,15 @@ PrimarySourceParameters parse_primary_source_parameters(const ConfigValues& valu
         throw std::invalid_argument("Specify primary_atomic_number and primary_mass_number");
     const int z = parse_number(values, "primary_atomic_number", 0);
     const int a = parse_number(values, "primary_mass_number", 0);
-    out.ion = make_primary_ion_definition(z, a);
+    const auto source_mass = [&](const char* key) {
+        const double mass = parse_number(values, key, 0.0);
+        if (values.contains(key) && (!(mass > 0.0) || !std::isfinite(mass)))
+            throw std::invalid_argument(std::string(key) + " must be finite and positive");
+        return mass;
+    };
+    out.ion = make_primary_ion_definition(z, a, source_mass("primary_kinematic_mass_MeV"));
+    out.nuclear_mass_MeV = resolve_primary_mass_MeV(z, a, PrimaryMassConvention::Nuclear,
+        source_mass("primary_nuclear_mass_MeV"));
     out.initial_energy_MeVu = parse_number(values, "initial_energy_MeVu", out.initial_energy_MeVu);
     if (!std::isfinite(out.initial_energy_MeVu) || !(out.initial_energy_MeVu > 0) ||
         !std::isfinite(out.initial_total_energy_MeV()))
@@ -395,6 +404,19 @@ std::size_t TransportConfig::number_of_voxels() const {
     return voxel_bins_x * voxel_bins_y * depth_bins;
 }
 
+std::string_view TransportConfig::primary_medium_scattering_model() const noexcept {
+    if (transport_profile == "broadbeam_fast") return "fermi_eyges";
+    return enable_multiple_scattering ? std::string_view(multiple_scattering_model) : "disabled";
+}
+
+std::string_view TransportConfig::secondary_medium_scattering_model() const noexcept {
+    if (!enable_secondary_transport) return "not_transported";
+    const auto primary = primary_medium_scattering_model();
+    if (primary == "disabled") return primary;
+    return uses_ct_minibeam_secondary_fe(transport_pipeline, enable_ct_grid)
+        ? "fermi_eyges" : primary;
+}
+
 void TransportConfig::validate() const {
     if (device != "cuda" && device != "intel")
         throw std::invalid_argument("device must be cuda or intel");
@@ -425,6 +447,8 @@ void TransportConfig::validate() const {
             "primary_mass_number >= primary_atomic_number");
     }
     (void)primary_ion(); // validate the complete source definition, including mass
+    (void)resolve_primary_mass_MeV(primary_atomic_number, primary_mass_number,
+        PrimaryMassConvention::Nuclear, primary_nuclear_mass_MeV);
     const auto energy_comes_from_spot_file =
         !tps_spots_file.empty();
     if (!energy_comes_from_spot_file && initial_energy_MeVu <= 0.0) {
@@ -1155,6 +1179,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     config.beam_energy_spread = source.beam_energy_spread;
     config.primary_atomic_number = source.ion.atomic_number;
     config.primary_mass_number = source.ion.mass_number;
+    config.primary_kinematic_mass_MeV = source.ion.rest_mass_MeV;
+    config.primary_nuclear_mass_MeV = source.nuclear_mass_MeV;
     config.broadbeam_maximum_mean_loss_fraction=parse_number(values,"broadbeam_maximum_mean_loss_fraction",config.broadbeam_maximum_mean_loss_fraction);
     config.em_package_file=parse_path(values,"em_package_file",config.em_package_file);
     if (!config.em_package_file.empty())
@@ -1604,9 +1630,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         if(config.enable_ct_grid && !config.ct_secondary_exact_faces)
             throw std::invalid_argument("All-ion elastic requires secondary exact faces");
     }
-    if (!((config.primary_atomic_number==1 && config.primary_mass_number==1) ||
-          (config.primary_atomic_number==6 && config.primary_mass_number==12)))
-        throw std::invalid_argument("Preset source must be proton or C12");
     reject_unknown_config_keys(values, path);
     config.canonical_config_text = canonicalize_config(
         values, config.config_schema_version);

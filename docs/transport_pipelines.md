@@ -2,7 +2,9 @@
 
 The eight release presets explicitly select one of four compile-time pipelines
 using `transport_pipeline`. The fifth, `generic`, is the default for custom
-configurations that omit this key. All sources remain restricted to proton/C12. Each pipeline generates its own
+configurations that omit this key. The generic source has no proton/C12 whitelist;
+other ions require explicit kinematic/nuclear masses and matching package coverage.
+Each pipeline generates its own
 primary and charged-secondary kernel identities. A proton/carbon
 pipeline identity describes the source, not the species of its fragments:
 generic charged fragment species remain supported in every secondary worker.
@@ -47,8 +49,12 @@ Copies of a release YAML retain its explicit dedicated selection; remove that
 key or replace it with `generic` to use the general path. Conversely, custom
 proton/C12 configurations may explicitly select a matching dedicated path.
 `src/pipelines/generic.hpp` keeps the existing broadbeam/reference physics
-modes and all package/coverage validation. It does not admit other primary
-species or supply missing physical data.
+modes and all package/coverage validation. Other primary species must set
+`primary_kinematic_mass_MeV` and `primary_nuclear_mass_MeV`, using the conventions
+of their extracted packages (total ion rest energies in MeV, not per nucleon).
+It does not supply missing physical data or extend
+the species inventories of existing package formats. Dedicated pipelines still
+require their matching proton/C12 source and beam mode.
 
 `src/transport_sycl.cpp` contains common helpers and the once-per-batch router.
 `transport_pipeline<Pipeline>` composes four shared phases:
@@ -101,7 +107,7 @@ Refactor evidence: `out/pipeline_refactor_20261009/`.
 
 Five CMake options control which pipeline templates and CUDA kernel families
 are instantiated. All default to `ON`, so an ordinary release build still
-supports all eight presets and custom proton/C12 configurations.
+supports all eight presets and custom configurations with matching packages.
 
 | CMake option | Compiled configurations |
 |---|---|
@@ -109,7 +115,7 @@ supports all eight presets and custom proton/C12 configurations.
 | `CARBON_ENABLE_PROTON_MINIBEAM` | Proton water/CT minibeam |
 | `CARBON_ENABLE_CARBON_BROADBEAM` | Carbon water/CT broadbeam |
 | `CARBON_ENABLE_CARBON_MINIBEAM` | Carbon water/CT minibeam |
-| `CARBON_ENABLE_GENERIC` | Custom proton/C12 configurations selecting `generic` |
+| `CARBON_ENABLE_GENERIC` | Custom ion configurations selecting `generic` |
 
 For proton broadbeam optimization, use a separate build directory. Explicitly
 specify `-DCARBON_CUDA_ARCH=sm_75` (根据自己显卡设置: RTX 2080 Ti `sm_75`,

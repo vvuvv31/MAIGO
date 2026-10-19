@@ -1,6 +1,6 @@
 #include "carbon/unified_em_package.hpp"
 #include "carbon/unrestricted_csda.hpp"
-#include "carbon/primary_em_mean_candidate.hpp"
+#include "detail/native_spline_wire.hpp"
 #include <bit>
 #include <cmath>
 #include <cstring>
@@ -43,7 +43,7 @@ UnifiedEmPackage parse_unified_em(const std::filesystem::path& path) {
     std::vector<FileRecord> records;
     std::vector<FileNode> nodes;
     std::vector<FileContinuousDescriptor> descriptors;
-    std::vector<EmCubicSegmentCandidate<float>> segments;
+    std::vector<detail::NativeSplineSegment> segments;
     std::vector<float> continuous_ranges;
     auto read=[&](auto& v,std::uint32_t count){v.resize(count);in.read(reinterpret_cast<char*>(v.data()),count*sizeof(v[0]));if(!in)throw std::runtime_error("Truncated unified EM payload");};
     read(p.materials,h[1]);read(p.species,h[2]);read(records,h[3]);

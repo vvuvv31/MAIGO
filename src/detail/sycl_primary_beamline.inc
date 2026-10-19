@@ -439,7 +439,7 @@
                         // t/g rescaling of the ledger.
                         const auto urban_v2_proposal =
                             correlated_scattering.proposal_valid;
-                        // Fix B5/C2.3: an invalid Urban proposal must fail the
+                        // An invalid Urban proposal must fail the
                         // run and stop this history (flag + record; the host
                         // throws). The old code advanced the full path
                         // unscattered; a failed proposal must never continue

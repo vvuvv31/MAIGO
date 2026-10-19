@@ -150,7 +150,7 @@ runtime; rebuild for the destination GPU. This does not remove normal startup,
 package loading or module loading costs.
 
 All five transport families are enabled by default: proton broadbeam, proton
-minibeam, carbon broadbeam, carbon minibeam and generic proton/C12. To compile
+minibeam, carbon broadbeam, carbon minibeam and generic ion transport. To compile
 only selected families, use the `CARBON_ENABLE_*` switches described in
 [selective compilation](docs/transport_pipelines.md#selective-compilation).
 A configuration cannot run a pipeline omitted from the binary.
@@ -379,9 +379,20 @@ process startup/package loading from subsequent batch transport when measuring
 performance; neither should include compiler build time.
 
 The eight release presets select their implementation with `transport_pipeline`.
-Custom proton/C12 configurations without that key use `generic`; a copied
+Custom configurations without that key use `generic`; a copied
 release preset retains its selection until the key is removed or changed.
 Pipeline layout is documented in [transport pipelines](docs/transport_pipelines.md).
+
+Other primary ions must select `transport_pipeline: generic` (or omit the key),
+provide `primary_atomic_number`, `primary_mass_number`, and explicitly set both
+`primary_kinematic_mass_MeV` and `primary_nuclear_mass_MeV` to masses from their
+corresponding extraction conventions (total ion rest energies in MeV, not per
+nucleon). Proton/C12 retain their built-in masses;
+no changes to the eight release presets are needed. Source parsing has no species
+whitelist, but all required EM, nuclear, scattering and elastic packages must
+cover the chosen ion and energy range, and match its reference masses. Existing
+packages are not expanded by this change; for example, the current continuous26
+bank includes He4 but not O16, and He4 still needs matching primary nuclear data.
 
 ## Release presets and physics
 
@@ -505,7 +516,8 @@ mean and stopping-CSV keys are rejected, rather than mapped to old behavior.
 `minibeam_em_package_file` selects the required full response.
 `minibeam_copper_fragment_native_transport` independently selects Cu fragment
 Urban/species elastic transport (carbon defaults `true`; proton `false`).
-Source species remain proton/C12; charged fragment transport remains generic.
+Other primary ions use the generic pipeline with matching packages and explicit
+source masses; charged fragment transport remains generic.
 See [Cu ion extraction and limits](extensions/copper_ion_transport/README.md).
 
 The data/inputs are local external assets and are excluded from Git. The

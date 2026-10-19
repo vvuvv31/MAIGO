@@ -49,10 +49,16 @@
 
 `kKernelStage` 区分编译内核和调度策略，`kPrimaryStage` 选择它们复用的物理主体。
 检查专用路径时，应先确认宿主 eligibility 条件，再审阅编译期替换是否符合该条件。
+阶段分类集中在同一头文件的 `is_proton_ct`、`is_carbon_ct`、
+`uses_shared_ct_cell`、`is_continuation` 和 `is_resume`；`transport_body`
+负责把启动阶段映射到物理主体。调用点不再重复组合这些身份条件，整数身份保持不变。
 
 暂停点必须在完整物理迭代之间。恢复时需要保留位置、能量、方向、步数、随机数
 身份、共享核光学深度、Urban 状态和尚未提交的计分。能量/物种排序只改变
 执行索引，不能重置这些状态，也不能把 GPU 队列槽号作为随机数身份。
+
+次级分段间隔在 `secondary_schedule.hpp` 中固定为 16 个完整物理迭代；
+不再通过编译宏选择实验间隔。尾部直接完成的调度规则保持不变。
 
 ## 物理计算的单位与约定
 
@@ -83,6 +89,21 @@ Urban 的受限能损矢量不再用于任何运行时能损或射程查询。
 Urban 的 Geant4 11.3.2 对应函数见 `sycl_device_math.inc` 开头的模型说明；铜涨落
 的参数与验证范围另见 `docs/copper_fluctuation_engine.md`。有历史验收结果不代表
 新增配置自动具有相同精度，具体结果应查对应的完整计划报告。
+
+患者内散射与铜／空气散射分别审阅。`scattering_policy.hpp` 的
+`uses_ct_minibeam_secondary_fe` 是专用 CT 微束次级 FE 的共用选择规则，
+内核编译期选择与宿主报告均使用它。`TransportConfig` 的
+`primary_medium_scattering_model()`／`secondary_medium_scattering_model()`
+解析有效介质模型；`quality_report.json` 的 `medium_scattering.primary` 和
+`medium_scattering.secondary` 分别输出该结果，启动日志使用 `[medium-mcs]`。
+例如专用 CT 微束输出 `urban_v2`／`fermi_eyges`；水和 generic 微束保留
+`urban_v2`／`urban_v2`，宽束为 `fermi_eyges`／`fermi_eyges`。
+未开启多重散射时为 `disabled`；关闭次级输运时次级项为 `not_transported`。
+这里报告的是选定模型，不表示该次运行中一定产生过相应粒子；铜／空气另按其物种路径执行。
+
+FE 接口只返回步末方向和相对直线漂移的位移，不再提供生产路径未使用的
+中间位置观测／Brownian bridge。分段仍按原顺序累计，保留 Gaussian 核、
+Poisson 尾及其原有随机数地址。主、次粒子共用该步末接口。
 
 ## 计分、批次和能量账目
 
@@ -118,6 +139,9 @@ Urban 的 Geant4 11.3.2 对应函数见 `sycl_device_math.inc` 开头的模型�
 `FileContinuousDescriptor` 对应固定 EMCNT001 文件，负责完整校验。其受限能损、
 旧电离率和样条系数不属于当前输运状态。加载后只投影出运行使用的字段，临时的
 样条／密度系数缓冲区随加载结束释放；GPU 节点、记录和描述符分别为 24、52、36 字节。
+EMCNT001 和 URBANV22 共用的六浮点样条磁盘记录单独放在
+`src/detail/native_spline_wire.hpp`，以 24 字节静态断言保证布局。该私有类型仅供
+包读取和校验，不含输运计算方法，也不经公共 Urban 头文件传播到设备代码。
 
 审阅 `energy_loss_fluctuation.hpp` 时，电离尾部抽样属于 unrestricted 总能损涨落，
 不会建立电子粒子或电子队列。引擎只接受 `Tmax`；介质参考 cut 仅用于把已存储的

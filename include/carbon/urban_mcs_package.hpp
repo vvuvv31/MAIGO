@@ -1,5 +1,4 @@
 #pragma once
-#include "carbon/primary_em_mean_candidate.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>

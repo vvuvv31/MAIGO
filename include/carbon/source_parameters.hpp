@@ -9,6 +9,7 @@ namespace carbon {
 // Successfully describing a source does not authorize a physics model for it.
 struct PrimarySourceParameters {
     PrimaryIonDefinition ion{};
+    double nuclear_mass_MeV{primary_nuclear_mass_MeV(6, 12)};
     double initial_energy_MeVu{200.0};
     double beam_energy_spread{0.0}; // relative RMS, not percent
 

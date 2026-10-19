@@ -120,8 +120,6 @@ struct TransportConfig {
     bool quality_reject_voxel_over_total{true};
     // Explicit grid-split closure (total ≈ in + outside, voxel ≈ in-grid).
     bool quality_reject_grid_closure{true};
-    // Optional single-file manifest owning the primary-ion identity and all
-    // ion-dependent water physics data. Run controls remain in the main YAML.
     std::size_t number_of_histories{10'000};
     // Single-beam energy; tps_spots_file
     // supply per-spot energy and therefore do not require this value in YAML.
@@ -133,6 +131,10 @@ struct TransportConfig {
     // GPU transport selects and checks package records using this Z/A.
     int primary_atomic_number{6};
     int primary_mass_number{12};
+    // Zero selects the built-in proton/C12 convention. Other primary ions
+    // require explicit masses, checked against every applicable package.
+    double primary_kinematic_mass_MeV{0.0};
+    double primary_nuclear_mass_MeV{0.0};
     // Derived transport/scorer dimensions; never parsed as independent YAML keys.
     // Water uses the explicit voxel grid; CT uses the native patient header.
     double phantom_length_mm{0.0};
@@ -301,12 +303,12 @@ struct TransportConfig {
     // Extracted discrete General Ion Elastic interactions. Condensed Copper
     // electromagnetic MCS remains independent of this switch.
     bool minibeam_copper_enable_elastic{true};
-    // Sample Bohr energy-loss fluctuations step-by-step in Copper.  This is
-    // independent of downstream ion straggling; both default to enabled.
+    // Native full-loss Universal/Ion fluctuations for Cu/air primaries,
+    // independent of the downstream primary fluctuation switch; default on.
     bool minibeam_copper_enable_energy_straggling{true};
     // Species Urban/elastic fragment transport is independent of primary fluctuations.
     bool minibeam_copper_fragment_native_transport{false};
-    // Separate Copper fragment control, enabled in all default minibeams.
+    // Separate Cu/air fragment fluctuation switch; off in every release preset.
     bool minibeam_copper_fragment_enable_energy_straggling{false};
     // Amplitude scale for the selected Copper MCS model. The legacy Highland
     // benchmark uses 0.785; the slab-constrained model uses 1.0.
@@ -440,15 +442,17 @@ struct TransportConfig {
 
     void require_primary_reference_mass(double reference_mass_MeV, const char* package,
                                         PrimaryMassConvention convention = PrimaryMassConvention::Nuclear) const {
-        const double expected = convention == PrimaryMassConvention::Kinematic
-            ? primary_kinematic_mass_MeV(primary_atomic_number, primary_mass_number)
-            : primary_nuclear_mass_MeV(primary_atomic_number, primary_mass_number);
+        const double expected = resolve_primary_mass_MeV(
+            primary_atomic_number, primary_mass_number, convention,
+            convention == PrimaryMassConvention::Kinematic
+                ? primary_kinematic_mass_MeV : primary_nuclear_mass_MeV);
         if (!std::isfinite(expected) || !std::isfinite(reference_mass_MeV) ||
             !(reference_mass_MeV > 0.0) || std::abs(reference_mass_MeV - expected) > 2.0e-6 * expected)
             throw std::invalid_argument(std::string(package) + " primary mass disagrees with its production mass convention");
     }
     [[nodiscard]] PrimaryIonDefinition primary_ion() const {
-        return make_primary_ion_definition(primary_atomic_number, primary_mass_number);
+        return make_primary_ion_definition(primary_atomic_number, primary_mass_number,
+                                           primary_kinematic_mass_MeV);
     }
 
     [[nodiscard]] std::size_t number_of_bins() const;
@@ -466,6 +470,11 @@ struct TransportConfig {
     [[nodiscard]] bool uses_fixed_patient_coordinates() const noexcept {
         return enable_tps_coordinate_system || enable_tps_source;
     }
+
+    // Effective patient-medium models after pipeline policy is applied.
+    // A disabled secondary transport path is reported as "not_transported".
+    [[nodiscard]] std::string_view primary_medium_scattering_model() const noexcept;
+    [[nodiscard]] std::string_view secondary_medium_scattering_model() const noexcept;
 
     void validate() const;
 };
