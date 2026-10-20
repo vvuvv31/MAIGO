@@ -21,7 +21,7 @@ bash extensions/copper_ion_transport/build_extract.sh \
 
 原铜 δ cut/spin 常量提取已移除；完整电子响应由 beamline_em 单独提取。提取器拒绝缺失过程、缺失模型、非两体末态和写入失败。
 
-安装位置为 `data/elastic/copper/carbon/fragments.csv`、`data/scattering/urban/copper_fragments.bin` 及各自同名 metadata。先检查候选并验证，再复制到这些位置、重新构建 GPU runtime，更新 `data/manifest.json` 与 `examples/preset_dependencies.json`。两个碳微束预设通过 `minibeam_copper_fragment_elastic_file` 和 `minibeam_copper_fragment_urban_package_file` 引用这些包。
+安装位置为 `data/elastic/copper/carbon/fragments.csv`、`data/scattering/urban/copper_fragments.bin` 。先检查候选并验证，再复制到这些位置、重新构建 GPU runtime，更新 `examples/preset_dependencies.json`。两个碳微束预设通过 `minibeam_copper_fragment_elastic_file` 和 `minibeam_copper_fragment_urban_package_file` 引用这些包。
 
 ## 数值验证
 

@@ -822,11 +822,23 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     std::filesystem::path sec_rate_file = config.ct_schneider_secondary_rate_file;
     std::filesystem::path sec_cinel_file = config.ct_schneider_secondary_cinel03_file;
 
+    // Channel support and bounds live in the rate binary and CINPKG04 nodes.
+    // Compare their FP32 endpoints, which are also used by device lookup.
+    const auto check_domain = [](const auto& rate, const auto& channel) {
+        if (static_cast<bool>(rate.has_support) != channel.found_target ||
+            (rate.has_support &&
+             (static_cast<float>(rate.energy_min_mevu) != channel.energy_min_MeV_per_u ||
+              static_cast<float>(rate.energy_max_mevu) != channel.energy_max_MeV_per_u)))
+            throw std::runtime_error("Nuclear rate/package channel domain mismatch");
+    };
+    const SchneiderRateTable* rate_table = nullptr;
+    std::shared_ptr<SchneiderRateTable> local_rate_table;
+    const SecondaryRateTable* sec_rate_table = nullptr;
+    std::shared_ptr<SecondaryRateTable> local_sec_rate_table;
+
     // 1. Primary Target Sampler
     if (std::filesystem::exists(primary_rate_file)) {
-        const SchneiderRateTable* rate_table = nullptr;
         const SchneiderTargetSampler* target_sampler = nullptr;
-        std::shared_ptr<SchneiderRateTable> local_rate_table;
         std::shared_ptr<SchneiderTargetSampler> local_target_sampler;
         if (host_cache && host_cache->primary_rate && host_cache->primary_sampler) {
             rate_table = host_cache->primary_rate.get();
@@ -894,6 +906,10 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 node.projectile_a != config.primary_mass_number)
                 throw std::runtime_error("Primary CINEL03 binary projectile does not match YAML source Z/A");
         }
+        if (!rate_table) throw std::runtime_error("Missing primary nuclear rate table");
+        for (std::size_t target = 0; target < kSchneiderNumTargets; ++target)
+            check_domain(rate_table->channel_domain(target), primary_package.channel_domain(
+                config.primary_atomic_number, config.primary_mass_number, kSchneiderCanonicalZ[target]));
         auto* dev_c12_nodes = upload("dev_c12_nodes", c12_dev->energy_nodes);
         auto* dev_c12_offsets = upload("dev_c12_offsets", c12_dev->event_offsets);
         auto* dev_c12_indices = upload("dev_c12_indices", c12_dev->event_indices);
@@ -917,8 +933,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
     // 3. Secondary Rates (when secondary transport or production mode is active)
     if (std::filesystem::exists(sec_rate_file) &&
         (config.enable_secondary_transport || config.run_mode == RunMode::production || !config.ct_schneider_secondary_rate_file.empty())) {
-        const SecondaryRateTable* sec_rate_table = nullptr;
-        std::shared_ptr<SecondaryRateTable> local_sec_rate_table;
         if (host_cache && host_cache->secondary_rate) {
             sec_rate_table = host_cache->secondary_rate.get();
             ++host_cache->hits;
@@ -943,7 +957,7 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         }
 
         ctx.sec_partial_rates = dev_sec_partial;
-        // v3: bundle-ordered projectile registry + per-(projectile,target)
+        // v3: binary projectile registry + per-(projectile,target)
         // domain for the only supported, masked device path.
         {
             const auto& projs = sec_rate_table->projectiles();
@@ -1006,6 +1020,18 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
                 host_cache->secondary_cinel03_device_tables = local_sec_dev;
                 ++host_cache->misses;
             }
+        }
+        if (!sec_rate_table) throw std::runtime_error("Missing secondary nuclear rate table");
+        const auto& secondary_package = host_cache && host_cache->secondary_cinel03
+            ? *host_cache->secondary_cinel03 : *local_sec_pkg;
+        for (const auto& node : sec_dev->energy_nodes)
+            if (sec_rate_table->projectile_index(node.projectile_z, node.projectile_a) < 0)
+                throw std::runtime_error("Secondary package projectile absent from rate binary");
+        for (std::size_t projectile = 0; projectile < sec_rate_table->num_projectiles(); ++projectile) {
+            const auto& key = sec_rate_table->projectiles()[projectile];
+            for (std::size_t target = 0; target < kSecondaryNumTargets; ++target)
+                check_domain(sec_rate_table->channel_domain(projectile, target),
+                    secondary_package.channel_domain(key.z, key.a, kSchneiderCanonicalZ[target]));
         }
         auto* dev_sec_nodes = upload("dev_sec_nodes", sec_dev->energy_nodes);
         auto* dev_sec_offsets = upload("dev_sec_offsets", sec_dev->event_offsets);

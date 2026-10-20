@@ -1,6 +1,6 @@
 #include "secondary_schedule.hpp"
 #include "run_quality.hpp"
-#include "min_json.hpp"
+#include "secondary_rate_table.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -366,34 +366,20 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         // (continuous slowing only, never a nuclear hazard), so they need
         // no rate/CINEL data.
         //
-        // Current bundle-scope coverage policy:
-        // (a) missing_projectile fails only on bundle-SCOPE misses: actual
+        // Current rate-registry scope coverage policy:
+        // (a) missing_projectile fails only on rate-registry scope misses: actual
         //     lookup misses, or logged unsupported tracks whose (Z,A) IS in
-        //     the bundle registry. Out-of-scope isotopes (no event data on
+        //     the binary rate registry. Out-of-scope isotopes (no event data on
         //     disk by design) deposit locally and are reported, not failed.
-        //     Fail-closed: log truncation (dropped>0) or missing bundle
-        //     refuses acceptance since scope cannot be proven.
+        //     Fail-closed: log truncation (dropped>0) refuses acceptance since scope cannot be proven.
         // (b) missing_target fails only on actual package-query misses.
         //     Sampler-empty draws (slowing left every channel domain between
         //     hazard and collision; no query issued) resolve via
         //     stopped-before-replay and never fail.
-        std::set<std::pair<int, int>> bundle_registry;
-        if (config.ct_schneider_physics_bundle_file.empty()) {
-            schneider_fail("schneider_bundle_missing",
-                           "Current nuclear rates require ct_schneider_physics_bundle_file", 1.0);
-        } else {
-            std::ifstream bundle_in(config.ct_schneider_physics_bundle_file);
-            if (!bundle_in) {
-                throw std::runtime_error("Cannot open nuclear physics bundle for quality audit");
-            }
-            const std::string bundle_content((std::istreambuf_iterator<char>(bundle_in)),
-                                             std::istreambuf_iterator<char>());
-            const auto bundle_doc = minjson::Parser(bundle_content).parse();
-            for (const auto& entry : bundle_doc.at("projectile_registry").arr) {
-                const auto z = static_cast<int>(minjson::require_uint(entry.at("z"), "registry.z"));
-                const auto a = static_cast<int>(minjson::require_uint(entry.at("a"), "registry.a"));
-                bundle_registry.emplace(z, a);
-            }
+        std::set<std::pair<int, int>> projectile_registry;
+        if (!result.schneider_unsupported_tracks.empty()) {
+            for (const auto& key : read_secondary_rate_projectiles(config.ct_schneider_secondary_rate_file))
+                projectile_registry.emplace(key.z, key.a);
         }
         if (sch.secondary_missing_projectile != 0) {
             schneider_fail("schneider_secondary_missing_projectile",
@@ -402,22 +388,22 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         }
         if (sch.unsupported_log_dropped != 0) {
             schneider_fail("schneider_unsupported_log_truncated",
-                           "unsupported-track log truncated; bundle scope unprovable",
+                           "unsupported-track log truncated; rate-registry scope unprovable",
                            static_cast<double>(sch.unsupported_log_dropped));
         } else {
-            std::uint64_t bundle_scope_unsupported = 0;
+            std::uint64_t in_scope_unsupported = 0;
             for (const auto& track : result.schneider_unsupported_tracks) {
                 if (track.projectile_z == 4 && track.projectile_a == 6) {
                     continue;  // Be6 TopasCompatKill exempt
                 }
-                if (bundle_registry.count({track.projectile_z, track.projectile_a}) != 0) {
-                    ++bundle_scope_unsupported;
+                if (projectile_registry.count({track.projectile_z, track.projectile_a}) != 0) {
+                    ++in_scope_unsupported;
                 }
             }
-            if (bundle_scope_unsupported != 0) {
+            if (in_scope_unsupported != 0) {
                 schneider_fail("schneider_secondary_missing_projectile",
-                               "Schneider secondary bundle-scope projectile unsupported",
-                               static_cast<double>(bundle_scope_unsupported));
+                               "Schneider secondary rate-registry scope projectile unsupported",
+                               static_cast<double>(in_scope_unsupported));
             }
         }
         // UnsupportedTargets is always a hard failure:

@@ -24,27 +24,6 @@ def inventory(root):
         expanded = set(dependencies.values())
         if cfg.get('enable_ct_grid') or cfg.get('unified_water_material_file'):
             expanded.add(cfg.get('ct_schneider_file', 'data/materials/schneider/hu_to_material.txt'))
-        # Bundle members and companion metadata are part of the installed package.
-        def bundle_files(value):
-            if isinstance(value, dict):
-                for key, item in value.items():
-                    if key in ('file', 'channels_file'):
-                        if not isinstance(item, str) or not item.startswith('data/'):
-                            raise ValueError(f'{path.name}: invalid bundle member {item}')
-                        expanded.add(item)
-                    else:
-                        bundle_files(item)
-            elif isinstance(value, list):
-                for item in value:
-                    bundle_files(item)
-        bundle = cfg.get('ct_schneider_physics_bundle_file')
-        if bundle:
-            bundle_files(json.loads((root/bundle).read_text()))
-        for filename in list(expanded):
-            for suffix in ('.metadata.json', '.channels.json'):
-                companion = Path(filename).with_suffix(suffix)
-                if (root/companion).is_file():
-                    expanded.add(str(companion))
         for filename in sorted(expanded):
             p = root/filename
             if not p.is_file():
@@ -55,7 +34,7 @@ def inventory(root):
              beam=path.stem.split('_')[2], transport_pipeline=cfg.get('transport_pipeline','generic'), ion_scattering=cfg['multiple_scattering_model'],
              inputs=dependencies)
         entries[path.stem]['files'] = sorted(expanded)
-    return dict(schema=4, scope='Eight preset inputs, fixed runtime defaults, bundle members and companion metadata. Generation provenance is not a runtime dependency.',
+    return dict(schema=4, scope='Eight preset inputs and runtime physics packages. No verification JSON sidecars.',
                 presets=entries, files=files,
                 total_unique_bytes=sum(v['bytes'] for v in files.values()))
 

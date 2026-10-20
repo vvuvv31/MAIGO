@@ -245,7 +245,7 @@ if __name__=='__main__':
     e=sub.add_parser('extract');e.add_argument('--source',type=Path,required=True);e.add_argument('--output',type=Path,required=True)
     e.add_argument('--lossless',action='store_true',help='Lossless ZIP compression; no change to stored FP32 arrays')
     m=sub.add_parser('material-inputs');m.add_argument('--bases',type=Path,required=True)
-    m.add_argument('--section-metadata',type=Path,default=Path('data/stopping/schneider/carbon.metadata.json'));m.add_argument('--output',type=Path,required=True)
+    m.add_argument('--section-metadata',type=Path,default=Path('extensions/reference/schneider_sections.metadata.json'));m.add_argument('--output',type=Path,required=True)
     s=sub.add_parser('synthesize');s.add_argument('--bases',type=Path,required=True);s.add_argument('--metadata',type=Path,required=True)
     s.add_argument('--output',type=Path,required=True)
     a=p.parse_args()

@@ -51,13 +51,15 @@ struct SecondaryRateDomainEntry {
 static_assert(sizeof(SecondaryRateDomainEntry) == 24,
               "SecondaryRateDomainEntry must be 24 bytes");
 
+// Read only the binary header and projectile keys for post-run coverage audits.
+std::vector<SecondaryProjectileKey> read_secondary_rate_projectiles(const std::filesystem::path& path);
+
 class SecondaryRateTable {
 public:
     SecondaryRateTable() = default;
 
     static SecondaryRateTable from_binary(
-        const std::filesystem::path& binary_path,
-        const std::filesystem::path& metadata_path = {});
+        const std::filesystem::path& binary_path);
 
     [[nodiscard]] double energy_min_mevu() const noexcept { return energy_min_mevu_; }
     [[nodiscard]] double energy_max_mevu() const noexcept { return energy_max_mevu_; }
@@ -122,7 +124,7 @@ private:
 
 // ---- v3 data-driven path (binary version 3 only) ----
 
-// Projectile registry lookup over the uploaded bundle-ordered key list
+// Projectile registry lookup over the uploaded binary-ordered key list
 // (layout [z0,a0,z1,a1,...], np entries). No hardcoded isotopes: any
 // (Z,A) absent from the list returns -1 (unsupported, deposited locally).
 inline int secondary_projectile_lut_index_device(const std::int32_t* keys,

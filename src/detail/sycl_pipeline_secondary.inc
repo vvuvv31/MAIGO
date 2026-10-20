@@ -319,8 +319,8 @@
                         // The per-step evaluation counter below
                         // (UnsupportedProjectileSteps) is diagnostic only and
                         // must NOT drive coverage gates.
-                        // v3: registry lookup over the uploaded bundle-ordered
-                        // keys (any (Z,A) in the bundle is supported).
+                        // v3: registry lookup over the uploaded binary-ordered
+                        // keys (any (Z,A) in the rate binary is supported).
 
                         if (enable_inelastic &&
                             schneider_ct_device_ctx.uses_cinel03() &&

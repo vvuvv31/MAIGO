@@ -87,16 +87,17 @@
   against each model's explicit kinematic or nuclear convention. Preserve the
   calibrated C12 A*amu kinematics and FE/copper FP32 arithmetic. Keep live
   `ion_species_*` audits.
-- Nuclear primary channel sidecars require explicit boolean `has_support`.
+- Nuclear channel support flags and energy domains come from binary rate tables
+  and CINPKG04 nodes. Do not restore metadata/channels/bundle JSON dependencies.
   Nuclear neutrals remain explicit untracked energy sinks; do not restore
   neutron transport/packages or replace their energy with local deposition.
   TPS isocenter configuration uses only the supported Z component key.
 - Water Z geometry requires explicit `voxel_bins_z` and `voxel_size_z_mm`.
   CT geometry comes from the CCTG header. Do not restore independent YAML
   phantom-length/depth-bin aliases or v1 nuclear-rate audit branches.
-- Primary rate readers are fixed to `SCHNRATE` v3. Startup rate metadata uses
-  `basename.metadata.json`; do not restore appended `.bin.metadata.json` naming
-  or configurable binary magic/version selectors.
+- Primary rate readers are fixed to `SCHNRATE` v3. All runtime package identity,
+  grids and channel domains come from binary data and explicit source Z/A.
+  Do not restore JSON verification sidecars or configurable magic/version selectors.
 - Supported GPU backends are CUDA (`device: cuda`, `nvptx64-nvidia-cuda`)
   and Intel Level Zero (`device: intel`, `spir64_gen`). No vendor aliases or
   CPU/backend fallback. Preserve CUDA queue/device ordering and physics.
@@ -120,7 +121,9 @@
   destination GPU; never enable JIT as a fallback. Build time is excluded from
   cold-start and steady-state throughput measurements.
 - Release assets use the physics-module layout described in `README.md`; keep
-  `data/manifest.json` and `examples/preset_dependencies.json` current.
+  `examples/preset_dependencies.json` current as an informational inventory.
+  Release archives contain physics data only; no verification JSON. The water
+  material JSON contains physical values and remains an input.
   Keep `docs/` as a local-only archive excluded from Git. Headers live directly
   in `include/`, with internal header helpers in `include/detail/`. Do not
   restore dated directory aliases or old-path lookups. Preserve independent

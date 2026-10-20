@@ -28,7 +28,7 @@ PY
 
 提取完成后将二进制及对应的提取记录安装到 `data/stopping/beamline/`，配置
 `minibeam_em_package_file: data/stopping/beamline/unrestricted.bin`，
-再更新 `examples/preset_dependencies.json` 和 `data/manifest.json`。
+再更新 `examples/preset_dependencies.json`。
 仅需离线提取一次；运行时不依赖 Geant4。
 
 `BLEM0001` 固定包含 G4_Cu、G4_AIR 两种材料、明确 ZA/质量、材料 I/e0、

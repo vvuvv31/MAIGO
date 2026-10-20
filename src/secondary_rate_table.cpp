@@ -1,5 +1,4 @@
 #include "secondary_rate_table.hpp"
-#include "min_json.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -11,23 +10,8 @@
 
 namespace carbon {
 
-SecondaryRateTable SecondaryRateTable::from_binary(
-    const std::filesystem::path& binary_path,
-    const std::filesystem::path& metadata_path) {
-    if (!std::filesystem::exists(binary_path)) {
-        throw std::runtime_error("Secondary rate binary file does not exist: " + binary_path.string());
-    }
-
-    const auto file_sz = std::filesystem::file_size(binary_path);
-    if (file_sz < sizeof(SecondaryRateHeader)) {
-        throw std::runtime_error("Secondary rate binary file too small for header: " + binary_path.string());
-    }
-
-    std::ifstream file(binary_path, std::ios::binary);
-    if (!file) {
-        throw std::runtime_error("Failed to open secondary rate binary: " + binary_path.string());
-    }
-
+namespace {
+SecondaryRateHeader read_rate_header(std::ifstream& file, const std::filesystem::path& binary_path) {
     SecondaryRateHeader header{};
     file.read(reinterpret_cast<char*>(&header), sizeof(SecondaryRateHeader));
     if (!file) {
@@ -64,6 +48,38 @@ SecondaryRateTable SecondaryRateTable::from_binary(
         std::abs(header.energy_step_mevu - kSecondaryEnergyStep) > 1e-5) {
         throw std::runtime_error("Unexpected energy grid range/step in header: " + binary_path.string());
     }
+
+    return header;
+}
+}
+
+std::vector<SecondaryProjectileKey> read_secondary_rate_projectiles(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) throw std::runtime_error("Cannot open secondary rate binary: " + path.string());
+    const auto header = read_rate_header(file, path);
+    std::vector<SecondaryProjectileKey> keys(header.num_projectiles);
+    if (!file.read(reinterpret_cast<char*>(keys.data()), keys.size() * sizeof(SecondaryProjectileKey)))
+        throw std::runtime_error("Truncated secondary projectile registry: " + path.string());
+    return keys;
+}
+
+SecondaryRateTable SecondaryRateTable::from_binary(
+    const std::filesystem::path& binary_path) {
+    if (!std::filesystem::exists(binary_path)) {
+        throw std::runtime_error("Secondary rate binary file does not exist: " + binary_path.string());
+    }
+
+    const auto file_sz = std::filesystem::file_size(binary_path);
+    if (file_sz < sizeof(SecondaryRateHeader)) {
+        throw std::runtime_error("Secondary rate binary file too small for header: " + binary_path.string());
+    }
+
+    std::ifstream file(binary_path, std::ios::binary);
+    if (!file) {
+        throw std::runtime_error("Failed to open secondary rate binary: " + binary_path.string());
+    }
+
+    const auto header = read_rate_header(file, binary_path);
 
     // Overflow-safe size computation
     const std::uint64_t np64 = header.num_projectiles;
@@ -217,121 +233,6 @@ SecondaryRateTable SecondaryRateTable::from_binary(
                             ": sum(masked)=" + std::to_string(part_sum) +
                             " total=" + std::to_string(tot));
                     }
-                }
-            }
-        }
-    }
-
-    // Companion metadata validation
-    std::filesystem::path resolved_meta = metadata_path;
-    if (resolved_meta.empty()) {
-        std::string s = binary_path.string();
-        if (s.size() > 4 && s.substr(s.size() - 4) == ".bin") {
-            resolved_meta = s.substr(0, s.size() - 4) + ".metadata.json";
-        }
-    }
-
-    // Companion metadata: REQUIRED (no silent loads). Strict schema:
-    // data_filename == actual basename, binary_magic
-    // and binary_version equal the binary header, projectile list / target
-    // order / energy grid / channel domains equal the binary content, plus
-    // provenance presence (physics list, TOPAS/Geant4 versions, Schneider
-    // hash, compiler commit). Older metadata schemas are no longer accepted.
-    if (resolved_meta.empty() || !std::filesystem::exists(resolved_meta)) {
-        throw std::runtime_error("SecondaryRateTable: companion metadata file is required but missing for: " +
-                                 binary_path.string());
-    }
-    {
-        std::ifstream meta_file(resolved_meta);
-        if (!meta_file) {
-            throw std::runtime_error("SecondaryRateTable: cannot open metadata file: " + resolved_meta.string());
-        }
-        std::string meta_content((std::istreambuf_iterator<char>(meta_file)),
-                                 std::istreambuf_iterator<char>());
-        {
-            minjson::Parser parser(meta_content);
-            const minjson::Value meta = parser.parse();
-            const std::string data_filename =
-                minjson::require_string(meta.at("data_filename"), "data_filename");
-            if (data_filename != binary_path.filename().string()) {
-                throw std::runtime_error("SecondaryRateTable: metadata data_filename '" + data_filename +
-                                         "' does not match binary basename '" +
-                                         binary_path.filename().string() + "'");
-            }
-            const std::string magic = minjson::require_string(meta.at("binary_magic"), "binary_magic");
-            if (magic != "SCHN2RAT") {
-                throw std::runtime_error("SecondaryRateTable: metadata binary_magic mismatch: " + magic);
-            }
-            const auto meta_version = minjson::require_uint(meta.at("binary_version"), "binary_version");
-            if (meta_version != header.version) {
-                throw std::runtime_error("SecondaryRateTable: metadata binary_version mismatch");
-            }
-            const minjson::Value& projs = meta.at("projectiles");
-            if (projs.type != minjson::Value::Type::Array ||
-                projs.arr.size() != table.projectiles_.size()) {
-                throw std::runtime_error("SecondaryRateTable: metadata projectile list size mismatch");
-            }
-            for (std::size_t i = 0; i < projs.arr.size(); ++i) {
-                const int z = static_cast<int>(minjson::require_uint(projs.arr[i].at("z"), "projectiles[].z"));
-                const int a = static_cast<int>(minjson::require_uint(projs.arr[i].at("a"), "projectiles[].a"));
-                if (z != table.projectiles_[i].z || a != table.projectiles_[i].a) {
-                    throw std::runtime_error("SecondaryRateTable: metadata projectile mismatch at index " +
-                                             std::to_string(i));
-                }
-            }
-            const minjson::Value& targets = meta.at("target_order");
-            if (targets.type != minjson::Value::Type::Array || targets.arr.size() != 13) {
-                throw std::runtime_error("SecondaryRateTable: metadata target_order size mismatch");
-            }
-            for (std::size_t i = 0; i < 13; ++i) {
-                const int z = static_cast<int>(minjson::require_uint(targets.arr[i], "target_order[]"));
-                if (z != table.canonical_targets_[i]) {
-                    throw std::runtime_error("SecondaryRateTable: metadata target_order mismatch at index " +
-                                             std::to_string(i));
-                }
-            }
-            const minjson::Value& grid = meta.at("energy_grid");
-            if (std::abs(minjson::require_number(grid.at("emin"), "energy_grid.emin") -
-                         table.energy_min_mevu_) > 1e-9 ||
-                std::abs(minjson::require_number(grid.at("emax"), "energy_grid.emax") -
-                         table.energy_max_mevu_) > 1e-9 ||
-                std::abs(minjson::require_number(grid.at("step"), "energy_grid.step") -
-                         table.energy_step_mevu_) > 1e-9 ||
-                minjson::require_uint(grid.at("count"), "energy_grid.count") != table.num_energies_) {
-                throw std::runtime_error("SecondaryRateTable: metadata energy_grid mismatch");
-            }
-            const minjson::Value& doms = meta.at("channel_domains");
-            if (doms.type != minjson::Value::Type::Array ||
-                doms.arr.size() != table.channel_domains_.size()) {
-                throw std::runtime_error("SecondaryRateTable: metadata channel_domains size mismatch");
-            }
-            for (std::size_t i = 0; i < doms.arr.size(); ++i) {
-                const std::size_t p = i / static_cast<std::size_t>(kSecondaryNumTargets);
-                const std::size_t t = i % static_cast<std::size_t>(kSecondaryNumTargets);
-                const auto& e = doms.arr[i];
-                const int pz = static_cast<int>(minjson::require_uint(e.at("projectile_z"), "domain.pz"));
-                const int pa = static_cast<int>(minjson::require_uint(e.at("projectile_a"), "domain.pa"));
-                const int tz = static_cast<int>(minjson::require_uint(e.at("target_z"), "domain.tz"));
-                const bool has = e.at("has_support").type == minjson::Value::Type::Boolean
-                                     ? e.at("has_support").boolean
-                                     : throw std::runtime_error(
-                                           "SecondaryRateTable: domain has_support must be boolean");
-                const double emin = minjson::require_number(e.at("energy_min_mevu"), "domain.emin");
-                const double emax = minjson::require_number(e.at("energy_max_mevu"), "domain.emax");
-                const auto& bin = table.channel_domains_[i];
-                if (pz != table.projectiles_[p].z || pa != table.projectiles_[p].a ||
-                    tz != table.canonical_targets_[t] ||
-                    (has ? 1 : 0) != bin.has_support || emin != bin.energy_min_mevu ||
-                    emax != bin.energy_max_mevu) {
-                    throw std::runtime_error("SecondaryRateTable: metadata channel_domains mismatch at index " +
-                                             std::to_string(i));
-                }
-            }
-            for (const char* field :
-                 {"physics_list", "topas_version", "geant4_version", "compiler_commit"}) {
-                if (!meta.contains(field)) {
-                    throw std::runtime_error(std::string("SecondaryRateTable: metadata missing '") + field +
-                                             "': " + resolved_meta.string());
                 }
             }
         }

@@ -152,11 +152,6 @@ std::string schneider_package_provenance_json(const std::filesystem::path& path)
         return "{\"present\": false}";
     }
     out << "{\"present\": true, \"path\": \"" << path.string() << "\"";
-    const std::filesystem::path sidecar =
-        path.parent_path() / (path.stem().string() + ".channels.json");
-    if (std::filesystem::exists(sidecar)) {
-        out << ", \"channels_file\": \"" << sidecar.string() << "\"";
-    }
     out << "}";
     return out.str();
 }
@@ -449,8 +444,7 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "  \"ct_schneider_primary_rate_file\": \"" << config.ct_schneider_primary_rate_file.string() << "\",\n"
            << "  \"ct_schneider_primary_cinel03_file\": \"" << config.ct_schneider_primary_cinel03_file.string() << "\",\n"
            << "  \"ct_schneider_secondary_rate_file\": \"" << config.ct_schneider_secondary_rate_file.string() << "\",\n"
-           << "  \"ct_schneider_secondary_cinel03_file\": \"" << config.ct_schneider_secondary_cinel03_file.string() << "\",\n"
-           << "  \"ct_schneider_physics_bundle_file\": \"" << config.ct_schneider_physics_bundle_file.string() << "\",\n";
+           << "  \"ct_schneider_secondary_cinel03_file\": \"" << config.ct_schneider_secondary_cinel03_file.string() << "\",\n";
     output << "  \"unified_water_nuclear_transport\": " << (config.unified_water_nuclear_transport ? "true" : "false") << ",\n";
     output << "  \"all_ion_primary_elastic_interactions\": " << result.primary_elastic_interactions << ",\n"
            << "  \"all_ion_secondary_elastic_interactions\": " << result.secondary_elastic_interactions << ",\n"

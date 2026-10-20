@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Assemble the proton runtime bank with explicit reuse provenance."""
-import argparse, json, shutil, struct
+import argparse, shutil, struct
 from pathlib import Path
 import numpy as np
-from campaign import REPO, dump
 
 def main():
     p = argparse.ArgumentParser()
@@ -21,7 +20,6 @@ def main():
     old = a.reference_bank.resolve()
     raw = work / 'elastic/raw/z1a1.bin'
     new = out / 'all_ion.bin'
-    pins = json.loads((work / 'elastic/provenance.json').read_text())
     with open(old, 'rb') as f:
         magic = f.read(8)
         ver, np_, ns, nt, ne, nq = struct.unpack('<6I', f.read(24))
@@ -55,12 +53,8 @@ def main():
         f.write(rates.astype('<f4').tobytes())
         f.seek(32 + 18 * 8 + ne * 4 + 18 * ns * nt * ne * 4)
         f.write(samples.tobytes())
-    meta = json.loads(old.with_suffix('.metadata.json').read_text())
-    meta.update(bytes=new.stat().st_size, new_proton_raw=[str(raw)], new_proton_input_pins=pins, water_reference='Proton row: Water_75eV; other projectile rows retained from parent bank', scope='New proton elastic row; 17 unchanged projectile rows from pinned reference extraction')
-    dump(new.with_suffix('.metadata.json'), meta)
     recoil = work / 'recoil/raw/recoil_stopping.bin'
     dest = out / 'recoil_stopping.bin'
-    rp = json.loads((work / 'recoil/provenance.json').read_text())
     shutil.copy2(recoil, dest)
     with open(dest, 'rb') as f:
         if f.read(8) != b'ELRSP001':
@@ -70,13 +64,11 @@ def main():
         vals = np.fromfile(f, '<f4')
         if nm != 26 or len(vals) != ni * nm * nenergy or (not np.all(np.isfinite(vals) & (vals > 0))):
             raise ValueError('Recoil payload')
-    dump(dest.with_suffix('.metadata.json'), dict(format='ELRSP001', water_material='Water_75eV', mean_excitation_energy_eV=75, input_pins=rp))
     raw_water = work / 'tables/proton_water.phsp'
     values = np.loadtxt(raw_water)
     if values.shape != (4001, 5) or not np.isfinite(values).all() or (not np.all(values[:, 2] > 0)):
         raise ValueError('Water stopping raw')
     np.savetxt(data / 'stopping/water/proton.csv', values[:, [0, 2]], delimiter=',', fmt='%.12g', header='Water_75eV; proton unrestricted electronic stopping\nenergy_MeVu,stopping_power_MeV_per_mm')
-    dump(data / 'stopping/water/proton.metadata.json', dict(projectile={'z': 1, 'a': 1}, water_material='Water_75eV', mean_excitation_energy_eV=75))
     print(out)
 if __name__ == '__main__':
     main()

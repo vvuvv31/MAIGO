@@ -60,10 +60,10 @@ struct SchneiderCtDeviceContext {
 
     // Secondary Rates
     const float* sec_partial_rates{nullptr};
-    // v3 only: bundle-ordered projectile registry keys [z0,a0,z1,a1,...]
+    // v3 only: binary-ordered projectile registry keys [z0,a0,z1,a1,...]
     // and per-(projectile,target) valid-domain arrays ([proj][target]).
     // Masked partials are summed at the queried energy; all current rate
-    // payloads provide the bundle-ordered registry and valid domains.
+    // payloads provide the binary-ordered registry and valid domains.
     const std::int32_t* sec_proj_keys{nullptr};
     const float* sec_domain_emin{nullptr};
     const float* sec_domain_emax{nullptr};

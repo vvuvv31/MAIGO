@@ -50,14 +50,11 @@ class SchneiderRateTable {
 public:
     SchneiderRateTable() = default;
 
-    // Current SCHNRATE v3 inelastic rates and their required companion metadata.
+    // Current SCHNRATE v3 rates; grids and channel domains come from the binary.
     static SchneiderRateTable from_binary(
-        const std::filesystem::path& binary_path,
-        const std::filesystem::path& metadata_path = {});
+        const std::filesystem::path& binary_path);
 
     [[nodiscard]] double energy_min_mevu() const noexcept { return energy_min_mevu_; }
-    [[nodiscard]] int projectile_z() const noexcept { return projectile_z_; }
-    [[nodiscard]] int projectile_a() const noexcept { return projectile_a_; }
     [[nodiscard]] double energy_max_mevu() const noexcept { return energy_max_mevu_; }
     [[nodiscard]] double energy_step_mevu() const noexcept { return energy_step_mevu_; }
     [[nodiscard]] std::size_t num_energies() const noexcept { return num_energies_; }
@@ -97,9 +94,6 @@ public:
     }
 
 private:
-    // Projectile identity is required in the companion metadata.
-    int projectile_z_{0};
-    int projectile_a_{0};
     std::uint32_t binary_version_{3};
     std::size_t num_energies_{kSchneiderNumEnergies};
     double energy_min_mevu_{0.1};

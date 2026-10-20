@@ -1,6 +1,6 @@
 #pragma once
 
-// Minimal strict JSON reader for metadata/bundle validation.
+// Minimal strict JSON reader for physical water material input.
 // Supports objects, arrays, strings, numbers, booleans, null.
 #include <cctype>
 #include <cmath>

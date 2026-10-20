@@ -1,5 +1,4 @@
 #include "schneider_rate_table.hpp"
-#include "min_json.hpp"
 
 #include <cmath>
 #include <cstring>
@@ -40,8 +39,7 @@ std::size_t SchneiderRateTable::target_index_from_z(int target_z) {
 }
 
 SchneiderRateTable SchneiderRateTable::from_binary(
-    const std::filesystem::path& binary_path,
-    const std::filesystem::path& metadata_path) {
+    const std::filesystem::path& binary_path) {
     std::ifstream in(binary_path, std::ios::binary);
     if (!in) {
         throw std::runtime_error("Cannot open Schneider rate binary file: " + binary_path.string());
@@ -156,105 +154,6 @@ SchneiderRateTable SchneiderRateTable::from_binary(
             kSchneiderNumTargets * sizeof(SchneiderRateDomainEntry);
         if (std::filesystem::file_size(binary_path) != expected_v3) {
             throw std::runtime_error("Schneider rate v3 file size mismatch (truncated or trailing bytes)");
-        }
-    }
-
-    // Companion metadata requires the full schema with binary<->metadata equality on
-    // filename, magic, version, target order, grid, and domains.
-    std::filesystem::path resolved_meta = metadata_path;
-    if (resolved_meta.empty()) {
-        const std::string s = binary_path.string();
-        if (s.size() > 4 && s.substr(s.size() - 4) == ".bin") {
-            resolved_meta = s.substr(0, s.size() - 4) + ".metadata.json";
-        }
-    }
-    if (!std::filesystem::exists(resolved_meta)) {
-        throw std::runtime_error("SchneiderRateTable: companion metadata file is required but missing for: " +
-                                 binary_path.string());
-    }
-    {
-        std::ifstream meta_in(resolved_meta);
-        if (!meta_in) {
-            throw std::runtime_error("SchneiderRateTable: cannot open metadata file: " + resolved_meta.string());
-        }
-        std::string meta_content((std::istreambuf_iterator<char>(meta_in)),
-                                 std::istreambuf_iterator<char>());
-        {
-            minjson::Parser parser(meta_content);
-            const minjson::Value meta = parser.parse();
-            {
-                const auto& projectile = meta.at("projectile");
-                const auto z = minjson::require_uint(projectile.at("z"), "projectile.z");
-                const auto a = minjson::require_uint(projectile.at("a"), "projectile.a");
-                if (z == 0 || a < z || a > 255)
-                    throw std::runtime_error("SchneiderRateTable: invalid projectile Z/A");
-                table.projectile_z_ = static_cast<int>(z);
-                table.projectile_a_ = static_cast<int>(a);
-            }
-            const std::string data_filename =
-                minjson::require_string(meta.at("data_filename"), "data_filename");
-            if (data_filename != binary_path.filename().string()) {
-                throw std::runtime_error("SchneiderRateTable: metadata data_filename '" + data_filename +
-                                         "' does not match binary basename '" +
-                                         binary_path.filename().string() + "'");
-            }
-            const std::string magic = minjson::require_string(meta.at("binary_magic"), "binary_magic");
-            if (magic != "SCHNRATE") {
-                throw std::runtime_error("SchneiderRateTable: metadata binary_magic mismatch: " + magic);
-            }
-            if (minjson::require_uint(meta.at("binary_version"), "binary_version") != header.version) {
-                throw std::runtime_error("SchneiderRateTable: metadata binary_version mismatch");
-            }
-            const minjson::Value& targets = meta.at("target_order");
-            if (targets.type != minjson::Value::Type::Array ||
-                targets.arr.size() != kSchneiderNumTargets) {
-                throw std::runtime_error("SchneiderRateTable: metadata target_order size mismatch");
-            }
-            for (std::size_t i = 0; i < kSchneiderNumTargets; ++i) {
-                const int z = static_cast<int>(minjson::require_uint(targets.arr[i], "target_order[]"));
-                if (z != kSchneiderCanonicalZ[i]) {
-                    throw std::runtime_error("SchneiderRateTable: metadata target_order mismatch at index " +
-                                             std::to_string(i));
-                }
-            }
-            const minjson::Value& grid = meta.at("energy_grid");
-            if (std::abs(minjson::require_number(grid.at("emin"), "energy_grid.emin") -
-                         table.energy_min_mevu_) > 1e-9 ||
-                std::abs(minjson::require_number(grid.at("emax"), "energy_grid.emax") -
-                         table.energy_max_mevu_) > 1e-9 ||
-                std::abs(minjson::require_number(grid.at("step"), "energy_grid.step") -
-                         table.energy_step_mevu_) > 1e-9 ||
-                minjson::require_uint(grid.at("count"), "energy_grid.count") != table.num_energies_) {
-                throw std::runtime_error("SchneiderRateTable: metadata energy_grid mismatch");
-            }
-            const minjson::Value& doms = meta.at("channel_domains");
-            if (doms.type != minjson::Value::Type::Array ||
-                doms.arr.size() != kSchneiderNumTargets) {
-                throw std::runtime_error("SchneiderRateTable: metadata channel_domains size mismatch");
-            }
-            for (std::size_t t = 0; t < kSchneiderNumTargets; ++t) {
-                const auto& e = doms.arr[t];
-                const int tz = static_cast<int>(minjson::require_uint(e.at("target_z"), "domain.tz"));
-                const bool has = e.at("has_support").type == minjson::Value::Type::Boolean
-                                     ? e.at("has_support").boolean
-                                     : throw std::runtime_error(
-                                           "SchneiderRateTable: domain has_support must be boolean");
-                const double emin = minjson::require_number(e.at("energy_min_mevu"), "domain.emin");
-                const double emax = minjson::require_number(e.at("energy_max_mevu"), "domain.emax");
-                const auto& bin = table.channel_domains_[t];
-                if (tz != kSchneiderCanonicalZ[t] || (has ? 1 : 0) != bin.has_support ||
-                    emin != bin.energy_min_mevu || emax != bin.energy_max_mevu) {
-                    throw std::runtime_error("SchneiderRateTable: metadata channel_domains mismatch at index " +
-                                             std::to_string(t));
-                }
-            }
-            for (const char* field :
-                 {"physics_list", "topas_version", "geant4_version", "compiler_commit"}) {
-                if (!meta.contains(field)) {
-                    throw std::runtime_error(std::string("SchneiderRateTable: metadata missing '") + field +
-                                             "': " + resolved_meta.string());
-                }
-            }
         }
     }
 

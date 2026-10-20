@@ -13,7 +13,6 @@ inline constexpr std::array<std::string_view,137> preset_keys{
     "max_secondary_inelastic_generations",
     "ct_grid_file",
     "ct_schneider_file",
-    "ct_schneider_physics_bundle_file",
     "ct_schneider_primary_cinel03_file",
     "ct_schneider_primary_rate_file",
     "ct_schneider_secondary_cinel03_file",

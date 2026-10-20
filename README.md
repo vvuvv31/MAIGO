@@ -115,11 +115,11 @@ echo 10000000 | sudo tee "$ARC_ENGINE/preempt_timeout_us"
 ### 3. Download physics assets
 
 Download and extract the physics assets from the
-[v2026.10.20 Release](https://github.com/vvuvv31/MAIGO/releases/tag/v2026.10.20):
+[v2026.10.20.1 Release](https://github.com/vvuvv31/MAIGO/releases/tag/v2026.10.20.1):
 
 ```bash
 export ASSET_DIR="$(dirname "$MAIGO_ROOT")/maigo_assets"
-export RELEASE_URL=https://github.com/vvuvv31/MAIGO/releases/download/v2026.10.20
+export RELEASE_URL=https://github.com/vvuvv31/MAIGO/releases/download/v2026.10.20.1
 mkdir -p "$ASSET_DIR"
 curl --fail --location --retry 3 "$RELEASE_URL/maigo_four_ct_assets.tar.gz" \
   --output "$ASSET_DIR/maigo_four_ct_assets.tar.gz"
@@ -322,7 +322,7 @@ quality fields; duplicate accounting aliases are removed.
 
 All four minibeams use compact scheduling. Retired interfaces and zero-only
 nuclear output layouts are removed.
-Primary nuclear channel metadata requires explicit boolean `has_support`.
+Nuclear channel support flags and energy domains are read directly from binary packages.
 Nuclear neutrals are not transported; their energy remains in explicit sinks.
 Neutron packages, birth captures, transport settings and dose outputs are removed.
 Explicit electromagnetic electron/photon transport was subsequently removed.
@@ -341,9 +341,6 @@ CUDA_DISABLE_PTX_JIT=1 python3 scripts/validate_presets.py \
   --candidate "$PWD/build/carbon_mc" --out tmp/validation_new
 CUDA_DISABLE_PTX_JIT=1 python3 scripts/check_interfaces.py \
   --binary "$PWD/build/carbon_mc" --output tmp/interface_check_new.json
-python3 scripts/check_release_inputs.py --output tmp/release_inputs_new.json
-CUDA_DISABLE_PTX_JIT=1 python3 scripts/check_package_contracts.py \
-  --binary "$PWD/build/carbon_mc" --output tmp/package_contracts_new.json
 ```
 
 The control is used only for scientific comparison. Small-history matched GPU
@@ -355,9 +352,10 @@ CT geometry comes from the CCTG header, with explicit voxel fields serving as
 consistency assertions. Retired `phantom_length_mm` and `depth_bin_width_mm` YAML
 keys are rejected. Internal transport dimensions are derived from the grid.
 
-Primary nuclear rates use only `SCHNRATE` v3. Startup companion metadata uses
-`basename.metadata.json`; the retired `basename.bin.metadata.json` route and
-custom magic/version reader selectors are removed.
+Primary nuclear rates use only `SCHNRATE` v3. Packages load directly from the
+configured binary files; no metadata, channels or bundle JSON is required.
+Water `material.json` supplies physical material properties, rather than a
+verification sidecar.
 
 The runtime accepts `device: cuda` with `nvptx64-nvidia-cuda` or `device: intel`
 with Intel Level Zero and the `spir64_gen` AOT target. Generic GPU/CPU selectors

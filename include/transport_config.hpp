@@ -162,7 +162,7 @@ struct TransportConfig {
     // Set false for isolated performance A/B against full face clamping.
     bool ct_skip_homogeneous_face_clamp{true};
     // Independent nuclear cross sections for four-class CT diagnostics.
-    // Schneider full physics uses the section-resolved nuclear bundle.
+    // Schneider full physics uses the section-resolved nuclear packages.
     // Top-level physics routing mode: Water vs SchneiderCt
     MaterialPhysicsMode material_physics_mode{MaterialPhysicsMode::Water};
 
@@ -177,9 +177,6 @@ struct TransportConfig {
     // Independent all-projectile TOPAS elastic bank; never uses the C12 isotropic fallback.
     std::filesystem::path all_ion_elastic_file{};
     std::filesystem::path elastic_recoil_stopping_file{};
-    // Current physics bundle manifest, required for native water/Schneider
-    // nuclear transport with strict v3 rates.
-    std::filesystem::path ct_schneider_physics_bundle_file{};
     // Out-of-scope projectile nuclear policy (Schneider CT only). The ONLY
     // allowed value is "em_only": registry-unknown projectiles keep charged
     // EM transport with secondary nuclear reactions disabled; no other value

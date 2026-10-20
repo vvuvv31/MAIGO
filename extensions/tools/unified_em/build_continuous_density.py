@@ -87,4 +87,4 @@ def build(bases,section_file,helper,output):
  (output/'continuous_density.json').write_text(json.dumps(report,indent=2)+'\n')
  print(json.dumps(report),flush=True)
 if __name__=='__main__':
- p=argparse.ArgumentParser(description=__doc__);p.add_argument('--bases',type=Path,default=Path('data/em/ions/composition_bases.npz'));p.add_argument('--sections',type=Path,default=Path('data/stopping/schneider/carbon.metadata.json'));p.add_argument('--helper',type=Path,default=Path('extensions/work/build/native/material_metadata'));p.add_argument('--output',type=Path,required=True);a=p.parse_args();build(a.bases,a.sections,a.helper,a.output)
+ p=argparse.ArgumentParser(description=__doc__);p.add_argument('--bases',type=Path,default=Path('data/em/ions/composition_bases.npz'));p.add_argument('--sections',type=Path,default=Path('extensions/reference/schneider_sections.metadata.json'));p.add_argument('--helper',type=Path,default=Path('extensions/work/build/native/material_metadata'));p.add_argument('--output',type=Path,required=True);a=p.parse_args();build(a.bases,a.sections,a.helper,a.output)

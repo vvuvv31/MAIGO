@@ -5,9 +5,6 @@
 #include "source_parameters.hpp"
 #include "cross_section.hpp"
 #include "ct_grid.hpp"
-#include "min_json.hpp"
-#include "schneider_rate_table.hpp"
-#include "secondary_rate_table.hpp"
 
 #include <algorithm>
 #include <atomic>
@@ -505,20 +502,17 @@ void TransportConfig::validate() const {
             initial_energy_MeVu > 430.0 ||
             maximum_step_mm > 1.0 || maximum_relative_energy_loss > 0.005 + 1.e-6)
             throw std::invalid_argument("Unified water requires native homogeneous water, 3D scoring, geant4 selector and CT step limits; legacy water routing is retired");
-        if (ct_schneider_physics_bundle_file.empty() || ct_schneider_primary_rate_file.empty() ||
+        if (ct_schneider_primary_rate_file.empty() ||
             ct_schneider_secondary_rate_file.empty() || ct_schneider_primary_cinel03_file.empty() ||
             ct_schneider_secondary_cinel03_file.empty() ||
             unified_water_material_file.empty())
-            throw std::invalid_argument("Unified water requires explicit v2.1 bundle paths and pinned G4_WATER material");
+            throw std::invalid_argument("Unified water requires explicit nuclear package paths and G4_WATER material");
     }
     if (material_physics_mode == MaterialPhysicsMode::SchneiderCt) {
         if (ct_grid_file.empty()) {
             throw std::invalid_argument("MaterialPhysicsMode::SchneiderCt requires ct_grid_file");
         }
-        const bool v3_bundle_mode = !ct_schneider_physics_bundle_file.empty();
-        if (nuclear_model != "none" && !v3_bundle_mode)
-            throw std::invalid_argument("Schneider CT requires the current physics bundle");
-        if (v3_bundle_mode && nuclear_model != "none") {
+        if (nuclear_model != "none") {
             if (maximum_relative_energy_loss > 0.005 + 1e-6) {
                 throw std::invalid_argument(
                     "Schneider primary cross section mode requires maximum_relative_energy_loss <= 0.005, got " +
@@ -845,263 +839,21 @@ void TransportConfig::validate() const {
     }
 }
 
-// Current physics bundle enforces rate/package identity, grids, domains and
-// registry ordering for native water and Schneider CT. Nuclear rates require v3.
-void validate_schneider_physics_bundle(const TransportConfig& config) {
-    const std::filesystem::path primary_rate =
-        config.ct_schneider_primary_rate_file;
-    const std::filesystem::path secondary_rate =
-        config.ct_schneider_secondary_rate_file;
-
-    auto peek_version = [](const std::filesystem::path& p) -> std::uint32_t {
-        if (!std::filesystem::exists(p)) {
-            return 0;
-        }
-        std::ifstream in(p, std::ios::binary);
-        char magic[8]{};
-        std::uint32_t version{0};
-        in.read(magic, 8);
-        in.read(reinterpret_cast<char*>(&version), sizeof(version));
-        if (!in) {
-            return 0;
-        }
-        if (std::strncmp(magic, "SCHNRATE", 8) != 0 && std::memcmp(magic, "SCHN2RAT", 8) != 0) {
-            return 0;
-        }
-        return version;
-    };
-    const std::uint32_t primary_ver = peek_version(primary_rate);
-    const std::uint32_t secondary_ver = peek_version(secondary_rate);
-
-    if (config.ct_schneider_physics_bundle_file.empty()) {
-        if (primary_ver == 3 || secondary_ver == 3) {
-            throw std::runtime_error(
-                "Schneider CT startup failed: v3 rate file requires "
-                "ct_schneider_physics_bundle_file (refusing unbundled v3)");
-        }
-        throw std::runtime_error("Current CINEL03 requires a v2.1 physics bundle; unbundled legacy rates are retired");
-    }
-    if (primary_ver != 3 || secondary_ver != 3) {
-        throw std::runtime_error("Current CINEL03 requires primary and secondary v3 rate binaries");
-    }
-
-    const std::filesystem::path& bundle_path = config.ct_schneider_physics_bundle_file;
-    if (!std::filesystem::exists(bundle_path)) {
-        throw std::runtime_error("Schneider CT startup failed: bundle file missing: " +
-                                 bundle_path.string());
-    }
-    std::ifstream bundle_in(bundle_path);
-    std::string bundle_content((std::istreambuf_iterator<char>(bundle_in)),
-                               std::istreambuf_iterator<char>());
-    minjson::Parser parser(bundle_content);
-    const minjson::Value bundle = parser.parse();
-    if (minjson::require_uint(bundle.at("schema_version"), "schema_version") != 1) {
-        throw std::runtime_error("Schneider CT startup failed: unsupported bundle schema_version");
-    }
-    if (bundle.contains("source_energy_scope_MeV")) {
-        const auto& scope = bundle.at("source_energy_scope_MeV");
-        if (scope.type != minjson::Value::Type::Array || scope.arr.size() != 2)
-            throw std::runtime_error("Invalid primary bundle source energy scope");
-        const double lo = minjson::require_number(scope.arr[0], "source energy min");
-        const double hi = minjson::require_number(scope.arr[1], "source energy max");
-        if (!std::isfinite(lo) || !std::isfinite(hi) || lo <= 0 || hi < lo ||
-            config.initial_total_energy_MeV() < lo || config.initial_total_energy_MeV() > hi)
-            throw std::runtime_error("Primary source energy is outside the physics bundle extraction scope");
-    }
-
-    const std::filesystem::path c12_cinel =
-        config.ct_schneider_primary_cinel03_file;
-    const std::filesystem::path sec_cinel =
-        config.ct_schneider_secondary_cinel03_file;
-    for (const auto& required : {primary_rate, secondary_rate, c12_cinel, sec_cinel}) {
-        if (!std::filesystem::is_regular_file(required))
-            throw std::runtime_error("Missing nuclear physics package: " + required.string());
-    }
-
-    // v3 requires exact versions; any v1 file with a bundle is mixing.
-    if (primary_ver != 3 || secondary_ver != 3) {
-        throw std::runtime_error(
-            "Schneider CT startup failed: bundle requires v3 primary AND secondary rate files "
-            "(refusing v1/v3 mixing)");
-    }
-    // v3 has no CSV XS table; the key must be empty.
-
-    // Full rate loads: schema + masked closure + metadata verified by
-    // construction (separate from the transport loads that follow).
-    const SecondaryRateTable sec_table = SecondaryRateTable::from_binary(secondary_rate);
-    const SchneiderRateTable pri_table = SchneiderRateTable::from_binary(primary_rate);
-    if (pri_table.projectile_z() != config.primary_atomic_number ||
-        pri_table.projectile_a() != config.primary_mass_number)
-        throw std::runtime_error("Primary rate projectile does not match YAML source Z/A; new packages require projectile metadata");
-    // Registry: bundle order == rate keys (order-sensitive, no aliasing).
-    const minjson::Value& registry = bundle.at("projectile_registry");
-    if (registry.type != minjson::Value::Type::Array ||
-        registry.arr.size() != sec_table.projectiles().size()) {
-        throw std::runtime_error("Schneider CT startup failed: bundle registry size != rate keys");
-    }
-    for (std::size_t i = 0; i < registry.arr.size(); ++i) {
-        const int z = static_cast<int>(minjson::require_uint(registry.arr[i].at("z"), "registry.z"));
-        const int a = static_cast<int>(minjson::require_uint(registry.arr[i].at("a"), "registry.a"));
-        if (z != sec_table.projectiles()[i].z || a != sec_table.projectiles()[i].a) {
-            throw std::runtime_error("Schneider CT startup failed: bundle registry mismatch at index " +
-                                     std::to_string(i));
-        }
-    }
-    const minjson::Value& targets = bundle.at("target_order");
-    if (targets.type != minjson::Value::Type::Array || targets.arr.size() != 13) {
-        throw std::runtime_error("Schneider CT startup failed: bundle target_order size != 13");
-    }
-
-    // Package sidecars: channels.json next to each package binary;
-    // projectile set == registry, bounds == rate domains (no 400MB load).
-    auto read_sidecar = [](const std::filesystem::path& pkg_path, const minjson::Value& pkg_section,
-                           const std::string& role) {
-        const std::string channels_name = minjson::require_string(
-            pkg_section.at("channels_file"), role + ".channels_file");
-        const std::filesystem::path sidecar =
-            pkg_path.parent_path() / std::filesystem::path(channels_name).filename();
-        if (!std::filesystem::exists(sidecar)) {
-            throw std::runtime_error("Schneider CT startup failed: package channels sidecar missing: " +
-                                     sidecar.string());
-        }
-        std::ifstream side_in(sidecar);
-        std::string side_content((std::istreambuf_iterator<char>(side_in)),
-                                 std::istreambuf_iterator<char>());
-        minjson::Parser side_parser(side_content);
-        return side_parser.parse();
-    };
-
-    const minjson::Value sec_side = read_sidecar(sec_cinel, bundle.at("secondary_package"), "sec");
-    {
-        std::map<std::pair<int, int>, int> proj_seen;
-        for (const auto& c : sec_side.at("channels").arr) {
-            const int pz = static_cast<int>(minjson::require_uint(c.at("projectile_z"), "ch.pz"));
-            const int pa = static_cast<int>(minjson::require_uint(c.at("projectile_a"), "ch.pa"));
-            const int tz = static_cast<int>(minjson::require_uint(c.at("target_element_z"), "ch.tz"));
-            const double lo = minjson::require_number(c.at("energy_min_MeV_per_u"), "ch.lo");
-            const double hi = minjson::require_number(c.at("energy_max_MeV_per_u"), "ch.hi");
-            proj_seen[{pz, pa}]++;
-            const int pi = sec_table.projectile_index(pz, pa);
-            if (pi < 0) {
-                throw std::runtime_error(
-                    "Schneider CT startup failed: package channel projectile not in registry");
-            }
-            const std::size_t ti = SecondaryRateTable::target_index_from_z(tz);
-            const auto& dom = sec_table.channel_domain(static_cast<std::size_t>(pi), ti);
-            if (!dom.has_support || dom.energy_min_mevu != lo || dom.energy_max_mevu != hi) {
-                throw std::runtime_error(
-                    "Schneider CT startup failed: rate/package domain mismatch");
-            }
-        }
-        if (proj_seen.size() != registry.arr.size()) {
-            throw std::runtime_error(
-                "Schneider CT startup failed: package/registry projectile count mismatch");
-        }
-    }
-    const minjson::Value pri_side = read_sidecar(c12_cinel, bundle.at("primary_package"), "pri");
-    {
-        std::array<bool, kSchneiderNumTargets> seen_targets{};
-        if (pri_side.at("channels").arr.size() != 13) {
-            throw std::runtime_error(
-                "Schneider CT startup failed: primary package must have 13 channels");
-        }
-        for (const auto& c : pri_side.at("channels").arr) {
-            const int pz = static_cast<int>(minjson::require_uint(c.at("projectile_z"), "ch.pz"));
-            const int pa = static_cast<int>(minjson::require_uint(c.at("projectile_a"), "ch.pa"));
-            if (pz != config.primary_atomic_number || pa != config.primary_mass_number) {
-                throw std::runtime_error(
-                    "Schneider CT startup failed: primary package projectile does not match the YAML source");
-            }
-            const int tz = static_cast<int>(minjson::require_uint(c.at("target_element_z"), "ch.tz"));
-            const double lo = minjson::require_number(c.at("energy_min_MeV_per_u"), "ch.lo");
-            const double hi = minjson::require_number(c.at("energy_max_MeV_per_u"), "ch.hi");
-            const std::size_t ti = SchneiderRateTable::target_index_from_z(tz);
-            if (seen_targets[ti])
-                throw std::runtime_error("Duplicate primary package target channel");
-            seen_targets[ti] = true;
-            const auto& dom = pri_table.channel_domain(ti);
-            if (!c.contains("has_support") ||
-                c.at("has_support").type != minjson::Value::Type::Boolean)
-                throw std::runtime_error("Primary channel requires explicit boolean has_support");
-            const bool has_support = c.at("has_support").boolean;
-            if (static_cast<bool>(dom.has_support) != has_support ||
-                dom.energy_min_mevu != lo || dom.energy_max_mevu != hi) {
-                throw std::runtime_error(
-                    "Schneider CT startup failed: primary rate/package domain mismatch");
-            }
-            // An explicitly empty channel is allowed only when every stored
-            // partial rate is zero. For example, p+H below pion threshold.
-            if (!has_support) {
-                for (std::size_t section = 0; section < kSchneiderNumSections; ++section)
-                    for (std::size_t energy = 0; energy < pri_table.num_energies(); ++energy)
-                        if (pri_table.mass_partial_rate(section, ti, energy) != 0.0)
-                            throw std::runtime_error("Unsupported primary channel has nonzero rates");
-            }
-        }
-    }
-
-    std::cout << "[schneider-bundle] domains and projectile registry verified: "
-              << registry.arr.size() << " projectiles\n";
-}
-
+// Packages are loaded directly. Their binary headers and channel tables are the
+// runtime source of format, projectile and energy-domain information.
 void validate_schneider_ct_startup(const TransportConfig& config) {
-    if (!config.is_schneider_ct_mode() && !config.unified_water_nuclear_transport) {
-        return;
-    }
-    if (config.is_schneider_ct_mode() && config.ct_grid_file.empty()) {
+    if (!config.is_schneider_ct_mode() && !config.unified_water_nuclear_transport) return;
+    if (config.is_schneider_ct_mode() && config.ct_grid_file.empty())
         throw std::invalid_argument("MaterialPhysicsMode::SchneiderCt requires ct_grid_file");
-    }
-
-    if (!config.enable_inelastic && config.nuclear_model == "none") {
-        return;
-    }
-
-    // Explicit em_only policy on the mandatory current bundle path.
-    if (!config.ct_schneider_physics_bundle_file.empty() &&
-        config.secondary_out_of_scope_nuclear_policy != "em_only") {
-        throw std::invalid_argument(
-            "Schneider CT bundle mode requires secondary_out_of_scope_nuclear_policy: em_only "
-            "(registry-unknown projectiles keep EM transport with nuclear reactions disabled; "
-            "no other value or default exists)");
-    }
-
-    validate_schneider_physics_bundle(config);
-
-    // Determine primary rate / cross section source
-    std::filesystem::path primary_source = config.ct_schneider_primary_rate_file;
-    if (primary_source.empty()) {
-        throw std::runtime_error("Current CINEL03 requires an explicit primary rate binary; legacy fallback is retired");
-    }
-
-    if (!std::filesystem::exists(primary_source)) {
-        throw std::runtime_error("Schneider CT startup failed: primary rate/XS table missing: " + primary_source.string());
-    }
-
-    // When secondary transport is active or in production mode, verify secondary rate and CINEL03 packages
-    if (config.enable_secondary_transport || config.run_mode == RunMode::production) {
-        std::filesystem::path c12_cinel = config.ct_schneider_primary_cinel03_file;
-        std::filesystem::path sec_rate = config.ct_schneider_secondary_rate_file;
-        std::filesystem::path sec_cinel = config.ct_schneider_secondary_cinel03_file;
-        const std::vector<std::pair<std::string, std::filesystem::path>> required = {
-            {"Schneider primary rate table", primary_source},
-            {"Schneider primary CINEL03 package", c12_cinel},
-            {"Schneider secondary rate table", sec_rate},
-            {"Schneider secondary CINEL03 package", sec_cinel},
-        };
-
-        for (const auto& [name, path] : required) {
-            if (!std::filesystem::exists(path)) {
-                throw std::runtime_error("Schneider CT startup failed: " + name + " missing: " + path.string());
-            }
-            if (path.extension() == ".bin") {
-                // The current rate readers use only basename.metadata.json.
-                const auto metadata = std::filesystem::path(path).replace_extension(".metadata.json");
-                if (!std::filesystem::exists(metadata)) {
-                    throw std::runtime_error("Schneider CT startup failed: companion metadata missing for " + path.string());
-                }
-            }
-        }
-
+    if (!config.enable_inelastic && config.nuclear_model == "none") return;
+    if (config.secondary_out_of_scope_nuclear_policy != "em_only")
+        throw std::invalid_argument("Nuclear transport requires secondary_out_of_scope_nuclear_policy: em_only");
+    for (const auto& path : {config.ct_schneider_primary_rate_file,
+                             config.ct_schneider_primary_cinel03_file,
+                             config.ct_schneider_secondary_rate_file,
+                             config.ct_schneider_secondary_cinel03_file}) {
+        if (path.empty() || !std::filesystem::is_regular_file(path))
+            throw std::runtime_error("Missing nuclear physics package: " + path.string());
     }
 }
 
@@ -1245,12 +997,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.ct_schneider_secondary_rate_file = resolve_input_path_from_config(
             config.ct_schneider_secondary_rate_file, path);
     }
-    config.ct_schneider_physics_bundle_file = parse_path(
-        values, "ct_schneider_physics_bundle_file", config.ct_schneider_physics_bundle_file);
-    if (!config.ct_schneider_physics_bundle_file.empty()) {
-        config.ct_schneider_physics_bundle_file = resolve_input_path_from_config(
-            config.ct_schneider_physics_bundle_file, path);
-    }
     if (const auto it = values.find("secondary_out_of_scope_nuclear_policy");
         it != values.end()) {
         config.secondary_out_of_scope_nuclear_policy = it->second;
@@ -1326,8 +1072,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         config.phantom_length_mm = ct_z_extent_mm;
 
         std::cout << "[material-indexing] mode: schneider-25\n";
-        if (config.nuclear_model != "none" && config.ct_schneider_physics_bundle_file.empty())
-            throw std::runtime_error("Schneider CT requires the current physics bundle");
     } else {
         if (!values.contains("voxel_bins_z") || !values.contains("voxel_size_z_mm")) {
             throw std::invalid_argument("Water geometry requires explicit voxel_bins_z and voxel_size_z_mm");

@@ -244,8 +244,7 @@ struct Cinel03LookupResult {
 };
 
 // Fixed pre-declared maximum bracketing-node gap. Chosen once from the
-// audited C12 campaign (observed per-channel max gap ~2.8 MeV/u, see
-// data/nuclear/schneider/carbon/final_states.channels.json); it is NOT relaxed
+// audited C12 binary nodes (observed per-channel max gap ~2.8 MeV/u); it is NOT relaxed
 // after seeing production results. Secondary channels are sparser, so
 // out-of-gap secondary queries are honestly reported as EnergyGapTooLarge
 // instead of being silently clamped.

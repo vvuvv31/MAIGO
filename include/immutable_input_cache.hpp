@@ -16,9 +16,6 @@ inline std::string input_cache_key(const std::filesystem::path& path) {
             std::to_string(std::filesystem::last_write_time(p).time_since_epoch().count());
     };
     append(path);
-    auto metadata = path;
-    metadata.replace_extension(".metadata.json");
-    if (metadata != path && std::filesystem::exists(metadata)) append(metadata);
     return key;
 }
 class ImmutableInputCache {
