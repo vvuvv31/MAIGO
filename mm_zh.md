@@ -17,6 +17,7 @@
 患者 CT 图像经离线预处理转换为规则三维笛卡尔体素网格，包含物理坐标原点、体素尺寸、质量密度 $\rho$ 及离散组织材料编码。CT 值（Hounsfield Unit, HU）依据 Schneider 化学计量学标定方法 [6] 映射至连续质量密度与 25 种人体组织元素组成；连同平均激发能 $I = 75\text{ eV}$ 的水参考材料（$\mathrm{Water\_75eV}$），系统共定义 26 种基础电磁介质组成。MAIGO 根据各体素的组织元素组成与连续质量密度计算电磁阻止、密度效应修正及核反应截面，使组织组成和密度共同参与异质介质输运。
 
 所有底层物理截面与响应函数均基于 Geant4 11.3.2 与 OpenTOPAS 4.2.3 [7,8] 离线提取，并封装为紧凑的模块化二进制数据包：
+
 1. **连续密度离子电磁数据包（`continuous26`）**：涵盖 26 种介质的非受限电子阻止本领、能损涨落方差参数及 Sternheimer 密度效应系数。运行时由同一阻止响应构造连续慢化近似（CSDA）射程及反射程映射。
 2. **束线材料电磁数据包（`BLEM0001`）**：针对铜（$\mathrm{G4\_Cu}$）与上游空气（$\mathrm{G4\_AIR}$）独立提取的非受限电子阻止本领及全运动学上限能损涨落方差，完整覆盖主粒子及铜核反应产生的各类带电碎片。
 3. **多重库仑散射（MCS）数据包**：预提取水、25 种 Schneider 组织、铜及空气中各带电物种的 Urban 多重散射参数、输运自由程与辐射长度，并配对提供高斯 Fermi–Eyges 散射参数。
@@ -41,22 +42,39 @@
 在异质 CT 介质中，实际体素密度 $\rho$ 处的非受限电子阻止本领通过结合参考密度 $\rho_0$ 处的线性质量密度缩放与连续 Sternheimer 密度效应修正求得：
 
 $$
-S_e(E; \rho) = \frac{\rho}{\rho_0}\, S_e(E; \rho_0) - C_{\mathrm{mat}}(\rho)\,\frac{Z_{\mathrm{eff}}^2}{\beta^2}\left[\delta(X; \rho) - \delta(X; \rho_0)\right],
+\begin{aligned}
+S_e(E;\rho)
+&= \frac{\rho}{\rho_0}S_e(E;\rho_0) \\
+&\quad - C_{\mathrm{mat}}(\rho)\frac{Z_{\mathrm{eff}}^2}{\beta^2}
+\bigl[\delta(X;\rho)-\delta(X;\rho_0)\bigr].
+\end{aligned}
 \tag{1a}
 $$
 
 式中 $\beta = v/c$ 为相对论速度比，$X = \log_{10}(\beta\gamma)$，$\delta(X; \rho)$ 为随实际密度连续插值的 Sternheimer 密度效应函数。固定局部材料组成与密度时，非受限 CSDA 射程 $R(E)$ 与有限真实路径 $\ell$ 上的平均电子能损 $\overline{\Delta E}(E, \ell)$ 满足：
 
 $$
-R(E) = \int_0^E \frac{\mathrm{d}E'}{S_e(E')}, \qquad
-\overline{\Delta E}(E, \ell) = E - R^{-1}\!\left(\max\!\left[R(E) - \ell,\, 0\right]\right).
+\begin{aligned}
+R(E) &= \int_0^E \frac{\mathrm{d}E'}{S_e(E')}, \\
+\overline{\Delta E}(E,\ell)
+&= E-R^{-1}\!\bigl(\max\{R(E)-\ell,0\}\bigr).
+\end{aligned}
 \tag{1b}
 $$
 
 阻止本领、射程及反射程采用同一分段线性响应。参考密度下的 CSDA 射程 $R_0(E)$ 在每个分段线性阻止本领节点区间 $[E_i, E_{i+1}]$（阻止本领由 $S_i$ 线性变化至 $S_{i+1}$）内采用倒数解析积分构造：
 
 $$
-\Delta R_i = \int_{E_i}^{E_{i+1}} \frac{\mathrm{d}E'}{S_e(E')} = \frac{E_{i+1} - E_i}{S_i}\,\frac{\ln(1 + q_i)}{q_i}, \qquad q_i = \frac{S_{i+1} - S_i}{S_i}.
+\begin{aligned}
+\Delta R_i
+&= \int_{E_i}^{E_{i+1}}\frac{\mathrm{d}E'}{S_e(E')}
+= \frac{E_{i+1}-E_i}{S_i}F(q_i), \\
+q_i &= \frac{S_{i+1}-S_i}{S_i}, \\
+F(q) &= \begin{cases}
+\dfrac{\ln(1+q)}{q}, & q\ne 0, \\[4pt]
+1, & q=0.
+\end{cases}
+\end{aligned}
 \tag{1c}
 $$
 
@@ -85,6 +103,7 @@ $$
 式中 $V_{\mathrm{ref}}$ 已包含局部质量密度缩放与原生电荷涨落乘子。将 $V_{\mathrm{full}}$ 乘以当前步接受的真实路径长度 $\ell$，即得该步的能损方差 $\sigma_E^2$。上游铜与空气（`BLEM0001`）则在离线提取时直接按 $T_{\max}$ 制表，无需运行时截断转换。
 
 统一涨落引擎依据粒子身份与比动能自动选择物理抽样分支：
+
 1. **Universal 涨落分支（适用于全部能区的 $^1\mathrm{H}$ 以及动能高于切换阈值 $E > (10\text{ MeV}/m_p)\,Z M$ 的 $Z > 1$ 离子）**：在厚吸收层条件（$\overline{\Delta E} \ge 10\,T_{\max}$）下，依据均值标准差比 $\mathrm{SN} = \overline{\Delta E}/\sigma_E$，当 $\mathrm{SN} \ge 2$ 时从 $[0, 2\overline{\Delta E}]$ 上的双侧截断高斯分布抽样，当 $\mathrm{SN} < 2$ 时从形状参数 $k = \mathrm{SN}^2$ 的矩匹配 Gamma 分布抽样。在薄层条件（$\overline{\Delta E} < 10\,T_{\max}$）下，遵循 Urban 双能级原子模型将能损分解为原子激发（$a_1$）与连续电离（$a_3$）两部分。当平均电离碰撞次数 $a_3 > 8$ 时，为保证数值稳定性，将电离能损代数拆分为高斯抽样的密集软碰撞分量与均值受限（$p_3 = 8 a_3 / (8 + a_3) \le 8$）的显式 Poisson 尾部；Poisson 尾部的单次碰撞能损在 $[\alpha E_0, T_{\max}]$ 区间内按 $1/E^2$ 律逐次抽样。
 2. **低能 Ion 涨落分支（适用于转换阈值以下的 $Z > 1$ 离子）**：当单步平均能损满足 $\overline{\Delta E} > 0.2 E$ 时，先对离子方差施加步内速度减慢修正；随后依据信噪比 $\mathrm{SN} = \overline{\Delta E}/\sigma_E$ 分别从截断高斯分布（$\mathrm{SN} \ge 2$）、Gamma 分布（$0.1 < \mathrm{SN} < 2$）或 $[0, 2\overline{\Delta E}]$ 均匀分布（$\mathrm{SN} \le 0.1$）中抽取实际能损。
 
@@ -137,7 +156,7 @@ $$
 L & L^2/2 \\
 L^2/2 & L^3/3
 \end{pmatrix}.
-\tag{5}
+\tag{5a}
 $$
 
 算法在粒子瞬时局部坐标系下通过 Cholesky 分解对两个正交横向轴的 $(\theta_x, x)$ 与 $(\theta_y, y)$ 进行联合抽样，再旋转回全局笛卡尔坐标系，从而精确保持末端横向位移与出射方向余弦之间的相空间相关性。当单个输运步超过设定的散射分段上限（如 CT 微束患者内次级碎片的 $0.1\text{ mm}$ 分段上限）时，自动将该步细分为多个均匀散射子段，并利用已接受的步能损估算各子段中点动能以求取 $\mathcal{T}$。
@@ -156,8 +175,13 @@ $$
 水与 CT 介质中的离散核反应包含相干核弹性散射（$\mathrm{el}$）与非弹性核碎裂反应（$\mathrm{in}$）。对于反应通道 $c \in \{\mathrm{el}, \mathrm{in}\}$，动能 $E$ 处的宏观线性反应率（单位路径反应概率，$\mathrm{mm}^{-1}$）由局部组织各靶元素 $t$ 的原子数密度 $n_t(\rho)$ 与微观截面 $\sigma_{c,t}(E)$ 求和得到：
 
 $$
-\Sigma_c(E; \rho) = \sum_{t} n_t(\rho)\,\sigma_{c,t}(E) = \rho \sum_{t} \left(\frac{\Sigma_{c,t}}{\rho}\right)_{\!\mathrm{tab}}\!(E), \qquad
-P(t \mid c, E) = \frac{n_t(\rho)\,\sigma_{c,t}(E)}{\Sigma_c(E; \rho)},
+\begin{aligned}
+\Sigma_c(E;\rho)
+&= \sum_t n_t(\rho)\sigma_{c,t}(E) \\
+&= \rho\sum_t\left(\frac{\Sigma_{c,t}}{\rho}\right)_{\!\mathrm{tab}}(E), \\
+P(t\mid c,E)
+&= \frac{n_t(\rho)\sigma_{c,t}(E)}{\Sigma_c(E;\rho)}.
+\end{aligned}
 \tag{6}
 $$
 
@@ -166,7 +190,11 @@ $$
 水与患者介质中的主粒子及带电次级碎片采用统一的无量纲核光学深度（optical depth）$\tau$ 追踪算法：
 
 $$
-\tau = -\ln U, \qquad \Sigma_{\mathrm{tot}}(E; \rho) = \Sigma_{\mathrm{el}}(E; \rho) + \Sigma_{\mathrm{in}}(E; \rho),
+\begin{aligned}
+\tau &= -\ln U, \\
+\Sigma_{\mathrm{tot}}(E;\rho)
+&= \Sigma_{\mathrm{el}}(E;\rho)+\Sigma_{\mathrm{in}}(E;\rho).
+\end{aligned}
 \tag{7}
 $$
 
@@ -179,14 +207,16 @@ $$
 八种标准配置均开启核弹性散射。当在比动能 $e = E/A$ 处选定弹性散射通道及靶元素 $t$ 后，算法确定包含 $e$ 的相邻能量节点 $[e_0, e_1]$，并按两节点对当前弹性率的贡献权重随机选择一个节点。随后从该节点预存的 512 个弹性样本中均匀抽取一条记录，获取具体靶同位素质量 $m_t$ 及归一化四动量转移平方 $q^2 / q_{\max}^2 = \tfrac{1}{2}(1 - \cos\theta_*)$（其中 $\theta_*$ 为质心系极角散射角）。结合均匀抽样的方位角 $\phi \sim \mathcal{U}(0, 2\pi)$，利用自然单位制（$c = 1$）下的精确相对论二体运动学求解实验室系反冲核动能 $E_R$ 与散射主粒子出射动能 $E'_p$：
 
 $$
-s = (m_p + m_t)^2 + 2 m_t E, \qquad
-p_* = \frac{m_t \sqrt{E(E + 2 m_p)}}{\sqrt{s}}, \qquad
-E_R = \frac{p_*^2 (1 - \cos\theta_*)}{m_t}, \qquad
-E'_p = E - E_R,
+\begin{aligned}
+s &= (M+m_t)^2+2m_tE, \\
+p_* &= \frac{m_t\sqrt{E(E+2M)}}{\sqrt{s}}, \\
+E_R &= \frac{p_*^2(1-\cos\theta_*)}{m_t}, \\
+E'_p &= E-E_R.
+\end{aligned}
 \tag{8}
 $$
 
-式中 $m_p$ 为入射粒子静止质量（严格遵循各物理包的标定质量约定，例如适用路径中 $^{12}\mathrm{C}$ 采用的 $12\text{ u}$ 约定），$p_*$ 为质心系三维动量模长。散射离子与反冲靶核的出射动量向量由当前入射方向坐标系旋转至全局笛卡尔坐标系。
+式中 $M$ 为入射粒子静止质量（严格遵循各物理包的标定质量约定，例如适用路径中 $^{12}\mathrm{C}$ 采用的 $12\text{ u}$ 约定），$p_*$ 为质心系三维动量模长。散射离子与反冲靶核的出射动量向量由当前入射方向坐标系旋转至全局笛卡尔坐标系。
 
 若反冲核身份 $(Z_R, A_R)$ 属于常规 18 物种带电离子注册表，则直接压入次级粒子队列，参与完整的电磁慢化、多重散射与核反应输运。对于常规注册表以外的重靶反冲同位素（如组织中的 $^{12}\mathrm{C}$–$^{40}\mathrm{Ca}$ 或 $^{16}\mathrm{O}$ 反冲核），引擎调用专属的全离子反冲阻止本领包（`ELRSP001`），采用非受限电子加核总阻止本领 $S_{\mathrm{tot}}(E) = S_e(E) + S_n(E)$ 及其派生 CSDA 射程进行连续慢化输运；该组反冲核采用连续慢化模型。在计算剂量平均电子 LET（$L_d$）时，这类重反冲核查询配套的纯电子阻止本领表（`LERSP001`），从而保证核阻止本领 $S_n(E)$ 不混入电子 LET 的分子与分母。初生动能 $E_R \le E_{\mathrm{cut}} = 0.1\text{ MeV}$ 的反冲核直接在碰撞顶点局部沉积能量。
 
@@ -197,7 +227,10 @@ $$
 当比动能为 $e = E/A$ 的粒子发生非弹性反应且位于有效通道域内的相邻能量节点 $[e_0, e_1]$ 之间（最大允许节点间距为 $5\text{ MeV/u}$）时，算法按线性随机插值概率选择上节点 $e_1$：
 
 $$
-P(e_1 \mid e) = \frac{e - e_0}{e_1 - e_0}, \qquad P(e_0 \mid e) = 1 - P(e_1 \mid e),
+\begin{aligned}
+P(e_1\mid e) &= \frac{e-e_0}{e_1-e_0}, \\
+P(e_0\mid e) &= 1-P(e_1\mid e).
+\end{aligned}
 \tag{9}
 $$
 
@@ -216,6 +249,7 @@ $$
 微束配置在宽束患者输运框架上游引入了铜多狭缝准直器、狭缝内空气通道及准直器后至患者体表的空气间隙。几何模型精确定义了铜准直器的外廓尺寸、沿束流方向厚度、狭缝数量、狭缝开口宽度、中心节距（pitch）、狭缝长度、阵列横向相位偏移、旋转角，以及源平面、准直器出口、CT 包围盒、患者皮肤表面与等中心之间的相对轴向坐标。准直器固定在射野坐标系中，不随扫描束斑平移。
 
 全计划临床对比实现了两套微束准直器设计：
+
 1. **质子微束准直器**：采用 $60\text{ mm}$ 厚铜块，包含 $15$ 条平行狭缝，单缝宽度 $0.5\text{ mm}$、中心节距 $3.6\text{ mm}$、狭缝长度 $50\text{ mm}$。
 2. **碳离子微束准直器（RT07575 头部计划）**：采用 $100\text{ mm}$ 厚铜块，包含 $17$ 条狭缝，单缝宽度 $0.7\text{ mm}$、中心节距 $3.0\text{ mm}$、狭缝长度 $100\text{ mm}$。针对 RT07575 计划中 $90^\circ$ 与 $270^\circ$ 对穿交火射野，两个射野保留各自独立的狭缝阵列定位，其中 $270^\circ$ 射野的名义中心狭缝阵列相对于 $90^\circ$ 射野设置了半节距（$1.5\text{ mm}$）的横向相位交错。
 
@@ -228,8 +262,12 @@ MAIGO 从准直器上游入口逐历史输运主粒子及带电核产物，经�
 离线提取的 Urban 物理包（`ct_copper.bin` 与 `air.bin`）按材料与粒子物种存储了第一输运自由程 $\lambda_{\mathrm{tr},1}(E)$、辐射长度 $X_0$ 及角分布形状参数（在水、25 种 Schneider 组织及铜中覆盖 52 种带电离子，在空气中覆盖质子与 $^{12}\mathrm{C}$）。Urban 输运通过真实路径长度 $\ell$ 与几何推进弦长 $g$ 的映射耦合散射和几何推进。在局部输运自由程 $\lambda_{\mathrm{tr},1}$ 近似恒定的条件下，正向路径转换及其精确逆映射表示为：
 
 $$
-g(\ell) = \lambda_{\mathrm{tr},1}\left(1 - e^{-\ell/\lambda_{\mathrm{tr},1}}\right), \qquad
-\ell(g) = -\lambda_{\mathrm{tr},1}\ln\!\left(1 - \frac{g}{\lambda_{\mathrm{tr},1}}\right),
+\begin{aligned}
+g(\ell)
+&= \lambda_{\mathrm{tr},1}\bigl(1-e^{-\ell/\lambda_{\mathrm{tr},1}}\bigr), \\
+\ell(g)
+&= -\lambda_{\mathrm{tr},1}\ln\!\left(1-\frac{g}{\lambda_{\mathrm{tr},1}}\right).
+\end{aligned}
 \tag{10}
 $$
 
@@ -264,6 +302,7 @@ $$
 MAIGO 采用 C++20 与 Khronos SYCL 实现，通过 oneAPI Unified Runtime CUDA 后端支持 NVIDIA GPU，通过 Level Zero 后端支持 Intel Xe GPU。设备内核预先编译为目标架构的原生机器码，运行时关闭即时编译。质子宽束、碳离子宽束、质子微束和碳离子微束采用四条编译期特化主粒子管线，并为自定义离子配置提供通用管线；各管线共享支持多物种带电核碎片的次级输运内核。
 
 针对微束模拟中因狭缝准直器吸收、多代核反应分支及轨迹寿命差异导致的 GPU 线程束分化（warp/subgroup divergence），微束管线将粒子输运解耦为通过预分配全局内存队列衔接的多个顺序执行阶段：
+
 1. **上游束线主粒子阶段**：追踪从束流源出发穿过铜狭缝准直器与空气间隙的主粒子，将到达患者入口的存活主粒子写入入口检查点队列，并将铜中产生的次级带电产物推入独立的上游子代队列。
 2. **上游铜碎片级联阶段**：在铜准直器与空气中继续追踪最多三代铜带电核碎片。
 3. **患者内主粒子输运阶段**：从患者入口恢复存活主粒子并在体素化水或 CT 网格中执行慢化与核反应输运；在适用配置下采用基于计数排序（counting-sort）的槽位重排算法（`bucket_order`）按空间／材料局部性重排活跃轨迹索引，以提高物理表查询的局部性。
@@ -278,17 +317,25 @@ MAIGO 采用 C++20 与 Khronos SYCL 实现，通过 oneAPI Unified Runtime CUDA 
 设单次照射中第 $j \in \{1, \dots, M\}$ 个扫描束斑的物理粒子权重为 $W_j > 0$，全计划总物理入射粒子数为 $W = \sum_{j=1}^M W_j$。对于总模拟历史数为 $N$ 的蒙特卡罗计算，各束斑的整数模拟粒子数 $n_j$ 按最大余数法（largest-remainder method）由 $N W_j / W$ 严格分配：
 
 $$
-n_j = \left\lfloor \frac{N W_j}{W} \right\rfloor + \mathbb{I}\!\left(j \in \mathcal{R}_{N - \sum_k \lfloor N W_k / W \rfloor}\right), \qquad \sum_{j=1}^M n_j = N,
+\begin{aligned}
+h_j &= \frac{NW_j}{W},
+& K &= N-\sum_{k=1}^M\lfloor h_k\rfloor, \\
+n_j &= \lfloor h_j\rfloor+\mathbf{1}_{\{j\in\mathcal{R}_K\}},
+& \sum_{j=1}^M n_j &= N.
+\end{aligned}
 \tag{11a}
 $$
 
-其中 $\mathcal{R}_K$ 为小数余数最大的前 $K$ 个束斑下标集合。该方法保证全计划整数历史数之和为 $N$，并将余数分配给距下一整数最近的束斑。全局分配随后拆分至各 GPU 和统计批次；配对 TOPAS 比较采用参考计算的整数束斑粒子数清单。
+其中 $h_j$ 为理想历史数，$K$ 为向下取整后待分配的历史数，$\mathcal{R}_K$ 为小数余数 $h_j-\lfloor h_j\rfloor$ 最大的前 $K$ 个束斑下标集合，$\mathbf{1}$ 为示性函数。该方法保证全计划整数历史数之和为 $N$，并将余数分配给距下一整数最近的束斑。全局分配随后拆分至各 GPU 和统计批次；配对 TOPAS 比较采用参考计算的整数束斑粒子数清单。
 
 粒子输运过程中，体素沉积能量 $\Delta E$（单位 $\mathrm{MeV}$）通过 GPU 32 位单精度浮点数（`FP32`）原子加操作累加至显存数组。设第 $i$ 个体素的质量密度为 $\rho_i$（$\mathrm{g/cm^3}$）、体积为 $V_i$（$\mathrm{mm^3}$）、累计沉积能量为 $E_i$（$\mathrm{MeV}$），则体素质量 $m_i$（$\mathrm{kg}$）及绝对介质吸收剂量 $D_i$（$\mathrm{Gy}$）由下式给出：
 
 $$
-m_i = \rho_i V_i \times 10^{-6}\text{ kg}, \qquad
-D_i = \frac{E_i \times 1.602176634 \times 10^{-13}\text{ J/MeV}}{m_i}\,\frac{W}{N}.
+\begin{aligned}
+m_i &= \rho_iV_i\times 10^{-6}\,\mathrm{kg}, \\
+D_i &= \frac{E_i\times 1.602176634\times 10^{-13}\,\mathrm{J/MeV}}{m_i}
+\frac{W}{N}.
+\end{aligned}
 \tag{11b}
 $$
 
@@ -299,9 +346,11 @@ $$
 剂量平均电子线性能量传递（$L_d$）采用基于非受限电子阻止本领的轨迹长度估计量（track-length estimator）与吸收剂量同步计分。对于体素 $i$ 内真实路径长度为 $\ell_k > 0$ 的第 $k$ 段有限长带电离子输运步，令 $S_{e,k}$ 表示在步前动能与当前体素实际密度 $\rho_i$ 处求值的非受限线性电子阻止本领（单位 $\mathrm{MeV/mm}$，数值上等价于 $\mathrm{keV/\mu m}$）。引擎在每个体素内同步累积两个可加矩 $A_i$ 与 $B_i$，其比值即为体素剂量平均电子 LET $L_{d,i}$：
 
 $$
-A_i = \sum_{k \in i} S_{e,k}^{\,2}\,\ell_k, \qquad
-B_i = \sum_{k \in i} S_{e,k}\,\ell_k, \qquad
-L_{d,i} = \frac{A_i}{B_i}.
+\begin{aligned}
+A_i &= \sum_{k\in i}S_{e,k}^{\,2}\ell_k, \\
+B_i &= \sum_{k\in i}S_{e,k}\ell_k, \\
+L_{d,i} &= \frac{A_i}{B_i},\qquad B_i>0.
+\end{aligned}
 \tag{12}
 $$
 
@@ -350,15 +399,20 @@ TOPAS 参考采用与式（12）一致的双矩 LET 计分器，分别累积 $A_
 采用以 TOPAS 参考剂量 $D_{\mathrm{ref}}(\mathbf{r})$ 为基准的三维局部（local）Gamma 指数 [10] 定量评价 GPU 计算剂量分布 $D_{\mathrm{GPU}}(\mathbf{r}')$ 的空间与剂量一致性：
 
 $$
-\gamma(\mathbf{r}) = \min_{\mathbf{r}'} \sqrt{
-\frac{\|\mathbf{r}' - \mathbf{r}\|^2}{\Delta r^2} +
-\frac{\left[D_{\mathrm{GPU}}(\mathbf{r}') - D_{\mathrm{ref}}(\mathbf{r})\right]^2}{\left[\delta D_{\mathrm{ref}}(\mathbf{r})\right]^2}
-}, \qquad
-\delta D_{\mathrm{ref}}(\mathbf{r}) = \left(\frac{\Delta D_{\%}}{100}\right) D_{\mathrm{ref}}(\mathbf{r}),
+\begin{aligned}
+\varepsilon_D &= \frac{\Delta D_{\%}}{100},\qquad \Delta r>0, \\
+\gamma(\mathbf{r})
+&= \min_{\substack{\mathbf{r}'\\\|\mathbf{r}'-\mathbf{r}\|\le\Delta r}}
+\left[
+\frac{\|\mathbf{r}'-\mathbf{r}\|^2}{(\Delta r)^2}
++\frac{\bigl[D_{\mathrm{GPU}}(\mathbf{r}')-D_{\mathrm{ref}}(\mathbf{r})\bigr]^2}
+{\bigl[\varepsilon_D D_{\mathrm{ref}}(\mathbf{r})\bigr]^2}
+\right]^{1/2}.
+\end{aligned}
 \tag{13}
 $$
 
-式中 $\Delta r$ 为距离一致性（DTA）容差，$\Delta D_{\%}$ 为相对于参考点局部剂量的百分比容差。GPU 剂量场通过三线性插值在参考点周围半径 $\Delta r$ 的球域内搜索，以计算亚体素距离容差下的 Gamma 指数。参考评价点为 `BODY` 轮廓内超过剂量阈值的体素；搜索时采用完整 GPU 剂量场，包括 `BODY` 边界外的邻近体素。表 3 列出评价域、局部判据及搜索步长。
+式中 $\Delta r>0$ 为距离一致性（DTA）容差，$\varepsilon_D=\Delta D_{\%}/100$ 为相对于参考点局部剂量的无量纲剂量容差。GPU 剂量场通过三线性插值在参考点周围半径 $\Delta r$ 的球域内搜索，以计算亚体素距离容差下的 Gamma 指数。参考评价点为 `BODY` 轮廓内超过剂量阈值的体素；搜索时采用完整 GPU 剂量场，包括 `BODY` 边界外的邻近体素。表 3 列出评价域、局部判据及搜索步长。
 
 **表 3.** 宽束与微束模式的三维局部 Gamma 评价域、验收判据及亚体素空间搜索步长。
 
@@ -367,11 +421,11 @@ $$
 | **宽束（Broadbeam）** | $D_{\mathrm{ref}}(\mathbf{r}) > 0.10\, D_{\mathrm{ref},\max}$ | $3\%/3\text{ mm}$、$1\%/1\text{ mm}$、$3\%/0\text{ mm}$ | $0.10\text{ mm}$ |
 | **微束（Minibeam）** | $D_{\mathrm{ref}}(\mathbf{r}) > 0.4\text{ Gy}$（$4\text{ Gy}$ 处方的 $10\%$） | $3\%/0.2\text{ mm}$、$3\%/0.1\text{ mm}$、$3\%/0\text{ mm}$ | $0.02\text{ mm}$ |
 
-评价点满足 $\gamma \le 1$ 时通过。$3\%/0\text{ mm}$ 单独定义为同位置局部剂量差检验 $|D_{\mathrm{GPU}}-D_{\mathrm{ref}}|/D_{\mathrm{ref}} \le 0.03$。宽束以局部 $1\%/1\text{ mm}$ 通过率 $>99\%$ 为预定验收标准。微束采用 $3\%/0.2\text{ mm}$ 与 $3\%/0.1\text{ mm}$ 判据及 $0.02\text{ mm}$ 搜索步长，使空间容差与亚毫米狭缝尺度相适应。不同深度的横向剂量剖面评价峰宽、谷值与 PVDR，深度剂量剖面评价远端跌落，DVH 指标评价靶区与 OAR 剂量；同位置剂量差分布与批次不确定度共同表征逐体素一致性。
+评价点满足 $\gamma \le 1$ 时通过。零距离终点定义为同位置相对剂量差 $\eta_D(\mathbf{r})=\lvert D_{\mathrm{GPU}}(\mathbf{r})-D_{\mathrm{ref}}(\mathbf{r})\rvert/D_{\mathrm{ref}}(\mathbf{r})$；$3\%/0\text{ mm}$ 检验以 $\eta_D\le 0.03$ 为通过条件。宽束以局部 $1\%/1\text{ mm}$ 通过率 $>99\%$ 为预定验收标准。微束采用 $3\%/0.2\text{ mm}$ 与 $3\%/0.1\text{ mm}$ 判据及 $0.02\text{ mm}$ 搜索步长，使空间容差与亚毫米狭缝尺度相适应。不同深度的横向剂量剖面评价峰宽、谷值与 PVDR，深度剂量剖面评价远端跌落，DVH 指标评价靶区与 OAR 剂量；同位置剂量差分布与批次不确定度共同表征逐体素一致性。
 
 ### II.F.2. 三维 LET Gamma 评价与一维空间剖面分析
 
-剂量平均电子 LET（$L_d$）的三维局部 Gamma 评价将式（13）中的剂量替换为 $L_{d,\mathrm{GPU}}(\mathbf{r}')$ 与 $L_{d,\mathrm{ref}}(\mathbf{r})$，局部容差定义为 $\delta L_{d,\mathrm{ref}}(\mathbf{r}) = (\Delta L_{\%}/100)\,L_{d,\mathrm{ref}}(\mathbf{r})$。评价域取为 `BODY` 轮廓与参考剂量掩膜 $D_{\mathrm{ref}}(\mathbf{r}) > 0.10\,D_{\mathrm{ref},\max}$ 的交集。宽束 LET 比较报告 $3\%/3\text{ mm}$、$1\%/1\text{ mm}$ 及 $3\%/0\text{ mm}$ 局部通过率（非零距离判据采用 $0.10\text{ mm}$ 搜索步长对 GPU LET 场作三线性插值）。参考剂量掩膜内若出现 GPU LET 分母为零（$B_i = 0$）的体素，在 Gamma 统计中严格保留为未通过点。
+剂量平均电子 LET（$L_d$）的三维局部 Gamma 评价将式（13）中的剂量替换为 $L_{d,\mathrm{GPU}}(\mathbf{r}')$ 与 $L_{d,\mathrm{ref}}(\mathbf{r})$，无量纲容差定义为 $\varepsilon_L=\Delta L_{\%}/100$，局部绝对容差为 $\varepsilon_L L_{d,\mathrm{ref}}(\mathbf{r})$。零距离终点采用同位置相对 LET 差。评价域取为 `BODY` 轮廓与参考剂量掩膜 $D_{\mathrm{ref}}(\mathbf{r}) > 0.10\,D_{\mathrm{ref},\max}$ 的交集。宽束 LET 比较报告 $3\%/3\text{ mm}$、$1\%/1\text{ mm}$ 及 $3\%/0\text{ mm}$ 局部通过率（非零距离判据采用 $0.10\text{ mm}$ 搜索步长对 GPU LET 场作三线性插值）。参考剂量掩膜内若出现 GPU LET 分母为零（$B_i = 0$）的体素，在 Gamma 统计中严格保留为未通过点。
 
 LET 空间分析采用固定几何深度的横向剖面与沿束轴的深度剖面。RT07575 碳离子宽束的深度从中心射线进入 `BODY` 的位置起算，按原生 $0.5\text{ mm}$ 间距取样。中心射线剖面表征局部 LET 结构，$2.5 \times 10\text{ mm}^2$ 横向 ROI 汇总剖面表征区域深度趋势。每个深度切片的 ROI LET 按 $\sum_{i\in\mathrm{ROI}}A_i/\sum_{i\in\mathrm{ROI}}B_i$ 计算。
 
@@ -384,40 +438,54 @@ $$
 \tag{14}
 $$
 
-当跨设备吞吐量均衡分配导致各批次历史数 $N_b$ 存在轻微差异时，定义批次历史数权重 $a_b = N_b / N$、全计划等效批次剂量 $Y_{i,b} = d_{i,b} / a_b$ 及权重平方和 $q = \sum_{b=1}^B a_b^2$，此时采用加权批次方差估计量：
+对于不等历史数批次，定义历史数占比 $a_b=N_b/N>0$ 和全计划等效批次剂量 $Y_{i,b}=d_{i,b}/a_b$，满足 $D_i=\sum_b a_bY_{i,b}$。在批次独立、源比例匹配且单历史方差相同的条件下，$\operatorname{Var}(Y_{i,b})=v_i/N_b$，总剂量方差估计为：
 
 $$
-\widehat{\sigma}_{D_i}^{\,2} = \frac{q}{1 - q} \left[ \sum_{b=1}^B a_b Y_{i,b}^{\,2} - D_i^{\,2} \right],
+\begin{aligned}
+\widehat{\sigma}_{D_i}^{\,2}
+&= \frac{1}{B-1}\sum_{b=1}^B a_b\bigl(Y_{i,b}-D_i\bigr)^2 \\
+&= \frac{1}{B-1}\sum_{b=1}^B
+\frac{\bigl(d_{i,b}-a_bD_i\bigr)^2}{a_b}.
+\end{aligned}
 \tag{15}
 $$
 
-当各批次等大小时（$a_b = 1/B$），式（15）精确退化为式（14）。
+式（15）要求 $B>1$，当 $a_b=1/B$ 时化为式（14）。
 
 TOPAS 不确定度采用逐历史计分方差或匹配先导模拟估计。逐历史方差按归一化因子换算至计划剂量尺度；三份碳离子宽束参考采用 $N_{\mathrm{pilot}}=300,000$ 个历史的先导计算，保持参考几何、物理列表、能谱和相对束斑权重，并按 $\widehat{\sigma}_{D_{\mathrm{ref},i}}=\widehat{\sigma}_{\mathrm{pilot},i}\sqrt{N_{\mathrm{pilot}}/N_{\mathrm{full}}}$ 外推至完整历史数。独立复本间方差用于交叉核验。
 
 在给定的固定评价域 $\mathcal{R}$（包含 $|\mathcal{R}|$ 个体素）内，整体蒙卡统计精度通过相对标准误的均方根（RMS）表征：
 
 $$
-u_{\mathrm{RMS}} = 100 \sqrt{ \frac{1}{|\mathcal{R}|} \sum_{i \in \mathcal{R}} \frac{\widehat{\sigma}_{D_i}^{\,2}}{D_{\mathrm{ref},i}^{\,2}} } \;\; (\%),
+\begin{aligned}
+u_i &= 100\frac{\widehat{\sigma}_{D_i}}{D_{\mathrm{ref},i}}, \\
+u_{\mathrm{RMS}}
+&= \sqrt{\frac{1}{\lvert\mathcal{R}\rvert}\sum_{i\in\mathcal{R}}u_i^2}.
+\end{aligned}
 \tag{16}
 $$
 
-并同时报告体素相对标准误的分位数及低于指定误差限（如 $1\%$ 或 $2\%$）的体素比例。鉴于 GPU 与 TOPAS 模拟彼此统计独立，逐体素剂量差 $\Delta D_i = D_{\mathrm{GPU},i} - D_{\mathrm{ref},i}$ 的随机方差由 $\widehat{\sigma}_{\Delta D_i}^{\,2} = \widehat{\sigma}_{D_{\mathrm{GPU},i}}^{\,2} + \widehat{\sigma}_{D_{\mathrm{ref},i}}^{\,2}$ 合成。
+$u_i$ 和 $u_{\mathrm{RMS}}$ 均以百分数表示，并报告体素不确定度分位数及相对标准误低于 $1\%$ 或 $2\%$ 的体素比例。鉴于 GPU 与 TOPAS 模拟彼此统计独立，逐体素剂量差 $\Delta D_i = D_{\mathrm{GPU},i} - D_{\mathrm{ref},i}$ 的随机方差由 $\widehat{\sigma}_{\Delta D_i}^{\,2} = \widehat{\sigma}_{D_{\mathrm{GPU},i}}^{\,2} + \widehat{\sigma}_{D_{\mathrm{ref},i}}^{\,2}$ 合成。
 
 ### II.F.4. 剂量平均 LET 的比值方差估计
 
-由于剂量平均 LET $L_{d,i} = A_i / B_i$ 是由同一批粒子轨迹同步累积的两个相关随机变量之比，其统计误差评估保留分子与分母之间的协方差 $\mathrm{Cov}(A_i, B_i)$。为在主计算总统计量 $N$ 下估计 GPU LET 统计误差，辅助 GPU 计算将总历史数 $N$ 拆分为 $K$ 个统计独立、近等统计量且源比例匹配的全计划分组（碳离子宽束基准取 $K = 20$）。设第 $b \in \{1, \dots, K\}$ 组在体素 $i$ 累积的两个矩分别为 $A_{i,b}$ 与 $B_{i,b}$，总估计量为 $L_{d,i} = \sum_{b=1}^K A_{i,b} \big/ \sum_{b=1}^K B_{i,b}$，则基于一阶 Taylor 展开（Delta 方法）的分组比值方差估计量为：
+由于剂量平均 LET $L_{d,i} = A_i / B_i$ 是由同一批粒子轨迹同步累积的两个相关随机变量之比，其统计误差评估保留分子与分母之间的协方差 $\mathrm{Cov}(A_i, B_i)$。为在主计算总统计量 $N$ 下估计 GPU LET 统计误差，辅助 GPU 计算将总历史数 $N$ 拆分为 $K$ 个统计独立、源比例匹配的全计划分组，各组历史数为 $N_b$、占比为 $a_b=N_b/N>0$（碳离子宽束基准取 $K = 20$）。设第 $b \in \{1, \dots, K\}$ 组在体素 $i$ 累积的两个矩分别为 $A_{i,b}$ 与 $B_{i,b}$，总估计量为 $L_{d,i} = \sum_{b=1}^K A_{i,b} \big/ \sum_{b=1}^K B_{i,b}$，在 $K>1$ 且各组配对矩具有相同单历史协方差矩阵的条件下，基于一阶 Taylor 展开（Delta 方法）的方差估计为：
 
 $$
-\widehat{\sigma}_{L_{d,i}}^{\,2} = \frac{K}{K - 1} \, \frac{\sum_{b=1}^K \left( A_{i,b} - L_{d,i}\,B_{i,b} \right)^2}{\left( \sum_{b=1}^K B_{i,b} \right)^2}.
+\widehat{\sigma}_{L_{d,i}}^{\,2}
+\approx \frac{1}{K-1}
+\frac{\displaystyle\sum_{b=1}^K
+\frac{\bigl(A_{i,b}-L_{d,i}B_{i,b}\bigr)^2}{a_b}}
+{\displaystyle\left(\sum_{b=1}^K B_{i,b}\right)^2}.
 \tag{17}
 $$
 
-当 TOPAS 参考模拟同样包含多个保存了配对分子／分母矩的独立复本时，按式（17）同等计算参考 LET 的逐体素标准误。在固定参考剂量掩膜 $D_{\mathrm{ref}} > 0.10\,D_{\mathrm{ref},\max}$ 内，分别报告逐体素 LET 相对标准误、区域 RMS 不确定度、分位数及达标体素比例。
+等历史数分组时，式（17）化为 $\widehat{\sigma}_{L_{d,i}}^{\,2}\approx [K/(K-1)]\sum_b(A_{i,b}-L_{d,i}B_{i,b})^2/(\sum_b B_{i,b})^2$。当 TOPAS 参考模拟同样包含多个保存了配对分子／分母矩的独立复本时，按式（17）同等计算参考 LET 的逐体素标准误。在固定参考剂量掩膜 $D_{\mathrm{ref}} > 0.10\,D_{\mathrm{ref},\max}$ 内，分别报告逐体素 LET 相对标准误、区域 RMS 不确定度、分位数及达标体素比例。
 
 ### II.F.5. 计算吞吐量评测与运行时完整性审计
 
 各型 GPU 硬件平台——包括 NVIDIA GeForce RTX 2080 Ti（`sm_75`）、NVIDIA RTX A6000（`sm_86`）、NVIDIA L4（`sm_89`）以及 Intel Arc B580（`bmg-g21`）——均采用禁用运行时 JIT 的原生 AOT 编译可执行程序独立评测并分别报告（编译耗时不计入运行时间）。性能评测严格区分两项端到端墙钟时间（wall-clock time）指标：
+
 1. **冷启动耗时（Cold-start latency）**：从操作系统启动新进程至首个批次结果落盘保存的完整耗时，涵盖配置解析、GPU 设备初始化、物理数据包上传至显存、内核计算、运行审计及文件输出。
 2. **稳态吞吐率（Steady-state throughput，$\mathrm{histories/s}$）**：同一常驻进程内后续连续批次的总模拟入射 histories 除以累计端到端墙钟时间（包含显存回传、运行审计与文件输出）。
 

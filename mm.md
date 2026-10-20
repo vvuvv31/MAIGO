@@ -17,6 +17,7 @@ The engine supports primary proton ($Z=1, A=1$) and carbon-12 ($^{12}\mathrm{C}$
 Patient CT datasets are preprocessed offline into a regular three-dimensional Cartesian grid specified by its physical origin, voxel dimensions, mass density $\rho$, and discrete tissue composition index. Hounsfield units (HU) are converted to mass density and mapped to 25 stoichiometric human tissue elemental compositions according to the Schneider segmentation scheme [6]. Supplementing these 25 tissues with a reference water composition having a mean excitation energy of $I = 75\text{ eV}$ ($\mathrm{Water\_75eV}$) yields 26 distinct material compositions. MAIGO evaluates material-specific electromagnetic and nuclear responses from each voxel’s tissue composition and continuous mass density, incorporating both composition and density into heterogeneous transport.
 
 All underlying physical cross sections and response functions are extracted offline from Geant4 11.3.2 and OpenTOPAS 4.2.3 [7,8]. The runtime physics database is organized into modular binary packages comprising:
+
 1. **Continuous-density ion electromagnetic tables (`continuous26`)**: Unrestricted electronic stopping powers, energy-loss straggling dispersions, and Sternheimer density-effect parameters across all 26 media, from which consistent continuous-slowing-down approximation (CSDA) ranges and inverse ranges are evaluated at runtime.
 2. **Beamline electromagnetic tables (`BLEM0001`)**: Independently extracted unrestricted electronic stopping powers and full energy-loss fluctuation dispersions for copper ($\mathrm{G4\_Cu}$) and air ($\mathrm{G4\_AIR}$) covering primary ions and all copper-generated charged fragment species.
 3. **Multiple Coulomb scattering (MCS) tables**: Precomputed species- and material-dependent Urban MCS parameters, transport mean free paths, and radiation lengths for water, CT tissues, copper, and air, paired with effective Gaussian Fermi–Eyges scattering parameters.
@@ -41,22 +42,39 @@ Each charged particle track maintains its 3D position $\mathbf{r}$, unit directi
 In heterogeneous CT media, the unrestricted stopping power at actual voxel density $\rho$ is evaluated by combining mass-density scaling of the reference composition response with a continuous Sternheimer density-effect correction:
 
 $$
-S_e(E; \rho) = \frac{\rho}{\rho_0}\, S_e(E; \rho_0) - C_{\mathrm{mat}}(\rho)\,\frac{Z_{\mathrm{eff}}^2}{\beta^2}\left[\delta(X; \rho) - \delta(X; \rho_0)\right],
+\begin{aligned}
+S_e(E;\rho)
+&= \frac{\rho}{\rho_0}S_e(E;\rho_0) \\
+&\quad - C_{\mathrm{mat}}(\rho)\frac{Z_{\mathrm{eff}}^2}{\beta^2}
+\bigl[\delta(X;\rho)-\delta(X;\rho_0)\bigr].
+\end{aligned}
 \tag{1a}
 $$
 
 where $\rho_0$ is the base density of the tissue composition, $\beta = v/c$ is the relativistic velocity, $X = \log_{10}(\beta\gamma)$, and $\delta(X; \rho)$ is the continuous Sternheimer parameterization interpolated across the voxel density $\rho$. For a fixed local composition and density, the unrestricted CSDA range $R(E)$ and the finite-step mean energy loss $\overline{\Delta E}(E, \ell)$ over a true path length $\ell$ are defined by
 
 $$
-R(E) = \int_0^E \frac{\mathrm{d}E'}{S_e(E')}, \qquad
-\overline{\Delta E}(E, \ell) = E - R^{-1}\!\left(\max\!\left[R(E) - \ell,\, 0\right]\right).
+\begin{aligned}
+R(E) &= \int_0^E \frac{\mathrm{d}E'}{S_e(E')}, \\
+\overline{\Delta E}(E,\ell)
+&= E-R^{-1}\!\bigl(\max\{R(E)-\ell,0\}\bigr).
+\end{aligned}
 \tag{1b}
 $$
 
 Stopping power, range, and inverse range share a piecewise-linear response. The reference CSDA range $R_0(E)$ is constructed analytically by integrating the reciprocal of the piecewise-linear stopping response over each energy knot interval $[E_i, E_{i+1}]$, where $S_e(E)$ varies linearly from $S_i$ to $S_{i+1}$:
 
 $$
-\Delta R_i = \int_{E_i}^{E_{i+1}} \frac{\mathrm{d}E'}{S_e(E')} = \frac{E_{i+1} - E_i}{S_i}\,\frac{\ln(1 + q_i)}{q_i}, \qquad q_i = \frac{S_{i+1} - S_i}{S_i},
+\begin{aligned}
+\Delta R_i
+&= \int_{E_i}^{E_{i+1}}\frac{\mathrm{d}E'}{S_e(E')}
+= \frac{E_{i+1}-E_i}{S_i}F(q_i), \\
+q_i &= \frac{S_{i+1}-S_i}{S_i}, \\
+F(q) &= \begin{cases}
+\dfrac{\ln(1+q)}{q}, & q\ne 0, \\[4pt]
+1, & q=0.
+\end{cases}
+\end{aligned}
 \tag{1c}
 $$
 
@@ -85,6 +103,7 @@ $$
 where $V_{\mathrm{ref}}$ already incorporates local mass-density scaling and the native effective-charge fluctuation factor. Multiplying $V_{\mathrm{full}}$ by the accepted true step length $\ell$ yields the step variance $\sigma_E^2$. For upstream copper and air (`BLEM0001`), the unrestricted variance at $T_{\max}$ is tabulated directly offline and requires no cut-conversion factor.
 
 The fluctuation engine selects the appropriate physical regime based on particle identity and velocity:
+
 1. **Universal fluctuation regime ($^1\mathrm{H}$ at all energies and $Z > 1$ ions above the native transition energy $E > (10\text{ MeV}/m_p)\,Z M$)**: In the thick-absorber regime ($\overline{\Delta E} \ge 10\,T_{\max}$), energy loss is drawn from a two-sided truncated Gaussian distribution on $[0, 2\overline{\Delta E}]$ when $\overline{\Delta E}/\sigma_E \ge 2$, or from a moment-matched Gamma distribution with shape parameter $k = (\overline{\Delta E}/\sigma_E)^2$ when $\overline{\Delta E}/\sigma_E < 2$. In the thin-absorber regime ($\overline{\Delta E} < 10\,T_{\max}$), the energy loss is decomposed into atomic excitation ($a_1$) and continuum ionization ($a_3$) components following the Urban two-level atom model. To avoid numerical instability when the expected number of ionization collisions $a_3 > 8$, the ionization component is split algebraically into a Gaussian-sampled dense soft part and a bounded explicit Poisson tail with mean $p_3 = 8 a_3 / (8 + a_3) \le 8$, from which single-collision transfers are drawn according to a $1/E^2$ distribution over $[\alpha E_0, T_{\max}]$.
 2. **Low-energy Ion fluctuation regime ($Z > 1$ ions below the transition threshold)**: The raw ion dispersion is corrected for finite-step velocity deceleration when $\overline{\Delta E} > 0.2 E$. Depending on the signal-to-noise ratio $\mathrm{SN} = \overline{\Delta E}/\sigma_E$, the actual energy loss is sampled from a truncated Gaussian ($\mathrm{SN} \ge 2$), a Gamma distribution ($0.1 < \mathrm{SN} < 2$), or a uniform distribution on $[0, 2\overline{\Delta E}]$ ($\mathrm{SN} \le 0.1$).
 
@@ -137,7 +156,7 @@ $$
 L & L^2/2 \\
 L^2/2 & L^3/3
 \end{pmatrix}.
-\tag{5}
+\tag{5a}
 $$
 
 Correlated pairs $(\theta_x, x)$ and $(\theta_y, y)$ are sampled via Cholesky decomposition in the instantaneous local frame of the particle and rotated into global Cartesian coordinates, ensuring exact phase-space correlation between lateral beam broadening and angular divergence. When a transport step exceeds the configured scattering sub-segment limit (e.g., the $0.1\text{ mm}$ segment limit for CT minibeam charged secondaries), the step is subdivided into uniform sub-segments and $\mathcal{T}$ is evaluated at the midpoint kinetic energy of each segment.
@@ -156,8 +175,13 @@ where $p$ is the relativistic momentum, $X_0(\rho)$ is the local radiation lengt
 Discrete nuclear interactions in water and CT media encompass both coherent nuclear elastic scattering ($\mathrm{el}$) and non-elastic nuclear fragmentation/inelastic reactions ($\mathrm{in}$). For reaction channel $c \in \{\mathrm{el}, \mathrm{in}\}$, the macroscopic interaction cross section (linear interaction rate per unit path length, $\mathrm{mm}^{-1}$) at kinetic energy $E$ is summed over the elemental constituents $t$ of the local tissue composition:
 
 $$
-\Sigma_c(E; \rho) = \sum_{t} n_t(\rho)\,\sigma_{c,t}(E) = \rho \sum_{t} \left(\frac{\Sigma_{c,t}}{\rho}\right)_{\!\mathrm{tab}}\!(E), \qquad
-P(t \mid c, E) = \frac{n_t(\rho)\,\sigma_{c,t}(E)}{\Sigma_c(E; \rho)},
+\begin{aligned}
+\Sigma_c(E;\rho)
+&= \sum_t n_t(\rho)\sigma_{c,t}(E) \\
+&= \rho\sum_t\left(\frac{\Sigma_{c,t}}{\rho}\right)_{\!\mathrm{tab}}(E), \\
+P(t\mid c,E)
+&= \frac{n_t(\rho)\sigma_{c,t}(E)}{\Sigma_c(E;\rho)}.
+\end{aligned}
 \tag{6}
 $$
 
@@ -166,7 +190,11 @@ where $n_t(\rho)$ is the atomic number density of target element $t$ at voxel de
 Both primary ions and charged secondary fragments track nuclear interaction distances using a persistent dimensionless optical depth $\tau$:
 
 $$
-\tau = -\ln U, \qquad \Sigma_{\mathrm{tot}}(E; \rho) = \Sigma_{\mathrm{el}}(E; \rho) + \Sigma_{\mathrm{in}}(E; \rho),
+\begin{aligned}
+\tau &= -\ln U, \\
+\Sigma_{\mathrm{tot}}(E;\rho)
+&= \Sigma_{\mathrm{el}}(E;\rho)+\Sigma_{\mathrm{in}}(E;\rho).
+\end{aligned}
 \tag{7}
 $$
 
@@ -179,14 +207,16 @@ To reduce redundant global-memory cross-section table lookups during primary ion
 Coherent nuclear elastic scattering is enabled across all eight release presets. Once an elastic collision and target element $t$ are selected at incident specific energy $e = E/A$, the engine brackets $e$ between adjacent table nodes $[e_0, e_1]$ and stochastically selects node $k \in \{0, 1\}$ in proportion to each node's partial elastic rate contribution. An empirical sample is then drawn uniformly from the 512 pre-extracted records at node $k$, providing the specific target isotope mass $m_t$ and the normalized squared four-momentum transfer $q^2 / q_{\max}^2 = \tfrac{1}{2}(1 - \cos\theta_*)$, where $\theta_*$ is the center-of-mass polar scattering angle. Combining $\cos\theta_*$ with a uniform azimuthal angle $\phi \sim \mathcal{U}(0, 2\pi)$, exact relativistic two-body kinematics (in natural units $c = 1$) determines the laboratory-frame recoil kinetic energy $E_R$ and scattered projectile kinetic energy $E'_p$:
 
 $$
-s = (m_p + m_t)^2 + 2 m_t E, \qquad
-p_* = \frac{m_t \sqrt{E(E + 2 m_p)}}{\sqrt{s}}, \qquad
-E_R = \frac{p_*^2 (1 - \cos\theta_*)}{m_t}, \qquad
-E'_p = E - E_R,
+\begin{aligned}
+s &= (M+m_t)^2+2m_tE, \\
+p_* &= \frac{m_t\sqrt{E(E+2M)}}{\sqrt{s}}, \\
+E_R &= \frac{p_*^2(1-\cos\theta_*)}{m_t}, \\
+E'_p &= E-E_R.
+\end{aligned}
 \tag{8}
 $$
 
-where $m_p$ is the projectile rest mass (retaining the package-calibrated mass convention, such as $12\text{ u}$ for $^{12}\mathrm{C}$ where specified) and $p_*$ is the center-of-mass momentum magnitude. The three-momentum vectors of both the scattered projectile and the recoiling target nucleus are rotated from the current projectile direction into the global coordinate frame.
+where $M$ is the projectile rest mass (retaining the package-calibrated mass convention, such as $12\text{ u}$ for $^{12}\mathrm{C}$ where specified) and $p_*$ is the center-of-mass momentum magnitude. The three-momentum vectors of both the scattered projectile and the recoiling target nucleus are rotated from the current projectile direction into the global coordinate frame.
 
 Target recoils whose nuclear identity $(Z_R, A_R)$ belongs to the standard 18-species charged-ion registry enter the secondary transport queue and undergo full electromagnetic, multiple-scattering, and nuclear transport. Heavy target recoil isotopes outside the standard 18-ion registry (e.g., $^{12}\mathrm{C}$–$^{40}\mathrm{Ca}$ or $^{16}\mathrm{O}$ tissue recoils) are transported using a dedicated all-ion recoil stopping package (`ELRSP001`) that tabulates the combined unrestricted electronic plus nuclear stopping power $S_{\mathrm{tot}}(E) = S_e(E) + S_n(E)$ and its consistent CSDA range; this recoil group uses continuous slowing-down transport. When scoring dose-averaged electronic LET ($L_d$), these heavy recoils query a companion electronic-only stopping table (`LERSP001`) so that nuclear stopping power $S_n(E)$ is strictly excluded from both the numerator and denominator of the electronic LET estimator. Recoils born with $E_R \le E_{\mathrm{cut}} = 0.1\text{ MeV}$ deposit their energy locally at the collision vertex.
 
@@ -197,7 +227,10 @@ Non-elastic nuclear interactions sample complete events from pre-generated Geant
 For an inelastic interaction occurring at specific energy $e = E/A$ bracketed by library energy nodes $e_0 \le e \le e_1$ (with a maximum permissible node spacing of $5\text{ MeV/u}$), stochastic linear interpolation selects the upper node $e_1$ with probability
 
 $$
-P(e_1 \mid e) = \frac{e - e_0}{e_1 - e_0}, \qquad P(e_0 \mid e) = 1 - P(e_1 \mid e),
+\begin{aligned}
+P(e_1\mid e) &= \frac{e-e_0}{e_1-e_0}, \\
+P(e_0\mid e) &= 1-P(e_1\mid e).
+\end{aligned}
 \tag{9}
 $$
 
@@ -216,6 +249,7 @@ Secondary inelastic cascades in water and patient CT use a maximum generation de
 In the minibeam configurations, a divergent or parallel multislit copper collimator and an intervening downstream air gap are interposed between the scanning nozzle exit and the patient surface. The geometric model specifies the collimator outer dimensions, thickness along the beam axis, slit count, slit aperture width, center-to-center pitch, slit length, array lateral phase offset, azimuthal rotation, and the exact axial coordinates of the collimator exit, CT bounding box, skin surface, and treatment isocenter. The collimator remains stationary in the field coordinate system while pencil-beam spots scan across its upstream entrance face.
 
 Two clinical collimator designs are implemented for full-plan evaluations:
+
 1. **Proton minibeam collimator**: A $60\text{ mm}$-thick copper block containing $15$ parallel slits of $0.5\text{ mm}$ aperture width, $3.6\text{ mm}$ center-to-center pitch, and $50\text{ mm}$ slit length.
 2. **Carbon-ion minibeam collimator (RT07575 head plan)**: A $100\text{ mm}$-thick copper block containing $17$ slits of $0.7\text{ mm}$ aperture width, $3.0\text{ mm}$ center-to-center pitch, and $100\text{ mm}$ slit length. For the opposing $90^\circ$ and $270^\circ$ lateral fields of the RT07575 plan, the $270^\circ$ slit array incorporates a half-pitch ($1.5\text{ mm}$) lateral phase shift relative to the $90^\circ$ field to interleave opposing peak and valley dose distributions.
 
@@ -228,8 +262,12 @@ Because accurate prediction of minibeam peak-to-valley dose ratios (PVDR) and pe
 The offline-extracted Urban package (`ct_copper.bin` and `air.bin`) tabulates species- and material-dependent transport mean free paths $\lambda_{\mathrm{tr},1}(E)$, radiation lengths $X_0$, and angular distribution shape parameters across 52 charged ion species in water, all 25 Schneider CT tissues, and copper (and for $^1\mathrm{H}$ and $^{12}\mathrm{C}$ in air). Urban transport couples scattering and geometric advancement through a mapping between the true path length $\ell$ and geometric chord length $g$. In the regime of locally constant transport mean free path $\lambda_{\mathrm{tr},1}$, the forward mapping and its exact inverse are given by
 
 $$
-g(\ell) = \lambda_{\mathrm{tr},1}\left(1 - e^{-\ell/\lambda_{\mathrm{tr},1}}\right), \qquad
-\ell(g) = -\lambda_{\mathrm{tr},1}\ln\!\left(1 - \frac{g}{\lambda_{\mathrm{tr},1}}\right),
+\begin{aligned}
+g(\ell)
+&= \lambda_{\mathrm{tr},1}\bigl(1-e^{-\ell/\lambda_{\mathrm{tr},1}}\bigr), \\
+\ell(g)
+&= -\lambda_{\mathrm{tr},1}\ln\!\left(1-\frac{g}{\lambda_{\mathrm{tr},1}}\right).
+\end{aligned}
 \tag{10}
 $$
 
@@ -264,6 +302,7 @@ Every primary ion and copper/air-born charged fragment that reaches the downstre
 MAIGO is implemented in C++20 and Khronos SYCL, supporting NVIDIA GPUs through the oneAPI Unified Runtime CUDA backend and Intel Xe GPUs through Level Zero. Device kernels are compiled ahead of time into native code for the target architecture, with runtime just-in-time compilation disabled. Four compile-time-specialized primary pipelines serve proton broadbeam, carbon-ion broadbeam, proton minibeam, and carbon-ion minibeam calculations; a generic pipeline supports custom ion configurations. The pipelines share secondary transport kernels supporting multispecies charged nuclear fragments.
 
 To mitigate SIMT warp/subgroup divergence caused by heterogeneous track lifetimes, nuclear branching, and collimator absorption, minibeam execution decouples particle transport into sequential device stages connected by preallocated global-memory ring/slot queues:
+
 1. **Upstream beamline stage**: Tracks incident primaries from the nozzle through the multislit copper collimator and air gap, depositing surviving primaries at the patient entrance checkpoint and pushing copper-born charged fragments into dedicated upstream child queues.
 2. **Upstream fragment cascade stage**: Transports copper-born charged products through the remaining collimator thickness and air gap across up to three inelastic generations.
 3. **Patient primary transport stage**: Resumes surviving primary tracks from the patient entrance into the voxelized water or CT grid, optionally employing counting-sort slot compaction (`bucket_order`) to group active tracks by spatial/material locality.
@@ -278,17 +317,25 @@ Device-side random numbers use the counter-based Philox-4x32-10 generator. Draws
 Let $W_j > 0$ denote the physical particle weight (number of clinical particles per fraction/field) assigned to pencil-beam spot $j \in \{1, \dots, M\}$, and let $W = \sum_{j=1}^M W_j$ denote the total physical particle weight of the treatment plan. For a Monte Carlo simulation campaign comprising $N$ total incident histories, integer history counts $n_j$ are allocated across spots via the largest-remainder method:
 
 $$
-n_j = \left\lfloor \frac{N W_j}{W} \right\rfloor + \mathbb{I}\!\left(j \in \mathcal{R}_{N - \sum_k \lfloor N W_k / W \rfloor}\right), \qquad \sum_{j=1}^M n_j = N,
+\begin{aligned}
+h_j &= \frac{NW_j}{W},
+& K &= N-\sum_{k=1}^M\lfloor h_k\rfloor, \\
+n_j &= \lfloor h_j\rfloor+\mathbf{1}_{\{j\in\mathcal{R}_K\}},
+& \sum_{j=1}^M n_j &= N.
+\end{aligned}
 \tag{11a}
 $$
 
-Here, $\mathcal{R}_K$ is the index set of the $K$ largest fractional remainders. The allocation sums to $N$, with the remaining histories assigned to spots closest to the next integer count. This campaign-wide allocation is partitioned across GPUs and statistical batches. Paired TOPAS comparisons use the reference calculation’s integer spot counts.
+Here, $h_j$ is the ideal history count, $K$ is the number of histories remaining after flooring, $\mathcal{R}_K$ is the index set of the $K$ largest fractional remainders $h_j-\lfloor h_j\rfloor$, and $\mathbf{1}$ is the indicator function. The allocation sums to $N$, with the remaining histories assigned to spots closest to the next integer count. This campaign-wide allocation is partitioned across GPUs and statistical batches. Paired TOPAS comparisons use the reference calculation’s integer spot counts.
 
 During transport, energy deposition $\Delta E$ (in $\mathrm{MeV}$) is accumulated into global device memory using 32-bit floating-point (`FP32`) atomic additions. Given voxel mass density $\rho_i$ ($\mathrm{g/cm^3}$), voxel volume $V_i$ ($\mathrm{mm^3}$), and total accumulated energy $E_i$ ($\mathrm{MeV}$) in voxel $i$, the mass $m_i$ (in $\mathrm{kg}$) and absolute absorbed dose to medium $D_i$ (in $\mathrm{Gy}$) are computed as
 
 $$
-m_i = \rho_i V_i \times 10^{-6}\text{ kg}, \qquad
-D_i = \frac{E_i \times 1.602176634 \times 10^{-13}\text{ J/MeV}}{m_i}\,\frac{W}{N}.
+\begin{aligned}
+m_i &= \rho_iV_i\times 10^{-6}\,\mathrm{kg}, \\
+D_i &= \frac{E_i\times 1.602176634\times 10^{-13}\,\mathrm{J/MeV}}{m_i}
+\frac{W}{N}.
+\end{aligned}
 \tag{11b}
 $$
 
@@ -299,9 +346,11 @@ When a campaign is partitioned across $B$ batches (or multiple GPUs) with $N_b$ 
 Dose-averaged electronic linear energy transfer ($L_d$) is scored concurrently with absorbed dose using an unrestricted stopping-power track-length estimator. For each finite transport step $k$ of a charged ion traversing voxel $i$ with accepted true path length $\ell_k > 0$, let $S_{e,k}$ denote the unrestricted linear electronic stopping power ($\mathrm{MeV/mm}$, numerically equivalent to $\mathrm{keV/\mu m}$) evaluated at the pre-step kinetic energy and actual voxel density $\rho_i$. The engine accumulates two extensive voxel moments, $A_i$ and $B_i$, whose ratio yields the voxelwise dose-averaged electronic LET $L_{d,i}$:
 
 $$
-A_i = \sum_{k \in i} S_{e,k}^{\,2}\,\ell_k, \qquad
-B_i = \sum_{k \in i} S_{e,k}\,\ell_k, \qquad
-L_{d,i} = \frac{A_i}{B_i}.
+\begin{aligned}
+A_i &= \sum_{k\in i}S_{e,k}^{\,2}\ell_k, \\
+B_i &= \sum_{k\in i}S_{e,k}\ell_k, \\
+L_{d,i} &= \frac{A_i}{B_i},\qquad B_i>0.
+\end{aligned}
 \tag{12}
 $$
 
@@ -350,15 +399,20 @@ To resolve stopping-power gradients near the Bragg peak, the carbon-ion broadbea
 Spatial and dosimetric agreement between the GPU-calculated dose distribution $D_{\mathrm{GPU}}(\mathbf{r}')$ and the reference TOPAS dose distribution $D_{\mathrm{ref}}(\mathbf{r})$ is quantified using the three-dimensional local gamma index [10]:
 
 $$
-\gamma(\mathbf{r}) = \min_{\mathbf{r}'} \sqrt{
-\frac{\|\mathbf{r}' - \mathbf{r}\|^2}{\Delta r^2} +
-\frac{\left[D_{\mathrm{GPU}}(\mathbf{r}') - D_{\mathrm{ref}}(\mathbf{r})\right]^2}{\left[\delta D_{\mathrm{ref}}(\mathbf{r})\right]^2}
-}, \qquad
-\delta D_{\mathrm{ref}}(\mathbf{r}) = \left(\frac{\Delta D_{\%}}{100}\right) D_{\mathrm{ref}}(\mathbf{r}),
+\begin{aligned}
+\varepsilon_D &= \frac{\Delta D_{\%}}{100},\qquad \Delta r>0, \\
+\gamma(\mathbf{r})
+&= \min_{\substack{\mathbf{r}'\\\|\mathbf{r}'-\mathbf{r}\|\le\Delta r}}
+\left[
+\frac{\|\mathbf{r}'-\mathbf{r}\|^2}{(\Delta r)^2}
++\frac{\bigl[D_{\mathrm{GPU}}(\mathbf{r}')-D_{\mathrm{ref}}(\mathbf{r})\bigr]^2}
+{\bigl[\varepsilon_D D_{\mathrm{ref}}(\mathbf{r})\bigr]^2}
+\right]^{1/2}.
+\end{aligned}
 \tag{13}
 $$
 
-Here, $\Delta r$ is the distance-to-agreement (DTA) criterion and $\Delta D_{\%}$ is the percentage dose tolerance relative to the local reference dose. Trilinear interpolation evaluates the GPU dose field within a sphere of radius $\Delta r$ around each reference point for subvoxel-distance gamma searches. Evaluation points are voxels inside `BODY` that exceed the dose threshold; interpolation uses the full GPU dose field, including neighboring voxels outside `BODY`. Table 3 lists the evaluation masks, local criteria, and search increments.
+Here, $\Delta r>0$ is the distance-to-agreement (DTA) criterion and $\varepsilon_D=\Delta D_{\%}/100$ is the fractional dose tolerance relative to the local reference dose. Trilinear interpolation evaluates the GPU dose field within a sphere of radius $\Delta r$ around each reference point for subvoxel-distance gamma searches. Evaluation points are voxels inside `BODY` that exceed the dose threshold; interpolation uses the full GPU dose field, including neighboring voxels outside `BODY`. Table 3 lists the evaluation masks, local criteria, and search increments.
 
 **Table 3.** Three-dimensional local gamma evaluation masks, acceptance criteria, and sub-voxel interpolation search steps.
 
@@ -367,11 +421,11 @@ Here, $\Delta r$ is the distance-to-agreement (DTA) criterion and $\Delta D_{\%}
 | **Broadbeam** | $D_{\mathrm{ref}}(\mathbf{r}) > 0.10\, D_{\mathrm{ref},\max}$ | $3\%/3\text{ mm}$, $1\%/1\text{ mm}$, $3\%/0\text{ mm}$ | $0.10\text{ mm}$ |
 | **Minibeam** | $D_{\mathrm{ref}}(\mathbf{r}) > 0.4\text{ Gy}$ ($10\%$ of $4\text{ Gy}$ prescription) | $3\%/0.2\text{ mm}$, $3\%/0.1\text{ mm}$, $3\%/0\text{ mm}$ | $0.02\text{ mm}$ |
 
-An evaluation point passes when $\gamma \le 1$. The $3\%/0\text{ mm}$ endpoint is defined separately as the same-position local dose-difference test $|D_{\mathrm{GPU}}-D_{\mathrm{ref}}|/D_{\mathrm{ref}} \le 0.03$. The prespecified broadbeam acceptance criterion is a local $1\%/1\text{ mm}$ pass rate above $99\%$. Minibeams use $3\%/0.2\text{ mm}$ and $3\%/0.1\text{ mm}$ criteria with a $0.02\text{ mm}$ search increment to match the submillimeter slit scale. Transverse profiles at multiple depths assess peak width, valley dose, and PVDR; depth-dose profiles assess distal falloff; and DVH indices assess target and OAR dose. Same-position dose-difference distributions and batch uncertainties characterize voxelwise agreement.
+An evaluation point passes when $\gamma \le 1$. For zero DTA, the endpoint is the same-position relative dose difference $\eta_D(\mathbf{r})=\lvert D_{\mathrm{GPU}}(\mathbf{r})-D_{\mathrm{ref}}(\mathbf{r})\rvert/D_{\mathrm{ref}}(\mathbf{r})$; the $3\%/0\text{ mm}$ test passes when $\eta_D\le 0.03$. The prespecified broadbeam acceptance criterion is a local $1\%/1\text{ mm}$ pass rate above $99\%$. Minibeams use $3\%/0.2\text{ mm}$ and $3\%/0.1\text{ mm}$ criteria with a $0.02\text{ mm}$ search increment to match the submillimeter slit scale. Transverse profiles at multiple depths assess peak width, valley dose, and PVDR; depth-dose profiles assess distal falloff; and DVH indices assess target and OAR dose. Same-position dose-difference distributions and batch uncertainties characterize voxelwise agreement.
 
 ### II.F.2. Voxelwise LET Gamma Evaluation and Spatial Profile Analysis
 
-Three-dimensional local gamma evaluation for dose-averaged electronic LET ($L_d$) is computed analogously to Eq. (13) by substituting $L_{d,\mathrm{GPU}}(\mathbf{r}')$ and $L_{d,\mathrm{ref}}(\mathbf{r})$ for dose, with the local tolerance set to $\delta L_{d,\mathrm{ref}}(\mathbf{r}) = (\Delta L_{\%}/100)\,L_{d,\mathrm{ref}}(\mathbf{r})$. The evaluation region is defined as the intersection of the `BODY` contour with the broadbeam dose mask $D_{\mathrm{ref}}(\mathbf{r}) > 0.10\,D_{\mathrm{ref},\max}$. Broadbeam LET agreement is reported at local $3\%/3\text{ mm}$, $1\%/1\text{ mm}$, and $3\%/0\text{ mm}$ criteria using a $0.10\text{ mm}$ trilinear interpolation search step on the GPU LET field. Any voxel within the reference dose mask where the GPU LET denominator vanishes ($B_i = 0$) is retained as a gamma failure.
+Three-dimensional local gamma evaluation for dose-averaged electronic LET ($L_d$) is computed analogously to Eq. (13) by substituting $L_{d,\mathrm{GPU}}(\mathbf{r}')$ and $L_{d,\mathrm{ref}}(\mathbf{r})$ for dose, with fractional tolerance $\varepsilon_L=\Delta L_{\%}/100$ and local absolute tolerance $\varepsilon_L L_{d,\mathrm{ref}}(\mathbf{r})$. The zero-DTA endpoint uses the same-position relative LET difference. The evaluation region is defined as the intersection of the `BODY` contour with the broadbeam dose mask $D_{\mathrm{ref}}(\mathbf{r}) > 0.10\,D_{\mathrm{ref},\max}$. Broadbeam LET agreement is reported at local $3\%/3\text{ mm}$, $1\%/1\text{ mm}$, and $3\%/0\text{ mm}$ criteria using a $0.10\text{ mm}$ trilinear interpolation search step on the GPU LET field. Any voxel within the reference dose mask where the GPU LET denominator vanishes ($B_i = 0$) is retained as a gamma failure.
 
 LET spatial analysis uses transverse profiles at fixed geometric depths and depth profiles along the beam axis. In the RT07575 carbon-ion broadbeam case, depth begins at the central-ray entry into `BODY` and is sampled at the native $0.5\text{ mm}$ interval. Central-ray profiles characterize local LET structure, and profiles pooled over a $2.5 \times 10\text{ mm}^2$ transverse ROI characterize regional depth trends. ROI LET is computed as $\sum_{i\in\mathrm{ROI}}A_i/\sum_{i\in\mathrm{ROI}}B_i$ within each depth slice.
 
@@ -384,40 +438,54 @@ $$
 \tag{14}
 $$
 
-When batches have slightly unequal history counts $N_b$ (e.g., due to throughput-proportional multi-GPU partitioning with $\sum_{b=1}^B N_b = N$), let $a_b = N_b / N$ denote the history fraction, $Y_{i,b} = d_{i,b} / a_b$ the full-plan-equivalent batch dose estimate, and $q = \sum_{b=1}^B a_b^2$. The weighted batch variance estimator is given by
+For unequal batch history counts $N_b$, let $a_b=N_b/N>0$ be the history fraction and $Y_{i,b}=d_{i,b}/a_b$ the full-plan-equivalent batch estimate, so that $D_i=\sum_b a_bY_{i,b}$. For independent, source-matched batches with a common per-history variance, $\operatorname{Var}(Y_{i,b})=v_i/N_b$. The variance of the total dose is estimated by
 
 $$
-\widehat{\sigma}_{D_i}^{\,2} = \frac{q}{1 - q} \left[ \sum_{b=1}^B a_b Y_{i,b}^{\,2} - D_i^{\,2} \right],
+\begin{aligned}
+\widehat{\sigma}_{D_i}^{\,2}
+&= \frac{1}{B-1}\sum_{b=1}^B a_b\bigl(Y_{i,b}-D_i\bigr)^2 \\
+&= \frac{1}{B-1}\sum_{b=1}^B
+\frac{\bigl(d_{i,b}-a_bD_i\bigr)^2}{a_b}.
+\end{aligned}
 \tag{15}
 $$
 
-which reduces identically to Eq. (14) when $a_b = 1/B$.
+Equation (15) applies for $B>1$ and reduces to Eq. (14) for $a_b=1/B$.
 
 TOPAS uncertainty is estimated from per-history scoring variance or matched pilot simulations. Per-history variances are converted to the plan-dose scale using the normalization factor. For the three carbon-ion broadbeam references, pilot simulations with $N_{\mathrm{pilot}}=300,000$ histories preserve the reference geometry, physics list, energy spectrum, and relative spot weights. Pilot standard errors are extrapolated to the full history count as $\widehat{\sigma}_{D_{\mathrm{ref},i}}=\widehat{\sigma}_{\mathrm{pilot},i}\sqrt{N_{\mathrm{pilot}}/N_{\mathrm{full}}}$ and cross-checked against inter-replica variance.
 
 Across any fixed evaluation mask $\mathcal{R}$ containing $|\mathcal{R}|$ voxels, the overall statistical precision is summarized by the root-mean-square (RMS) relative standard error:
 
 $$
-u_{\mathrm{RMS}} = 100 \sqrt{ \frac{1}{|\mathcal{R}|} \sum_{i \in \mathcal{R}} \frac{\widehat{\sigma}_{D_i}^{\,2}}{D_{\mathrm{ref},i}^{\,2}} } \;\; (\%),
+\begin{aligned}
+u_i &= 100\frac{\widehat{\sigma}_{D_i}}{D_{\mathrm{ref},i}}, \\
+u_{\mathrm{RMS}}
+&= \sqrt{\frac{1}{\lvert\mathcal{R}\rvert}\sum_{i\in\mathcal{R}}u_i^2}.
+\end{aligned}
 \tag{16}
 $$
 
-supplemented by voxelwise uncertainty percentiles and the fraction of voxels satisfying $u_i < 1\%$ or $u_i < 2\%$. Because GPU and TOPAS simulations use independent random streams, the statistical variance of the voxelwise dose difference $\Delta D_i = D_{\mathrm{GPU},i} - D_{\mathrm{ref},i}$ is given by $\widehat{\sigma}_{\Delta D_i}^{\,2} = \widehat{\sigma}_{D_{\mathrm{GPU},i}}^{\,2} + \widehat{\sigma}_{D_{\mathrm{ref},i}}^{\,2}$.
+Both $u_i$ and $u_{\mathrm{RMS}}$ are expressed in percent. Uncertainty summaries also include voxelwise percentiles and the fractions with relative standard errors below $1\%$ or $2\%$. Because GPU and TOPAS simulations use independent random streams, the statistical variance of the voxelwise dose difference $\Delta D_i = D_{\mathrm{GPU},i} - D_{\mathrm{ref},i}$ is given by $\widehat{\sigma}_{\Delta D_i}^{\,2} = \widehat{\sigma}_{D_{\mathrm{GPU},i}}^{\,2} + \widehat{\sigma}_{D_{\mathrm{ref},i}}^{\,2}$.
 
 ### II.F.4. Ratio-Variance Estimation for Dose-Averaged LET
 
-Because $L_{d,i} = A_i / B_i$ is a ratio of two correlated random variables accumulated along the same particle tracks, its statistical variance accounts for the covariance $\mathrm{Cov}(A_i, B_i)$. To evaluate voxelwise LET statistical uncertainty at the full-plan history count $N$, an auxiliary GPU calculation partitions the $N$ histories into $K$ independent, equal-statistics full-plan replicate groups ($K = 20$ for the carbon-ion broadbeam benchmark). Let $A_{i,b}$ and $B_{i,b}$ denote the accumulated numerator and denominator moments in replicate group $b \in \{1, \dots, K\}$, with pooled estimator $L_{d,i} = \sum_{b=1}^K A_{i,b} \big/ \sum_{b=1}^K B_{i,b}$. Applying a first-order Taylor expansion (delta method) for ratio estimators across independent groups yields the covariance-preserving variance estimator:
+Because $L_{d,i} = A_i / B_i$ is a ratio of two correlated random variables accumulated along the same particle tracks, its statistical variance accounts for the covariance $\mathrm{Cov}(A_i, B_i)$. To evaluate voxelwise LET statistical uncertainty at the full-plan history count $N$, an auxiliary GPU calculation partitions the $N$ histories into $K$ independent, source-matched full-plan groups with history counts $N_b$ and fractions $a_b=N_b/N>0$ ($K = 20$ for the carbon-ion broadbeam benchmark). Let $A_{i,b}$ and $B_{i,b}$ denote the accumulated numerator and denominator moments in replicate group $b \in \{1, \dots, K\}$, with pooled estimator $L_{d,i} = \sum_{b=1}^K A_{i,b} \big/ \sum_{b=1}^K B_{i,b}$. With $K>1$ and a common per-history covariance matrix for the paired moments, a first-order Taylor expansion (delta method) gives the variance estimate
 
 $$
-\widehat{\sigma}_{L_{d,i}}^{\,2} = \frac{K}{K - 1} \, \frac{\sum_{b=1}^K \left( A_{i,b} - L_{d,i}\,B_{i,b} \right)^2}{\left( \sum_{b=1}^K B_{i,b} \right)^2}.
+\widehat{\sigma}_{L_{d,i}}^{\,2}
+\approx \frac{1}{K-1}
+\frac{\displaystyle\sum_{b=1}^K
+\frac{\bigl(A_{i,b}-L_{d,i}B_{i,b}\bigr)^2}{a_b}}
+{\displaystyle\left(\sum_{b=1}^K B_{i,b}\right)^2}.
 \tag{17}
 $$
 
-For TOPAS LET references partitioned into independent replicas (each saving paired $A_{i,b}$ and $B_{i,b}$ volumes), the reference LET standard error is computed analogously via Eq. (17). Voxelwise relative LET standard errors, regional RMS uncertainties within the $D_{\mathrm{ref}} > 0.10\,D_{\mathrm{ref},\max}$ mask, and quantiles are reported alongside the 3D LET gamma pass rates.
+For equal-history groups, Eq. (17) reduces to $\widehat{\sigma}_{L_{d,i}}^{\,2}\approx [K/(K-1)]\sum_b(A_{i,b}-L_{d,i}B_{i,b})^2/(\sum_b B_{i,b})^2$. For TOPAS LET references partitioned into independent replicas (each saving paired $A_{i,b}$ and $B_{i,b}$ volumes), the reference LET standard error is computed analogously via Eq. (17). Voxelwise relative LET standard errors, regional RMS uncertainties within the $D_{\mathrm{ref}} > 0.10\,D_{\mathrm{ref},\max}$ mask, and quantiles are reported alongside the 3D LET gamma pass rates.
 
 ### II.F.5. Computational Throughput Benchmarking and Runtime Integrity Audits
 
 Computational performance is evaluated separately across GPU architectures—including NVIDIA GeForce RTX 2080 Ti (`sm_75`), NVIDIA RTX A6000 (`sm_86`), NVIDIA L4 (`sm_89`), and Intel Arc B580 (`bmg-g21`)—using AOT-compiled native binaries with runtime JIT compilation disabled. Two end-to-end wall-clock timing metrics are reported:
+
 1. **Cold-start latency**: Total elapsed wall-clock time from OS process invocation to completion of the first saved output batch, encompassing configuration parsing, GPU context initialization, host-to-device physics package uploads, kernel execution, runtime quality audits, and disk output.
 2. **Steady-state throughput ($\mathrm{histories/s}$)**: Total simulated incident histories across subsequent resident batches divided by their cumulative end-to-end wall-clock time (including device-to-host readback, quality audits, and file I/O) within the same persistent process.
 
