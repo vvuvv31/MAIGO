@@ -9,35 +9,15 @@ electron/photon transport and its package-loading interfaces have been removed.
 
 ## Build and run
 
-Supported GPU platforms are Linux with NVIDIA CUDA or Intel Arc Level Zero.
-MAIGO uses Intel LLVM/DPC++ SYCL with native AOT device images
-(`nvptx64-nvidia-cuda` or `spir64_gen`); CPU and AMD backends are not supported.
-Choose one backend: **NVIDIA users follow steps 1–3**; **Intel Arc users go
-straight to [Intel Arc build and run](#intel-arc-build-and-run)**. Both then follow
-steps 4–6 for physics assets, case inputs and execution. Arc does not require CUDA
-or a source build of the CUDA-capable LLVM toolchain.
-
-The workflow is: install the GPU driver and matching SYCL toolchain → compile
-MAIGO for the destination GPU → restore physics data → supply matching case
-inputs → run and inspect the audits. Compilation does not require patient data.
-
-Clone the repository first, for either backend:
-
 ```bash
 git clone --branch clean --single-branch https://github.com/vvuvv31/MAIGO.git MAIGO_clean
 cd MAIGO_clean
 export MAIGO_ROOT="$PWD"
 ```
 
-Use separate build directories for different backends or GPU architectures.
-The same executable can run different cases; compilation is not per patient.
+### 1. For NVIDIA GPU
 
-### 1. NVIDIA: install system dependencies and CUDA
-
-The following package commands assume Ubuntu 24.04 LTS (Python 3.12).
-Use a host compiler supported by your chosen LLVM and CUDA versions; MAIGO
-requires CMake 3.22 or newer and C++20. The upstream LLVM build may require a
-newer CMake; consult its [build guide](https://github.com/intel/llvm/blob/sycl/sycl/doc/GetStartedGuide.md).
+#### 1. Install system dependencies and CUDA
 
 ```bash
 sudo apt update
@@ -45,32 +25,14 @@ sudo apt install build-essential git cmake ninja-build python3 python3-venv \
   libhwloc-dev libzstd-dev libz-dev curl ca-certificates
 ```
 
-`hwloc` supplies host hardware-topology information to the SYCL toolchain;
-it does not enable CPU particle transport. Building LLVM requires substantially
-more RAM and disk space than building MAIGO. Choose build parallelism to fit
-available RAM rather than automatically using every CPU thread.
-
-Install an NVIDIA driver compatible with your GPU and CUDA version, then the
+Install an NVIDIA driver compatible with your GPU and CUDA version and
 [NVIDIA CUDA Toolkit](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html).
-Follow NVIDIA's distribution-specific installation instructions and reboot if
-required by the driver installation. The existing local toolchain uses CUDA
-12.6; this is a reference setup, not a claim that every toolkit version works.
 
 ```bash
-nvidia-smi
-export CUDA_ROOT=/usr/local/cuda-12.6  # change to your Toolkit installation
-"$CUDA_ROOT/bin/nvcc" --version
+export CUDA_ROOT=/usr/local/cuda-12.6  # set your CUDA installation path
 ```
 
-The CUDA version displayed by `nvidia-smi` is the driver's supported CUDA
-version, not proof that the Toolkit is installed. Both checks above should work.
-
-### 2. NVIDIA: build the complete Intel LLVM/SYCL toolchain
-
-The [`libsycl` directory](https://github.com/intel/llvm/tree/sycl/libsycl) contains
-part of the runtime; building it alone does not provide the SYCL compiler and
-CUDA backend. Build the complete Intel LLVM repository using its official
-configuration and compilation helpers:
+#### 2. Build the Intel LLVM/SYCL toolchain
 
 ```bash
 export SYCL_WORKSPACE="$HOME/sycl_workspace"
@@ -85,14 +47,6 @@ CC=gcc CXX=g++ python3 "$SYCL_WORKSPACE/llvm/buildbot/configure.py" \
 python3 "$SYCL_WORKSPACE/llvm/buildbot/compile.py" \
   -o "$SYCL_WORKSPACE/llvm/build" -j 4
 ```
-
-The default compilation target is `deploy-sycl-toolchain`, which deploys the
-toolchain under the build directory's `install/`. Both helpers must receive the
-same `-o` directory. Record the LLVM commit and CUDA version used; the `sycl`
-branch changes over time. The current development compiler reports Intel LLVM
-commit `ebbf0d953099709c1ab0e4d5abe64d4884620bef` with CUDA 12.6; check out that
-commit before configuration if reproducing this toolchain. The official build
-guide remains the reference for version-specific dependencies and options.
 
 Configure the installed compiler and runtime in each new shell:
 
@@ -110,10 +64,11 @@ the CUDA runtime adapter and a working NVIDIA driver. A preinstalled `icpx`
 may also be used if its CUDA backend is available; the compiler name alone
 does not establish CUDA support.
 
-### 3. NVIDIA: compile MAIGO
+#### 3. Compile
 
 ```bash
 cd "$MAIGO_ROOT"
+export CUDA_DISABLE_PTX_JIT=1
 # -DCARBON_CUDA_ARCH=sm_75: 根据自己显卡设置 / adjust for your GPU.
 cmake -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
@@ -124,73 +79,24 @@ cmake --build build --target carbon_mc -j 4
 build/carbon_mc --help
 ```
 
-| GPU | `CARBON_CUDA_ARCH` |
-|---|---|
-| NVIDIA L4 | `sm_89` |
-| RTX A6000 | `sm_86` |
-| RTX 2080 Ti | `sm_75` |
+### 2. For Intel Arc GPU
 
-Always specify `-DCARBON_CUDA_ARCH=sm_75` **(根据自己显卡设置 / adjust for your
-GPU)** in build commands. Both CMake and the wrapper default to `sm_75`, and
-CMake rejects an empty architecture. Use `sm_89` for L4 and `sm_86` for RTX
-A6000. The architecture refers to the GPU that will run the binary, which may
-be different from the GPU on the build machine. Use a separate build directory
-when changing the compiler or GPU architecture.
+#### 1. Install dependencies
 
-These builds compile device code ahead of time. Before running, explicitly
-prohibit driver PTX JIT fallback:
+Install the [Intel GPU compute runtime](https://github.com/intel/compute-runtime),
+firmware, `ocloc`, and the [oneAPI DPC++/C++ compiler](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html),
+plus Git, CMake 3.22+, Ninja, Python and curl. Add your account to the `render` group
+and log in again.
 
-```bash
-export CUDA_DISABLE_PTX_JIT=1
-```
-
-Keep this variable set in every execution shell or job script. With JIT disabled,
-a missing compatible machine-code image causes an error instead of compiling at
-runtime; rebuild for the destination GPU. This does not remove normal startup,
-package loading or module loading costs.
-
-All five transport families are enabled by default: proton broadbeam, proton
-minibeam, carbon broadbeam, carbon minibeam and generic ion transport. To compile
-only selected families, set the corresponding CMake options:
-`CARBON_ENABLE_PROTON_BROADBEAM`, `CARBON_ENABLE_PROTON_MINIBEAM`,
-`CARBON_ENABLE_CARBON_BROADBEAM`, `CARBON_ENABLE_CARBON_MINIBEAM` and
-`CARBON_ENABLE_GENERIC` (`ON` or `OFF`).
-A configuration cannot run a pipeline omitted from the binary.
-
-Alternatively, with `CXX` set to the absolute compiler path above, the build
-wrapper accepts the same CMake options:
-
-```bash
-CXX="$CXX" BUILD_JOBS=4 BUILD_DIR=build \
-  bash scripts/build.sh -DCARBON_CUDA_ARCH=sm_75 \
-  -DCMAKE_CXX_FLAGS="--cuda-path=$CUDA_ROOT"
-```
-
-Always set `CXX` when using the wrapper on another machine; its fallback path
-points to the original development machine.
-
-### Intel Arc build and run
-
-Start from the clone above. Install Git, CMake 3.22+, Ninja and Python, then
-install the [Intel GPU compute runtime](https://github.com/intel/compute-runtime)
-(Level Zero), GPU firmware, the matching `ocloc` offline compiler, and the
-[Intel oneAPI DPC++/C++ compiler](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html).
-Follow the packages and kernel requirements for your distribution and GPU.
-The tested system is Debian 13, Arc B580 12 GB, oneAPI 2026.1 and Xe driver
-26.22.38646.4. The user needs access to `/dev/dri/renderD*` (normally via the
-`render` group; log in again after changing group membership).
-
-Load the oneAPI environment before compiling or running. Confirm that `sycl-ls`
-lists the Intel GPU under Level Zero, then build:
+#### 2. Compile
 
 ```bash
 cd "$MAIGO_ROOT"
 source /opt/intel/oneapi/setvars.sh
-icpx --version
-ocloc --help
-# oneAPI 2026.1 + B580 driver 26.22: use the working Level Zero V1 adapter.
 export SYCL_UR_USE_LEVEL_ZERO_V2=0
+export CUDA_DISABLE_PTX_JIT=1
 ONEAPI_DEVICE_SELECTOR=level_zero:gpu sycl-ls
+# bmg-g21: Arc B580; set the ocloc device identifier for your GPU.
 cmake -S . -B build-intel -G Ninja \
   -DCMAKE_CXX_COMPILER=icpx -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CXX_FLAGS="-fsycl-max-parallel-link-jobs=4" \
@@ -199,68 +105,23 @@ cmake --build build-intel --target carbon_mc -j 4
 build-intel/carbon_mc --help
 ```
 
-`bmg-g21` targets Arc B580; choose the `ocloc` device identifier for your GPU.
-An explicit architecture is required. `spir64` runtime-JIT builds are rejected.
-On the tested oneAPI 2026.1/B580 setup, the default Level Zero V2 adapter returns
-`UR_RESULT_ERROR_UNSUPPORTED_FEATURE` when launching a native kernel; keep
-`SYCL_UR_USE_LEVEL_ZERO_V2=0` set when running. This still uses Level Zero and
-the precompiled GPU image.
-The driver must expose FP64, atomic64 and device USM for the existing transport
-and energy audits. Physics packages and source inputs are shared with CUDA.
-Intel primary kernels move the immutable nuclear/EM views into device memory
-to respect the smaller kernel-argument budget. Intel AOT builds also generate
-separate native images per kernel to avoid incorrect CT lookup results observed
-with merged images on oneAPI 2026.1/B580. Temporary upload arrays are retained
-until their asynchronous transfers complete; physics and RNG remain unchanged.
-Keep the eight release YAMLs as CUDA defaults. Step 6 shows how to make a
-private `device: intel` copy and run it from the repository root. There is no
-CPU or alternative-backend fallback.
-
-**AOT happens during the build, including the final link.** That link compiles
-GPU kernels to native machine code and embeds them in the executable; it can
-therefore take much longer than an ordinary C++ link. `cmake --build -j 4`
-controls build tasks, while `-fsycl-max-parallel-link-jobs=4` controls device
-compilation inside the SYCL link. Adjust both to available CPU and RAM; eight
-parallel link jobs were also tested on the 62 GiB B580 host. Selective pipeline
-compilation can further reduce build work.
-
-Build once and reuse the executable across cases and continuous batches.
-Changing CT, spot weights, particle counts or supported YAML parameters does
-not require rebuilding. Changes to C++ code, compiled pipeline selection,
-toolchain or destination GPU architecture do. A custom C++ full-plan driver
-also needs an AOT build once; ordinary `carbon_mc` runs need no extra driver.
-Neither build time nor AOT link time belongs in cold-start throughput.
-
-On the tested Xe/B580 system, the compute engine's default **640 ms preemption
-timeout** resets longer carbon CT minibeam kernels. Set it to 10 seconds before
-running these workloads (root required; this setting resets on reboot):
+For B580 minibeam runs, set the Xe preemption timeout after each reboot
+(adjust `card0` to your GPU):
 
 ```bash
-# Select the DRM card belonging to the Intel GPU on your machine.
 ARC_ENGINE=/sys/class/drm/card0/device/tile0/gt0/engines/ccs
-cat "$ARC_ENGINE/preempt_timeout_us"
 echo 10000000 | sudo tee "$ARC_ENGINE/preempt_timeout_us"
 ```
 
-The tested 5,000 ms `job_timeout_ms` can remain unchanged. The executable does
-not modify driver settings. Do not reduce physical track limits to work around
-a driver timeout. All eight electron-off presets passed two 10,000-history
-batches on B580 with the native AOT build; these are runtime/audit checks, not
-TOPAS dose acceptance or throughput benchmarks.
+### 3. Download physics assets
 
-### 4. Download and restore the physics assets
-
-The [v2026.10.14 Release](https://github.com/vvuvv31/MAIGO/releases/tag/v2026.10.14)
-contains the physics assets for the **four CT presets**, including optional
-historical electron/photon packages that the current runtime does not use. It is not an eight-preset water/CT asset bundle.
-The complete gzip archive is split into two ordered parts to satisfy GitHub's
-attachment size limit. Download both parts into one
-folder outside the repository:
+Download and extract the four-CT asset bundle from the
+[v2026.10.14 Release](https://github.com/vvuvv31/MAIGO/releases/tag/v2026.10.14):
 
 ```bash
 export ASSET_DIR="$(dirname "$MAIGO_ROOT")/maigo_assets"
-mkdir -p "$ASSET_DIR"
 export RELEASE_URL=https://github.com/vvuvv31/MAIGO/releases/download/v2026.10.14
+mkdir -p "$ASSET_DIR"
 for asset in maigo_four_ct_assets.tar.gz.part01 maigo_four_ct_assets.tar.gz.part02; do
   curl --fail --location --retry 3 "$RELEASE_URL/$asset" --output "$ASSET_DIR/$asset"
 done
@@ -270,131 +131,56 @@ cat "$ASSET_DIR/maigo_four_ct_assets.tar.gz.part01" \
 tar -xzf "$ASSET_DIR/maigo_four_ct_assets.tar.gz" -C "$MAIGO_ROOT" --wildcards 'data/*'
 ```
 
-Extract only `data/` so the cloned configuration and documentation stay intact.
-No separate content-hash verification is required. Reserve
-space for about 3 GB of parts, 3 GB of assembled archive and 6.3 GB of extracted
-data, plus the toolchain, build files and outputs. Physics files must appear at
-paths such as `data/em/ions/continuous26.bin`; do not put the entire cache folder
-inside `data/`.
+Supply any additional packages required by the selected preset, including
+`data/stopping/beamline/unrestricted.bin` for minibeams. Check
+[examples/preset_dependencies.json](examples/preset_dependencies.json) for the
+complete list, including water-preset assets.
 
-If the same cache is already on a mounted Google Drive, restore it directly:
+### 4. Prepare case inputs
 
-```bash
-tar -xzf /content/drive/MyDrive/gpumc/maigo_four_ct_assets.tar.gz \
-  -C /content/MAIGO_clean --wildcards 'data/*'
-```
+Place CT grids, source plans, beam parameters and spot weights at the paths
+specified in [examples/](examples/). Keep each case's inputs and normalization
+together. Case inputs are supplied separately from the asset bundle.
 
-Run from local disk after restoring. For water presets, provide their additional
-assets listed in [preset dependencies](examples/preset_dependencies.json).
-The current runtime needs no electron/photon packages. Older release archives
-may contain them; omit `data/em/electrons/` when installing new runtime assets.
+### 5. Run
 
-### 5. Supply matching case inputs
+Run from the repository root. Restore the toolchain environment above in each
+new shell.
 
-Neither Git nor the Release archive includes `inputs/`: CT grids, source plans,
-beam parameters and optimized spot weights must be supplied separately at the
-paths referenced by the selected YAML. Inspect
-[examples/](examples/) and [preset dependencies](examples/preset_dependencies.json)
-before running. Preserve each case's CT, source, weights, placement, collimator
-and dose normalization as one consistent input set.
-
-RT07575 is a **head** case. CT broadbeam defaults use its head inputs; default
-CT minibeams use a separate lung benchmark and are not RT07575 head full plans.
-A CT grid uses the CCTG binary format; TPS source CSV columns are
-`energy_MeV,x_mm,y_mm,weight`, with total ion energy in `energy_MeV`.
-The runtime does not convert DICOM or replay TOPAS text plans.
-
-Validation helpers require NumPy and PyYAML:
-
-```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install numpy pyyaml
-```
-
-### 6. Run a scene or continuous batches
-
-Run from the repository root after supplying the matching inputs. In each new
-shell, restore the appropriate toolchain environment from above and set
-`MAIGO_ROOT` to your checkout. Select **one** of the following launch setups.
-
-For NVIDIA (with the CUDA-capable SYCL library path configured):
+**NVIDIA:**
 
 ```bash
 cd "$MAIGO_ROOT"
 export CUDA_DISABLE_PTX_JIT=1
 export ONEAPI_DEVICE_SELECTOR=cuda:gpu
-export MAIGO_BINARY="$MAIGO_ROOT/build/carbon_mc"
-export MAIGO_CONFIG="$MAIGO_ROOT/examples/proton_ct_broadbeam.yaml"
+build/carbon_mc --config examples/proton_ct_broadbeam.yaml --histories 10000
 ```
 
-For Arc (after configuring the Xe timeout where required):
+**Intel Arc:**
 
 ```bash
 cd "$MAIGO_ROOT"
 source /opt/intel/oneapi/setvars.sh
 export SYCL_UR_USE_LEVEL_ZERO_V2=0
-export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 export CUDA_DISABLE_PTX_JIT=1
+export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 mkdir -p tmp/arc_run
 sed 's/^device: cuda$/device: intel/' examples/proton_ct_broadbeam.yaml \
   > tmp/arc_run/proton_ct_broadbeam.yaml
-export MAIGO_BINARY="$MAIGO_ROOT/build-intel/carbon_mc"
-export MAIGO_CONFIG="$MAIGO_ROOT/tmp/arc_run/proton_ct_broadbeam.yaml"
+build-intel/carbon_mc --config tmp/arc_run/proton_ct_broadbeam.yaml --histories 10000
 ```
 
-This private copy changes only the requested device. Relative data/input paths
-resolve from the repository root; keep running there. Use the same approach
-for other presets, or supply your own complete case configuration.
-
-Start with a small execution check, using the selected backend:
+**Continuous batches** (for Arc, use `build-intel/carbon_mc` and the Intel YAML):
 
 ```bash
-"$MAIGO_BINARY" --config "$MAIGO_CONFIG" --histories 10000
-```
-
-Continuous batches share one GPU context and loaded physics packages:
-
-```bash
-"$MAIGO_BINARY" --config "$MAIGO_CONFIG" \
+build/carbon_mc --config examples/proton_ct_broadbeam.yaml \
   --batch-count 3 --histories-per-batch 100000 \
-  --batch-output out/proton_ct_broadbeam_first_batches
+  --batch-output out/proton_ct_broadbeam_batches
 ```
 
-Use a new output directory for each campaign. CLI options are `--config`,
-`--histories`, `--seed`, `--batch-count`, `--histories-per-batch`, `--batch-output`
-and `--help`. Counts refer to incident primary particles. Plan weights are
-allocated across the whole campaign; outputs retain the original absolute dose
-normalization. Do not multiply normalized plan dose by the number of batches.
-
-Inspect the reported output directory, `quality_report.json` and
-`energy_ledger.json`. Require completed histories, acceptable energy/EM and
-coverage audits, and zero queue overflow before using a result. A small run
-checks execution, not dose accuracy or representative throughput. Reduce batch
-size if the GPU memory budget or secondary queues are exceeded. Distinguish
-process startup/package loading from subsequent batch transport when measuring
-performance; neither should include compiler build time.
-
-In `energy_ledger.json`, `E_dep_depth_MeV` includes deposits from all transported
-charged particles. Use `ion_species_transport_ledger_MeV` and its accompanying
-layout for charged-secondary species contributions; the depth score does not
-separate primary and secondary deposits. `E_transported_secondaries_birth_MeV`
-records the transported-secondary birth-energy tally.
-
-The eight release presets select their implementation with `transport_pipeline`.
-Custom configurations without that key use `generic`; a copied
-release preset retains its selection until the key is removed or changed.
-Pipeline policies are in `src/pipelines/`; shared transport phases are in `src/detail/`.
-
-Other primary ions must select `transport_pipeline: generic` (or omit the key),
-provide `primary_atomic_number`, `primary_mass_number`, and explicitly set both
-`primary_kinematic_mass_MeV` and `primary_nuclear_mass_MeV` to masses from their
-corresponding extraction conventions (total ion rest energies in MeV, not per
-nucleon). Proton/C12 retain their built-in masses;
-no changes to the eight release presets are needed. Source parsing has no species
-whitelist, but all required EM, nuclear, scattering and elastic packages must
-cover the chosen ion and energy range, and match its reference masses. Existing
-packages are not expanded by this change; for example, the current continuous26
-bank includes He4 but not O16, and He4 still needs matching primary nuclear data.
+Use a new output directory for each run. Check `quality_report.json` and
+`energy_ledger.json` for successful audits and zero overflow. Batch dose is
+already normalized; do not multiply it by the batch count.
 
 ## Release presets and physics
 
