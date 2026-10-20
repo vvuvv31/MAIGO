@@ -69,12 +69,11 @@ does not establish CUDA support.
 ```bash
 cd "$MAIGO_ROOT"
 export CUDA_DISABLE_PTX_JIT=1
-# -DCARBON_CUDA_ARCH=sm_75: 根据自己显卡设置 / adjust for your GPU.
 cmake -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CXX_COMPILER="$CXX" \
   -DCMAKE_CXX_FLAGS="--cuda-path=$CUDA_ROOT" \
-  -DCARBON_CUDA_ARCH=sm_75
+  -DCARBON_CUDA_ARCH=sm_75 # adjust for your GPU.
 cmake --build build --target carbon_mc -j 4
 build/carbon_mc --help
 ```
@@ -115,26 +114,20 @@ echo 10000000 | sudo tee "$ARC_ENGINE/preempt_timeout_us"
 
 ### 3. Download physics assets
 
-Download and extract the four-CT asset bundle from the
-[v2026.10.14 Release](https://github.com/vvuvv31/MAIGO/releases/tag/v2026.10.14):
+Download and extract the physics assets from the
+[v2026.10.20 Release](https://github.com/vvuvv31/MAIGO/releases/tag/v2026.10.20):
 
 ```bash
 export ASSET_DIR="$(dirname "$MAIGO_ROOT")/maigo_assets"
-export RELEASE_URL=https://github.com/vvuvv31/MAIGO/releases/download/v2026.10.14
+export RELEASE_URL=https://github.com/vvuvv31/MAIGO/releases/download/v2026.10.20
 mkdir -p "$ASSET_DIR"
-for asset in maigo_four_ct_assets.tar.gz.part01 maigo_four_ct_assets.tar.gz.part02; do
-  curl --fail --location --retry 3 "$RELEASE_URL/$asset" --output "$ASSET_DIR/$asset"
-done
-cat "$ASSET_DIR/maigo_four_ct_assets.tar.gz.part01" \
-    "$ASSET_DIR/maigo_four_ct_assets.tar.gz.part02" \
-    > "$ASSET_DIR/maigo_four_ct_assets.tar.gz"
-tar -xzf "$ASSET_DIR/maigo_four_ct_assets.tar.gz" -C "$MAIGO_ROOT" --wildcards 'data/*'
+curl --fail --location --retry 3 "$RELEASE_URL/maigo_four_ct_assets.tar.gz" \
+  --output "$ASSET_DIR/maigo_four_ct_assets.tar.gz"
+tar -xzf "$ASSET_DIR/maigo_four_ct_assets.tar.gz" -C "$MAIGO_ROOT"
 ```
 
-Supply any additional packages required by the selected preset, including
-`data/stopping/beamline/unrestricted.bin` for minibeams. Check
-[examples/preset_dependencies.json](examples/preset_dependencies.json) for the
-complete list, including water-preset assets.
+The bundle includes physics assets for all eight presets and LET scoring.
+Case inputs are supplied separately.
 
 ### 4. Prepare case inputs
 
@@ -297,8 +290,7 @@ source masses; charged fragment transport remains generic.
 See [Cu ion extraction and limits](extensions/copper_ion_transport/README.md).
 
 The data/inputs are local external assets and are excluded from Git. Expanded
-preset dependencies are in `examples/preset_dependencies.json`. `data/manifest.json` records installed
-asset paths, sizes and each preset's dependency list. No default data
+preset dependencies are in `examples/preset_dependencies.json`. No default data
 paths point to an archive.
 
 Data directories follow the physics modules: `materials/`, `em/`, `nuclear/`,
@@ -309,7 +301,7 @@ RT07575 head inputs are in `inputs/rt07575_head/{proton,carbon}/`; the separate
 lung benchmark is in `inputs/lung_minibeam/`. Research notes and historical
 validation reports in `docs/` are local archives and are not included in Git.
 
-After an intentional asset change, update `data/manifest.json` and refresh dependencies with
+After an intentional asset change, refresh dependencies with
 `python3 scripts/list_preset_dependencies.py --output examples/preset_dependencies.json`.
 
 Validation scripts require Python 3, NumPy and PyYAML.
