@@ -34,12 +34,17 @@ T_{\max} = \frac{2 m_e c^2 \beta^2 \gamma^2}{1 + 2\gamma(m_e/M) + (m_e/M)^2},
 \tag{2}
 $$
 
-where $m_e$ is the electron rest mass. The full unrestricted dispersion per unit length, $V_{\mathrm{full}}$, is evaluated at the local material and density with $T_{\max}$ as the energy-transfer upper limit. The step variance is
+where $m_e$ is the electron rest mass. Unrestricted transport includes electronic energy transfers up to $T_{\max}$, corresponding to an energy-transfer cutoff $T_c=T_{\max}$ in the Geant4 dispersion expression. The baseline energy-loss variance over a true step length $\ell$ is therefore
 
 $$
-\sigma_E^2=V_{\mathrm{full}}(E;\rho,T_{\max})\,\ell.
+\sigma_{E,0}^2=
+2\pi r_e^2m_ec^2N_{\mathrm{el}}
+\frac{Z_h^2}{\beta^2}\,T_{\max}\ell
+\left(1-\frac{\beta^2}{2}\right),
 \tag{3}
 $$
+
+where $r_e$ is the classical electron radius, $N_{\mathrm{el}}$ is the local electron number density, and $Z_h$ is the projectile charge number in units of the elementary charge. Equation (3) gives the unrestricted baseline dispersion; the low-energy Ion model additionally uses the native effective-charge and charge-fluctuation corrections.
 
 Protons and higher-velocity ions use the Universal fluctuation model. Thin-absorber losses combine stochastic atomic-excitation and ionization contributions; thick-absorber losses use truncated Gaussian or moment-matched Gamma sampling according to the mean-to-standard-deviation ratio. Lower-energy heavy ions use the Ion fluctuation model, including the finite-step deceleration correction and its Gaussian, Gamma, or uniform sampling regimes. Each primary step receives one full-loss draw based on the mean loss and unrestricted dispersion. Charged secondary fragments use the finite-step mean loss while retaining stochastic multiple scattering and nuclear interactions.
 
