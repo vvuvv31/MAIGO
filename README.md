@@ -207,13 +207,16 @@ CT, source, spot weights, placement, collimator and normalization together.
 All presets use unrestricted electronic stopping with local ionization energy
 deposition, primary energy-loss fluctuations, and nuclear elastic and inelastic
 interactions. Secondary energy-loss fluctuations are disabled by default.
+Water/CT short steps use midpoint-energy stopping; larger losses use CSDA
+range inversion.
 Charged nuclear fragments are transported; nuclear neutrals are recorded as
 untracked energy. The water reference is Water_75eV (I = 75 eV).
 
 Broadbeams use Fermi–Eyges scattering. CT minibeams use Urban scattering for
 patient primaries and segmented Fermi–Eyges for patient charged secondaries;
 water minibeams use Urban. Minibeams explicitly model the copper collimator
-and upstream air.
+and upstream air. Proton and carbon minibeams share species-resolved Urban
+scattering and nuclear elastic transport for charged fragments in copper.
 
 Maximum ion steps are **1.0 mm for broadbeams**, **0.5 mm for minibeams** and
 **0.05 mm in copper**. These caps override YAML step-cap values. Dose to medium

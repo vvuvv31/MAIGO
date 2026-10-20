@@ -18,6 +18,9 @@
   and Tmax; no soft/delta partition, delta-moment sidecar or medium ionization
   proposal clock. Preserve primary fluctuations and residual-range/mean-loss
   stepping, with final-range termination and all geometry/nuclear limits.
+  Water/CT short-step means use midpoint-energy stopping for all registered
+  ions, including protons; larger losses retain residual-range inversion.
+  Do not replace the proton midpoint mean with step-start stopping.
   Cu/air use BLEM0001 full electronic stopping, consistent CSDA/inverse
   and native full dispersion with Tmax. No beamline hard-delta sampling or
   ionization proposal clock remains. Beamline electronic loss is an explicit
@@ -76,7 +79,11 @@
   selectors, straggling scales, Cu stopping-ratio CSV readers and air
   ionization-rate keys are retired, with no compatibility aliases.
   Native Cu fragment transport has its own `minibeam_copper_fragment_native_transport`
-  switch; do not select fragment packages or transport from the fluctuation model.
+  switch, enabled by default in all four minibeams; proton and carbon sources
+  share species-resolved Cu Urban/elastic fragment transport. The fragment
+  elastic bank under `data/elastic/copper/carbon/` is keyed by fragment ZA and
+  is shared by both source types. Do not select fragment packages or transport
+  from the fluctuation model.
   Preserve independently extracted native-fragment scattering/elastic data.
   Full fluctuation parameters use native material response and particle mass/ZA,
   including H1; never reconstruct a restricted soft/hard split.

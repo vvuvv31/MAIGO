@@ -25,7 +25,7 @@ R(E) &= \int_0^E \frac{\mathrm{d}E'}{S_e(E')}, \\
 \tag{1}
 $$
 
-Short proton steps use $\overline{\Delta E}=S_e(E)\ell$. For heavier ions, a midpoint-energy predictor–corrector evaluates the stopping response at $E-\tfrac{1}{2}S_e(E)\ell$ to account for its variation along the step. When the trial loss exceeds the native fractional linear-loss threshold, or the step exhausts the residual range, the mean loss is evaluated by CSDA range inversion using Eq. (1).
+For short steps, protons and heavier ions share a midpoint-energy predictor–corrector: the stopping response is evaluated at $E-\tfrac{1}{2}S_e(E)\ell$ and multiplied by the true step length $\ell$ to account for its variation along the step. When the trial loss exceeds the native fractional linear-loss threshold, or the step exhausts the residual range, the mean loss is evaluated by CSDA range inversion using Eq. (1).
 
 Primary energy-loss straggling is sampled with a unified engine adapted from the Geant4 `G4UniversalFluctuation` and `G4IonFluctuations` models [8]. For an ion of rest mass $M$, speed $\beta c$, and Lorentz factor $\gamma$, the maximum transferable energy to a free electron is
 
@@ -217,10 +217,7 @@ Both coherent nuclear elastic scattering and non-elastic nuclear fragmentation a
 
 Copper inelastic collisions sample complete correlated final states from a dedicated copper cascade event library indexed by projectile $(Z, A)$ and specific energy $e = E/A$. All surviving charged reaction products are rotated coherently by a common azimuthal angle and tracked through the remainder of the copper block and downstream air gap. Multi-generation nuclear cascades within the copper collimator are tracked up to $g_{\max,\mathrm{Cu}} = 3$ inelastic generations, beyond which surviving charged fragments continue electromagnetic and elastic transport without further inelastic branching.
 
-Primary ions in copper and air use the Urban scattering model described in Section II.A.2. The upstream angular transport of copper-born charged fragments is species-resolved:
-
-- In **carbon-ion minibeams**, copper fragments are transported using independently extracted, species-resolved copper Urban MCS tables and species-resolved copper nuclear elastic scattering.
-- In **proton minibeams**, upstream copper fragments (such as secondary deuterons, tritons, and $\alpha$ particles) utilize a Highland-based Gaussian multiple-scattering update paired with unrestricted electronic energy loss.
+Primary ions in copper and air use the Urban scattering model described in Section II.A.2. In both proton and carbon-ion minibeams, copper-born charged fragments traversing copper use a shared transport model with independently extracted, species-resolved Urban MCS tables, copper nuclear elastic scattering, and unrestricted electronic stopping. Fragment responses are selected by their own nuclear identity $(Z, A)$ and energy.
 
 ### II.B.3. Coupling to Patient Transport
 

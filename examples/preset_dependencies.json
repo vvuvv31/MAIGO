@@ -232,9 +232,12 @@
         "ct_schneider_file": "data/materials/schneider/hu_to_material.txt",
         "all_ion_elastic_file": "data/elastic/schneider/proton/all_ion.bin",
         "elastic_recoil_stopping_file": "data/elastic/schneider/proton/recoil_stopping.bin",
-        "minibeam_em_package_file": "data/stopping/beamline/unrestricted.bin"
+        "minibeam_em_package_file": "data/stopping/beamline/unrestricted.bin",
+        "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin",
+        "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv"
       },
       "files": [
+        "data/elastic/copper/carbon/fragments.csv",
         "data/elastic/copper/proton/primary.csv",
         "data/elastic/schneider/proton/all_ion.bin",
         "data/elastic/schneider/proton/recoil_stopping.bin",
@@ -248,6 +251,7 @@
         "data/nuclear/schneider/secondary/final_states.bin",
         "data/nuclear/schneider/secondary/inelastic_rates.bin",
         "data/scattering/urban/air.bin",
+        "data/scattering/urban/copper_fragments.bin",
         "data/scattering/urban/ct_copper.bin",
         "data/stopping/beamline/unrestricted.bin",
         "data/stopping/water/proton.csv",
@@ -308,9 +312,12 @@
         "minibeam_copper_ion_cross_section_file": "data/nuclear/copper/ion_cross_sections.csv",
         "minibeam_air_urban_package_file": "data/scattering/urban/air.bin",
         "urban_mcs_package_file": "data/scattering/urban/ct_copper.bin",
-        "minibeam_em_package_file": "data/stopping/beamline/unrestricted.bin"
+        "minibeam_em_package_file": "data/stopping/beamline/unrestricted.bin",
+        "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin",
+        "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv"
       },
       "files": [
+        "data/elastic/copper/carbon/fragments.csv",
         "data/elastic/copper/proton/primary.csv",
         "data/elastic/schneider/proton/all_ion.bin",
         "data/elastic/schneider/proton/recoil_stopping.bin",
@@ -325,6 +332,7 @@
         "data/nuclear/schneider/secondary/final_states.bin",
         "data/nuclear/schneider/secondary/inelastic_rates.bin",
         "data/scattering/urban/air.bin",
+        "data/scattering/urban/copper_fragments.bin",
         "data/scattering/urban/ct_copper.bin",
         "data/stopping/beamline/unrestricted.bin",
         "data/stopping/water/proton.csv"

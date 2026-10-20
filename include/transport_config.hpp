@@ -303,16 +303,17 @@ struct TransportConfig {
     // Native full-loss Universal/Ion fluctuations for Cu/air primaries,
     // independent of the downstream primary fluctuation switch; default on.
     bool minibeam_copper_enable_energy_straggling{true};
-    // Species Urban/elastic fragment transport is independent of primary fluctuations.
-    bool minibeam_copper_fragment_native_transport{false};
+    // All release minibeams share species Urban/elastic copper fragment transport,
+    // independently of the primary source identity and fluctuation model.
+    bool minibeam_copper_fragment_native_transport{true};
     // Separate Cu/air fragment fluctuation switch; off in every release preset.
     bool minibeam_copper_fragment_enable_energy_straggling{false};
     // Amplitude scale for the selected Copper MCS model. The legacy Highland
     // benchmark uses 0.785; the slab-constrained model uses 1.0.
     double minibeam_copper_mcs_scale{0.785};
-    // Copper fragments use independently controlled native Urban or cumulative
-    // Highland path.  Do not inherit the primary Fermi--Eyges normalization.
-    double minibeam_copper_fragment_mcs_scale{0.785};
+    // Native Urban fragments use unit amplitude. The optional Highland path
+    // keeps an independent scale, separate from primary FE normalization.
+    double minibeam_copper_fragment_mcs_scale{1.0};
     // Number of fragment+Cu reactions whose process-faithful correlated
     // final states are replayed after the primary C12+Cu interaction. Zero
     // preserves the historical terminal-absorption approximation. Copper and
@@ -323,8 +324,12 @@ struct TransportConfig {
     // Copper-only TOPAS banks, loaded only for minibeam runs.
     std::filesystem::path minibeam_copper_inclxx_file{};
     std::filesystem::path minibeam_copper_elastic_file{};
-    std::filesystem::path minibeam_copper_fragment_elastic_file{};
-    std::filesystem::path minibeam_copper_fragment_urban_package_file{};
+    // The elastic bank's directory names its extraction campaign; its rows
+    // describe fragment ZA + Cu and are shared by proton and carbon sources.
+    std::filesystem::path minibeam_copper_fragment_elastic_file{
+        "data/elastic/copper/carbon/fragments.csv"};
+    std::filesystem::path minibeam_copper_fragment_urban_package_file{
+        "data/scattering/urban/copper_fragments.bin"};
     std::filesystem::path minibeam_copper_ion_cross_section_file{};
     // Used by spots_geometry_mode=minibeam_pbs_y to map TOPAS world Y to
     // canonical GPU depth: gpu_z = world_y - this value.

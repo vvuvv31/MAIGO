@@ -81,7 +81,9 @@ minibeam_copper_elastic_file: data/elastic/copper/proton/primary.csv
 minibeam_copper_inclxx_file: data/nuclear/copper/proton/cascade.cinpkg
 minibeam_copper_ion_cross_section_file: data/nuclear/copper/ion_cross_sections.csv
 minibeam_air_urban_package_file: data/scattering/urban/air.bin
-minibeam_copper_fragment_native_transport: false
+minibeam_copper_fragment_native_transport: true
+minibeam_copper_fragment_urban_package_file: data/scattering/urban/copper_fragments.bin
+minibeam_copper_fragment_elastic_file: data/elastic/copper/carbon/fragments.csv
 minibeam_primary_specialization: true
 multiple_scattering_model: urban_v2
 urban_mcs_package_file: data/scattering/urban/ct_copper.bin
