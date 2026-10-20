@@ -370,7 +370,7 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
         // (a) missing_projectile fails only on rate-registry scope misses: actual
         //     lookup misses, or logged unsupported tracks whose (Z,A) IS in
         //     the binary rate registry. Out-of-scope isotopes (no event data on
-        //     disk by design) deposit locally and are reported, not failed.
+        //     disk by design) continue EM-only transport and are reported, not failed.
         //     Fail-closed: log truncation (dropped>0) refuses acceptance since scope cannot be proven.
         // (b) missing_target fails only on actual package-query misses.
         //     Sampler-empty draws (slowing left every channel domain between

@@ -29,9 +29,9 @@
                 }
                 const auto spot_seed = spot != nullptr ? spot->random_seed : random_seed;
                 const auto spot_initial_energy_MeV =
-                    spot != nullptr ? spot->floats[0] : initial_energy_MeV;
+                    spot != nullptr ? spot->initial_energy_MeV() : initial_energy_MeV;
                 const auto spot_energy_spread =
-                    spot != nullptr ? spot->floats[1] : beam_energy_spread;
+                    spot != nullptr ? spot->beam_energy_spread() : beam_energy_spread;
 
                 auto energy_MeV = spot_initial_energy_MeV;
                 if (spot_energy_spread > 0.0F) {
@@ -47,10 +47,6 @@
                         energy_MeV = energy_cutoff_MeV;
                     }
                 }
-
-                // Offline history-cohort attribution. Inactive source slots have
-                // zero incident energy, retain original history/RNG identity, and
-                // generate no descendants. This is not a production pruning mode.
 
                 const auto sampled_initial_energy_MeVu = energy_MeV * inverse_mass_number;
                 // Store the energy actually transported after source sampling/cutoff.
@@ -78,19 +74,19 @@
                     const auto g1 = sycl::sqrt(-2.0F * sycl::log(u0)) * sycl::sin(two_pi * u1);
                     const auto g2 = sycl::sqrt(-2.0F * sycl::log(u2)) * sycl::cos(two_pi * u3);
                     const auto g3 = sycl::sqrt(-2.0F * sycl::log(u2)) * sycl::sin(two_pi * u3);
-                    const auto sigma_x = spot != nullptr ? spot->floats[2] : emittance_sigma_x_mm;
-                    const auto sigma_y = spot != nullptr ? spot->floats[3] : emittance_sigma_y_mm;
+                    const auto sigma_x = spot != nullptr ? spot->emittance_sigma_x_mm() : emittance_sigma_x_mm;
+                    const auto sigma_y = spot != nullptr ? spot->emittance_sigma_y_mm() : emittance_sigma_y_mm;
                     const auto sigma_x_prime =
-                        spot != nullptr ? spot->floats[4] : emittance_sigma_x_prime;
+                        spot != nullptr ? spot->emittance_sigma_x_prime() : emittance_sigma_x_prime;
                     const auto sigma_y_prime =
-                        spot != nullptr ? spot->floats[5] : emittance_sigma_y_prime;
+                        spot != nullptr ? spot->emittance_sigma_y_prime() : emittance_sigma_y_prime;
                     local_x_mm = sigma_x * g0;
                     local_y_mm = sigma_y * g2;
                     const auto rho_x = sycl::clamp(
-                        spot != nullptr ? spot->floats[6] : emittance_correlation_x,
+                        spot != nullptr ? spot->emittance_correlation_x() : emittance_correlation_x,
                         -0.9999F, 0.9999F);
                     const auto rho_y = sycl::clamp(
-                        spot != nullptr ? spot->floats[7] : emittance_correlation_y,
+                        spot != nullptr ? spot->emittance_correlation_y() : emittance_correlation_y,
                         -0.9999F, 0.9999F);
                     const auto x_prime =
                         sigma_x_prime * (rho_x * g0 + sycl::sqrt(1.0F - rho_x * rho_x) * g1);
@@ -107,18 +103,18 @@
                     local_dz = inv_norm;
                 }
 
-                const auto origin_x = spot != nullptr ? spot->floats[8] : source_origin_x_mm;
-                const auto origin_y = spot != nullptr ? spot->floats[9] : source_origin_y_mm;
-                const auto origin_z = spot != nullptr ? spot->floats[10] : source_origin_z_mm;
-                const auto ux_x = spot != nullptr ? spot->floats[11] : beam_ux_x;
-                const auto ux_y = spot != nullptr ? spot->floats[12] : beam_ux_y;
-                const auto ux_z = spot != nullptr ? spot->floats[13] : beam_ux_z;
-                const auto uy_x = spot != nullptr ? spot->floats[14] : beam_uy_x;
-                const auto uy_y = spot != nullptr ? spot->floats[15] : beam_uy_y;
-                const auto uy_z = spot != nullptr ? spot->floats[16] : beam_uy_z;
-                const auto uz_x = spot != nullptr ? spot->floats[17] : beam_uz_x;
-                const auto uz_y = spot != nullptr ? spot->floats[18] : beam_uz_y;
-                const auto uz_z = spot != nullptr ? spot->floats[19] : beam_uz_z;
+                const auto origin_x = spot != nullptr ? spot->source_origin_x_mm() : source_origin_x_mm;
+                const auto origin_y = spot != nullptr ? spot->source_origin_y_mm() : source_origin_y_mm;
+                const auto origin_z = spot != nullptr ? spot->source_origin_z_mm() : source_origin_z_mm;
+                const auto ux_x = spot != nullptr ? spot->beam_ux_x() : beam_ux_x;
+                const auto ux_y = spot != nullptr ? spot->beam_ux_y() : beam_ux_y;
+                const auto ux_z = spot != nullptr ? spot->beam_ux_z() : beam_ux_z;
+                const auto uy_x = spot != nullptr ? spot->beam_uy_x() : beam_uy_x;
+                const auto uy_y = spot != nullptr ? spot->beam_uy_y() : beam_uy_y;
+                const auto uy_z = spot != nullptr ? spot->beam_uy_z() : beam_uy_z;
+                const auto uz_x = spot != nullptr ? spot->beam_uz_x() : beam_uz_x;
+                const auto uz_y = spot != nullptr ? spot->beam_uz_y() : beam_uz_y;
+                const auto uz_z = spot != nullptr ? spot->beam_uz_z() : beam_uz_z;
 
                 auto position_x_mm = origin_x + ux_x * local_x_mm + uy_x * local_y_mm;
                 auto position_y_mm = origin_y + ux_y * local_x_mm + uy_y * local_y_mm;

@@ -126,7 +126,8 @@ private:
 
 // Projectile registry lookup over the uploaded binary-ordered key list
 // (layout [z0,a0,z1,a1,...], np entries). No hardcoded isotopes: any
-// (Z,A) absent from the list returns -1 (unsupported, deposited locally).
+// (Z,A) absent from the list returns -1: its nuclear inelastic channel is
+// unavailable. Charged EM transport continues under the em_only policy.
 inline int secondary_projectile_lut_index_device(const std::int32_t* keys,
                                                  std::uint32_t num_projectiles,
                                                  int pz, int pa) noexcept {

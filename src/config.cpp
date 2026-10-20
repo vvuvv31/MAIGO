@@ -820,8 +820,8 @@ void TransportConfig::validate() const {
                     "primary_spot_batch history ranges must be contiguous and non-empty");
             }
             expected_begin = entry.history_end;
-            const float spot_energy_MeV = entry.floats[0];
-            const float spot_spread = entry.floats[1];
+            const float spot_energy_MeV = entry.initial_energy_MeV();
+            const float spot_spread = entry.beam_energy_spread();
             if (!std::isfinite(spot_energy_MeV) || spot_energy_MeV <= 0.0F) {
                 throw std::invalid_argument(
                     "primary_spot_batch[" + std::to_string(s) + "] energy must be finite and positive");

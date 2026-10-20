@@ -28,35 +28,53 @@ sudo apt install build-essential git cmake ninja-build python3 python3-venv \
 Install an NVIDIA driver compatible with your GPU and CUDA version and
 [NVIDIA CUDA Toolkit](https://docs.nvidia.com/cuda/cuda-installation-guide-linux/index.html).
 
+You may also use conda with
+
 ```bash
-export CUDA_ROOT=/usr/local/cuda-12.6  # set your CUDA installation path
+conda create -n maigo python=3.11 -y
+conda activate maigo
+conda install -c nvidia/label/cuda-12.6.0 cuda
 ```
 
-#### 2. Build the Intel LLVM/SYCL toolchain
+#### 2. Build the CUDA adapter for Intel oneAPI
 
-```bash
+Install [Intel oneAPI Base Toolkit (https://www.intel.com/content/www/us/en/developer/tools/oneapi/oneapi-toolkit-download.html)](<https://www.intel.com/content/www/us/en/developer/tools/oneapi/oneapi-toolkit-download.html>).
+
+```
+export CUDA_ROOT=/usr/local/cuda-12.6  # Conda CUDA using "$CONDA_PREFIX"
 export SYCL_WORKSPACE="$HOME/sycl_workspace"
 mkdir -p "$SYCL_WORKSPACE"
-git clone --branch sycl https://github.com/intel/llvm.git "$SYCL_WORKSPACE/llvm"
-# For reproducible builds, check out your chosen compatible commit before configuring.
-git -C "$SYCL_WORKSPACE/llvm" rev-parse HEAD
+cd $SYCL_WORKSPACE
 
-CC=gcc CXX=g++ python3 "$SYCL_WORKSPACE/llvm/buildbot/configure.py" \
-  --cuda -t Release -o "$SYCL_WORKSPACE/llvm/build" \
-  -DCUDAToolkit_ROOT="$CUDA_ROOT"
-python3 "$SYCL_WORKSPACE/llvm/buildbot/compile.py" \
-  -o "$SYCL_WORKSPACE/llvm/build" -j 4
-```
+git clone --depth 1 --branch v7.1.1 \
+  https://github.com/intel/llvm.git \
+  $HOME/sycl_workspace/llvm-7.1.1
 
-Configure the installed compiler and runtime in each new shell:
+CC=/usr/bin/gcc CXX=/usr/bin/g++ \
+cmake \
+  -S $HOME/sycl_workspace/llvm-7.1.1/unified-runtime \
+  -B $HOME/sycl_workspace/ur-build-7.1.1 \
+  -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DUR_BUILD_ADAPTER_CUDA=ON \
+  -DCUDAToolkit_ROOT="$CUDA_ROOT" \
+  -DUR_USE_EXTERNAL_UMF=ON \
+  -Dumf_DIR=$HOME/intel/oneapi/umf/1.1/lib/cmake/umf \
+  -DUR_BUILD_TESTS=OFF \
+  -DUR_BUILD_EXAMPLES=OFF \
+  -DUR_BUILD_TOOLS=OFF \
+  -DUR_ENABLE_SANITIZER=OFF
 
-```bash
-export SYCL_ROOT="$SYCL_WORKSPACE/llvm/build/install"
-export PATH="$SYCL_ROOT/bin:$PATH"
-export LD_LIBRARY_PATH="$SYCL_ROOT/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-export CXX="$SYCL_ROOT/bin/clang++"
-"$CXX" --version
-ONEAPI_DEVICE_SELECTOR=cuda:gpu "$SYCL_ROOT/bin/sycl-ls"
+cmake --build $HOME/sycl_workspace/ur-build-7.1.1 \
+  --target ur_adapter_cuda -j 16
+
+source "$HOME/intel/oneapi/setvars.sh"
+export CXX="$(command -v icpx)"
+export UR_ADAPTERS_SEARCH_PATH="$SYCL_WORKSPACE/ur-build-7.1.1/lib"
+export CUDA_DISABLE_PTX_JIT=1
+unset SYCL_DEVICE_FILTER UR_ADAPTERS_FORCE_LOAD
+
+ONEAPI_DEVICE_SELECTOR=cuda:gpu sycl-ls
 ```
 
 `sycl-ls` must list an NVIDIA CUDA GPU before proceeding. This requires both
@@ -73,9 +91,8 @@ cmake -S . -B build -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CXX_COMPILER="$CXX" \
   -DCMAKE_CXX_FLAGS="--cuda-path=$CUDA_ROOT" \
-  -DCARBON_CUDA_ARCH=sm_75 # adjust for your GPU.
+  -DCARBON_CUDA_ARCH=sm_75
 cmake --build build --target carbon_mc -j 4
-build/carbon_mc --help
 ```
 
 ### 2. For Intel Arc GPU
@@ -115,11 +132,11 @@ echo 10000000 | sudo tee "$ARC_ENGINE/preempt_timeout_us"
 ### 3. Download physics assets
 
 Download and extract the physics assets from the
-[v2026.10.20.1 Release](https://github.com/vvuvv31/MAIGO/releases/tag/v2026.10.20.1):
+[v2026.10.20 Release](https://github.com/vvuvv31/MAIGO/releases/tag/v2026.10.20):
 
 ```bash
 export ASSET_DIR="$(dirname "$MAIGO_ROOT")/maigo_assets"
-export RELEASE_URL=https://github.com/vvuvv31/MAIGO/releases/download/v2026.10.20.1
+export RELEASE_URL=https://github.com/vvuvv31/MAIGO/releases/download/v2026.10.20
 mkdir -p "$ASSET_DIR"
 curl --fail --location --retry 3 "$RELEASE_URL/maigo_four_ct_assets.tar.gz" \
   --output "$ASSET_DIR/maigo_four_ct_assets.tar.gz"

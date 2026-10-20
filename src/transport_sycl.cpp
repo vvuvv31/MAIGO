@@ -39,6 +39,7 @@
 #include "pipelines/carbon_broadbeam.hpp"
 #include "pipelines/carbon_minibeam.hpp"
 #include "pipelines/generic.hpp"
+#include "pipelines/bucket_order.hpp"
 
 #include <algorithm>
 #include <array>
@@ -89,6 +90,17 @@ class SecondaryTransportKernel;
 namespace {
 
 #include "detail/sycl_copper_primary_task.inc"
+
+// Slot values are a shared host/device wire layout, not physical process IDs.
+namespace primary_terminal {
+enum : std::size_t { inelastic = 0, escaped_ct = 1, stopped = 2, other = 3, count = 4 };
+}
+namespace copper_failure_field {
+enum : std::size_t {
+    reason = 1, atomic_number = 2, mass_number = 3, energy = 4,
+    step = 5, path = 6, optical_depth = 7
+};
+}
 
 constexpr std::size_t minibeam_event_counter_count = 170;
 constexpr std::size_t copper_fragment_post_loss_null_slot = 169;

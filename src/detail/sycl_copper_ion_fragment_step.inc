@@ -13,12 +13,15 @@ const auto f_fail = [&](unsigned reason) {
     sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
         sycl::memory_scope::device, sycl::access::address_space::global_space>
         claim(minibeam_event_counts_device[copper_ion_first_failure_slot]);
-    if(claim.fetch_add(1ULL)==0ULL) {
-        auto* first=minibeam_event_counts_device+copper_ion_first_failure_slot;
-        first[1]=reason;first[2]=f_charge;first[3]=f_a;
-        first[4]=sycl::bit_cast<std::uint32_t>(f_energy);first[5]=f_step;
-        first[6]=sycl::bit_cast<std::uint32_t>(f_path);
-        first[7]=sycl::bit_cast<std::uint32_t>(f_tau);
+    if (claim.fetch_add(1ULL) == 0ULL) {
+        auto* first = minibeam_event_counts_device + copper_ion_first_failure_slot;
+        first[copper_failure_field::reason] = reason;
+        first[copper_failure_field::atomic_number] = f_charge;
+        first[copper_failure_field::mass_number] = f_a;
+        first[copper_failure_field::energy] = sycl::bit_cast<std::uint32_t>(f_energy);
+        first[copper_failure_field::step] = f_step;
+        first[copper_failure_field::path] = sycl::bit_cast<std::uint32_t>(f_path);
+        first[copper_failure_field::optical_depth] = sycl::bit_cast<std::uint32_t>(f_tau);
     }
 
 };

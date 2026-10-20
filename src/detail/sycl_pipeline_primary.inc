@@ -155,7 +155,7 @@
         throw std::bad_alloc();
     float continuation_max_energy = initial_energy_MeV;
     for (const auto &spot : config.primary_spot_batch)
-        continuation_max_energy = std::max(continuation_max_energy, spot.floats[0]);
+        continuation_max_energy = std::max(continuation_max_energy, spot.initial_energy_MeV());
     std::vector<sycl::event> continuation_extra_events;
     std::cout << "[primary-continuation] enabled=" << use_primary_continuation
               << " bytes=" << sizeof(PrimaryContinuation) << " segment_steps=64\n";
@@ -1274,7 +1274,8 @@
                             sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
                                              sycl::access::address_space::global_space>
-                                term_ref(primary_terminal_counts_device[0]);
+                                term_ref(primary_terminal_counts_device[
+                                    primary_terminal::inelastic]);
                             term_ref.fetch_add(1U);
                         }
                         energy_MeV = 0.0F;
@@ -1317,7 +1318,8 @@
                         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                          sycl::memory_scope::device,
                                          sycl::access::address_space::global_space>
-                            term_ref(primary_terminal_counts_device[2]); // [2] = stopped_without_inelastic
+                            term_ref(primary_terminal_counts_device[
+                                primary_terminal::stopped]);
                         term_ref.fetch_add(1U);
                     }
                     energy_MeV = 0.0F;
@@ -1326,7 +1328,8 @@
                         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                          sycl::memory_scope::device,
                                          sycl::access::address_space::global_space>
-                            term_ref(primary_terminal_counts_device[1]); // [1] = escaped_ct_without_inelastic
+                            term_ref(primary_terminal_counts_device[
+                                primary_terminal::escaped_ct]);
                         term_ref.fetch_add(1U);
                     }
                 } else if (!primary_inelastic_occurred) {
@@ -1334,7 +1337,8 @@
                         sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
                                          sycl::memory_scope::device,
                                          sycl::access::address_space::global_space>
-                            term_ref(primary_terminal_counts_device[3]); // [3] = other_terminal
+                            term_ref(primary_terminal_counts_device[
+                                primary_terminal::other]);
                         term_ref.fetch_add(1U);
                     }
                     if (energy_MeV > 0.0F) {
@@ -1383,47 +1387,41 @@
             });
         };
         const auto launch_continuation = [&](auto first_stage, auto resume_stage) {
-            queue.fill(continuation_count,0U,1);
-            auto last_event=launch_primary_chunk(std::false_type{},first_stage);
-            unsigned rounds=0;
-            for(;;) {
-                std::uint32_t active=0;
-                queue.copy(continuation_count,&active,1).wait_and_throw();
-                if(active>chunk_count)throw std::runtime_error("Primary continuation queue overflow");
-                if(!active)break;
+            queue.fill(continuation_count, 0U, 1);
+            auto last_event = launch_primary_chunk(std::false_type{}, first_stage);
+            unsigned rounds = 0;
+            for (;;) {
+                std::uint32_t active = 0;
+                queue.copy(continuation_count, &active, 1).wait_and_throw();
+                if (active > chunk_count)
+                    throw std::runtime_error("Primary continuation queue overflow");
+                if (!active)
+                    break;
                 continuation_extra_events.push_back(last_event);
-                continuation_lanes=active;
-                continuation_segment_steps=(active<8192 || ++rounds>=64)?maximum_primary_steps:64;
-                if(continuation_segment_steps==maximum_primary_steps) {
-                    water_order_events.push_back(queue.copy(continuation_output,continuation_input,active));
+                continuation_lanes = active;
+                continuation_segment_steps =
+                    (active < 8192 || ++rounds >= 64) ? maximum_primary_steps : 64;
+                if (continuation_segment_steps == maximum_primary_steps) {
+                    water_order_events.push_back(
+                        queue.copy(continuation_output, continuation_input, active));
                 } else {
-                    auto key=[=](std::uint32_t slot) {
-                        const auto& state=continuation_states[slot];
-                        const auto material=static_cast<unsigned>(sycl::clamp(state.unified_primary_state.section,0,26));
-                        const auto energy=sycl::min(15U,static_cast<unsigned>(sycl::fmax(0.F,state.entry.energy_MeV)/continuation_max_energy*16));
-                        return material*16+energy;
+                    const auto key = [=](std::uint32_t slot) {
+                        const auto& state = continuation_states[slot];
+                        const auto material = static_cast<unsigned>(
+                            sycl::clamp(state.unified_primary_state.section, 0, 26));
+                        const auto energy = sycl::min(15U, static_cast<unsigned>(
+                            sycl::fmax(0.F, state.entry.energy_MeV) /
+                            continuation_max_energy * 16));
+                        return material * 16 + energy;
                     };
-                    water_order_events.push_back(queue.fill(continuation_histogram,0U,continuation_buckets));
-                    water_order_events.push_back(queue.parallel_for(sycl::range<1>(active),[=](sycl::id<1> id){
-                        const auto b=key(continuation_output[id[0]]);
-                        sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                            sycl::access::address_space::global_space>(continuation_histogram[b]).fetch_add(1);
-                    }));
-                    water_order_events.push_back(queue.single_task([=]{
-                        unsigned offset=0;
-                        for(unsigned b=0;b<continuation_buckets;++b) {
-                            continuation_offsets[b]=offset;offset+=continuation_histogram[b];continuation_histogram[b]=0;
-                        }
-                    }));
-                    water_order_events.push_back(queue.parallel_for(sycl::range<1>(active),[=](sycl::id<1> id){
-                        const auto slot=continuation_output[id[0]],b=key(slot);
-                        const auto rank=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,
-                            sycl::access::address_space::global_space>(continuation_histogram[b]).fetch_add(1);
-                        continuation_input[continuation_offsets[b]+rank]=slot;
-                    }));
+                    pipelines::enqueue_bucket_order(
+                        queue,
+                        {continuation_output, continuation_input, continuation_histogram,
+                         continuation_offsets, continuation_buckets},
+                        active, key, water_order_events);
                 }
-                queue.fill(continuation_count,0U,1);
-                last_event=launch_primary_chunk(std::false_type{},resume_stage);
+                queue.fill(continuation_count, 0U, 1);
+                last_event = launch_primary_chunk(std::false_type{}, resume_stage);
             }
             return last_event;
         };
@@ -1522,42 +1520,14 @@
                                     beamline_order_events.push_back(queue.copy(
                                         beamline_resume_output, beamline_resume_input, active));
                                 } else {
-                                    beamline_order_events.push_back(
-                                        queue.fill(beamline_histogram, 0U, 32));
-                                    beamline_order_events.push_back(queue.parallel_for(
-                                        sycl::range<1>(active), [=](sycl::id<1> id) {
-                                            const auto b =
-                                                beamline_states[beamline_resume_output[id[0]]]
-                                                    .order_bucket;
-                                            sycl::atomic_ref<
-                                                std::uint32_t, sycl::memory_order::relaxed,
-                                                sycl::memory_scope::device,
-                                                sycl::access::address_space::global_space>(
-                                                beamline_histogram[b])
-                                                .fetch_add(1U);
-                                        }));
-                                    beamline_order_events.push_back(queue.single_task([=] {
-                                        unsigned offset = 0;
-                                        for (unsigned b = 0; b < 32; ++b) {
-                                            beamline_offsets[b] = offset;
-                                            offset += beamline_histogram[b];
-                                            beamline_histogram[b] = 0;
-                                        }
-                                    }));
-                                    beamline_order_events.push_back(queue.parallel_for(
-                                        sycl::range<1>(active), [=](sycl::id<1> id) {
-                                            const auto slot = beamline_resume_output[id[0]],
-                                                       b = beamline_states[slot].order_bucket;
-                                            const auto rank =
-                                                sycl::atomic_ref<
-                                                    std::uint32_t, sycl::memory_order::relaxed,
-                                                    sycl::memory_scope::device,
-                                                    sycl::access::address_space::global_space>(
-                                                    beamline_histogram[b])
-                                                    .fetch_add(1U);
-                                            beamline_resume_input[beamline_offsets[b] + rank] =
-                                                slot;
-                                        }));
+                                    const auto key = [=](std::uint32_t slot) {
+                                        return beamline_states[slot].order_bucket;
+                                    };
+                                    pipelines::enqueue_bucket_order(
+                                        queue,
+                                        {beamline_resume_output, beamline_resume_input,
+                                         beamline_histogram, beamline_offsets, 32},
+                                        active, key, beamline_order_events);
                                 }
                                 queue.fill(beamline_resume_count, 0U, 1);
                                 upstream_event = launch_minibeam_stage(

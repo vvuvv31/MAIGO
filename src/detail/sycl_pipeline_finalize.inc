@@ -103,10 +103,22 @@
                 << " fragment_elastic=" << minibeam_event_counts_host[copper_fragment_elastic_slot]
                 << " post_loss_null=" << minibeam_event_counts_host[copper_fragment_post_loss_null_slot] << '\n';
             if (minibeam_event_counts_host[copper_ion_transport_failure_slot]) {
-                const auto* f=minibeam_event_counts_host.data()+copper_ion_first_failure_slot;
-                const auto as_float=[](std::uint64_t bits) {auto u=static_cast<std::uint32_t>(bits);float v;std::memcpy(&v,&u,4);return v;};
-                std::cout<<"COPPER_ION_FIRST_FAILURE reason="<<f[1]<<" Z="<<f[2]<<" A="<<f[3]
-                    <<" energy="<<as_float(f[4])<<" step="<<f[5]<<" path="<<as_float(f[6])<<" tau="<<as_float(f[7])<<'\n';
+                const auto* failure =
+                    minibeam_event_counts_host.data() + copper_ion_first_failure_slot;
+                const auto decode_fp32 = [](std::uint64_t bits) {
+                    const auto word = static_cast<std::uint32_t>(bits);
+                    float value;
+                    std::memcpy(&value, &word, sizeof(value));
+                    return value;
+                };
+                std::cout << "COPPER_ION_FIRST_FAILURE reason="
+                    << failure[copper_failure_field::reason]
+                    << " Z=" << failure[copper_failure_field::atomic_number]
+                    << " A=" << failure[copper_failure_field::mass_number]
+                    << " energy=" << decode_fp32(failure[copper_failure_field::energy])
+                    << " step=" << failure[copper_failure_field::step]
+                    << " path=" << decode_fp32(failure[copper_failure_field::path])
+                    << " tau=" << decode_fp32(failure[copper_failure_field::optical_depth]) << '\n';
                 throw std::runtime_error("Invalid Cu ion transport/coverage: reject partial dose");
             }
         }
@@ -168,9 +180,10 @@
     if (schneider_inelastic_device != nullptr) {
         queue.copy(schneider_inelastic_device, &schneider_inelastic_host, 1);
     }
-    std::array<std::uint64_t, 4> terminal_counts_host{};
+    std::array<std::uint64_t, primary_terminal::count> terminal_counts_host{};
     if (primary_terminal_counts_device != nullptr) {
-        queue.copy(primary_terminal_counts_device, terminal_counts_host.data(), 4).wait_and_throw();
+        queue.copy(primary_terminal_counts_device, terminal_counts_host.data(),
+                   terminal_counts_host.size()).wait_and_throw();
     }
 
     // Only shared species and grid ledgers are backed by device buffers.
@@ -323,7 +336,7 @@
                      (config.enable_energy_straggling ? "+straggling" : "");
     const auto batch_has_energy_spread = std::any_of(
         config.primary_spot_batch.begin(), config.primary_spot_batch.end(),
-        [](const auto& spot) { return spot.floats[1] > 0.0F; });
+        [](const auto& spot) { return spot.beam_energy_spread() > 0.0F; });
     if (config.beam_energy_spread > 0.0 || batch_has_energy_spread) {
         result.backend += "+espread";
     }
@@ -364,10 +377,10 @@
 
     result.untracked_nuclear_energy_MeV =
         std::accumulate(untracked_host.begin(), untracked_host.end(), 0.0);
-    result.primary_inelastic_terminated_count = terminal_counts_host[0];
-    result.primary_escaped_ct_count = terminal_counts_host[1];
-    result.primary_stopped_count = terminal_counts_host[2];
-    result.primary_other_terminal_count = terminal_counts_host[3];
+    result.primary_inelastic_terminated_count = terminal_counts_host[primary_terminal::inelastic];
+    result.primary_escaped_ct_count = terminal_counts_host[primary_terminal::escaped_ct];
+    result.primary_stopped_count = terminal_counts_host[primary_terminal::stopped];
+    result.primary_other_terminal_count = terminal_counts_host[primary_terminal::other];
     result.primary_inelastic_removed_kinetic_MeV = result.untracked_nuclear_energy_MeV;
     result.primary_other_terminal_kinetic_MeV =
         std::accumulate(other_terminal_host.begin(), other_terminal_host.end(), 0.0);

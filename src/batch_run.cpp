@@ -82,7 +82,8 @@ std::vector<RunShard> make_repeated_batches(const RunShard &original, const CliS
         prototypes = plan.make_primary_batch(template_config, air);
         base.enable_emittance_source =
             std::any_of(prototypes.begin(), prototypes.end(), [](const auto &p) {
-                return p.floats[2] > 0 || p.floats[3] > 0 || p.floats[4] > 0 || p.floats[5] > 0;
+                return p.emittance_sigma_x_mm() > 0 || p.emittance_sigma_y_mm() > 0 ||
+                       p.emittance_sigma_x_prime() > 0 || p.emittance_sigma_y_prime() > 0;
             });
     }
     if (base.enable_tps_source && weights.empty())

@@ -962,7 +962,8 @@
             : nullptr;
     auto* schneider_inelastic_device =
         use_schneider_primary_xs ? mem_tracker.allocate<std::uint64_t>(1) : nullptr;
-    auto* primary_terminal_counts_device = mem_tracker.allocate<std::uint64_t>(4);
+    auto* primary_terminal_counts_device =
+        mem_tracker.allocate<std::uint64_t>(primary_terminal::count);
 
     if (deposited_device == nullptr || sampled_incident_device == nullptr || escaped_device == nullptr || steps_device == nullptr ||
         untracked_nuclear_device == nullptr || other_terminal_energy_device == nullptr ||
@@ -1028,7 +1029,7 @@
     if (schneider_inelastic_device != nullptr) {
         queue.fill(schneider_inelastic_device, std::uint64_t{0}, 1);
     }
-    queue.fill(primary_terminal_counts_device, std::uint64_t{0}, 4).wait_and_throw();
+    queue.fill(primary_terminal_counts_device, std::uint64_t{0}, primary_terminal::count).wait_and_throw();
 
     const std::size_t max_secondaries = config.secondary_queue_capacity;
     const bool need_secondary_buffers =
