@@ -99,10 +99,7 @@ cmake --build build --target carbon_mc -j 4
 
 #### 1. Install dependencies
 
-Install the [Intel GPU compute runtime](https://github.com/intel/compute-runtime),
-firmware, `ocloc`, and the [oneAPI DPC++/C++ compiler](https://www.intel.com/content/www/us/en/developer/tools/oneapi/dpc-compiler.html),
-plus Git, CMake 3.22+, Ninja, Python and curl. Add your account to the `render` group
-and log in again.
+Install [Intel oneAPI Base Toolkit (https://www.intel.com/content/www/us/en/developer/tools/oneapi/oneapi-toolkit-download.html)](<https://www.intel.com/content/www/us/en/developer/tools/oneapi/oneapi-toolkit-download.html>).
 
 #### 2. Compile
 
