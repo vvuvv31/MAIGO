@@ -8,11 +8,11 @@ Material-dependent cross sections and response functions are extracted offline f
 
 ---
 
-## II.A. Physical Models for Ion Transport
+## II.A. Ion Transport Physics
 
 The shared models below describe ion slowing, scattering, and nuclear reactions in water and heterogeneous patient tissues. Their material-specific extension to copper and air is given in Section II.B.
 
-### II.A.1. Material-Dependent Electronic Stopping and Mean Energy Loss
+### II.A.1. Continuous Energy Loss
 
 Patient CT datasets are preprocessed offline into a regular three-dimensional Cartesian grid specified by its physical origin, voxel dimensions, mass density $\rho$, and discrete tissue composition index. Hounsfield units (HU) are converted to mass density and mapped to 25 stoichiometric human tissue elemental compositions according to the Schneider segmentation scheme [6]. Supplementing these 25 tissues with a reference water composition having a mean excitation energy of $I = 75\text{ eV}$ ($\mathrm{Water\_75eV}$) yields 26 distinct material compositions. MAIGO evaluates material-specific electromagnetic and nuclear responses from each voxel’s tissue composition and continuous mass density, incorporating both composition and density into heterogeneous transport.
 
@@ -63,7 +63,7 @@ During particle stepping in water and patient CT, the trial linear energy loss $
 
 Water and patient CT transport use the local-ionization energy-deposition approximation: unrestricted electronic energy loss is scored in the current transport voxel, and secondary $\delta$-ray electrons and bremsstrahlung/atomic-relaxation photons are not transported as separate tracks. Electronic energy transfer is incorporated into condensed-history ion stepping.
 
-### II.A.2. Energy-Loss Fluctuations
+### II.A.2. Energy-Loss Straggling
 
 Energy-loss straggling for primary protons and carbon ions is modeled using a unified stochastic sampling engine adapted from the Geant4 11.3.2 `G4UniversalFluctuation` and `G4IonFluctuations` algorithms [8]. For an incident ion of rest mass $M$, speed $\beta c$, and Lorentz factor $\gamma$, the maximum energy transferable to a free electron in a single collision is
 
@@ -133,7 +133,7 @@ supplemented by the native Geant4 energy-dependent $\lambda_{\mathrm{tr},1}(E)$ 
 
 At the conclusion of the true step (after accounting for any step shortening due to discrete nuclear collisions), the polar deflection cosine $\cos\theta$ is sampled from the composite Urban distribution, which blends a Gaussian small-angle core with a power-law single-scattering tail parameterized by the step thickness $\ell / \lambda_{\mathrm{tr},1}$, radiation length $X_0$, and pre-/post-step kinetic energy mean. Correlated lateral displacement is applied in the local particle frame, constrained by the geometric safety radius, and rotated into global coordinates. Boundary-crossing flags and range-step conditioning states are preserved across steps and kernel handoffs.
 
-### II.A.4. Nuclear Interaction Rates and Channel Competition
+### II.A.4. Nuclear Interaction Sampling
 
 Discrete nuclear interactions in water and CT media encompass both coherent nuclear elastic scattering ($\mathrm{el}$) and non-elastic nuclear fragmentation/inelastic reactions ($\mathrm{in}$). For reaction channel $c \in \{\mathrm{el}, \mathrm{in}\}$, the macroscopic interaction cross section (linear interaction rate per unit path length, $\mathrm{mm}^{-1}$) at kinetic energy $E$ is summed over the elemental constituents $t$ of the local tissue composition:
 
@@ -165,7 +165,7 @@ where $U \sim \mathcal{U}(0, 1)$ is drawn independently for each particle track.
 
 To reduce redundant global-memory cross-section table lookups during primary ion transport, primary inelastic proposals utilize a per-track majorant rate cache $\widehat{\Sigma}_{\mathrm{in}}$. The cached rate is initialized and refreshed whenever the particle enters a new material composition or density, when its kinetic energy drops below $80\%$ of the energy at which the cache was last evaluated, or immediately following a candidate nuclear event. At a proposed inelastic vertex, the exact post-slowing inelastic rate $\Sigma_{\mathrm{in}}(E_{\mathrm{post}})$ is evaluated and accepted with probability $\Sigma_{\mathrm{in}}(E_{\mathrm{post}}) / \widehat{\Sigma}_{\mathrm{in}}$; rejected proposals are treated as null collisions (delta-tracking), and the primary ion continues transport after a rejected proposal.
 
-### II.A.5. Nuclear Elastic Scattering and Target Recoils
+### II.A.5. Nuclear Elastic Scattering and Recoil Transport
 
 Coherent nuclear elastic scattering is included for both primary beams and transported charged fragments in water and CT. Once an elastic collision and target element $t$ are selected at incident specific energy $e = E/A$, the engine brackets $e$ between adjacent table nodes $[e_0, e_1]$ and stochastically selects node $k \in \{0, 1\}$ in proportion to each node's partial elastic rate contribution. An empirical sample is then drawn uniformly from the 512 pre-extracted records at node $k$, providing the specific target isotope mass $m_t$ and the normalized squared four-momentum transfer $q^2 / q_{\max}^2 = \tfrac{1}{2}(1 - \cos\theta_*)$, where $\theta_*$ is the center-of-mass polar scattering angle. Combining $\cos\theta_*$ with a uniform azimuthal angle $\phi \sim \mathcal{U}(0, 2\pi)$, exact relativistic two-body kinematics (in natural units $c = 1$) determines the laboratory-frame recoil kinetic energy $E_R$ and scattered projectile kinetic energy $E'_p$:
 
@@ -183,7 +183,7 @@ where $M$ is the projectile rest mass (retaining the package-calibrated mass con
 
 Target recoils whose nuclear identity $(Z_R, A_R)$ belongs to the 18-species charged-fragment set enter the secondary transport queue and undergo full electromagnetic, multiple-scattering, and nuclear transport. Additional target-recoil isotopes (e.g., $^{12}\mathrm{C}$–$^{40}\mathrm{Ca}$ or $^{16}\mathrm{O}$ tissue recoils) are transported using a dedicated all-ion recoil stopping package that tabulates the combined unrestricted electronic plus nuclear stopping power $S_{\mathrm{tot}}(E) = S_e(E) + S_n(E)$ and its consistent CSDA range; this recoil group uses continuous slowing-down transport. When scoring dose-averaged electronic LET ($L_d$), these heavy recoils query a companion electronic-only stopping table so that both LET moments use electronic stopping power $S_e(E)$. Recoils born with $E_R \le E_{\mathrm{cut}} = 0.1\text{ MeV}$ deposit their energy locally at the collision vertex.
 
-### II.A.6. Correlated Inelastic Final States and Charged Fragments
+### II.A.6. Nuclear Inelastic Interactions and Fragment Transport
 
 Non-elastic nuclear interactions sample complete events from pre-generated Geant4 intranuclear cascade final-state libraries, preserving multiparticle final-state correlations in a GPU-queryable representation indexed by projectile $(Z, A)$, target element $t$, and incident energy per nucleon $e_k$. The primary proton event library was generated offline using the Geant4 Binary Cascade model (`QGSP_BIC_HP`), the primary $^{12}\mathrm{C}$ library using the Liège Intranuclear Cascade model (`FTFP_INCLXX`), and the secondary fragment library using `G4IonBinaryCascadePhysics` paired with `G4EmStandardPhysics_option4`.
 
@@ -203,7 +203,7 @@ A single uniform azimuthal rotation angle $\Phi \sim \mathcal{U}(0, 2\pi)$ is ap
 
 Secondary inelastic cascades in water and patient CT use a maximum generation depth of $g_{\max} = 2$. Charged fragments at this limit, or with species policies that disable inelastic branching, continue continuous slowing-down, multiple scattering, and permitted nuclear elastic scattering until stopping or escape. $^6\mathrm{Be}$ residuals terminate at production, with their kinetic energy recorded separately as untracked energy. Neutral nuclear products, including neutrons and de-excitation $\gamma$ rays, are not transported further; their kinetic energy and untracked reaction residuals are recorded separately and excluded from patient dose.
 
-### II.A.7. Step Control, Geometry, and Track Termination
+### II.A.7. Step Control and Boundary Transport
 
 At the beginning of each transport step, the local material composition, mass density, and electromagnetic response are evaluated to determine the maximum permissible step length across competing physical and geometric processes. Let $f$ denote the species-specific range fraction, $r_f$ the final-range parameter, and $\eta$ the maximum fractional mean energy loss per step. When the residual CSDA range satisfies $R(E) > r_f$, the electromagnetic step proposal $\ell_{\mathrm{EM}}$ is governed by the dual range-guided and energy-loss constraint:
 
@@ -238,7 +238,7 @@ Continuous ionization energy loss is scored in the originating voxel of the step
 
 ---
 
-## II.B. Extension to Copper-Collimated Minibeams
+## II.B. Extension to Minibeam Transport
 
 ### II.B.1. Multislit Collimator Geometry
 
@@ -249,7 +249,7 @@ Two clinical collimator designs are implemented for full-plan evaluations:
 1. **Proton minibeam collimator**: A $60\text{ mm}$-thick copper block containing $15$ parallel slits of $0.5\text{ mm}$ aperture width, $3.6\text{ mm}$ center-to-center pitch, and $50\text{ mm}$ slit length.
 2. **Carbon-ion minibeam collimator (RT07575 head plan)**: A $100\text{ mm}$-thick copper block containing $17$ slits of $0.7\text{ mm}$ aperture width, $3.0\text{ mm}$ center-to-center pitch, and $100\text{ mm}$ slit length. For the opposing $90^\circ$ and $270^\circ$ lateral fields of the RT07575 plan, the $270^\circ$ slit array incorporates a half-pitch ($1.5\text{ mm}$) lateral phase shift relative to the $90^\circ$ field to interleave opposing peak and valley dose distributions.
 
-### II.B.2. Transport through Copper and Air
+### II.B.2. Copper and Air Transport
 
 Charged particles traversing the copper collimator and air regions query material-specific beamline electromagnetic tables, which provide unrestricted electronic stopping powers $S_e(E)$ and native unrestricted straggling variances $V_{\mathrm{full}}(E; T_{\max})$ across all charged isotopes present in the copper charged-fragment set. For steps whose trial linear loss satisfies $S_e(E)\,\ell \le 0.02 E$, mean energy loss is computed linearly as $S_e(E)\,\ell$; for larger fractional losses, exact CSDA range inversion (Eq. 1b) is used with a $\sqrt{E}$ stopping continuation below the lowest energy node.
 
@@ -264,7 +264,7 @@ Primary ions in copper and air use the Urban scattering model described in Secti
 - In **carbon-ion minibeams**, copper fragments are transported using independently extracted, species-resolved copper Urban MCS tables and species-resolved copper nuclear elastic scattering.
 - In **proton minibeams**, upstream copper fragments (such as secondary deuterons, tritons, and $\alpha$ particles) utilize a Highland-based Gaussian multiple-scattering update paired with unrestricted electronic energy loss.
 
-### II.B.3. Patient-Entry Phase Space and Scattering Assignment
+### II.B.3. Coupling to Patient Transport
 
 MAIGO transports incident histories and their charged nuclear products through the air slits, copper septa, and downstream air gap to generate the patient-entry phase space. The resulting distribution includes directly transmitted primaries, primaries scattered from copper sidewalls, and charged nuclear fragments generated in copper and upstream air, carrying collimator-induced beam modulation and secondary-particle contributions into patient transport. Histories stopped or absorbed in copper remain part of the total incident history count $N$ used for absolute dose normalization.
 
@@ -274,9 +274,9 @@ Patient primary ions use the Urban model to represent angular deflection and lat
 
 ---
 
-## II.C. Absorbed Dose and Electronic LET Scoring
+## II.C. Dose and LET Scoring
 
-### II.C.1. Absolute Dose and Plan Normalization
+### II.C.1. Absorbed Dose and Plan Normalization
 
 Let $W_j > 0$ denote the physical particle weight (number of clinical particles per fraction/field) assigned to pencil-beam spot $j \in \{1, \dots, M\}$, and let $W = \sum_{j=1}^M W_j$ denote the total physical particle weight of the treatment plan. For a Monte Carlo simulation campaign comprising $N$ total incident histories, integer history counts $n_j$ are allocated across spots via the largest-remainder method:
 
@@ -322,7 +322,7 @@ The weight in Eq. (12) is the expected electronic energy loss $S_{e,k}\,\ell_k$,
 
 All transported charged particles within the water or patient CT scoring grid—including primary ions, secondary nuclear fragments, and transported elastic recoils above the $0.1\text{ MeV}$ kinetic energy cutoff—contribute to $A_i$ and $B_i$. Upstream copper/air trajectory segments, discrete nuclear-vertex local energy deposits, zero-path terminal cutoff deposits, and untracked neutral reaction products are excluded from the LET moments. Both $A_i$ and $B_i$ are accumulated on the GPU via `FP32` atomic additions, written to disk independently for each field and batch, and summed in double precision across all fields, batches, and devices prior to evaluating the quotient $A_i / B_i$. Voxels with $B_i = 0$ (no traversed charged-particle track) are flagged explicitly and excluded from ratio averaging.
 
-### II.C.3. Matched TOPAS Scorers
+### II.C.3. TOPAS Reference Scoring
 
 TOPAS absorbed dose is scored with `DoseToMedium`. The TOPAS reference uses the two-moment LET estimator of Eq. (12), accumulating $A_i = \sum_k w_k S_{e,k}^2 \ell_k$ and $B_i = \sum_k w_k S_{e,k} \ell_k$, where $w_k$ is the track statistical weight and the scoring threshold is $0.1\text{ MeV}$ in total kinetic energy. The scorer queries pre-extracted read-only unrestricted electronic stopping tables generated with the reference Geant4 11.3.2 physics list, particle species, Schneider tissue compositions, densities, and mean excitation energies. This establishes a common LET definition and scoring endpoint across the two engines.
 
@@ -330,7 +330,7 @@ TOPAS absorbed dose is scored with `DoseToMedium`. The TOPAS reference uses the 
 
 ## II.D. GPU Implementation
 
-### II.D.1. Specialized Transport Pipelines and Queue Scheduling
+### II.D.1. Transport Specialization and Queue Scheduling
 
 MAIGO is implemented in C++20 and Khronos SYCL, supporting NVIDIA GPUs through the oneAPI Unified Runtime CUDA backend and Intel Xe GPUs through Level Zero. Device kernels are compiled ahead of time into native code for the target architecture, with runtime just-in-time compilation disabled. Four compile-time-specialized primary pipelines serve proton broadbeam, carbon-ion broadbeam, proton minibeam, and carbon-ion minibeam calculations. A generic pipeline supports custom ion configurations. All pipelines share secondary transport kernels for multispecies charged nuclear fragments.
 
@@ -343,13 +343,13 @@ To mitigate SIMT warp/subgroup divergence caused by heterogeneous track lifetime
 
 Device queues are preallocated before kernel launch, with hardware atomic counters recording queue occupancy and completion across stages.
 
-### II.D.2. Random Streams and Resident Multi-GPU Batches
+### II.D.2. Random Number Generation and Batch Execution
 
 Device-side random numbers use the counter-based Philox-4x32-10 generator. Draws are keyed by batch seed, spot index, primary history index, descendant track identity, and a monotonically increasing counter, making each track’s random stream independent of thread scheduling and queue reordering. Consecutive batches reuse the GPU context and resident material and physics tables, amortizing initialization and physics-table upload costs across the campaign.
 
 Multi-GPU campaigns partition histories in proportion to measured steady-state throughput to balance device completion times. The campaign-wide integer spot allocation in Eq. (11a) is preserved across devices and batches; independent history streams are combined using the dose and LET moment normalization of Section II.C.
 
-### II.D.3. Transport Completion and Energy Accounting
+### II.D.3. Energy Accounting and Transport Completion
 
 Each batch checks track completion, queue capacity, physics-table coverage, and energy balance, saving the checks with dose and LET outputs. Required conditions are completion of all launched tracks, zero queue overflow, in-domain physics queries, and finite non-negative dose and LET moments. The energy ledger separates continuous deposition, nuclear-vertex deposition, terminal cutoff deposition, boundary escape, upstream loss, neutral products, and reaction residuals to check energy accounting by species and transport stage.
 
@@ -357,9 +357,9 @@ Projectile identity, material composition, and energy coverage are checked at in
 
 ---
 
-## II.E. Clinical Validation and Quantitative Assessment
+## II.E. Clinical Validation
 
-### II.E.1. Clinical Plans, Beam Sources, and Simulation Statistics
+### II.E.1. Clinical Cases and Treatment Plans
 
 Clinical full-plan evaluation uses two head CT datasets—**RT07575** (Head 1) and **RT06423** (Head 2)—and one lung CT dataset, **20022516** (Lung 1). The head cases assess plan-dose agreement in complex anatomy, and the lung case assesses transport in low-density heterogeneous tissue. Table 2 lists the history counts for paired proton and carbon-ion calculations in broadbeam and copper-collimated minibeam modes. Each MAIGO–TOPAS pair shares the CT grid, Schneider material mapping, beam optics, spot positions and energies, final weights, placement, collimator geometry, and absolute dose normalization.
 
@@ -379,7 +379,7 @@ Clinical treatment plans are defined by a sequence of fields, energy layers, and
 
 Physical-dose inverse optimization represents voxel dose as $\mathbf{d} = \mathbf{A}\mathbf{w}$, where $\mathbf{A}$ is the dose-influence matrix per incident particle and $\mathbf{w} \ge \mathbf{0}$ contains the spot particle weights. Weights are optimized for case-specific target coverage and organ-at-risk (OAR) sparing. The final vector is fixed for both MAIGO and TOPAS full-plan forward calculations, establishing a common irradiation source. Reoptimized plans use a $4\text{ Gy}$ physical-dose prescription; carbon-ion broadbeam plans retaining treatment planning system (TPS) weights use the original cumulative dose scale.
 
-### II.E.2. Reference Monte Carlo Simulations
+### II.E.2. TOPAS Reference Simulations
 
 Reference simulations use OpenTOPAS 4.2.3 / Geant4 11.3.2 [7,8] with the scorers defined in Section II.C.3. The physics list includes standard electromagnetic processes (`g4em-standard_opt4`), hadron and ion inelastic interactions (`g4h-phy_QGSP_BIC_HP`, `g4ion-inclxx`), hadron elastic scattering (`g4h-elastic_HP`), stopping (`g4stopping`), and decay (`g4decay`, `g4radioactivedecay`). Minibeam references apply Urban scattering to charged particles through `AllChargedUrbanPhysics`. Carbon-ion references register nuclear elastic scattering for `GenericIon` through `CarbonIonElasticPhysics`, which wraps `G4IonElasticPhysics`.
 
@@ -387,7 +387,7 @@ Electromagnetic table limits, secondary production cuts, and step settings are r
 
 To resolve stopping-power gradients near the Bragg peak, the carbon-ion broadbeam TOPAS LET reference uses `dRoverRange = 0.005` and `finalRange = 0.1 nm` for light ions and `GenericIon`, with the reference proton step controls retained. The RT07575 single-replica paired LET comparison uses $25,927,634$ incident histories and matching integer spot allocations in MAIGO and TOPAS. LET uncertainty from independent replicas is estimated as described in Section II.E.6.
 
-### II.E.3. Dose Gamma and Dosimetric Endpoints
+### II.E.3. Dose Agreement
 
 Spatial and dosimetric agreement between the GPU-calculated dose distribution $D_{\mathrm{GPU}}(\mathbf{r}')$ and the reference TOPAS dose distribution $D_{\mathrm{ref}}(\mathbf{r})$ is quantified using the three-dimensional local gamma index [10]:
 
@@ -416,13 +416,13 @@ Here, $\Delta r>0$ is the distance-to-agreement (DTA) criterion and $\varepsilon
 
 An evaluation point passes when $\gamma \le 1$. For zero DTA, the endpoint is the same-position relative dose difference $\eta_D(\mathbf{r})=\lvert D_{\mathrm{GPU}}(\mathbf{r})-D_{\mathrm{ref}}(\mathbf{r})\rvert/D_{\mathrm{ref}}(\mathbf{r})$; the $3\%/0\text{ mm}$ test passes when $\eta_D\le 0.03$. The prespecified broadbeam acceptance criterion is a local $1\%/1\text{ mm}$ pass rate above $99\%$. Minibeams use $3\%/0.2\text{ mm}$ and $3\%/0.1\text{ mm}$ criteria with a $0.02\text{ mm}$ search increment to match the submillimeter slit scale. Transverse profiles at multiple depths assess peak width, valley dose, and PVDR; depth-dose profiles assess distal falloff; and DVH indices assess target and OAR dose. Same-position dose-difference distributions and batch uncertainties characterize voxelwise agreement.
 
-### II.E.4. LET Gamma and Spatial Profiles
+### II.E.4. LET Agreement and Spatial Profiles
 
 Three-dimensional local gamma evaluation for dose-averaged electronic LET ($L_d$) is computed analogously to Eq. (13) by substituting $L_{d,\mathrm{GPU}}(\mathbf{r}')$ and $L_{d,\mathrm{ref}}(\mathbf{r})$ for dose, with fractional tolerance $\varepsilon_L=\Delta L_{\%}/100$ and local absolute tolerance $\varepsilon_L L_{d,\mathrm{ref}}(\mathbf{r})$. The zero-DTA endpoint uses the same-position relative LET difference. The evaluation region is defined as the intersection of the `BODY` contour with the broadbeam dose mask $D_{\mathrm{ref}}(\mathbf{r}) > 0.10\,D_{\mathrm{ref},\max}$. Broadbeam LET agreement is reported at local $3\%/3\text{ mm}$, $1\%/1\text{ mm}$, and $3\%/0\text{ mm}$ criteria using a $0.10\text{ mm}$ trilinear interpolation search step on the GPU LET field. Any voxel within the reference dose mask where the GPU LET denominator vanishes ($B_i = 0$) is retained as a gamma failure.
 
 LET spatial analysis uses transverse profiles at fixed geometric depths and depth profiles along the beam axis. In the RT07575 carbon-ion broadbeam case, depth begins at the central-ray entry into `BODY` and is sampled at the native $0.5\text{ mm}$ interval. Central-ray profiles characterize local LET structure, and profiles pooled over a $2.5 \times 10\text{ mm}^2$ transverse ROI characterize regional depth trends. ROI LET is computed as $\sum_{i\in\mathrm{ROI}}A_i/\sum_{i\in\mathrm{ROI}}B_i$ within each depth slice.
 
-### II.E.5. Statistical Uncertainty in Absorbed Dose
+### II.E.5. Dose Uncertainty
 
 Voxelwise Monte Carlo statistical uncertainty on the GPU is evaluated from $B$ independent full-plan batches, each preserving the campaign-wide spot weight proportions. For $B$ equal-history batches whose individual voxel dose contributions $d_{i,b}$ are scaled such that $D_i = \sum_{b=1}^B d_{i,b}$, the unbiased sample variance of the total voxel dose $D_i$ is
 
@@ -460,7 +460,7 @@ $$
 
 Both $u_i$ and $u_{\mathrm{RMS}}$ are expressed in percent. Uncertainty summaries also include voxelwise percentiles and the fractions with relative standard errors below $1\%$ or $2\%$. Because GPU and TOPAS simulations use independent random streams, the statistical variance of the voxelwise dose difference $\Delta D_i = D_{\mathrm{GPU},i} - D_{\mathrm{ref},i}$ is given by $\widehat{\sigma}_{\Delta D_i}^{\,2} = \widehat{\sigma}_{D_{\mathrm{GPU},i}}^{\,2} + \widehat{\sigma}_{D_{\mathrm{ref},i}}^{\,2}$.
 
-### II.E.6. Statistical Uncertainty in Dose-Averaged LET
+### II.E.6. LET Uncertainty
 
 Because $L_{d,i} = A_i / B_i$ is a ratio of two correlated random variables accumulated along the same particle tracks, its statistical variance accounts for the covariance $\mathrm{Cov}(A_i, B_i)$. To evaluate voxelwise LET statistical uncertainty at the full-plan history count $N$, an auxiliary GPU calculation partitions the $N$ histories into $K$ independent, source-matched full-plan groups with history counts $N_b$ and fractions $a_b=N_b/N>0$ ($K = 20$ for the carbon-ion broadbeam benchmark). Let $A_{i,b}$ and $B_{i,b}$ denote the accumulated numerator and denominator moments in replicate group $b \in \{1, \dots, K\}$, with pooled estimator $L_{d,i} = \sum_{b=1}^K A_{i,b} \big/ \sum_{b=1}^K B_{i,b}$. With $K>1$ and a common per-history covariance matrix for the paired moments, a first-order Taylor expansion (delta method) gives the variance estimate
 
