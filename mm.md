@@ -143,8 +143,6 @@ where $M$ is the projectile rest mass (retaining the package-calibrated mass con
 
 Target recoils whose nuclear identity $(Z_R, A_R)$ belongs to the 18-species charged-fragment set enter the secondary transport queue and undergo full electromagnetic, multiple-scattering, and nuclear transport. Additional target-recoil isotopes (e.g., $^{12}\mathrm{C}$–$^{40}\mathrm{Ca}$ or $^{16}\mathrm{O}$ tissue recoils) are transported using a dedicated all-ion recoil stopping package that tabulates the combined unrestricted electronic plus nuclear stopping power $S_{\mathrm{tot}}(E) = S_e(E) + S_n(E)$ and its consistent CSDA range; this recoil group uses continuous slowing-down transport. When scoring dose-averaged electronic LET ($L_d$), these heavy recoils query a companion electronic-only stopping table so that both LET moments use electronic stopping power $S_e(E)$. Recoils born with $E_R \le E_{\mathrm{cut}} = 0.1\text{ MeV}$ deposit their energy locally at the collision vertex.
 
-### II.A.4. Nuclear Inelastic Interactions and Fragment Transport
-
 Non-elastic nuclear interactions sample complete events from pre-generated Geant4 intranuclear cascade final-state libraries, preserving multiparticle final-state correlations in a GPU-queryable representation indexed by projectile $(Z, A)$, target element $t$, and incident energy per nucleon $e_k$. The primary proton event library was generated offline using the Geant4 Binary Cascade model (`QGSP_BIC_HP`), the primary $^{12}\mathrm{C}$ library using the Liège Intranuclear Cascade model (`FTFP_INCLXX`), and the secondary fragment library using `G4IonBinaryCascadePhysics` paired with `G4EmStandardPhysics_option4`.
 
 For an inelastic interaction occurring at specific energy $e = E/A$ bracketed by library energy nodes $e_0 \le e \le e_1$ (with a maximum permissible node spacing of $5\text{ MeV/u}$), stochastic linear interpolation selects the upper node $e_1$ with probability
@@ -163,7 +161,7 @@ A single uniform azimuthal rotation angle $\Phi \sim \mathcal{U}(0, 2\pi)$ is ap
 
 Secondary inelastic cascades in water and patient CT use a maximum generation depth of $g_{\max} = 2$. Charged fragments at this limit, or with species policies that disable inelastic branching, continue continuous slowing-down, multiple scattering, and permitted nuclear elastic scattering until stopping or escape. $^6\mathrm{Be}$ residuals terminate at production, with their kinetic energy recorded separately as untracked energy. Neutral nuclear products, including neutrons and de-excitation $\gamma$ rays, are not transported further; their kinetic energy and untracked reaction residuals are recorded separately and excluded from patient dose.
 
-### II.A.5. Step Control and Boundary Transport
+### II.A.4. Step Control and Boundary Transport
 
 At the beginning of each transport step, the local material composition, mass density, and electromagnetic response are evaluated to determine the maximum permissible step length across competing physical and geometric processes. Let $f$ denote the species-specific range fraction, $r_f$ the final-range parameter, and $\eta$ the maximum fractional mean energy loss per step. When the residual CSDA range satisfies $R(E) > r_f$, the electromagnetic step proposal $\ell_{\mathrm{EM}}$ is governed by the dual range-guided and energy-loss constraint:
 
