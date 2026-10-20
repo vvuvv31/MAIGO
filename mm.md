@@ -12,25 +12,9 @@ Material-dependent cross sections and response functions are extracted offline f
 
 The shared models below describe ion slowing, scattering, and nuclear reactions in water and heterogeneous patient tissues. Their material-specific extension to copper and air is given in Section II.B.
 
-### II.A.1. Continuous Energy Loss
+### II.A.1. Continuous Energy Loss and Straggling
 
-Patient CT datasets are preprocessed offline into a regular three-dimensional Cartesian grid specified by its physical origin, voxel dimensions, mass density $\rho$, and discrete tissue composition index. Hounsfield units (HU) are converted to mass density and mapped to 25 stoichiometric human tissue elemental compositions according to the Schneider segmentation scheme [6]. Supplementing these 25 tissues with a reference water composition having a mean excitation energy of $I = 75\text{ eV}$ ($\mathrm{Water\_75eV}$) yields 26 distinct material compositions. MAIGO evaluates material-specific electromagnetic and nuclear responses from each voxel’s tissue composition and continuous mass density, incorporating both composition and density into heterogeneous transport.
-
-Each charged particle track maintains its 3D position $\mathbf{r}$, unit direction vector $\mathbf{u}$, total kinetic energy $E$, nuclear identity $(Z, A)$, and deterministic random-number stream state. Electromagnetic tables parameterized in specific energy $e = E/A$ ($\mathrm{MeV/u}$) are queried using the exact species identity, local material composition, and voxel mass density $\rho$. MAIGO employs the unrestricted linear electronic stopping power $S_e(E; \rho)$, which integrates energy transfers to ionization electrons up to the kinematic maximum $T_{\max}$. Native species-resolved stopping tables retain each ion’s effective-charge ($Z_{\mathrm{eff}}$) dependence and Barkas/Bloch corrections.
-
-In heterogeneous CT media, the unrestricted stopping power at actual voxel density $\rho$ is evaluated by combining mass-density scaling of the reference composition response with a continuous Sternheimer density-effect correction:
-
-$$
-\begin{aligned}
-S_e(E;\rho)
-&= \frac{\rho}{\rho_0}S_e(E;\rho_0) \\
-&\quad - C_{\mathrm{mat}}(\rho)\frac{Z_{\mathrm{eff}}^2}{\beta^2}
-\bigl[\delta(X;\rho)-\delta(X;\rho_0)\bigr].
-\end{aligned}
-\tag{1a}
-$$
-
-where $\rho_0$ is the base density of the tissue composition, $\beta = v/c$ is the relativistic velocity, $X = \log_{10}(\beta\gamma)$, and $\delta(X; \rho)$ is the continuous Sternheimer parameterization interpolated across the voxel density $\rho$. For a fixed local composition and density, the unrestricted continuous-slowing-down approximation (CSDA) range $R(E)$ and the finite-step mean energy loss $\overline{\Delta E}(E, \ell)$ over a true path length $\ell$ are defined by
+Continuous slowing of charged ions is described by the unrestricted electronic stopping power $S_e(E;\rho)$ at the particle's kinetic energy $E$, local material composition, and mass density $\rho$. The stopping response includes species-dependent effective-charge and density-effect corrections; the reference water uses a mean excitation energy of $75\text{ eV}$. For a true step length $\ell$, the mean energy loss is related to the continuous-slowing-down approximation (CSDA) range by
 
 $$
 \begin{aligned}
@@ -38,57 +22,30 @@ R(E) &= \int_0^E \frac{\mathrm{d}E'}{S_e(E')}, \\
 \overline{\Delta E}(E,\ell)
 &= E-R^{-1}\!\bigl(\max\{R(E)-\ell,0\}\bigr).
 \end{aligned}
-\tag{1b}
+\tag{1}
 $$
 
-Stopping power, CSDA range, and inverse range are derived from the same piecewise-linear stopping response. The reference CSDA range $R_0(E)$ is constructed analytically by integrating the reciprocal of the piecewise-linear stopping response over each energy knot interval $[E_i, E_{i+1}]$, where $S_e(E)$ varies linearly from $S_i$ to $S_{i+1}$:
+Short proton steps use $\overline{\Delta E}=S_e(E)\ell$. For heavier ions, a midpoint-energy predictor–corrector evaluates the stopping response at $E-\tfrac{1}{2}S_e(E)\ell$ to account for its variation along the step. When the trial loss exceeds the native fractional linear-loss threshold, or the step exhausts the residual range, the mean loss is evaluated by CSDA range inversion using Eq. (1).
 
-$$
-\begin{aligned}
-\Delta R_i
-&= \int_{E_i}^{E_{i+1}}\frac{\mathrm{d}E'}{S_e(E')}
-= \frac{E_{i+1}-E_i}{S_i}F(q_i), \\
-q_i &= \frac{S_{i+1}-S_i}{S_i}, \\
-F(q) &= \begin{cases}
-\dfrac{\ln(1+q)}{q}, & q\ne 0, \\[4pt]
-1, & q=0.
-\end{cases}
-\end{aligned}
-\tag{1c}
-$$
-
-with a fourth-order Taylor expansion applied for $|q_i| < 10^{-3}$ to prevent floating-point cancellation in single precision (FP32). The inverse mapping $R_0^{-1}$ within each interval is evaluated in closed form via the exponential inverse $\mathrm{expm1}$, while stopping below the lowest energy knot $E_0$ follows the prescribed $\sqrt{E}$ continuation. Whenever the kinetic energy lies below the density-effect onset (where $\delta(X; \rho) = \delta(X; \rho_0) = 0$), the actual range simplifies exactly to $R(E; \rho) = (\rho_0 / \rho) R_0(E)$. Above the density-effect onset, the residual integral of the reciprocal-stopping difference is evaluated via composite 8-point Gauss–Legendre quadrature in logarithmic energy, and the inverse range $R^{-1}$ is solved to a relative tolerance of $2\times 10^{-6}$ using a safeguarded Newton–bisection iteration.
-
-During particle stepping in water and patient CT, the trial linear energy loss $\Delta E_{\mathrm{lin}} = S_e(E)\,\ell$ is compared against the native linear-loss threshold $\xi_{\mathrm{lin}} E$ stored in the EM package. For fractional losses below $\xi_{\mathrm{lin}}$, proton transport sets $\overline{\Delta E} = S_e(E)\,\ell$ following the short-step convention of `G4VEnergyLossProcess`. For heavier ions ($Z > 1$) below $\xi_{\mathrm{lin}}$, the engine retains a midpoint-energy predictor–corrector evaluation, querying $S_e(E - \tfrac{1}{2} S_e(E)\ell)\,\ell$ to account for rapid effective-charge variation. Steps exceeding $\xi_{\mathrm{lin}} E$ and range-terminating steps evaluate the exact CSDA range inversion in Eq. (1b). Additional target-recoil isotopes use dedicated isotope-specific total (electronic plus nuclear) stopping tables, as detailed in Section II.A.5.
-
-Water and patient CT transport use the local-ionization energy-deposition approximation: unrestricted electronic energy loss is scored in the current transport voxel, and secondary $\delta$-ray electrons and bremsstrahlung/atomic-relaxation photons are not transported as separate tracks. Electronic energy transfer is incorporated into condensed-history ion stepping.
-
-### II.A.2. Energy-Loss Straggling
-
-Energy-loss straggling for primary protons and carbon ions is modeled using a unified stochastic sampling engine adapted from the Geant4 11.3.2 `G4UniversalFluctuation` and `G4IonFluctuations` algorithms [8]. For an incident ion of rest mass $M$, speed $\beta c$, and Lorentz factor $\gamma$, the maximum energy transferable to a free electron in a single collision is
+Primary energy-loss straggling is sampled with a unified engine adapted from the Geant4 `G4UniversalFluctuation` and `G4IonFluctuations` models [8]. For an ion of rest mass $M$, speed $\beta c$, and Lorentz factor $\gamma$, the maximum transferable energy to a free electron is
 
 $$
 T_{\max} = \frac{2 m_e c^2 \beta^2 \gamma^2}{1 + 2\gamma(m_e/M) + (m_e/M)^2},
 \tag{2}
 $$
 
-where $m_e c^2 = 0.51099891\text{ MeV}$ is the electron rest energy. Because MAIGO operates in an unrestricted condensed-history scheme without discrete $\delta$-ray production cuts, $T_{\max}$ serves directly as the upper energy transfer limit for straggling. For medium tables whose base variance per unit length $V_{\mathrm{ref}}$ was extracted at a finite reference cut $T_c$, the runtime engine analytically restores the full unrestricted Bohr/Bethe energy-loss variance per unit length $V_{\mathrm{full}}$ at the current voxel density via
+where $m_e$ is the electron rest mass. The full unrestricted dispersion per unit length, $V_{\mathrm{full}}$, is evaluated at the local material and density with $T_{\max}$ as the energy-transfer upper limit. The step variance is
 
 $$
-V_{\mathrm{full}} = V_{\mathrm{ref}} \, \frac{T_{\max}/\beta^2 - T_{\max}/2}{T_{\max}/\beta^2 - \min(T_c, T_{\max})/2},
+\sigma_E^2=V_{\mathrm{full}}(E;\rho,T_{\max})\,\ell.
 \tag{3}
 $$
 
-where $V_{\mathrm{ref}}$ already incorporates local mass-density scaling and the native effective-charge fluctuation factor. Multiplying $V_{\mathrm{full}}$ by the accepted true step length $\ell$ yields the step variance $\sigma_E^2$. For upstream copper and air, the unrestricted variance at $T_{\max}$ is tabulated directly offline and requires no cut-conversion factor.
+Protons and higher-velocity ions use the Universal fluctuation model. Thin-absorber losses combine stochastic atomic-excitation and ionization contributions; thick-absorber losses use truncated Gaussian or moment-matched Gamma sampling according to the mean-to-standard-deviation ratio. Lower-energy heavy ions use the Ion fluctuation model, including the finite-step deceleration correction and its Gaussian, Gamma, or uniform sampling regimes. Each primary step receives one full-loss draw based on the mean loss and unrestricted dispersion. Charged secondary fragments use the finite-step mean loss while retaining stochastic multiple scattering and nuclear interactions.
 
-The fluctuation engine selects the appropriate physical regime based on particle identity and velocity:
+The sampled loss is bounded by the available kinetic energy; range-terminating steps deposit the residual kinetic energy. The full ionization loss is deposited locally in the current water or patient CT voxel. This treatment retains primary range straggling and Bragg-peak broadening within condensed-history ion transport.
 
-1. **Universal fluctuation regime ($^1\mathrm{H}$ at all energies and $Z > 1$ ions above the native transition energy $E > (10\text{ MeV}/m_p)\,Z M$)**: In the thick-absorber regime ($\overline{\Delta E} \ge 10\,T_{\max}$), energy loss is drawn from a two-sided truncated Gaussian distribution on $[0, 2\overline{\Delta E}]$ when $\overline{\Delta E}/\sigma_E \ge 2$, or from a moment-matched Gamma distribution with shape parameter $k = (\overline{\Delta E}/\sigma_E)^2$ when $\overline{\Delta E}/\sigma_E < 2$. In the thin-absorber regime ($\overline{\Delta E} < 10\,T_{\max}$), the energy loss is decomposed into atomic excitation ($a_1$) and continuum ionization ($a_3$) components following the Urban two-level atom model. To avoid numerical instability when the expected number of ionization collisions $a_3 > 8$, the ionization component is split algebraically into a Gaussian-sampled dense soft part and a bounded explicit Poisson tail with mean $p_3 = 8 a_3 / (8 + a_3) \le 8$, from which single-collision transfers are drawn according to a $1/E^2$ distribution over $[\alpha E_0, T_{\max}]$.
-2. **Low-energy Ion fluctuation regime ($Z > 1$ ions below the transition threshold)**: The raw ion dispersion is corrected for finite-step velocity deceleration when $\overline{\Delta E} > 0.2 E$. Depending on the signal-to-noise ratio $\mathrm{SN} = \overline{\Delta E}/\sigma_E$, the actual energy loss is sampled from a truncated Gaussian ($\mathrm{SN} \ge 2$), a Gamma distribution ($0.1 < \mathrm{SN} < 2$), or a uniform distribution on $[0, 2\overline{\Delta E}]$ ($\mathrm{SN} \le 0.1$).
-
-Sampled energy loss is bounded by the available kinetic energy $E$; range-terminating steps deposit the residual kinetic energy. Primary energy-loss straggling is retained in the patient/water phantom and copper collimator to model primary range straggling and Bragg-peak broadening. Charged secondary fragments use finite-path mean electronic energy loss ($\Delta E = \overline{\Delta E}$), together with stochastic nuclear interactions and multiple scattering.
-
-### II.A.3. Multiple Coulomb Scattering
+### II.A.2. Multiple Coulomb Scattering
 
 In broadbeam configurations—and for charged secondary fragments inside the patient volume in CT minibeams—multiple Coulomb scattering is modeled using the correlated Gaussian Fermi–Eyges theory [9]. Within a homogeneous sub-step of length $L$ characterized by linear scattering power $\mathcal{T}$, the projected angular deflection $\theta$ and lateral spatial displacement $y$ along each of two orthogonal transverse axes follow a bivariate normal distribution with covariance matrix
 
@@ -115,7 +72,7 @@ $$
 \tag{4b}
 $$
 
-where $p$ is the relativistic momentum, $X_0(\rho)$ is the local radiation length derived from the Schneider tissue composition and voxel density, and $\lambda_{\mathrm{tail}}(\rho) = \lambda_{\mathrm{tail}, \mathrm{water}} \, [X_{0,\mathrm{water}} / X_0(\rho)]$ scales the nominal tail rate by inverse radiation length. For light ions ($^1\mathrm{H}$, $^2\mathrm{H}$, $^3\mathrm{H}$, and $^4\mathrm{He}$), the effective core energy parameter $E_s(E/A)$ and tail parameters are obtained by piecewise-linear interpolation of homogeneous water fits calibrated against Geant4 at $50$, $150$, and $300\text{ MeV/u}$ (clamped to endpoint values outside this interval). For $^{12}\mathrm{C}$ and heavier fragments assigned to the same calibration group, the engine adopts calibrated constants $E_s = 9.9\text{ MeV}$, $\lambda_{\mathrm{tail},\mathrm{water}} = 0.0025\text{ mm}^{-1}$, and $E_{\mathrm{tail}} = 2.4\text{ MeV}$. Strong-interaction nuclear elastic scattering is modeled independently as a discrete stochastic process (Section II.A.5).
+where $p$ is the relativistic momentum, $X_0(\rho)$ is the local radiation length derived from the Schneider tissue composition and voxel density, and $\lambda_{\mathrm{tail}}(\rho) = \lambda_{\mathrm{tail}, \mathrm{water}} \, [X_{0,\mathrm{water}} / X_0(\rho)]$ scales the nominal tail rate by inverse radiation length. For light ions ($^1\mathrm{H}$, $^2\mathrm{H}$, $^3\mathrm{H}$, and $^4\mathrm{He}$), the effective core energy parameter $E_s(E/A)$ and tail parameters are obtained by piecewise-linear interpolation of homogeneous water fits calibrated against Geant4 at $50$, $150$, and $300\text{ MeV/u}$ (clamped to endpoint values outside this interval). For $^{12}\mathrm{C}$ and heavier fragments assigned to the same calibration group, the engine adopts calibrated constants $E_s = 9.9\text{ MeV}$, $\lambda_{\mathrm{tail},\mathrm{water}} = 0.0025\text{ mm}^{-1}$, and $E_{\mathrm{tail}} = 2.4\text{ MeV}$. Strong-interaction nuclear elastic scattering is modeled independently as a discrete stochastic process (Section II.A.4).
 
 A data-driven adaptation of the Urban model (`G4UrbanMscModel`) [8] uses offline-tabulated species- and material-dependent transport mean free paths $\lambda_{\mathrm{tr},1}(E)$, radiation lengths $X_0$, and angular distribution shape parameters across 52 charged ion species in water, all 25 Schneider CT tissues, and copper (and for $^1\mathrm{H}$ and $^{12}\mathrm{C}$ in air). Urban transport couples scattering and geometric advancement through a mapping between the true path length $\ell$ and geometric chord length $g$. In the regime of locally constant transport mean free path $\lambda_{\mathrm{tr},1}$, the forward mapping and its exact inverse are given by
 
@@ -133,7 +90,7 @@ supplemented by the native Geant4 energy-dependent $\lambda_{\mathrm{tr},1}(E)$ 
 
 At the conclusion of the true step (after accounting for any step shortening due to discrete nuclear collisions), the polar deflection cosine $\cos\theta$ is sampled from the composite Urban distribution, which blends a Gaussian small-angle core with a power-law single-scattering tail parameterized by the step thickness $\ell / \lambda_{\mathrm{tr},1}$, radiation length $X_0$, and pre-/post-step kinetic energy mean. Correlated lateral displacement is applied in the local particle frame, constrained by the geometric safety radius, and rotated into global coordinates. Boundary-crossing flags and range-step conditioning states are preserved across steps and kernel handoffs.
 
-### II.A.4. Nuclear Interaction Sampling
+### II.A.3. Nuclear Interaction Sampling
 
 Discrete nuclear interactions in water and CT media encompass both coherent nuclear elastic scattering ($\mathrm{el}$) and non-elastic nuclear fragmentation/inelastic reactions ($\mathrm{in}$). For reaction channel $c \in \{\mathrm{el}, \mathrm{in}\}$, the macroscopic interaction cross section (linear interaction rate per unit path length, $\mathrm{mm}^{-1}$) at kinetic energy $E$ is summed over the elemental constituents $t$ of the local tissue composition:
 
@@ -165,7 +122,7 @@ where $U \sim \mathcal{U}(0, 1)$ is drawn independently for each particle track.
 
 To reduce redundant global-memory cross-section table lookups during primary ion transport, primary inelastic proposals utilize a per-track majorant rate cache $\widehat{\Sigma}_{\mathrm{in}}$. The cached rate is initialized and refreshed whenever the particle enters a new material composition or density, when its kinetic energy drops below $80\%$ of the energy at which the cache was last evaluated, or immediately following a candidate nuclear event. At a proposed inelastic vertex, the exact post-slowing inelastic rate $\Sigma_{\mathrm{in}}(E_{\mathrm{post}})$ is evaluated and accepted with probability $\Sigma_{\mathrm{in}}(E_{\mathrm{post}}) / \widehat{\Sigma}_{\mathrm{in}}$; rejected proposals are treated as null collisions (delta-tracking), and the primary ion continues transport after a rejected proposal.
 
-### II.A.5. Nuclear Elastic Scattering and Recoil Transport
+### II.A.4. Nuclear Elastic Scattering and Recoil Transport
 
 Coherent nuclear elastic scattering is included for both primary beams and transported charged fragments in water and CT. Once an elastic collision and target element $t$ are selected at incident specific energy $e = E/A$, the engine brackets $e$ between adjacent table nodes $[e_0, e_1]$ and stochastically selects node $k \in \{0, 1\}$ in proportion to each node's partial elastic rate contribution. An empirical sample is then drawn uniformly from the 512 pre-extracted records at node $k$, providing the specific target isotope mass $m_t$ and the normalized squared four-momentum transfer $q^2 / q_{\max}^2 = \tfrac{1}{2}(1 - \cos\theta_*)$, where $\theta_*$ is the center-of-mass polar scattering angle. Combining $\cos\theta_*$ with a uniform azimuthal angle $\phi \sim \mathcal{U}(0, 2\pi)$, exact relativistic two-body kinematics (in natural units $c = 1$) determines the laboratory-frame recoil kinetic energy $E_R$ and scattered projectile kinetic energy $E'_p$:
 
@@ -183,7 +140,7 @@ where $M$ is the projectile rest mass (retaining the package-calibrated mass con
 
 Target recoils whose nuclear identity $(Z_R, A_R)$ belongs to the 18-species charged-fragment set enter the secondary transport queue and undergo full electromagnetic, multiple-scattering, and nuclear transport. Additional target-recoil isotopes (e.g., $^{12}\mathrm{C}$–$^{40}\mathrm{Ca}$ or $^{16}\mathrm{O}$ tissue recoils) are transported using a dedicated all-ion recoil stopping package that tabulates the combined unrestricted electronic plus nuclear stopping power $S_{\mathrm{tot}}(E) = S_e(E) + S_n(E)$ and its consistent CSDA range; this recoil group uses continuous slowing-down transport. When scoring dose-averaged electronic LET ($L_d$), these heavy recoils query a companion electronic-only stopping table so that both LET moments use electronic stopping power $S_e(E)$. Recoils born with $E_R \le E_{\mathrm{cut}} = 0.1\text{ MeV}$ deposit their energy locally at the collision vertex.
 
-### II.A.6. Nuclear Inelastic Interactions and Fragment Transport
+### II.A.5. Nuclear Inelastic Interactions and Fragment Transport
 
 Non-elastic nuclear interactions sample complete events from pre-generated Geant4 intranuclear cascade final-state libraries, preserving multiparticle final-state correlations in a GPU-queryable representation indexed by projectile $(Z, A)$, target element $t$, and incident energy per nucleon $e_k$. The primary proton event library was generated offline using the Geant4 Binary Cascade model (`QGSP_BIC_HP`), the primary $^{12}\mathrm{C}$ library using the Liège Intranuclear Cascade model (`FTFP_INCLXX`), and the secondary fragment library using `G4IonBinaryCascadePhysics` paired with `G4EmStandardPhysics_option4`.
 
@@ -203,7 +160,7 @@ A single uniform azimuthal rotation angle $\Phi \sim \mathcal{U}(0, 2\pi)$ is ap
 
 Secondary inelastic cascades in water and patient CT use a maximum generation depth of $g_{\max} = 2$. Charged fragments at this limit, or with species policies that disable inelastic branching, continue continuous slowing-down, multiple scattering, and permitted nuclear elastic scattering until stopping or escape. $^6\mathrm{Be}$ residuals terminate at production, with their kinetic energy recorded separately as untracked energy. Neutral nuclear products, including neutrons and de-excitation $\gamma$ rays, are not transported further; their kinetic energy and untracked reaction residuals are recorded separately and excluded from patient dose.
 
-### II.A.7. Step Control and Boundary Transport
+### II.A.6. Step Control and Boundary Transport
 
 At the beginning of each transport step, the local material composition, mass density, and electromagnetic response are evaluated to determine the maximum permissible step length across competing physical and geometric processes. Let $f$ denote the species-specific range fraction, $r_f$ the final-range parameter, and $\eta$ the maximum fractional mean energy loss per step. When the residual CSDA range satisfies $R(E) > r_f$, the electromagnetic step proposal $\ell_{\mathrm{EM}}$ is governed by the dual range-guided and energy-loss constraint:
 
@@ -251,15 +208,15 @@ Two clinical collimator designs are implemented for full-plan evaluations:
 
 ### II.B.2. Copper and Air Transport
 
-Charged particles traversing the copper collimator and air regions query material-specific beamline electromagnetic tables, which provide unrestricted electronic stopping powers $S_e(E)$ and native unrestricted straggling variances $V_{\mathrm{full}}(E; T_{\max})$ across all charged isotopes present in the copper charged-fragment set. For steps whose trial linear loss satisfies $S_e(E)\,\ell \le 0.02 E$, mean energy loss is computed linearly as $S_e(E)\,\ell$; for larger fractional losses, exact CSDA range inversion (Eq. 1b) is used with a $\sqrt{E}$ stopping continuation below the lowest energy node.
+Charged particles traversing the copper collimator and air regions query material-specific beamline electromagnetic tables, which provide unrestricted electronic stopping powers $S_e(E)$ and native unrestricted straggling variances $V_{\mathrm{full}}(E; T_{\max})$ across all charged isotopes present in the copper charged-fragment set. For steps whose trial linear loss satisfies $S_e(E)\,\ell \le 0.02 E$, mean energy loss is computed linearly as $S_e(E)\,\ell$; for larger fractional losses, exact CSDA range inversion (Eq. 1) is used with a $\sqrt{E}$ stopping continuation below the lowest energy node.
 
-Primary ions in copper and air use the shared Universal/Ion fluctuation engine of Section II.A.2 with native particle mass, charge, material excitation energy, and $T_{\max}$ parameters. Charged secondary fragments use finite-path mean electronic energy loss. Upstream electronic losses follow the local-deposition approximation and enter the beamline energy ledger separately from patient-grid dose. Step caps are $0.05\text{ mm}$ in copper and $0.2\text{ mm}$ in slit air for CT carbon minibeams.
+Primary ions in copper and air use the shared Universal/Ion fluctuation engine of Section II.A.1 with native particle mass, charge, material excitation energy, and $T_{\max}$ parameters. Charged secondary fragments use finite-path mean electronic energy loss. Upstream electronic losses follow the local-deposition approximation and enter the beamline energy ledger separately from patient-grid dose. Step caps are $0.05\text{ mm}$ in copper and $0.2\text{ mm}$ in slit air for CT carbon minibeams.
 
 Both coherent nuclear elastic scattering and non-elastic nuclear fragmentation are modeled explicitly within the copper collimator. Primary ions sample their distance to the next copper nuclear interaction using the combined macroscopic cross section $\Sigma_{\mathrm{tot},\mathrm{Cu}} = \Sigma_{\mathrm{el},\mathrm{Cu}} + \Sigma_{\mathrm{in},\mathrm{Cu}}$, followed by post-slowing channel selection. In a copper nuclear elastic event, the center-of-mass scattering angle is drawn from copper-specific momentum-transfer tables and applied via relativistic two-body kinematics (Eq. 8); the scattered beam ion continues transport, while the kinetic energy transferred to the heavy copper target nucleus is booked directly to the upstream beamline energy ledger without tracking the sub-micrometer copper recoil.
 
 Copper inelastic collisions sample complete correlated final states from a dedicated copper cascade event library indexed by projectile $(Z, A)$ and specific energy $e = E/A$. All surviving charged reaction products are rotated coherently by a common azimuthal angle and tracked through the remainder of the copper block and downstream air gap. Multi-generation nuclear cascades within the copper collimator are tracked up to $g_{\max,\mathrm{Cu}} = 3$ inelastic generations, beyond which surviving charged fragments continue electromagnetic and elastic transport without further inelastic branching.
 
-Primary ions in copper and air use the Urban scattering model described in Section II.A.3. The upstream angular transport of copper-born charged fragments is species-resolved:
+Primary ions in copper and air use the Urban scattering model described in Section II.A.2. The upstream angular transport of copper-born charged fragments is species-resolved:
 
 - In **carbon-ion minibeams**, copper fragments are transported using independently extracted, species-resolved copper Urban MCS tables and species-resolved copper nuclear elastic scattering.
 - In **proton minibeams**, upstream copper fragments (such as secondary deuterons, tritons, and $\alpha$ particles) utilize a Highland-based Gaussian multiple-scattering update paired with unrestricted electronic energy loss.
@@ -270,7 +227,7 @@ MAIGO transports incident histories and their charged nuclear products through t
 
 Every primary ion and copper/air-born charged fragment that reaches the downstream patient entrance plane transfers its joint phase-space state $(\mathbf{r}, \mathbf{u}, E)$, nuclear identity $(Z, A)$, generation index, and deterministic RNG state into the patient transport queue.
 
-Patient primary ions use the Urban model to represent angular deflection and lateral displacement near slit-generated dose gradients. In CT minibeams, charged secondaries use segmented Fermi–Eyges scattering, including upstream-born fragments after entry into the patient. The outer step cap is $0.5\text{ mm}$ for both groups, with a $0.1\text{ mm}$ scattering-segment cap for secondaries. Water and generic minibeam transport use Urban scattering for both primary and secondary charged particles. These assignments use the common scattering operators described in Section II.A.3.
+Patient primary ions use the Urban model to represent angular deflection and lateral displacement near slit-generated dose gradients. In CT minibeams, charged secondaries use segmented Fermi–Eyges scattering, including upstream-born fragments after entry into the patient. The outer step cap is $0.5\text{ mm}$ for both groups, with a $0.1\text{ mm}$ scattering-segment cap for secondaries. Water and generic minibeam transport use Urban scattering for both primary and secondary charged particles. These assignments use the common scattering operators described in Section II.A.2.
 
 ---
 
@@ -361,7 +318,7 @@ Projectile identity, material composition, and energy coverage are checked at in
 
 ### II.E.1. Clinical Cases and Treatment Plans
 
-Clinical full-plan evaluation uses two head CT datasets—**RT07575** (Head 1) and **RT06423** (Head 2)—and one lung CT dataset, **20022516** (Lung 1). The head cases assess plan-dose agreement in complex anatomy, and the lung case assesses transport in low-density heterogeneous tissue. Table 2 lists the history counts for paired proton and carbon-ion calculations in broadbeam and copper-collimated minibeam modes. Each MAIGO–TOPAS pair shares the CT grid, Schneider material mapping, beam optics, spot positions and energies, final weights, placement, collimator geometry, and absolute dose normalization.
+Clinical full-plan evaluation uses two head CT datasets—**RT07575** (Head 1) and **RT06423** (Head 2)—and one lung CT dataset, **20022516** (Lung 1). The head cases assess plan-dose agreement in complex anatomy, and the lung case assesses transport in low-density heterogeneous tissue. Table 2 lists the history counts for paired proton and carbon-ion calculations in broadbeam and copper-collimated minibeam modes. Each MAIGO–TOPAS pair shares the CT grid, Schneider material mapping [6], beam optics, spot positions and energies, final weights, placement, collimator geometry, and absolute dose normalization.
 
 **Table 2.** Total simulated incident particle histories ($N$) for full-plan patient dose validations across clinical cases and beam delivery modes.
 
