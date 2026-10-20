@@ -1,7 +1,7 @@
-#include "carbon/tps_source.hpp"
+#include "tps_source.hpp"
 
-#include "carbon/ct_grid.hpp"
-#include "carbon/source_pose.hpp"
+#include "ct_grid.hpp"
+#include "source_pose.hpp"
 #include <optional>
 
 #include <algorithm>

@@ -11,9 +11,9 @@ PRESETS = {f'{ion}_{medium}_{beam}' for ion in ('proton', 'carbon')
 
 
 def inventory(root):
-    paths = sorted((root/'config').glob('*.yaml'))
+    paths = sorted((root/'examples').glob('*.yaml'))
     if {p.stem for p in paths} != PRESETS:
-        raise ValueError('config must contain exactly the eight current presets')
+        raise ValueError('examples must contain exactly the eight current presets')
     entries, files = {}, {}
     for path in paths:
         cfg = yaml.safe_load(path.read_text())

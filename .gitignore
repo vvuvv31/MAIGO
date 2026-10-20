@@ -1,8 +1,7 @@
 /build/
 /build-*/
 /out/
-/docs/validation*/
-/docs/*.log
+/docs/
 __pycache__/
 *.pyc
 /data/

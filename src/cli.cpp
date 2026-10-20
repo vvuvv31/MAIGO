@@ -1,4 +1,4 @@
-#include "carbon/cli.hpp"
+#include "cli.hpp"
 #include <charconv>
 #include <iostream>
 #include <stdexcept>
@@ -34,6 +34,6 @@ CliState parse_cli(int argc,char** argv) {
     if(state.histories_overridden && !state.histories)throw std::invalid_argument("Histories must be positive");
     return state;
 }
-void print_usage(){std::cout<<"carbon_mc --config config/<preset>.yaml [--seed N] [--histories N]\n"
-    <<"carbon_mc --config config/<preset>.yaml --batch-count N --histories-per-batch H --batch-output NEW_DIR\n";}
+void print_usage(){std::cout<<"carbon_mc --config examples/<preset>.yaml [--seed N] [--histories N]\n"
+    <<"carbon_mc --config examples/<preset>.yaml --batch-count N --histories-per-batch H --batch-output NEW_DIR\n";}
 }

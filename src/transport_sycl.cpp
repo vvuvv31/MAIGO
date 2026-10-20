@@ -1,37 +1,37 @@
-#include "carbon/immutable_input_cache.hpp"
-#include "carbon/input_dependencies.hpp"
-#include "carbon/charged_species.hpp"
-#include "carbon/secondary_schedule.hpp"
-#include "carbon/scattering_policy.hpp"
-#include "carbon/host_prefetch.hpp"
-#include "carbon/runtime_timing.hpp"
-#include "carbon/unified_em_view.hpp"
-#include "carbon/urban_ct_loss.hpp"
+#include "immutable_input_cache.hpp"
+#include "input_dependencies.hpp"
+#include "charged_species.hpp"
+#include "secondary_schedule.hpp"
+#include "scattering_policy.hpp"
+#include "host_prefetch.hpp"
+#include "runtime_timing.hpp"
+#include "unified_em_view.hpp"
+#include "urban_ct_loss.hpp"
 #include <fstream>
 #include <charconv>
 #include <sstream>
-#include "carbon/cross_section.hpp"
-#include "carbon/hadronic_rate_cache.hpp"
-#include "carbon/ct_grid.hpp"
-#include "carbon/device.hpp"
-#include "carbon/beamline_fluctuation.hpp"
-#include "carbon/inelastic.hpp"
-#include "carbon/multiple_scattering.hpp"
-#include "carbon/particle.hpp"
-#include "carbon/rng.hpp"
-#include "carbon/stopping_power.hpp"
-#include "carbon/tps_source.hpp"
-#include "carbon/nuclear_elastic_scattering.hpp"
-#include "carbon/all_ion_elastic.hpp"
-#include "carbon/detail/device_memory_tracker.hpp"
-#include "carbon/transport.hpp"
-#include "carbon/schneider_rate_table.hpp"
-#include "carbon/schneider_target_sampler.hpp"
-#include "carbon/secondary_rate_table.hpp"
-#include "carbon/inelastic_package_v3.hpp"
-#include "carbon/cinel03_event_rotation.hpp"
-#include "carbon/schneider_ct_device_context.hpp"
-#include "carbon/minibeam_collimator.hpp"
+#include "cross_section.hpp"
+#include "hadronic_rate_cache.hpp"
+#include "ct_grid.hpp"
+#include "device.hpp"
+#include "beamline_fluctuation.hpp"
+#include "inelastic.hpp"
+#include "multiple_scattering.hpp"
+#include "particle.hpp"
+#include "rng.hpp"
+#include "stopping_power.hpp"
+#include "tps_source.hpp"
+#include "nuclear_elastic_scattering.hpp"
+#include "all_ion_elastic.hpp"
+#include "detail/device_memory_tracker.hpp"
+#include "transport.hpp"
+#include "schneider_rate_table.hpp"
+#include "schneider_target_sampler.hpp"
+#include "secondary_rate_table.hpp"
+#include "inelastic_package_v3.hpp"
+#include "cinel03_event_rotation.hpp"
+#include "schneider_ct_device_context.hpp"
+#include "minibeam_collimator.hpp"
 
 #include <sycl/sycl.hpp>
 #include "pipelines/proton_broadbeam.hpp"
@@ -776,9 +776,6 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
         std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count());
 }
 
-// Content identity for cached read-only tables: FNV-1a over the bytes that are
-// actually uploaded. Paths are never used as equivalence proof.
-
 }  // namespace
 
 [[gnu::noinline]] SchneiderCtDeviceContext upload_schneider_ct_device_context(
@@ -984,11 +981,8 @@ float cuda_clock_warmup(sycl::queue& queue, DeviceMemoryTracker& tracker) {
             ctx.sec_domain_has = dev_dhas;
         }
         ctx.sec_num_projectiles = static_cast<std::uint32_t>(sec_rate_table->num_projectiles());
-        ctx.sec_num_sections = static_cast<std::uint32_t>(kSecondaryNumSections);
-        ctx.sec_num_targets = static_cast<std::uint32_t>(kSecondaryNumTargets);
         ctx.sec_num_energies = static_cast<std::uint32_t>(sec_rate_table->num_energies());
         ctx.sec_energy_min_MeV_per_u = static_cast<float>(sec_rate_table->energy_min_mevu());
-        ctx.sec_energy_step_MeV_per_u = static_cast<float>(sec_rate_table->energy_step_mevu());
         ctx.sec_inv_energy_step = static_cast<float>(1.0 / sec_rate_table->energy_step_mevu());
     }
 
@@ -1051,7 +1045,6 @@ template<class Pipeline>
     // These fragments form one function body and share its local scope.
     // setup owns uploads/allocations; primary appends charged children;
     // secondary drains their generations; finalize reads scores and audits.
-    // See docs/core_code_review_zh.md for state and scoring invariants.
 #include "detail/sycl_pipeline_setup.inc"
 #include "detail/sycl_pipeline_primary.inc"
 #include "detail/sycl_pipeline_secondary.inc"

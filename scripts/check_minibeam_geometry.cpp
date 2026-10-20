@@ -1,6 +1,6 @@
 // Standalone arithmetic regression, not a CPU transport implementation.
 // g++ -std=c++20 -O2 -I include scripts/check_minibeam_geometry.cpp -o /tmp/check_minibeam_geometry
-#include "carbon/minibeam_collimator.hpp"
+#include "minibeam_collimator.hpp"
 #include <cmath>
 #include <iostream>
 #include <stdexcept>

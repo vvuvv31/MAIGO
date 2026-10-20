@@ -26,7 +26,7 @@ def main():
     env['CUDA_DISABLE_PTX_JIT']='1'
     with tempfile.TemporaryDirectory(prefix='maigo_package_contracts_') as temporary:
         temporary=Path(temporary)
-        cfg=yaml.safe_load((ROOT/'config/carbon_water_broadbeam.yaml').read_text())
+        cfg=yaml.safe_load((ROOT/'examples/carbon_water_broadbeam.yaml').read_text())
         for key,value in cfg.items():
             if isinstance(value,str) and value.startswith(('data/','inputs/')):cfg[key]=str(ROOT/value)
         package=Path(cfg['ct_schneider_primary_cinel03_file'])

@@ -1,6 +1,6 @@
-#include "carbon/batch_run.hpp"
-#include "carbon/stopping_power.hpp"
-#include "carbon/tps_source.hpp"
+#include "batch_run.hpp"
+#include "stopping_power.hpp"
+#include "tps_source.hpp"
 #include <algorithm>
 #include <cmath>
 #include <fstream>

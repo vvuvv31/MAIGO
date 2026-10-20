@@ -399,6 +399,6 @@ Primary, copper/air upstream, and charged-secondary stage times provide the comp
 
 ---
 
-**Companion material, outside the manuscript Methods text:** [literature and writing analysis](docs/gpu_mc_methods_literature.md), [physics implementation comparison](docs/topas_gpu_physics_comparison.md), [unrestricted-loss model](docs/unrestricted_dedx.md), [LET estimator and matched scorer](docs/let_scoring.md), [data extraction](extensions/README.md), and [full-plan and uncertainty records](docs/full_plan_validation_20261017/README.md).
+**Companion material, outside the manuscript Methods text:** [data extraction](extensions/README.md).
 
 **Author information required before submission:** case provenance and ethics approval or exemption; complete per-plan source, energy-layer, field, grid, and collimator tables; optimization objectives and solver settings; full species-dependent scattering coefficients and electromagnetic range-step parameters; frozen reference-physics, compiler/driver, and CPU-model inventories; and completed LET reference statistics and step-refinement records. Clinical beam commissioning and independent acceptance of every configuration are not asserted without those records. Dose and LET pass rates, throughput, and measured uncertainty values belong in Results; this section defines how they are obtained.

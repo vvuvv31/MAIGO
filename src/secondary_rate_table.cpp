@@ -1,5 +1,5 @@
-#include "carbon/secondary_rate_table.hpp"
-#include "carbon/min_json.hpp"
+#include "secondary_rate_table.hpp"
+#include "min_json.hpp"
 
 #include <algorithm>
 #include <cmath>

@@ -1,13 +1,13 @@
 #include <initializer_list>
-#include "carbon/transport_config.hpp"
-#include "carbon/scattering_policy.hpp"
-#include "carbon/preset_keys.hpp"
-#include "carbon/source_parameters.hpp"
-#include "carbon/cross_section.hpp"
-#include "carbon/ct_grid.hpp"
-#include "carbon/min_json.hpp"
-#include "carbon/schneider_rate_table.hpp"
-#include "carbon/secondary_rate_table.hpp"
+#include "transport_config.hpp"
+#include "scattering_policy.hpp"
+#include "preset_keys.hpp"
+#include "source_parameters.hpp"
+#include "cross_section.hpp"
+#include "ct_grid.hpp"
+#include "min_json.hpp"
+#include "schneider_rate_table.hpp"
+#include "secondary_rate_table.hpp"
 
 #include <algorithm>
 #include <atomic>

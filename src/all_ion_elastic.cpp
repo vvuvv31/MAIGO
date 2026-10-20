@@ -1,4 +1,4 @@
-#include "carbon/all_ion_elastic.hpp"
+#include "all_ion_elastic.hpp"
 #include <fstream>
 #include <cstring>
 #include <stdexcept>

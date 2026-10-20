@@ -1,6 +1,6 @@
 // Standalone RNG address regression; no CPU transport implementation.
 // g++ -std=c++20 -O2 -I include scripts/check_secondary_rng.cpp -o /tmp/check_secondary_rng
-#include "carbon/rng.hpp"
+#include "rng.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <unordered_set>

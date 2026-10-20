@@ -10,7 +10,7 @@ AUDITS=['unified-em-audit','all-ion-elastic','elastic-failure-sites','urban-v2-s
 
 def run(case,arm,binary,input_root,out,histories):
     directory=out/case/arm;directory.mkdir(parents=True)
-    cfg=yaml.safe_load((input_root/'config'/f'{case}.yaml').read_text())
+    cfg=yaml.safe_load((input_root/'examples'/f'{case}.yaml').read_text())
     for key,value in cfg.items():
         if isinstance(value,str) and value.startswith(('data/','inputs/')):cfg[key]=str(input_root/value)
     cfg['random_seed']=1001904402

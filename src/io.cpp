@@ -1,7 +1,7 @@
-#include "carbon/io.hpp"
-#include "carbon/ct_grid.hpp"
-#include "carbon/particle.hpp"
-#include "carbon/charged_species.hpp"
+#include "io.hpp"
+#include "ct_grid.hpp"
+#include "particle.hpp"
+#include "charged_species.hpp"
 
 #include <algorithm>
 #include <array>
@@ -427,8 +427,6 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << result.outside_grid_deposited_energy_MeV << ",\n"
            << "  \"E_dep_depth_MeV\": " << sum_depth(result.deposited_energy_MeV)
            << ",\n"
-           << "  \"E_primary_depth_MeV\": "
-           << sum_depth(result.primary_deposited_energy_MeV) << ",\n"
            << "  \"E_secondary_transport_MeV\": "
            << result.secondary_deposited_energy_MeV << ",\n"
            << "  \"E_esc_MeV\": " << result.escaped_energy_MeV << ",\n"
@@ -530,7 +528,6 @@ void write_energy_ledger_json(const std::filesystem::path& path,
            << "    \"neutral_product_kinetic_MeV\": " << result.schneider_diagnostics.neutral_product_kinetic_MeV << ",\n"
            << "    \"reaction_q_residual_MeV\": " << result.schneider_diagnostics.reaction_q_residual_MeV << ",\n"
            << "    \"E_transported_secondaries_birth_MeV\": " << result.energy_ledger.E_transported_secondaries << ",\n"
-           << "    \"E_charged_birth_MeV\": " << result.energy_ledger.E_charged_birth << ",\n"
            << "    \"E_be6_kill_MeV\": " << result.energy_ledger.E_be6_kill << ",\n"
            << "    \"E_lookup_failure_MeV\": " << result.energy_ledger.E_lookup_failure << ",\n"
            << "    \"E_neutral_product_kinetic_MeV\": " << result.energy_ledger.E_neutral_product_kinetic << ",\n"

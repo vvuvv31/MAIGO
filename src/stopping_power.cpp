@@ -1,4 +1,4 @@
-#include "carbon/stopping_power.hpp"
+#include "stopping_power.hpp"
 
 #include <algorithm>
 #include <cctype>

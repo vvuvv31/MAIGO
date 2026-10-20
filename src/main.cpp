@@ -1,5 +1,5 @@
-#include "carbon/cli.hpp"
-#include "carbon/run_session.hpp"
+#include "cli.hpp"
+#include "run_session.hpp"
 #include <cstdio>
 #include <exception>
 #include <iostream>

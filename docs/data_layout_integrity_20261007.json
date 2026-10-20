@@ -1,7 +1,0 @@
-{
-  "passed": true,
-  "byte_identical_payloads": 111,
-  "metadata_numeric_content_unchanged": 38,
-  "presets_nonpath_fields_unchanged": 8,
-  "old_runtime_path_references": 0
-}

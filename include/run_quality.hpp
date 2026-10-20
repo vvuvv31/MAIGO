@@ -1,0 +1,58 @@
+#pragma once
+
+#include "transport.hpp"
+#include "transport_config.hpp"
+
+#include <cstdint>
+#include <filesystem>
+#include <string>
+#include <vector>
+
+namespace carbon {
+
+struct QualityIssue {
+    std::string code;
+    std::string message;
+    double value{};
+    double limit{};
+};
+
+struct RunQualityReport {
+    RunMode mode{RunMode::research};
+    bool accepted{false};
+    // Effective patient-medium scattering, resolved from configuration and
+    // dedicated-pipeline policy; these names do not describe Cu/air transport.
+    std::string primary_medium_scattering;
+    std::string secondary_medium_scattering;
+    // Physical closure includes deposited, escaped and explicitly untracked energy.
+    double absolute_physical_energy_residual_MeV{};
+    double physical_relative_energy_residual{};
+    std::uint64_t queue_overflow_count{};
+    double queue_overflow_energy_MeV{};
+    // Direct host aggregation of the scored 3D voxel energy and its closure
+    // against the global deposited total. Voxel scoring covers the scoring
+    // grid only, so voxel <= total is the hard invariant (relative tolerance
+    // covers float32 device accumulation, not physics).
+    double voxel_scored_energy_MeV{};
+    // Explicit device-side grid sinks (see TransportResult): in-grid and
+    // outside-grid deposited energy, plus their closure ratios. These
+    // replace any total-minus-voxel inference.
+    double in_grid_deposited_energy_MeV{};
+    double outside_grid_deposited_energy_MeV{};
+    double grid_split_closure_ratio{};
+    double voxel_to_ingrid_ratio{};
+    double voxel_to_total_deposited_ratio{};
+    std::vector<QualityIssue> failures;
+    std::vector<QualityIssue> approximations;
+
+    [[nodiscard]] std::string status() const;
+    [[nodiscard]] std::string summary() const;
+};
+
+[[nodiscard]] RunQualityReport evaluate_run_quality(
+    const TransportConfig& config, const TransportResult& result);
+
+void write_run_quality_report_json(const std::filesystem::path& path,
+                                   const RunQualityReport& report);
+
+}  // namespace carbon

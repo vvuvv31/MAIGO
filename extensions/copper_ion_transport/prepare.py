@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Extract and validate native Cu transport data for charged CINPKG04 products."""
 import argparse
-import hashlib
 import json
 import struct
 import subprocess
@@ -41,9 +40,7 @@ def write_metadata(output, species, args):
         material='G4_Cu', density_g_per_cm3=8.96, random_seed=10070917,
         projectiles=[dict(z=z, a=a) for z, a in species], nodes_per_projectile=101,
         samples_per_node=128, energy_grid='0.001 * 10**(k/15) MeV/u, k=0..100', target_isotopes=[63, 65],
-        nuclear_package_sha256=hashlib.sha256(args.nuclear_package.read_bytes()).hexdigest(),
         sampler='Species-specific nearest energy node; natural Cu isotope and two-body CM transfer fraction',
-        sha256=hashlib.sha256((output/'fragments.csv').read_bytes()).hexdigest(),
         limitations=['Finite event-bank convergence pending', 'Carbon minibeam dose acceptance pending',
                     'Native ground-state ions only; Cu recoil energy remains a beamline sink'])
     (output/'fragments.metadata.json').write_text(json.dumps(metadata, indent=2)+'\n')
@@ -53,8 +50,7 @@ def write_metadata(output, species, args):
         projectiles=[dict(z=z, a=a) for z, a in species], dense_nodes=args.dense_nodes,
         validation_nodes=args.validation_nodes, minimum_energy_MeV=.05, maximum_energy_MeV=6500,
         heldout_grid_offset=.37, fp32_maximum_relative_error_gate=.0005,
-        validation_log=(output/'urban_validation.log').read_text(),
-        sha256=hashlib.sha256((output/'copper_fragments.bin').read_bytes()).hexdigest())
+        validation_log=(output/'urban_validation.log').read_text())
     (output/'copper_fragments.metadata.json').write_text(json.dumps(metadata, indent=2)+'\n')
 
 def main():

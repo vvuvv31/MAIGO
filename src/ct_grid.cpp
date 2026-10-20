@@ -1,6 +1,6 @@
-#include "carbon/runtime_timing.hpp"
-#include "carbon/ct_grid.hpp"
-#include "carbon/immutable_input_cache.hpp"
+#include "runtime_timing.hpp"
+#include "ct_grid.hpp"
+#include "immutable_input_cache.hpp"
 
 #include <algorithm>
 #include <cctype>

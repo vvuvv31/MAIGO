@@ -1,6 +1,6 @@
-#include "carbon/secondary_schedule.hpp"
-#include "carbon/run_quality.hpp"
-#include "carbon/min_json.hpp"
+#include "secondary_schedule.hpp"
+#include "run_quality.hpp"
+#include "min_json.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -276,8 +276,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             result.secondary_escaped_energy_MeV,
             result.queued_cascade_energy_MeV,
             result.cascade_nuclear_energy_MeV,
-            result.cascade_selection_energy_distance_sum_MeVu,
-            result.cascade_selection_energy_distance_max_MeVu,
             result.elapsed_seconds,
             result.primary_kernel_seconds,
             result.secondary_kernel_seconds,
@@ -297,14 +295,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
              std::initializer_list<std::pair<const char*, const std::vector<double>*>>{
                  {"depth dose", &result.deposited_energy_MeV},
                  {"voxel dose", &result.voxel_deposited_energy_MeV},
-                 {"primary dose", &result.primary_deposited_energy_MeV},
-                 {"secondary carbon dose", &result.secondary_carbon_deposited_energy_MeV},
-                 {"secondary boron dose", &result.secondary_boron_deposited_energy_MeV},
-                 {"secondary beryllium dose", &result.secondary_beryllium_deposited_energy_MeV},
-                 {"secondary lithium dose", &result.secondary_lithium_deposited_energy_MeV},
-                 {"secondary helium dose", &result.secondary_helium_deposited_energy_MeV},
-                 {"secondary proton dose", &result.secondary_proton_deposited_energy_MeV},
-                 {"secondary other dose", &result.secondary_other_charged_deposited_energy_MeV},
              }) {
             if (!finite_vector(*values)) {
                 finite_issue(label);

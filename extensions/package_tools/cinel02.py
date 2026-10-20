@@ -8,7 +8,6 @@ extension have one auditable interpretation.
 
 from __future__ import annotations
 
-import binascii
 import json
 import math
 import struct
@@ -49,7 +48,7 @@ RAW_FIXED_FORMAT = struct.Struct(
 # + position + time/weight + role.  Keep this at 72 bytes: the local frame is
 # part of the authoritative correlated-event contract and is not optional.
 PRODUCT_FORMAT = struct.Struct("<ihh" + "f" * 15 + "i")
-CRC_FORMAT = struct.Struct("<I")
+RECORD_TRAILER = struct.Struct("<I")  # Reserved trailing slot, ignored on read.
 
 PACKAGE_MAGIC = b"CINPKG03"
 PACKAGE_VERSION = 3
@@ -354,10 +353,9 @@ def pack_record(record: dict[str, Any], products: list[dict[str, Any]]) -> bytes
     fixed = _pack_fixed(record)
     product_bytes = b"".join(_pack_product(_normalise_product(product)) for product in products)
     payload = fixed + product_bytes
-    length = RECORD_PREFIX.size + len(payload) + CRC_FORMAT.size
+    length = RECORD_PREFIX.size + len(payload) + RECORD_TRAILER.size
     prefix = RECORD_PREFIX.pack(RECORD_MAGIC, RECORD_VERSION, 0, length, len(payload))
-    crc = CRC_FORMAT.pack(binascii.crc32(payload) & 0xFFFFFFFF)
-    return prefix + payload + crc
+    return prefix + payload + RECORD_TRAILER.pack(0)
 
 
 def read_raw(path: Path, *, allow_truncated_tail: bool = False) -> list[tuple[dict[str, Any], list[dict[str, Any]]]]:
@@ -384,7 +382,7 @@ def read_raw(path: Path, *, allow_truncated_tail: bool = False) -> list[tuple[di
         record_magic, record_version, _, record_length, payload_length = RECORD_PREFIX.unpack_from(data, offset)
         if record_magic != RECORD_MAGIC or record_version != RECORD_VERSION:
             raise ValueError(f"invalid CINEL02 record prefix at byte {offset}: {path}")
-        if record_length < RECORD_PREFIX.size + CRC_FORMAT.size or payload_length != record_length - RECORD_PREFIX.size - CRC_FORMAT.size:
+        if record_length < RECORD_PREFIX.size + RECORD_TRAILER.size or payload_length != record_length - RECORD_PREFIX.size - RECORD_TRAILER.size:
             raise ValueError(f"invalid CINEL02 record length at byte {offset}: {path}")
         end = offset + record_length
         if end > len(data):
@@ -394,10 +392,6 @@ def read_raw(path: Path, *, allow_truncated_tail: bool = False) -> list[tuple[di
         payload_start = offset + RECORD_PREFIX.size
         payload_end = payload_start + payload_length
         payload = data[payload_start:payload_end]
-        expected_crc = CRC_FORMAT.unpack_from(data, payload_end)[0]
-        actual_crc = binascii.crc32(payload) & 0xFFFFFFFF
-        if expected_crc != actual_crc:
-            raise ValueError(f"CINEL02 CRC mismatch at byte {offset}: {path}")
         record = _unpack_fixed(payload)
         product_start = RAW_FIXED_FORMAT.size
         product_bytes = payload[product_start:]

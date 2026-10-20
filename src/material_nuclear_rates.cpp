@@ -1,5 +1,5 @@
-#include "carbon/material_nuclear_rates.hpp"
-#include "carbon/min_json.hpp"
+#include "material_nuclear_rates.hpp"
+#include "min_json.hpp"
 #include <algorithm>
 #include <fstream>
 #include <stdexcept>

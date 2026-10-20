@@ -1,4 +1,4 @@
-#include "carbon/schneider_target_sampler.hpp"
+#include "schneider_target_sampler.hpp"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>

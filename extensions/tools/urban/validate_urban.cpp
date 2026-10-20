@@ -1,5 +1,5 @@
 // Independent held-out real Geant4 steps, evaluated by the production FP32 view.
-#include "carbon/urban_mcs_package.hpp"
+#include "urban_mcs_package.hpp"
 #include <array>
 #include <fstream>
 #include <iomanip>

@@ -8,7 +8,6 @@ material section is NOT part of the event key.
 
 from __future__ import annotations
 
-import binascii
 import json
 import math
 import struct
@@ -50,7 +49,6 @@ FLAG_TARGET_KNOWN = 1 << 1
 FLAG_PROCESS_LOCAL_DEPOSIT = 1 << 2
 FLAG_PARENT_FINAL_STATE = 1 << 3
 FLAG_GLOBAL_ENERGY_INDEX = 1 << 4
-FLAG_CRC32_CHECKSUM = 1 << 5
 
 PRODUCT_DIRECT_SECONDARY = 0
 PRODUCT_PARENT_CONTINUATION = 1
@@ -61,9 +59,6 @@ SCHNEIDER_TARGET_ELEMENTS = {1, 6, 7, 8, 11, 12, 15, 16, 17, 18, 19, 20, 22}
 
 def is_valid_elemental_target(z: int) -> bool:
     return 1 <= z <= 100
-
-def compute_crc32(data: bytes, prev_crc: int = 0) -> int:
-    return binascii.crc32(data, prev_crc) & 0xFFFFFFFF
 
 class Cinel03Package:
     def __init__(self):
@@ -86,7 +81,7 @@ class Cinel03Package:
             raise ValueError(f"Truncated CINPKG04 file: {len(data)} < {PACKAGE_HEADER_SIZE}")
 
         magic, ver, hdr_sz, endian, idx_sz, int_sz, prd_sz, flags, \
-        n_cells, n_ints, n_prods, file_sz, e_min, e_w, min_ev, n_nodes, uuid_bytes, crc = \
+        n_cells, n_ints, n_prods, file_sz, e_min, e_w, min_ev, n_nodes, uuid_bytes, _reserved = \
             PACKAGE_HEADER.unpack_from(data, 0)
 
         if magic != PACKAGE_MAGIC:
@@ -103,13 +98,6 @@ class Cinel03Package:
             raise ValueError(f"Product record size mismatch: {prd_sz} != {PRODUCT_FORMAT.size}")
         if file_sz != len(data):
             raise ValueError(f"File size mismatch: {file_sz} != {len(data)}")
-
-        # Verify CRC32
-        if flags & FLAG_CRC32_CHECKSUM:
-            payload = data[PACKAGE_HEADER_SIZE:]
-            calc_crc = compute_crc32(payload)
-            if crc != calc_crc:
-                raise ValueError(f"CINPKG04 CRC32 mismatch: 0x{crc:08x} vs 0x{calc_crc:08x}")
 
         pkg = cls()
         pkg.minimum_energy_MeV_per_u = e_min
@@ -190,11 +178,10 @@ class Cinel03Package:
             payload_parts.append(PACKAGE_EVENT_INDEX.pack(idx))
 
         payload_bytes = b"".join(payload_parts)
-        payload_crc = compute_crc32(payload_bytes)
 
         file_sz = PACKAGE_HEADER_SIZE + len(payload_bytes)
         flags = FLAG_AUTHORITATIVE | FLAG_TARGET_KNOWN | FLAG_PROCESS_LOCAL_DEPOSIT | \
-                FLAG_PARENT_FINAL_STATE | FLAG_GLOBAL_ENERGY_INDEX | FLAG_CRC32_CHECKSUM
+                FLAG_PARENT_FINAL_STATE | FLAG_GLOBAL_ENERGY_INDEX
 
         header = PACKAGE_HEADER.pack(
             PACKAGE_MAGIC,
@@ -214,7 +201,7 @@ class Cinel03Package:
             self.minimum_events_per_bin,
             len(self.energy_nodes),
             self.campaign_uuid.encode("ascii"),
-            payload_crc
+            0  # Reserved header slot.
         )
 
         path.write_bytes(header + payload_bytes)

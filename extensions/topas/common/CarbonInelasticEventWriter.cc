@@ -126,18 +126,6 @@ bool TransportIdentity(const CarbonCinel02Product& product) {
     return product.pdg == expected_pdg && product.excitation <= 1.0e-4F;
 }
 
-std::uint32_t Crc32(const char* bytes, std::size_t size) {
-    std::uint32_t crc = 0xFFFFFFFFU;
-    for (std::size_t index = 0; index < size; ++index) {
-        crc ^= static_cast<std::uint8_t>(bytes[index]);
-        for (int bit = 0; bit < 8; ++bit) {
-            const auto mask = static_cast<std::uint32_t>(-(crc & 1U));
-            crc = (crc >> 1U) ^ (0xEDB88320U & mask);
-        }
-    }
-    return ~crc;
-}
-
 G4ThreeVector ProjectileLocalDirection(const G4ThreeVector& global_direction,
                                        const G4ThreeVector& incident_direction) {
     const auto axis = incident_direction.unit();
@@ -841,14 +829,9 @@ void CarbonInelasticEventWriter::WriteRecord(
     for (const auto& product : products) {
         stream_.write(reinterpret_cast<const char*>(&product), sizeof(product));
     }
-    std::vector<char> payload(payload_size);
-    std::memcpy(payload.data(), &record, sizeof(record));
-    if (!products.empty()) {
-        std::memcpy(payload.data() + sizeof(record), products.data(),
-                    products.size() * sizeof(CarbonCinel02Product));
-    }
-    const auto crc = Crc32(payload.data(), payload.size());
-    stream_.write(reinterpret_cast<const char*>(&crc), sizeof(crc));
+    // Preserve the raw record layout without a payload checksum.
+    const std::uint32_t reserved = 0;
+    stream_.write(reinterpret_cast<const char*>(&reserved), sizeof(reserved));
     if (!stream_) {
         Fatal("CarbonInelasticEventWriter", "Failed writing CINEL02 record to " + output_file_);
     }

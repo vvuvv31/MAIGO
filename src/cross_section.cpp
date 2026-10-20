@@ -1,5 +1,5 @@
-#include "carbon/cross_section.hpp"
-#include "carbon/transport_config.hpp"
+#include "cross_section.hpp"
+#include "transport_config.hpp"
 
 #include <algorithm>
 #include <cctype>

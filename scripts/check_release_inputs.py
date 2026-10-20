@@ -7,10 +7,10 @@ import tempfile
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CHECKER = r'''
-#include "carbon/ct_grid.hpp"
-#include "carbon/schneider_rate_table.hpp"
-#include "carbon/transport_config.hpp"
-#include "carbon/tps_source.hpp"
+#include "ct_grid.hpp"
+#include "schneider_rate_table.hpp"
+#include "transport_config.hpp"
+#include "tps_source.hpp"
 #include <cmath>
 #include <iostream>
 #include <stdexcept>

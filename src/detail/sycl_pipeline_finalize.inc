@@ -348,7 +348,6 @@
         result.backend += "+voxel-scoring+scorer-decoupled";
     }
 
-    result.primary_deposited_energy_MeV = dose_host;
     result.deposited_energy_MeV = std::move(dose_host);
     result.voxel_deposited_energy_MeV = std::move(voxel_dose_host);
     result.voxel_let_numerator_MeV2_per_mm = std::move(let_numerator_host);

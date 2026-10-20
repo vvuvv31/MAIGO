@@ -1,4 +1,4 @@
-#include "carbon/beamline_em.hpp"
+#include "beamline_em.hpp"
 #include <array>
 #include <cstring>
 #include <fstream>

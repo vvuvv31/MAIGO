@@ -1,5 +1,5 @@
 // Standalone check: c++ -std=c++20 -O2 -Iinclude scripts/check_nuclear_optical_depth.cpp -o /tmp/check_nuclear_optical_depth
-#include "carbon/cross_section.hpp"
+#include "cross_section.hpp"
 #include <cassert>
 #include <iostream>
 #include <random>

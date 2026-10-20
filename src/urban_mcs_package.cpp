@@ -1,4 +1,4 @@
-#include "carbon/urban_mcs_package.hpp"
+#include "urban_mcs_package.hpp"
 #include "detail/native_spline_wire.hpp"
 #include <array>
 #include <cstring>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "carbon/secondary_schedule.hpp"
+#include "secondary_schedule.hpp"
 #include "primary_stage.hpp"
 #include <cstddef>
 #include <type_traits>

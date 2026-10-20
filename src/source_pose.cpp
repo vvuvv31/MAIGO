@@ -1,5 +1,5 @@
-#include "carbon/source_pose.hpp"
-#include "carbon/stopping_power.hpp"
+#include "source_pose.hpp"
+#include "stopping_power.hpp"
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>

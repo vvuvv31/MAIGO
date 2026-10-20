@@ -948,8 +948,7 @@
       "kind": "native_unrestricted_electronic_response",
       "tools": [
         "beamline_em/CMakeLists.txt",
-        "beamline_em/extract.cpp",
-        "beamline_em/verify.py"
+        "beamline_em/extract.cpp"
       ],
       "note": "G4_Cu/G4_AIR, 324 native charged ions; full electronic mean and Dispersion(tcut=Tmax), independent held-out validation, derived CSDA/inverse. No finite-cut or missing-data fallback."
     },
@@ -958,10 +957,29 @@
       "kind": "native_unrestricted_electronic_response",
       "tools": [
         "beamline_em/CMakeLists.txt",
-        "beamline_em/extract.cpp",
-        "beamline_em/verify.py"
+        "beamline_em/extract.cpp"
       ],
       "note": "G4_Cu/G4_AIR, 324 native charged ions; full electronic mean and Dispersion(tcut=Tmax), independent held-out validation, derived CSDA/inverse. No finite-cut or missing-data fallback."
+    },
+    "data/let/schneider/recoil_electronic_stopping.bin": {
+      "family": "elastic",
+      "kind": "native_electronic_recoil_stopping",
+      "tools": [
+        "tools/general_ion_elastic/prepare_campaign.py",
+        "tools/general_ion_elastic/run_campaign.py",
+        "topas/all_ion_elastic/AllIonElasticDump.cc"
+      ],
+      "note": "LERSP001 unrestricted electronic recoil stopping for LET; independent of total electronic-plus-nuclear transport stopping."
+    },
+    "data/let/schneider/recoil_electronic_stopping.metadata.json": {
+      "family": "elastic",
+      "kind": "native_electronic_recoil_stopping",
+      "tools": [
+        "tools/general_ion_elastic/prepare_campaign.py",
+        "tools/general_ion_elastic/run_campaign.py",
+        "topas/all_ion_elastic/AllIonElasticDump.cc"
+      ],
+      "note": "LERSP001 unrestricted electronic recoil stopping for LET; independent of total electronic-plus-nuclear transport stopping."
     }
   }
 }

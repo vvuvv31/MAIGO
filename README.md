@@ -1,6 +1,6 @@
 # MAIGO_clean
 
-论文主线为 **GPU Monte Carlo: From Broadbeam to Minibeam**。材料与方法：[中文](mm_zh.md) / [English](mm.md)；[文献与写作分析](docs/gpu_mc_methods_literature.md)。
+论文主线为 **GPU Monte Carlo: From Broadbeam to Minibeam**。材料与方法：[中文](mm_zh.md) / [English](mm.md)。
 
 A standalone GPU runtime for the eight current MAIGO presets. The source and
 runtime inputs were copied independently from MAIGO_minibeam; there are no
@@ -151,8 +151,10 @@ package loading or module loading costs.
 
 All five transport families are enabled by default: proton broadbeam, proton
 minibeam, carbon broadbeam, carbon minibeam and generic ion transport. To compile
-only selected families, use the `CARBON_ENABLE_*` switches described in
-[selective compilation](docs/transport_pipelines.md#selective-compilation).
+only selected families, set the corresponding CMake options:
+`CARBON_ENABLE_PROTON_BROADBEAM`, `CARBON_ENABLE_PROTON_MINIBEAM`,
+`CARBON_ENABLE_CARBON_BROADBEAM`, `CARBON_ENABLE_CARBON_MINIBEAM` and
+`CARBON_ENABLE_GENERIC` (`ON` or `OFF`).
 A configuration cannot run a pipeline omitted from the binary.
 
 Alternatively, with `CXX` set to the absolute compiler path above, the build
@@ -244,8 +246,7 @@ The tested 5,000 ms `job_timeout_ms` can remain unchanged. The executable does
 not modify driver settings. Do not reduce physical track limits to work around
 a driver timeout. All eight electron-off presets passed two 10,000-history
 batches on B580 with the native AOT build; these are runtime/audit checks, not
-TOPAS dose acceptance or throughput benchmarks. Electron-on execution on Arc
-has not yet been tested. See [Intel Arc validation notes](docs/intel_arc_support_20261015.md).
+TOPAS dose acceptance or throughput benchmarks.
 
 ### 4. Download and restore the physics assets
 
@@ -253,24 +254,24 @@ The [v2026.10.14 Release](https://github.com/vvuvv31/MAIGO/releases/tag/v2026.10
 contains the physics assets for the **four CT presets**, including optional
 historical electron/photon packages that the current runtime does not use. It is not an eight-preset water/CT asset bundle.
 The complete gzip archive is split into two ordered parts to satisfy GitHub's
-attachment size limit. Download both parts and their helper files into one
+attachment size limit. Download both parts into one
 folder outside the repository:
 
 ```bash
 export ASSET_DIR="$(dirname "$MAIGO_ROOT")/maigo_assets"
 mkdir -p "$ASSET_DIR"
 export RELEASE_URL=https://github.com/vvuvv31/MAIGO/releases/download/v2026.10.14
-for asset in maigo_four_ct_assets.tar.gz.part01 maigo_four_ct_assets.tar.gz.part02 \
-  archive.json manifest.json SHA256SUMS restore.py README.md verification.json; do
+for asset in maigo_four_ct_assets.tar.gz.part01 maigo_four_ct_assets.tar.gz.part02; do
   curl --fail --location --retry 3 "$RELEASE_URL/$asset" --output "$ASSET_DIR/$asset"
 done
-(cd "$ASSET_DIR" && sha256sum -c SHA256SUMS)
-python3 "$ASSET_DIR/restore.py" --dest "$MAIGO_ROOT" --data-only
+cat "$ASSET_DIR/maigo_four_ct_assets.tar.gz.part01" \
+    "$ASSET_DIR/maigo_four_ct_assets.tar.gz.part02" \
+    > "$ASSET_DIR/maigo_four_ct_assets.tar.gz"
+tar -xzf "$ASSET_DIR/maigo_four_ct_assets.tar.gz" -C "$MAIGO_ROOT" --wildcards 'data/*'
 ```
 
-The restore helper requires **Python 3.12 or newer**. It verifies the parts,
-assembles and verifies the full archive, then verifies each restored file.
-`--data-only` preserves the cloned configuration and documentation. Reserve
+Extract only `data/` so the cloned configuration and documentation stay intact.
+No separate content-hash verification is required. Reserve
 space for about 3 GB of parts, 3 GB of assembled archive and 6.3 GB of extracted
 data, plus the toolchain, build files and outputs. Physics files must appear at
 paths such as `data/em/ions/continuous26.bin`; do not put the entire cache folder
@@ -279,12 +280,12 @@ inside `data/`.
 If the same cache is already on a mounted Google Drive, restore it directly:
 
 ```bash
-python3 /content/drive/MyDrive/gpumc/restore.py \
-  --dest /content/MAIGO_clean --data-only
+tar -xzf /content/drive/MyDrive/gpumc/maigo_four_ct_assets.tar.gz \
+  -C /content/MAIGO_clean --wildcards 'data/*'
 ```
 
 Run from local disk after restoring. For water presets, provide their additional
-assets listed in [preset dependencies](docs/preset_dependencies.json).
+assets listed in [preset dependencies](examples/preset_dependencies.json).
 The current runtime needs no electron/photon packages. Older release archives
 may contain them; omit `data/em/electrons/` when installing new runtime assets.
 
@@ -293,7 +294,7 @@ may contain them; omit `data/em/electrons/` when installing new runtime assets.
 Neither Git nor the Release archive includes `inputs/`: CT grids, source plans,
 beam parameters and optimized spot weights must be supplied separately at the
 paths referenced by the selected YAML. Inspect
-[config/](config/) and [preset dependencies](docs/preset_dependencies.json)
+[examples/](examples/) and [preset dependencies](examples/preset_dependencies.json)
 before running. Preserve each case's CT, source, weights, placement, collimator
 and dose normalization as one consistent input set.
 
@@ -310,11 +311,6 @@ python3 -m venv .venv
 .venv/bin/python -m pip install numpy pyyaml
 ```
 
-The Release restore helper validates its own asset manifest. The later
-`check_data_manifest.py` inventory check covers the complete local eight-preset
-installation, including inputs; it is not a prerequisite that a four-CT physics-only
-restore can satisfy by itself.
-
 ### 6. Run a scene or continuous batches
 
 Run from the repository root after supplying the matching inputs. In each new
@@ -328,7 +324,7 @@ cd "$MAIGO_ROOT"
 export CUDA_DISABLE_PTX_JIT=1
 export ONEAPI_DEVICE_SELECTOR=cuda:gpu
 export MAIGO_BINARY="$MAIGO_ROOT/build/carbon_mc"
-export MAIGO_CONFIG="$MAIGO_ROOT/config/proton_ct_broadbeam.yaml"
+export MAIGO_CONFIG="$MAIGO_ROOT/examples/proton_ct_broadbeam.yaml"
 ```
 
 For Arc (after configuring the Xe timeout where required):
@@ -340,7 +336,7 @@ export SYCL_UR_USE_LEVEL_ZERO_V2=0
 export ONEAPI_DEVICE_SELECTOR=level_zero:gpu
 export CUDA_DISABLE_PTX_JIT=1
 mkdir -p tmp/arc_run
-sed 's/^device: cuda$/device: intel/' config/proton_ct_broadbeam.yaml \
+sed 's/^device: cuda$/device: intel/' examples/proton_ct_broadbeam.yaml \
   > tmp/arc_run/proton_ct_broadbeam.yaml
 export MAIGO_BINARY="$MAIGO_ROOT/build-intel/carbon_mc"
 export MAIGO_CONFIG="$MAIGO_ROOT/tmp/arc_run/proton_ct_broadbeam.yaml"
@@ -378,10 +374,16 @@ size if the GPU memory budget or secondary queues are exceeded. Distinguish
 process startup/package loading from subsequent batch transport when measuring
 performance; neither should include compiler build time.
 
+In `energy_ledger.json`, `E_dep_depth_MeV` includes deposits from all transported
+charged particles. Use `ion_species_transport_ledger_MeV` and its accompanying
+layout for charged-secondary species contributions; the depth score does not
+separate primary and secondary deposits. `E_transported_secondaries_birth_MeV`
+records the transported-secondary birth-energy tally.
+
 The eight release presets select their implementation with `transport_pipeline`.
 Custom configurations without that key use `generic`; a copied
 release preset retains its selection until the key is removed or changed.
-Pipeline layout is documented in [transport pipelines](docs/transport_pipelines.md).
+Pipeline policies are in `src/pipelines/`; shared transport phases are in `src/detail/`.
 
 Other primary ions must select `transport_pipeline: generic` (or omit the key),
 provide `primary_atomic_number`, `primary_mass_number`, and explicitly set both
@@ -414,27 +416,22 @@ subsegments follow `fermi_eyges_max_segment_mm` (release default 0.1 mm),
 with the existing FE tail treatment. Copper/air workers keep their existing
 scattering models; water and generic minibeam medium workers retain Urban.
 The YAML `multiple_scattering_model: urban_v2` therefore describes the CT
-minibeam primary model, not the secondary model. See the
-[full-plan comparisons and adoption scope](docs/ct_minibeam_secondary_fe.md).
+minibeam primary model, not the secondary model.
 
 Ion step caps are forced during configuration loading: **broadbeam 1.0 mm**,
 **minibeam 0.5 mm**, and **minibeam copper 0.05 mm**, for both water and CT.
 These effective caps override the corresponding YAML values.
 Carbon CT minibeam slit air defaults to a separate 0.2 mm cap; copper remains
-0.05 mm and the patient cap remains 0.5 mm. See the
-[slit-air timing and dose comparison](docs/carbon_minibeam_slit_air_20261016.md).
+0.05 mm and the patient cap remains 0.5 mm.
 The dedicated proton and carbon CT minibeam beamlines continue native steps in segments,
 regrouping live tracks by current material and energy while preserving both
-Urban states, RNG identity, clocks and ledgers. See the
-[matched two-GPU timing and implementation checks](docs/carbon_minibeam_beamline_continuation_20261016.md).
+Urban states, RNG identity, clocks and ledgers.
 The proton CT minibeam default primary pool is 1,048,576 histories; explicit
-user chunk sizes remain authoritative. See the
-[three-case proton timing and implementation checks](docs/proton_minibeam_beamline_continuation_20261016.md).
+user chunk sizes remain authoritative.
 Direct charged children of carbon CT primary copper reactions also continue in
 64-native-step segments, regrouped by species, energy and current Cu/air region.
 The original RNG steps, Urban state, shared nuclear optical depth and energy
-bookkeeping are retained. See the
-[Cu-child scheduling comparison](docs/carbon_minibeam_cu_child_continuation_20261016.md).
+bookkeeping are retained.
 
 Release presets retain primary energy-loss straggling and disable secondary
 straggling by default (`enable_secondary_energy_straggling: false`). Minibeams
@@ -442,20 +439,18 @@ also disable Cu/air fragment full-loss straggling; Cu/air primary fluctuations r
 on. There is no separate hard-delta draw. Scoped RT07575 CT
 validation is recorded for proton broadbeam/minibeam and carbon broadbeam;
 **carbon minibeam is under verification**. This status does not establish
-water/other-patient acceptance. See [validation scope and measured effects](docs/secondary_straggling.md).
+water/other-patient acceptance.
 
 All implemented medium and Cu/air loss paths now use unrestricted stopping;
 fluctuating tracks use a single full Universal/Ion draw and
 range-based stepping. Earlier dense-tail Gamma and restricted-range performance
-reports describe historical implementations; see the [current model and checks](docs/unrestricted_dedx.md).
+reports describe historical implementations.
 Carbon CT broadbeam also precomputes elastic totals for primary and fragment
-species; see [scope, paired timings and validation limits](docs/carbon_broadbeam_elastic_totals_20261013.md).
+species.
 Proton/carbon CT minibeams reuse exact actual-density material fields and
-elastic total caches for proton primary and carbon primary/fragments. Historical
-restricted-range optimization measurements are recorded in the
-[matched full-plan report](docs/minibeam_ct_cache_optimization_20261013.md).
+elastic total caches for proton primary and carbon primary/fragments.
 
-Each row has the matching `config/<preset>.yaml`. Default CT minibeams are lung
+Each row has the matching `examples/<preset>.yaml`. Default CT minibeams are lung
 benchmarks, **not RT07575 head full plans**. Broadbeam caps ion steps at 1.0 mm
 and minibeam at 0.5 mm in both water and CT.
 Minibeam copper retains its separate 0.05 mm cap. All use continuous26 ion EM;
@@ -474,9 +469,7 @@ Primary fluctuations remain enabled. The EMCNT001 reader validates the fixed
 disk layout, then retains compact runtime nodes/records/descriptors; unused
 restricted/rate fields and spline coefficients do not enter GPU loss queries.
 Generic recoils retain unrestricted electronic+nuclear total stopping and use a
-consistent derived CSDA. Cu/air electronic losses remain beamline energy sinks. See
-[unrestricted transport](docs/unrestricted_dedx.md) and
-[electron removal scope](docs/no_electron_transport_20261015.md).
+consistent derived CSDA. Cu/air electronic losses remain beamline energy sinks.
 
 `src/main.cpp` handles startup, `cli.cpp` parses the small CLI, `run_session.cpp`
 owns source preparation/context reuse/output, `batch_run.cpp` allocates the
@@ -493,10 +486,7 @@ part of the current physics. Optional patient/phantom electronic LETd scoring
 uses `letd_output_prefix: letd` and, with medium all-ion elastic,
 `letd_recoil_electronic_stopping_file: data/let/schneider/recoil_electronic_stopping.bin`,
 with independent additive moments and no change
-to transport or dose normalization; release presets leave it unset. See
-[LET scoring and the matched TOPAS scorer](docs/let_scoring.md).
-Current process implementations and differences from TOPAS/Geant4 are documented in
-[TOPAS and GPU physics comparison](docs/topas_gpu_physics_comparison.md) (Chinese).
+to transport or dose normalization; release presets leave it unset.
 
 All eight release presets enable medium nuclear elastic transport for primary and
 charged secondary particles using projectile-specific `all_ion_elastic_file` and
@@ -507,7 +497,7 @@ sampler: elastic and inelastic rates compete through one clock per track. Second
 continuation preserves the remaining depth and draw counter; the inelastic generation
 limit does not disable elastic scattering.
 
-All four minibeams share an [unrestricted Cu/air fluctuation engine](docs/copper_fluctuation_engine.md).
+All four minibeams share an unrestricted Cu/air fluctuation engine.
 Particle identity and mass select Universal/Ion parameters; full native material
 response supplies the mean loss, variance and CSDA. Primary fluctuations remain
 on, fragment fluctuations default off. No finite-cut mean selector, separate
@@ -520,10 +510,9 @@ Other primary ions use the generic pipeline with matching packages and explicit
 source masses; charged fragment transport remains generic.
 See [Cu ion extraction and limits](extensions/copper_ion_transport/README.md).
 
-The data/inputs are local external assets and are excluded from Git. The
-installed inventory is `docs/copied_inputs.json`; expanded preset dependencies
-are in `docs/preset_dependencies.json`. `data/manifest.json` records installed
-asset sizes, SHA256 digests and each preset's dependency list. No default data
+The data/inputs are local external assets and are excluded from Git. Expanded
+preset dependencies are in `examples/preset_dependencies.json`. `data/manifest.json` records installed
+asset paths, sizes and each preset's dependency list. No default data
 paths point to an archive.
 
 Data directories follow the physics modules: `materials/`, `em/`, `nuclear/`,
@@ -531,23 +520,16 @@ Data directories follow the physics modules: `materials/`, `em/`, `nuclear/`,
 subdirectories distinguish independent calibrations. Dates, generator versions
 and binary format versions belong in metadata rather than runtime filenames.
 RT07575 head inputs are in `inputs/rt07575_head/{proton,carbon}/`; the separate
-lung benchmark is in `inputs/lung_minibeam/`. Historical generation records are
-under `docs/data_provenance/`. See `docs/data_layout_20261007.md` for the migration.
+lung benchmark is in `inputs/lung_minibeam/`. Research notes and historical
+validation reports in `docs/` are local archives and are not included in Git.
 
-Verify installed assets before packaging:
-
-```bash
-python3 scripts/check_data_manifest.py
-```
-
-After an intentional asset change, regenerate the manifest with
-`python3 scripts/check_data_manifest.py --write` and refresh dependencies with
-`python3 scripts/list_preset_dependencies.py --output docs/preset_dependencies.json`.
+After an intentional asset change, update `data/manifest.json` and refresh dependencies with
+`python3 scripts/list_preset_dependencies.py --output examples/preset_dependencies.json`.
 
 Validation scripts require Python 3, NumPy and PyYAML.
 
-For the runtime's include structure, scheduling states, units and dose-accounting
-contracts, see the [Chinese core code review guide](docs/core_code_review_zh.md).
+Public headers are directly under `include/`; `include/detail/` holds internal
+header helpers. Transport implementation phases remain in `src/detail/`.
 
 The release configuration requires explicit `primary_atomic_number` and
 `primary_mass_number`; YAML source energies use `initial_energy_MeVu`.
@@ -560,23 +542,14 @@ Energy outputs use `physical_energy_balance_error` in the ledger and the
 `physical_relative_energy_residual` / `absolute_physical_energy_residual_MeV`
 quality fields; duplicate accounting aliases are removed.
 
-All four minibeams use compact scheduling. The release cleanup also removes
-retired interfaces and zero-only nuclear output layouts. See
-`docs/release_cleanup_20261007.md`, `docs/release_cleanup2_20261007.md`, and
-`docs/release_cleanup3_20261007.md` for migrations and validation evidence.
+All four minibeams use compact scheduling. Retired interfaces and zero-only
+nuclear output layouts are removed.
 Primary nuclear channel metadata requires explicit boolean `has_support`.
 Nuclear neutrals are not transported; their energy remains in explicit sinks.
 Neutron packages, birth captures, transport settings and dose outputs are removed.
-Explicit electromagnetic electron/photon transport was subsequently removed. See
-`docs/no_neutral_20261007.md` for removal scope and matched regression evidence. The proton water minibeam
-therefore no longer includes the former neutron-dose contribution.
+Explicit electromagnetic electron/photon transport was subsequently removed.
+The proton water minibeam no longer includes the former neutron-dose contribution.
 TPS isocenter input uses only the supported `tps_isocenter_z_mm` key.
-
-Current three-case full-plan GPU/TOPAS gamma, per-device throughput, statistical
-uncertainty and error-distribution figures are collected in the
-[2026-10-17 validation report](docs/full_plan_validation_20261017/README.md).
-Carbon broadbeam TOPAS uncertainties are explicitly marked as estimates from
-matched low-statistics reruns; the original reference doses are retained.
 
 For a matched implementation regression, explicitly select both a frozen
 control executable with compatible physics/configuration and the candidate
@@ -597,30 +570,20 @@ CUDA_DISABLE_PTX_JIT=1 python3 scripts/check_package_contracts.py \
 
 The control is used only for scientific comparison. Small-history matched GPU
 checks are not TOPAS gamma acceptance, water dose acceptance or a throughput
-measurement. The earlier refactor and compact scheduling checks remain documented
-in `docs/refactor.md` and `docs/compact_20261007.md`.
+measurement.
 
 Water Z geometry uses only `voxel_bins_z` and `voxel_size_z_mm`; both are required.
 CT geometry comes from the CCTG header, with explicit voxel fields serving as
 consistency assertions. Retired `phantom_length_mm` and `depth_bin_width_mm` YAML
 keys are rejected. Internal transport dimensions are derived from the grid.
 
-See `docs/release_cleanup4_20261007.md` for the geometry migration, removal scope
-and final eight-preset regression evidence.
-
 Primary nuclear rates use only `SCHNRATE` v3. Startup companion metadata uses
 `basename.metadata.json`; the retired `basename.bin.metadata.json` route and
 custom magic/version reader selectors are removed.
 
-See `docs/release_cleanup5_20261007.md` for the fixed rate-reader contract and
-matched eight-preset regression evidence.
-
 The runtime accepts `device: cuda` with `nvptx64-nvidia-cuda` or `device: intel`
 with Intel Level Zero and the `spir64_gen` AOT target. Generic GPU/CPU selectors
 and vendor aliases are retired; no fallback to another backend occurs.
-
-See `docs/release_cleanup6_20261007.md` for CUDA-only migration and matched
-eight-preset regression evidence.
 
 Offline TOPAS/Geant4 extraction sources and build/package instructions are in
 [extensions/README.md](extensions/README.md). They are separate from the GPU runtime.

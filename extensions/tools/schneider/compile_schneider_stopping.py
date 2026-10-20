@@ -13,7 +13,7 @@ Enforces:
   - Full domain coverage up to 430.11 MeV/u (supporting 430.0 MeV/u source domain plus guard node)
   - Unit consistency check: linear_stopping == mass_stopping * density within 1e-4 relative
   - Monotonicity of energy and CSDA range
-  - Section Identity & Composition Hash verification against data/materials/schneider/hu_to_material.txt
+  - Section identity and composition checks against data/materials/schneider/hu_to_material.txt
   - Clean, separate metadata sidecars for binary and CSV
 """
 import argparse

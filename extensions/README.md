@@ -1,8 +1,8 @@
 # 八个预设的数据提取扩展
 
-此目录收集当前八个预设需要的 TOPAS/Geant4 导出器、编译脚本、离线打包工具和材料输入卡。源码从周边仓库筛选、复制并适配当前目录；执行不需要访问原仓库。`source_provenance.json` 记录来源与安装后 SHA256，`coverage.json` 逐文件对应当前 `data/manifest.json` 的全部资源。
+此目录收集当前八个预设需要的 TOPAS/Geant4 导出器、编译脚本、离线打包工具和材料输入卡。源码从周边仓库筛选、复制并适配当前目录；执行不需要访问原仓库。`source_provenance.json` 保留来源记录，工具不再计算或校验源码哈希；`coverage.json` 逐文件对应当前 `data/manifest.json` 的全部资源。
 
-这是离线提取工具。编译不会改变 `config/`、GPU 运行时或安装的 `data/`。没有加入中性粒子追踪包；核反应记录仍观察完整 Geant4 反应以审计能量闭合，内部带电碎片 Z/A 注册表仍必需。原始记录、构建产物及校准数据放 `work/`，不随源码发布。
+这是离线提取工具。编译不会改变 `examples/`、GPU 运行时或安装的 `data/`。没有加入中性粒子追踪包；核反应记录仍观察完整 Geant4 反应以审计能量闭合，内部带电碎片 Z/A 注册表仍必需。原始记录、构建产物及校准数据放 `work/`，不随源码发布。
 
 ## 1. 八个预设与数据范围
 
@@ -17,7 +17,7 @@
 | proton_ct_minibeam | proton 主粒子表 | Cu/空气、独立 lung benchmark CT |
 | carbon_ct_minibeam | carbon 主粒子表 | Cu/空气、独立 lung benchmark CT |
 
-共同包族包括 EMCNT001 continuous26、BLEM0001 铜／空气完整电子响应、次级核反应及 Urban。每个预设实际展开的文件路径以 [preset_dependencies.json](../docs/preset_dependencies.json) 为准。RT07575 是 head case，CT、源、权重、放置、准直器及归一化必须成套使用；lung minibeam 不能称为 RT07575 全计划验证。
+共同包族包括 EMCNT001 continuous26、BLEM0001 铜／空气完整电子响应、次级核反应及 Urban。每个预设实际展开的文件路径以 [preset_dependencies.json](../examples/preset_dependencies.json) 为准。RT07575 是 head case，CT、源、权重、放置、准直器及归一化必须成套使用；lung minibeam 不能称为 RT07575 全计划验证。
 
 覆盖清单区分物理提取、离线派生、静态定义和外部输入。CT、计划 spots、beam model 不是物理扩展输出；这里不加入 DICOM 转换或 TOPAS 文本计划 replay。
 
@@ -259,12 +259,7 @@ Schneider radiation-length JSON 可从 CT native 元数据 section、density、r
 
 ## 10. 检查、安装和验证范围
 
-```bash
-python3 extensions/verify_kit.py
-python3 scripts/check_data_manifest.py
-```
-
-后两条默认检查当前安装资源。电子检查器支持 `--root` 指向具备 config/docs/data 的独立候选仓库。候选先完成包字段/能量/覆盖/completion/zero-overflow 审计及匹配剂量检查，再成套安装 payload、companions、bundle/registry；仅在主动接受替包后，按 manifest 检查器 `--help` 更新摘要。
+候选先完成包字段/能量/覆盖/completion/zero-overflow 审计及匹配剂量检查，再成套安装 payload、companions、bundle/registry；主动接受替包后同步更新安装清单及预设依赖列表。
 
 保持 fluctuations、Cu primary/fragment fluctuations、broadbeam0.5mm/minibeam0.1mm ion step caps、FP32 atomics，以及 campaign largest-remainder 权重、per-spot seed、正确归一化。本工具不改调度/源行为。
 
@@ -288,4 +283,6 @@ python3 scripts/check_topas_carbon_reference.py /path/to/topas.log
 
 剂量门槛：broadbeam local1%/1mm >99%、search0.1mm；proton minibeam local3%/0.2mm、search0.02mm，相对匹配旧基线下降≤1个百分点。绝对 TOPAS gamma 分开报告；carbon minibeam 剂量精度验收 deferred，runtime audits 仍必需。clean regression 是匹配 GPU 实现检查，不是新 TOPAS acceptance。性能实验前读 `../failed.md`，smoke 不支持性能结论。
 
-2026-10-07 实测：原生六目标、TOPAS electrons/nuclear-copper 编译通过；其余四 profile 检查 staging。electron composition、G4_WATER material JSON、air proton ionization probes 通过。Urban air 两 species 完整 dense/held-out 流程8192 steps、零 failed queries，最大 query 相对误差约2.57e-6。另检查 Python/CLI/shell、来源摘要、材料卡与安装资源。记录见 [extensions_20261007.json](../docs/extensions_20261007.json)。这些结果不代表全量重提取、剂量接受或性能测试。
+2026-10-07 实测：原生六目标、TOPAS electrons/nuclear-copper 编译通过；其余四 profile 检查 staging。electron composition、G4_WATER material JSON、air proton ionization probes 通过。Urban air 两 species 完整 dense/held-out 流程8192 steps、零 failed queries，最大 query 相对误差约2.57e-6。另检查 Python/CLI/shell、来源摘要、材料卡与安装资源。这些结果不代表全量重提取、剂量接受或性能测试。
+
+文件哈希及 CRC 完整性校验已移除。CINPKG04 头和 CINEL02 尾部保留原有字段宽度，新输出填零，读取忽略；格式、尺寸和物理数据检查保留。

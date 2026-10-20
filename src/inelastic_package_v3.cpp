@@ -1,5 +1,5 @@
-#include "carbon/inelastic_package_v3.hpp"
-#include "carbon/inelastic_identity.hpp"
+#include "inelastic_package_v3.hpp"
+#include "inelastic_identity.hpp"
 
 #include <algorithm>
 #include <array>
@@ -23,65 +23,13 @@ constexpr std::array<char, 8> package_magic{'C', 'I', 'N', 'P', 'K', 'G', '0', '
 constexpr std::uint32_t package_version = 4;
 constexpr std::uint32_t endian_marker = 0x01020304U;
 constexpr std::uint32_t required_flags = 0x0FU;
-constexpr std::uint32_t known_flags = required_flags | cinel03_global_energy_index_flag | cinel03_crc32_checksum_flag;
-
-// Standard IEEE 802.3 CRC32, slicing-by-8. Identical polynomial (0xEDB88320),
-// initial value (0), final inversion and incremental concatenation semantics as
-// the previous byte-at-a-time version; only the number of table lookups per
-// byte changes. `previous_crc` is the finalized CRC of the preceding chunks.
-std::uint32_t compute_crc32(const void* data, std::size_t length, std::uint32_t previous_crc = 0) noexcept {
-    static constexpr auto tables = []() constexpr {
-        std::array<std::array<std::uint32_t, 256>, 8> t{};
-        for (std::uint32_t i = 0; i < 256; ++i) {
-            std::uint32_t c = i;
-            for (int k = 0; k < 8; ++k) {
-                c = (c & 1) ? (0xEDB88320U ^ (c >> 1)) : (c >> 1);
-            }
-            t[0][i] = c;
-        }
-        for (std::uint32_t i = 0; i < 256; ++i) {
-            std::uint32_t c = t[0][i];
-            for (int k = 1; k < 8; ++k) {
-                c = t[0][c & 0xFF] ^ (c >> 8);
-                t[k][i] = c;
-            }
-        }
-        return t;
-    }();
-
-    std::uint32_t c = ~previous_crc;
-    const auto* bytes = static_cast<const std::uint8_t*>(data);
-    while (length >= 8) {
-        const std::uint32_t lo =
-            static_cast<std::uint32_t>(bytes[0]) |
-            (static_cast<std::uint32_t>(bytes[1]) << 8) |
-            (static_cast<std::uint32_t>(bytes[2]) << 16) |
-            (static_cast<std::uint32_t>(bytes[3]) << 24);
-        const std::uint32_t hi =
-            static_cast<std::uint32_t>(bytes[4]) |
-            (static_cast<std::uint32_t>(bytes[5]) << 8) |
-            (static_cast<std::uint32_t>(bytes[6]) << 16) |
-            (static_cast<std::uint32_t>(bytes[7]) << 24);
-        const std::uint32_t x = c ^ lo;
-        c = tables[7][x & 0xFF] ^ tables[6][(x >> 8) & 0xFF] ^
-            tables[5][(x >> 16) & 0xFF] ^ tables[4][(x >> 24) & 0xFF] ^
-            tables[3][hi & 0xFF] ^ tables[2][(hi >> 8) & 0xFF] ^
-            tables[1][(hi >> 16) & 0xFF] ^ tables[0][(hi >> 24) & 0xFF];
-        bytes += 8;
-        length -= 8;
-    }
-    while (length > 0) {
-        c = tables[0][(c ^ *bytes) & 0xFF] ^ (c >> 8);
-        ++bytes;
-        --length;
-    }
-    return ~c;
-}
+// Bit 5 is an ignored wire-format flag in existing CINPKG04 assets.
+constexpr std::uint32_t known_flags = required_flags | cinel03_global_energy_index_flag | cinel03_reserved_flag;
 
 template <typename Record>
 void read_records(std::ifstream& input, std::vector<Record>& records,
                   std::uint64_t count, const std::filesystem::path& path,
-                  const char* label, std::uint32_t* crc_accumulator = nullptr) {
+                  const char* label) {
     if (count > static_cast<std::uint64_t>(std::numeric_limits<std::size_t>::max()) ||
         count > static_cast<std::uint64_t>(std::numeric_limits<std::streamsize>::max()) /
                     sizeof(Record)) {
@@ -94,9 +42,6 @@ void read_records(std::ifstream& input, std::vector<Record>& records,
         if (!input.read(reinterpret_cast<char*>(records.data()), bytes)) {
             throw std::runtime_error(std::string("Truncated CINPKG04 ") + label +
                                      " table: " + path.string());
-        }
-        if (crc_accumulator != nullptr) {
-            *crc_accumulator = compute_crc32(records.data(), static_cast<std::size_t>(bytes), *crc_accumulator);
         }
     }
 }
@@ -232,8 +177,7 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
     }
     table.campaign_uuid_.assign(header.campaign_uuid, uuid_end);
 
-    std::uint32_t running_crc = 0;
-    read_records(input, table.cells_, header.cell_count, path, "cell", &running_crc);
+    read_records(input, table.cells_, header.cell_count, path, "cell");
 
     std::uint64_t previous_interaction_end = 0;
     std::tuple<int, int, int, std::uint32_t> previous_key{-1, -1, -1, 0};
@@ -258,7 +202,7 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
         throw std::runtime_error("CINPKG04 cell ranges do not close: " + path.string());
     }
 
-    read_records(input, table.interactions_, header.interaction_count, path, "interaction", &running_crc);
+    read_records(input, table.interactions_, header.interaction_count, path, "interaction");
     table.product_offsets_.resize(table.interactions_.size());
     std::uint64_t expected_product_count = 0;
 
@@ -332,7 +276,7 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
         throw std::runtime_error("CINPKG04 product count does not close: " + path.string());
     }
 
-    read_records(input, table.products_, header.product_count, path, "product", &running_crc);
+    read_records(input, table.products_, header.product_count, path, "product");
 
     for (std::size_t product_index = 0; product_index < table.products_.size(); ++product_index) {
         const auto& product = table.products_[product_index];
@@ -379,21 +323,12 @@ InelasticPackageV3Table InelasticPackageV3Table::from_binary(
         if (header.energy_node_count == 0U) {
             throw std::runtime_error("Invalid CINPKG04 global energy-node count: " + path.string());
         }
-        read_records(input, table.energy_nodes_, header.energy_node_count, path, "energy node", &running_crc);
-        read_records(input, table.event_offsets_, header.energy_node_count + 1U, path, "energy-node offset", &running_crc);
-        read_records(input, table.event_indices_, header.interaction_count, path, "energy event index", &running_crc);
+        read_records(input, table.energy_nodes_, header.energy_node_count, path, "energy node");
+        read_records(input, table.event_offsets_, header.energy_node_count + 1U, path, "energy-node offset");
+        read_records(input, table.event_indices_, header.interaction_count, path, "energy event index");
 
     validate_energy_index(table.energy_nodes_, table.event_offsets_, table.event_indices_,
                           table.interactions_, path);
-
-    // Checksum verification
-    if ((header.flags & cinel03_crc32_checksum_flag) != 0U) {
-        if (header.checksum_crc32 != running_crc) {
-            throw std::runtime_error("CINPKG04 checksum mismatch: header 0x" +
-                                     std::to_string(header.checksum_crc32) + " vs computed 0x" +
-                                     std::to_string(running_crc) + " in " + path.string());
-        }
-    }
 
     if (input.peek() != std::ifstream::traits_type::eof()) {
         throw std::runtime_error("CINPKG04 has trailing bytes: " + path.string());

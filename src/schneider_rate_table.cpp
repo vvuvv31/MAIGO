@@ -1,5 +1,5 @@
-#include "carbon/schneider_rate_table.hpp"
-#include "carbon/min_json.hpp"
+#include "schneider_rate_table.hpp"
+#include "min_json.hpp"
 
 #include <cmath>
 #include <cstring>

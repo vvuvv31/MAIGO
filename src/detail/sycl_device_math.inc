@@ -115,73 +115,14 @@ float highland_projected_rms_angle_device(const float kinetic_energy_MeV,
            (beta * momentum_MeV_per_c) * sycl::sqrt(radiation_lengths) * correction;
 }
 
-// --- Unified MSC transport model (Highland theta sampler -> MscTransportModel).
-// First implementation: Highland + lateral displacement placeholder.
-// A single MCS step returns BOTH the outgoing direction and the intra-step
-// lateral displacement, instead of only theta:
-//
-//   pre-step state -> true step -> energy loss -> apply_msc() -> post-step
-//
-// Highland mode is endpoint scattering by definition: displacement_mm = 0 and
-// the caller advances position along the pre-step direction:
-//   position += seg_dir * step + displacement (== seg_dir * step here).
+// Highland is endpoint scattering: the caller advances along the pre-step
+// direction without a correlated intra-step lateral displacement.
 // Correlated models (Fermi-Eyges tail, Urban v2) fill a non-zero displacement
 // through their own CorrelatedScatteringStep paths; they are selected before
 // these Highland helpers are reached. Do NOT add a hinge/displacement to the
 // Highland helpers: failed.md 2026-09-18 shows per-step Fermi-Eyges
 // displacement retaining Highland angular variance worsens Bragg valley/PVDR,
 // with retry allowed only for validated step-invariant scattering power.
-inline float ion_effective_charge_device(const int atomic_number,
-                                          const float energy_MeVu) noexcept {
-    if (atomic_number <= 0 || energy_MeVu <= 0.0F) {
-        return 0.0F;
-    }
-    constexpr float nucleon_mass_MeV = 931.49410242F;
-    const auto gamma = 1.0F + energy_MeVu / nucleon_mass_MeV;
-    const auto beta_squared = sycl::fmax(0.0F, 1.0F - 1.0F / (gamma * gamma));
-    const auto beta = sycl::sqrt(beta_squared);
-    const auto charge = static_cast<float>(atomic_number);
-    return charge *
-           (1.0F - sycl::exp(-125.0F * beta * sycl::pow(charge, -2.0F / 3.0F)));
-}
-
-inline float condensed_total_loss_variance_MeV2_device(
-    const float energy_MeVu,
-    const int mass_number,
-    const float effective_charge,
-    const float path_length_mm,
-    const float density_g_per_cm3,
-    const float z_over_a_rel_water = 1.0F) noexcept {
-    if (energy_MeVu <= 0.0F || mass_number <= 0 || effective_charge <= 0.0F ||
-        path_length_mm <= 0.0F || density_g_per_cm3 <= 0.0F) {
-        return 0.0F;
-    }
-    constexpr float electron_mass_MeV = 0.51099895F;
-    constexpr float nucleon_mass_MeV = 931.49410242F;
-    constexpr float bethe_K_MeV_cm2_per_g = 0.307075F;
-    constexpr float water_Z_over_A = 0.55509F;
-    const auto gamma = 1.0F + energy_MeVu / nucleon_mass_MeV;
-    const auto beta_squared =
-        sycl::fmax(0.0F, 1.0F - 1.0F / (gamma * gamma));
-    if (beta_squared <= 0.0F) {
-        return 0.0F;
-    }
-    const auto projectile_mass_MeV =
-        static_cast<float>(mass_number) * nucleon_mass_MeV;
-    const auto mass_ratio = electron_mass_MeV / projectile_mass_MeV;
-    const auto maximum_transfer_MeV =
-        2.0F * electron_mass_MeV * beta_squared * gamma * gamma /
-        (1.0F + 2.0F * gamma * mass_ratio + mass_ratio * mass_ratio);
-    const auto relativistic_multiplier =
-        (maximum_transfer_MeV / beta_squared - 0.5F * maximum_transfer_MeV) /
-        (2.0F * electron_mass_MeV);
-    const auto z_over_a = water_Z_over_A *
-                          sycl::clamp(z_over_a_rel_water, 0.5F, 1.5F);
-    return bethe_K_MeV_cm2_per_g * electron_mass_MeV * effective_charge *
-           effective_charge * z_over_a * density_g_per_cm3 *
-           (path_length_mm / 10.0F) * sycl::fmax(0.0F, relativistic_multiplier);
-}
-
 Direction3F scatter_direction(const Direction3F direction,
                               const float projected_rms_angle_rad,
                               const std::uint64_t seed,

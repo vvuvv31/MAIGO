@@ -13,7 +13,7 @@ KEYS += ['ct_schneider_radiation_length_file']
 FLAGS=['--plan-manifest','--sequential-spots','--scorer-let','--dose-output','--straggling-scale']
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('--binary',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args()
-    cfg=yaml.safe_load((ROOT/'config/proton_water_broadbeam.yaml').read_text())
+    cfg=yaml.safe_load((ROOT/'examples/proton_water_broadbeam.yaml').read_text())
     env={k:v for k,v in os.environ.items() if not k.startswith('CARBON_')}
     env['CUDA_DISABLE_PTX_JIT']='1'
     reports=[]
@@ -56,7 +56,7 @@ def main():
             reports.append(dict(key=key,value=0,passed=ok));assert ok,r.stdout
         # Compact is unconditional; the redundant selector is no longer accepted.
         for value in ['compact', 'combined']:
-            c=yaml.safe_load((ROOT/'config/carbon_water_minibeam.yaml').read_text())
+            c=yaml.safe_load((ROOT/'examples/carbon_water_minibeam.yaml').read_text())
             c['minibeam_primary_pipeline']=value
             f=Path(tmp)/'case.yaml';f.write_text(yaml.safe_dump(c,sort_keys=False))
             r=subprocess.run([str(a.binary.resolve()),'--config',str(f)],cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)

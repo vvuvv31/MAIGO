@@ -399,6 +399,6 @@ LET 误差必须保留分子与分母协方差。辅助 GPU 计算采用独立�
 
 ---
 
-**稿件配套资料，投稿时不作为方法正文：** [文献阅读与写作分析](docs/gpu_mc_methods_literature.md)、[物理实现对照](docs/topas_gpu_physics_comparison.md)、[非受限能损模型](docs/unrestricted_dedx.md)、[LET 估计量与匹配计分器](docs/let_scoring.md)、[数据提取](extensions/README.md)、[完整计划与统计误差资料](docs/full_plan_validation_20261017/README.md)。
+**稿件配套资料，投稿时不作为方法正文：** [数据提取](extensions/README.md)。
 
 **待作者补全的投稿信息：** 病例来源与伦理审批／豁免；逐计划完整源、能量层、射野、网格及准直器表；优化目标和求解器设置；完整分物种散射系数及电磁射程步长参数；参考物理、编译器／驱动和 CPU 型号的冻结清单；已完成 LET 参考统计量及步长细化记录。缺少相应记录时不声明临床束流实测标定或所有配置均已独立验收。剂量与 LET 通过率、吞吐及实测误差属于 Results，本节定义其获取方法。

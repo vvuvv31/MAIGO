@@ -1,7 +1,7 @@
 # MAIGO_clean
 
 - This is a production-only runtime with eight proton/carbon ×
-  water/CT × broadbeam/minibeam release presets in `config/`. Custom ion
+  water/CT × broadbeam/minibeam release presets in `examples/`. Custom ion
   configurations may use the generic pipeline with matching packages. Other
   primary ions require explicit kinematic/nuclear masses; retain calibrated
   proton/C12 conventions and all package identity/mass/coverage checks. Do not
@@ -119,7 +119,14 @@
   native image is unavailable, stop that run and rebuild ahead of time for the
   destination GPU; never enable JIT as a fallback. Build time is excluded from
   cold-start and steady-state throughput measurements.
-- Release assets use the physics-module layout documented in
-  `docs/data_layout_20261007.md`; keep `data/manifest.json` and preset dependency
-  inventories current. Do not restore dated directory aliases or old-path
-  lookups. Preserve independent projectile calibrations and package formats.
+- Release assets use the physics-module layout described in `README.md`; keep
+  `data/manifest.json` and `examples/preset_dependencies.json` current.
+  Keep `docs/` as a local-only archive excluded from Git. Headers live directly
+  in `include/`, with internal header helpers in `include/detail/`. Do not
+  restore dated directory aliases or old-path lookups. Preserve independent
+  projectile calibrations and package formats.
+
+- Do not calculate or verify file/content SHA, MD5 or CRC checksums in runtime
+  loaders, offline tools or asset checks. Keep existing binary layouts, using
+  reserved zero fields in new outputs. Preserve format/size/species/coverage
+  checks and physical energy/EM/completion/overflow audits.

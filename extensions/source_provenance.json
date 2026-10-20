@@ -27,12 +27,6 @@
       "maintenance_note": "2026-10-18: native unrestricted Cu/air electronic response extraction."
     },
     {
-      "file": "beamline_em/verify.py",
-      "installed_sha256": "f082fb6e1b114c3f37c7781c3ad4ef6afc00210a06cc22f25333336ed2039460",
-      "status": "authored_or_curated",
-      "maintenance_note": "2026-10-18: native unrestricted Cu/air electronic response extraction."
-    },
-    {
       "file": "build_native.sh",
       "installed_sha256": "4d3b427d23771b9f31037d7df72ce041835673afff86ae0392c0f08e02c91ece",
       "status": "authored_or_curated"
@@ -1158,12 +1152,6 @@
       "source_sha256": "30813a721656d5b5c807087bfd3d9d62590675f309eef3c352bf6c5a5b6bdd54",
       "installed_sha256": "30813a721656d5b5c807087bfd3d9d62590675f309eef3c352bf6c5a5b6bdd54",
       "status": "copied"
-    },
-    {
-      "file": "verify_kit.py",
-      "installed_sha256": "62df66fd2a425e5114ce2333be40b23246b81fd2274705363fdc93325855402d",
-      "status": "authored_or_curated",
-      "maintenance_note": "2026-10-15: remove retired explicit electron/photon transport tooling."
     }
   ]
 }
