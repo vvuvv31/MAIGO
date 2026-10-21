@@ -1362,6 +1362,21 @@
                                     sec_dz = correlated.direction.z;
                                 }
                             }
+                            // A water scoring face can leave an FP32 endpoint one
+                            // representable value short of the next cell. Resolve
+                            // it in the drift direction, as primary FE already
+                            // does, so repeated sub-ULP face steps cannot exhaust
+                            // the track guard without advancing position/energy.
+                            if (!sec_global_urban && !enable_ct_grid &&
+                                sycl::fabs(collision_input_dz) >= 1.0e-6F &&
+                                !secondary_inelastic && !secondary_elastic) {
+                                const float boundary_z = static_cast<float>(
+                                    collision_input_dz < 0.0F ? bin_z : bin_z + 1) *
+                                    depth_bin_width_mm;
+                                if (sycl::fabs(boundary_z - sec_z) <= 1.0e-5F)
+                                    sec_z = sycl::nextafter(boundary_z,
+                                        collision_input_dz > 0.0F ? 1.0e30F : -1.0e30F);
+                            }
                             // A hazard sampled at step start can leave a supported rate
                             // interval after EM loss. Treat the zero-rate endpoint as a
                             // null collision; retain post-EM energy, position and MCS.
