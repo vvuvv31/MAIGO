@@ -260,30 +260,33 @@ inline bool ct_dda_init(const float x_mm,
     state.t_delta_z =
         state.step_z != 0 ? spacing_z / (dz > 0.0F ? dz : -dz) : huge;
 
+    // Round each physical plane before subtracting the position. Compiler
+    // reassociation of origin + i*pitch - position can otherwise use a plane
+    // different from the endpoint snap and repeat sub-ULP face steps.
     if (state.step_x > 0) {
         state.t_max_x =
-            (origin_x + static_cast<float>(state.ix + 1) * spacing_x - x_mm) / dx;
+            (std::fma(static_cast<float>(state.ix + 1), spacing_x, origin_x) - x_mm) / dx;
     } else if (state.step_x < 0) {
         state.t_max_x =
-            (origin_x + static_cast<float>(state.ix) * spacing_x - x_mm) / dx;
+            (std::fma(static_cast<float>(state.ix), spacing_x, origin_x) - x_mm) / dx;
     } else {
         state.t_max_x = huge;
     }
     if (state.step_y > 0) {
         state.t_max_y =
-            (origin_y + static_cast<float>(state.iy + 1) * spacing_y - y_mm) / dy;
+            (std::fma(static_cast<float>(state.iy + 1), spacing_y, origin_y) - y_mm) / dy;
     } else if (state.step_y < 0) {
         state.t_max_y =
-            (origin_y + static_cast<float>(state.iy) * spacing_y - y_mm) / dy;
+            (std::fma(static_cast<float>(state.iy), spacing_y, origin_y) - y_mm) / dy;
     } else {
         state.t_max_y = huge;
     }
     if (state.step_z > 0) {
         state.t_max_z =
-            (origin_z + static_cast<float>(state.iz + 1) * spacing_z - z_mm) / dz;
+            (std::fma(static_cast<float>(state.iz + 1), spacing_z, origin_z) - z_mm) / dz;
     } else if (state.step_z < 0) {
         state.t_max_z =
-            (origin_z + static_cast<float>(state.iz) * spacing_z - z_mm) / dz;
+            (std::fma(static_cast<float>(state.iz), spacing_z, origin_z) - z_mm) / dz;
     } else {
         state.t_max_z = huge;
     }
@@ -333,6 +336,7 @@ struct CtFaceClampResult {
     float step_mm{0.0F};
     bool hit_face{false};
     std::uint8_t axis_mask{0}; // 1 = x, 2 = y, 4 = z
+    std::array<float,3> face_position{};
 };
 
 inline CtFaceClampResult clamp_step_to_ct_faces_exact(
@@ -366,6 +370,13 @@ inline CtFaceClampResult clamp_step_to_ct_faces_exact(
         result.step_mm = t_face;
         result.hit_face = true;
         result.axis_mask = 0;
+        // Carry the exact plane used by DDA. Reconstructing it from the
+        // rounded endpoint can choose a different FP32 value when the grid
+        // origin is large compared with the voxel pitch.
+        result.face_position = {
+            std::fma(static_cast<float>(state.ix + (state.step_x > 0)), spacing_x, origin_x),
+            std::fma(static_cast<float>(state.iy + (state.step_y > 0)), spacing_y, origin_y),
+            std::fma(static_cast<float>(state.iz + (state.step_z > 0)), spacing_z, origin_z)};
         constexpr float kEps = 1.0e-6F;
         if (state.t_max_x <= t_face + kEps) result.axis_mask |= 1;
         if (state.t_max_y <= t_face + kEps) result.axis_mask |= 2;
@@ -379,14 +390,13 @@ inline CtFaceClampResult clamp_step_to_ct_faces_exact(
 // destination cell; merely flooring a negative-going face leaves it upstream.
 inline std::array<float,3> ct_finish_exact_face_step(
     const CtFaceClampResult& clamp, const float used_step,
-    const std::array<float,3>& start, const std::array<float,3>& direction,
-    const std::array<float,3>& origin, const std::array<float,3>& spacing) noexcept {
+    const std::array<float,3>& start, const std::array<float,3>& direction) noexcept {
     std::array<float,3> result{};
     for (int axis=0;axis<3;++axis) {
         result[axis]=start[axis]+used_step*direction[axis];
         if (clamp.hit_face && used_step==clamp.step_mm &&
             (clamp.axis_mask & (1U<<axis)) && std::fabs(direction[axis])>1e-6F) {
-            const float face=origin[axis]+std::round((result[axis]-origin[axis])/spacing[axis])*spacing[axis];
+            const float face=clamp.face_position[axis];
             result[axis]=std::nextafter(face,direction[axis]>0 ? 1e30F : -1e30F);
         }
     }

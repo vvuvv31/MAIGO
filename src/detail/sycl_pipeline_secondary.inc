@@ -727,8 +727,7 @@
                             }
                             if (!sec_global_urban && (kProductionSecondaryPath ? true : ct_secondary_exact_faces) && sec_face_clamp.hit_face && !secondary_inelastic && !secondary_elastic) {
                                 const auto endpoint=ct_finish_exact_face_step(sec_face_clamp,sec_step_mm,
-                                    {sec_x,sec_y,sec_z},{collision_input_dx,collision_input_dy,collision_input_dz},
-                                    {ct_origin_x,ct_origin_y,ct_origin_z},{ct_spacing_x,ct_spacing_y,ct_spacing_z});
+                                    {sec_x,sec_y,sec_z},{collision_input_dx,collision_input_dy,collision_input_dz});
                                 post_em_x=endpoint[0];post_em_y=endpoint[1];post_em_z=endpoint[2];
                             }
 

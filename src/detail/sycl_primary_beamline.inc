@@ -703,7 +703,15 @@
                             hit = false;
                         }
                     };
-                    if ((enable_voxel_scoring)) {
+                    if ((kUniformWaterPrimaryPath || global_urban) && !enable_ct_grid) {
+                        // A scoring strip is a region inside the physical water box,
+                        // not a transport entrance. Intersect the physical box so
+                        // water loss and scattering precede any later ROI entry.
+                        intersect_slab(position_x_mm, direction_x,
+                                       -urban_water_half_width_mm, urban_water_half_width_mm);
+                        intersect_slab(position_y_mm, direction_y,
+                                       -urban_water_half_width_mm, urban_water_half_width_mm);
+                    } else if (enable_voxel_scoring) {
                         intersect_slab(position_x_mm, direction_x, voxel_min_x_mm, voxel_max_x_mm);
                         intersect_slab(position_y_mm, direction_y, voxel_min_y_mm, voxel_max_y_mm);
                     }

@@ -190,6 +190,18 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
                  result.minibeam.copper_fragment_cascade_queue_overflows,
                  0.0);
 
+    // A track guard is an incomplete trajectory, even if its residual energy
+    // was booked as escaped and the global energy ledger still closes.
+    std::uint64_t secondary_step_limits = 0;
+    for (std::size_t species = 0; species < IonSpeciesLedgerSchema::species_count; ++species)
+        secondary_step_limits += result.ion_species_terminal_reason_counts[
+            species * IonSpeciesLedgerSchema::terminal_reason_count +
+            IonSpeciesLedgerSchema::step_limit];
+    if (secondary_step_limits != 0)
+        report.failures.push_back({"secondary_step_limit_exceeded",
+            "Charged secondary trajectories reached the transport step guard",
+            static_cast<double>(secondary_step_limits), 0.0});
+
     {
         double voxel_sum_MeV = 0.0;
         for (const double value : result.voxel_deposited_energy_MeV) {

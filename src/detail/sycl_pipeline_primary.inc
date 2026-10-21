@@ -361,7 +361,7 @@
                 double pending_primary_depth_MeV = 0.0;
                 int pending_primary_bin = 0;
                 double pending_primary_voxel_MeV = 0.0;
-                std::size_t pending_primary_voxel = 0;
+                std::size_t pending_primary_voxel = number_of_voxels;
 
                 float nuclear_tau_remaining = 0.0F;
                 HadronicRateCache primary_hadronic_cache;
@@ -464,6 +464,7 @@
 
                     auto voxel_x = static_cast<int>(voxel_bins_x / 2);
                     auto voxel_y = static_cast<int>(voxel_bins_y / 2);
+                    bool primary_score_cell_valid = false;
                     if ((enable_voxel_scoring)) {
                         const auto x_coordinate =
                             (position_x_mm - voxel_min_x_mm) / voxel_size_x_mm;
@@ -475,6 +476,9 @@
                         voxel_y = direction_y < 0.0F
                                       ? static_cast<int>(sycl::ceil(y_coordinate)) - 1
                                       : static_cast<int>(sycl::floor(y_coordinate));
+                        primary_score_cell_valid =
+                            voxel_x >= 0 && voxel_x < static_cast<int>(voxel_bins_x) &&
+                            voxel_y >= 0 && voxel_y < static_cast<int>(voxel_bins_y);
                         if constexpr (kSharedCtCell)
                             ct_score_cell_valid = ct_score_cell_valid &&
                                 voxel_x >= 0 && voxel_x < static_cast<int>(voxel_bins_x) &&
@@ -490,11 +494,17 @@
                             {direction_x,direction_y,direction_z},{voxel_min_x_mm,voxel_min_y_mm,0},
                             {voxel_max_x_mm,voxel_max_y_mm,phantom_length_mm},
                             {voxel_size_x_mm,voxel_size_y_mm,depth_bin_width_mm},voxel_bins_x,voxel_bins_y,number_of_bins);
+                        primary_score_cell_valid = scored.valid;
                         if(scored.valid){voxel_x=scored.ix;voxel_y=scored.iy;bin=scored.iz;}
                     }
                     const auto voxel_index = static_cast<std::size_t>(bin) * voxel_plane_size +
                                              static_cast<std::size_t>(voxel_y) * voxel_bins_x +
                                              static_cast<std::size_t>(voxel_x);
+                    // Clamped indices are safe for material lookup, not for
+                    // scoring. Water outside a narrow scorer still transports;
+                    // its energy belongs to the outside-grid ledger, not an edge voxel.
+                    const auto primary_scoring_voxel = primary_score_cell_valid
+                        ? voxel_index : static_cast<std::size_t>(number_of_voxels);
 
                     auto local_density_g_per_cm3 = water_density_g_per_cm3;
                     std::uint8_t ct_material = 2;
@@ -780,7 +790,7 @@
 
                         pending_primary_bin = bin;
                     }
-                    if ((enable_voxel_scoring) && voxel_index != pending_primary_voxel) {
+                    if ((enable_voxel_scoring) && primary_scoring_voxel != pending_primary_voxel) {
                         if (pending_primary_voxel_MeV > 0.0 && pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                             sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
                                              sycl::memory_scope::device,
@@ -791,12 +801,12 @@
                         }
                         pending_primary_voxel_MeV = 0.0;
 
-                        pending_primary_voxel = voxel_index;
+                        pending_primary_voxel = primary_scoring_voxel;
                     }
 
                     // Score the ionization loss locally in depth and voxel scorers.
                     pending_primary_depth_MeV += deposited_MeV;
-                    if (enable_voxel_scoring) {
+                    if (enable_voxel_scoring && primary_score_cell_valid) {
                         pending_primary_voxel_MeV += local_voxel_deposit_MeV;
 
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
@@ -811,7 +821,7 @@
                     }
                     history_deposited_MeV += deposited_MeV;
                     grid_split(
-                        enable_voxel_scoring,
+                        enable_voxel_scoring && primary_score_cell_valid,
                         deposited_MeV);
 
                     const float seg_dir_x = direction_x;
@@ -998,14 +1008,14 @@
                                 sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_audit[3]).fetch_add(1);
                                 sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(untracked_nuclear_device[global_history]).fetch_add(scat.recoil_ke_MeV);
                             } else if (scat.recoil_ke_MeV > 0.0F) {
-                                if ((enable_voxel_scoring) && voxel_index < number_of_voxels) {
+                                if (enable_voxel_scoring && primary_score_cell_valid) {
                                     pending_primary_voxel_MeV += scat.recoil_ke_MeV;
                                 }
                                 history_deposited_MeV += scat.recoil_ke_MeV;
                                 sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[0]).fetch_add(scat.recoil_ke_MeV);
                                 pending_primary_depth_MeV += scat.recoil_ke_MeV;
                                 grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,
-                                    enable_voxel_scoring,scat.recoil_ke_MeV);
+                                    enable_voxel_scoring && primary_score_cell_valid,scat.recoil_ke_MeV);
                             }
                         }
                     }
@@ -1098,13 +1108,13 @@
                         const float local_deposit = sycl::fmax(0.0F, event.process_local_deposit_MeV);
 
                         pending_primary_depth_MeV += local_deposit;
-                        if (enable_voxel_scoring) {
+                        if (enable_voxel_scoring && primary_score_cell_valid) {
                             pending_primary_voxel_MeV += local_deposit;
                         }
                         history_deposited_MeV += local_deposit;
                         grid_deposit_split_device(
                             grid_deposited_in_device, grid_deposited_out_device,
-                            enable_voxel_scoring, local_deposit);
+                            enable_voxel_scoring && primary_score_cell_valid, local_deposit);
 
                         float charged_accounted_MeV = 0.0F;
                         float neutral_accounted_MeV = 0.0F;
@@ -1230,7 +1240,7 @@
                                 }
                             } else {
                                 pending_primary_depth_MeV += product.kinetic_energy_MeV;
-                                if (enable_voxel_scoring) {
+                                if (enable_voxel_scoring && primary_score_cell_valid) {
                                     pending_primary_voxel_MeV += product.kinetic_energy_MeV;
                                 }
 
@@ -1238,7 +1248,7 @@
                                 grid_deposit_split_device(
                                     grid_deposited_in_device,
                                     grid_deposited_out_device,
-                                    enable_voxel_scoring,
+                                    enable_voxel_scoring && primary_score_cell_valid,
                                     product.kinetic_energy_MeV);
                                 charged_accounted_MeV += product.kinetic_energy_MeV;
                                 schneider_diag_increment_device(
@@ -1292,6 +1302,31 @@
 
                 if (energy_MeV > 0.0F && energy_MeV <= energy_cutoff_MeV && inside_phantom) {
                     const auto cutoff_energy_MeV = energy_MeV;
+                    if (enable_voxel_scoring && !enable_ct_grid) {
+                        // The residual energy is a point deposit at the final
+                        // position, which can lie across the scorer face from
+                        // the last continuous-loss segment.
+                        const auto cell = urban_voxel_cell(
+                            {position_x_mm, position_y_mm, position_z_mm},
+                            {direction_x, direction_y, direction_z},
+                            {voxel_min_x_mm, voxel_min_y_mm, 0},
+                            {voxel_max_x_mm, voxel_max_y_mm, phantom_length_mm},
+                            {voxel_size_x_mm, voxel_size_y_mm, depth_bin_width_mm},
+                            voxel_bins_x, voxel_bins_y, number_of_bins);
+                        const auto cutoff_voxel = cell.valid
+                            ? (static_cast<std::size_t>(cell.iz) * voxel_bins_y + cell.iy) * voxel_bins_x + cell.ix
+                            : static_cast<std::size_t>(number_of_voxels);
+                        if (cutoff_voxel != pending_primary_voxel) {
+                            if (pending_primary_voxel_MeV > 0.0 && pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
+                                sycl::atomic_ref<DoseAtomicT, sycl::memory_order::relaxed,
+                                    sycl::memory_scope::device, sycl::access::address_space::global_space>
+                                    atomic_voxel(voxel_dose_device[pending_primary_voxel]);
+                                atomic_voxel.fetch_add(static_cast<DoseAtomicT>(pending_primary_voxel_MeV));
+                            }
+                            pending_primary_voxel_MeV = 0.0;
+                            pending_primary_voxel = cutoff_voxel;
+                        }
+                    }
                     pending_primary_depth_MeV += cutoff_energy_MeV;
                     if ((enable_voxel_scoring) && pending_primary_voxel < static_cast<std::size_t>(number_of_voxels)) {
                         pending_primary_voxel_MeV += cutoff_energy_MeV;
