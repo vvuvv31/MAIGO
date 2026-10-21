@@ -65,35 +65,23 @@ $$
 L & L^2/2 \\
 L^2/2 & L^3/3
 \end{pmatrix}.
-\tag{4a}
+\tag{4}
 $$
 
-算法在粒子瞬时局部坐标系下通过 Cholesky 分解对两个正交横向轴的 $(\theta_x, x)$ 与 $(\theta_y, y)$ 进行联合抽样，再旋转回全局笛卡尔坐标系，由此实现式（4a）给出的角度—位移协方差。当单个输运步超过设定的散射分段上限（如 CT 微束患者内次级碎片的 $0.1\text{ mm}$ 分段上限）时，自动将该步细分为多个均匀散射子段，并利用已接受的步能损估算各子段中点动能以求取 $\mathcal{T}$。
+算法在粒子瞬时局部坐标系下通过 Cholesky 分解对两个正交横向轴的 $(\theta_x, x)$ 与 $(\theta_y, y)$ 进行联合抽样，再旋转回全局笛卡尔坐标系，由此实现式（4）给出的角度—位移协方差。当单个输运步超过设定的散射分段上限（如 CT 微束患者内次级碎片的 $0.1\text{ mm}$ 分段上限）时，自动将该步细分为多个均匀散射子段，并利用已接受的步能损估算各子段中点动能以求取 $\mathcal{T}$。
 
 有效线性散射功率 $\mathcal{T}$ 由 Rossi–Greisen 高斯核心项与标定大角单次散射尾部的等效二阶矩叠加而成：
 
 $$
 \mathcal{T}(E) = \left(\frac{E_s Z}{\beta p c}\right)^2 \frac{1}{X_0(\rho)} + \lambda_{\mathrm{tail}}(\rho)\,\left(\frac{E_{\mathrm{tail}} Z}{\beta p c}\right)^2,
-\tag{4b}
+\tag{5}
 $$
 
 式中 $p$ 为相对论动量，$X_0(\rho)$ 为由 Schneider 组织组成与体素密度确定的局部辐射长度，$\lambda_{\mathrm{tail}}(\rho) = \lambda_{\mathrm{tail}, \mathrm{water}} \, [X_{0,\mathrm{water}} / X_0(\rho)]$ 按逆辐射长度之比缩放名义尾部散射率。对于轻离子（$^1\mathrm{H}$、$^2\mathrm{H}$、$^3\mathrm{H}$ 与 $^4\mathrm{He}$），有效核心散射能量 $E_s(E/A)$ 及尾部参数由 $50$、$150$ 和 $300\text{ MeV/u}$ 均匀水层 Geant4 标定值分段线性插值给出（区间外取端点值）；对于 $^{12}\mathrm{C}$ 及采用同组标定的重碎片，统一采用标定常数 $E_s = 9.9\text{ MeV}$、水中名义尾部率 $\lambda_{\mathrm{tail},\mathrm{water}} = 0.0025\text{ mm}^{-1}$ 及尾部散射能量 $E_{\mathrm{tail}} = 2.4\text{ MeV}$。强相互作用核弹性散射则作为独立的离散随机过程单独处理（第 II.A.3 节）。
 
-数据驱动的 Urban 模型（`G4UrbanMscModel`）[8] 按材料与粒子物种查询离线提取的第一输运自由程 $\lambda_{\mathrm{tr},1}(E)$、辐射长度 $X_0$ 及角分布形状参数（在水、25 种 Schneider 组织及铜中覆盖 52 种带电离子，在空气中覆盖质子与 $^{12}\mathrm{C}$）。Urban 输运通过真实路径长度 $\ell$ 与几何推进弦长 $g$ 的映射耦合散射和几何推进。在局部输运自由程 $\lambda_{\mathrm{tr},1}$ 近似恒定的条件下，正向路径转换及其精确逆映射表示为：
+微束主粒子的多重散射采用 Urban 模型的 GPU 实现 [8,11]，按材料和粒子物种查询从 Geant4 提取的输运自由程、辐射长度及角分布参数。模型联合抽样角偏转与相关横向位移，并计入粒子真实路径与几何推进距离之间的差异。
 
-$$
-\begin{aligned}
-g(\ell)
-&= \lambda_{\mathrm{tr},1}\bigl(1-e^{-\ell/\lambda_{\mathrm{tr},1}}\bigr), \\
-\ell(g)
-&= -\lambda_{\mathrm{tr},1}\ln\!\left(1-\frac{g}{\lambda_{\mathrm{tr},1}}\right).
-\end{aligned}
-\tag{5}
-$$
-
-并同时包含输运自由程随能量显著变化时的 Geant4 原生能量相关修正分支。当粒子靠近铜—空气狭缝侧壁、准直器出口或体素交界面（欧氏距离为 $d_{\mathrm{geom}}$）时，先将几何推进距离限制为 $g \le d_{\mathrm{geom}}$，再按式（5）反演出允许的最大真实路径 $\ell_{\mathrm{geom}}$。连续电子能损与核光学深度均按真实路径 $\ell$ 计算，使边界推进与路径积分采用同一散射几何表示。
-
-在真实步长最终确定后（已计入可能的离散核碰撞步长缩短），从复合 Urban 角分布中抽取极角散射余弦 $\cos\theta$——该分布将小角高斯核心与非高斯幂律单次散射尾部相融合，其角度展宽依赖于归一化散射厚度 $\ell / \lambda_{\mathrm{tr},1}$、局部辐射长度 $X_0$ 及步前／步后动能均值。耦合的横向位移在粒子局部坐标系中抽样并受几何安全半径约束，随后变换至世界坐标系。边界跨越标记与射程步长调节状态跨输运步及阶段调度交接持续保留。
+在 CT 组织界面及铜—空气边界附近，几何步长受边界距离约束，能损与核反应概率则沿对应的真实路径计算，从而保持组织界面和多狭缝准直器中散射与几何输运的一致性。铜内产生的带电碎片在铜中同样采用分物种 Urban 输运，具体见第 II.B.2 节。
 
 ### II.A.3. 核相互作用
 
@@ -455,3 +443,4 @@ $$
 8. Agostinelli S, Allison J, Amako K, et al. Geant4—a simulation toolkit. *Nucl Instrum Methods Phys Res A.* 2003;506(3):250–303. [doi:10.1016/S0168-9002(03)01368-8](https://doi.org/10.1016/S0168-9002(03)01368-8).
 9. Eyges L. Multiple scattering with energy loss. *Phys Rev.* 1948;74(10):1534–1535. [doi:10.1103/PhysRev.74.1534](https://doi.org/10.1103/PhysRev.74.1534).
 10. Low DA, Harms WB, Mutic S, Purdy JA. A technique for the quantitative evaluation of dose distributions. *Med Phys.* 1998;25(5):656–661. [doi:10.1118/1.598248](https://doi.org/10.1118/1.598248).
+11. Urbán L. A model for multiple scattering in GEANT4. CERN; 2006. [CERN report](https://cds.cern.ch/record/1004190).

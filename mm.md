@@ -65,35 +65,23 @@ $$
 L & L^2/2 \\
 L^2/2 & L^3/3
 \end{pmatrix}.
-\tag{4a}
+\tag{4}
 $$
 
-Correlated pairs $(\theta_x, x)$ and $(\theta_y, y)$ are sampled via Cholesky decomposition in the instantaneous local frame of the particle and rotated into global Cartesian coordinates, reproducing the angle–displacement covariance in Eq. (4a). When a transport step exceeds the configured scattering sub-segment limit (e.g., the $0.1\text{ mm}$ segment limit for CT minibeam charged secondaries), the step is subdivided into uniform sub-segments and $\mathcal{T}$ is evaluated at the midpoint kinetic energy of each segment.
+Correlated pairs $(\theta_x, x)$ and $(\theta_y, y)$ are sampled via Cholesky decomposition in the instantaneous local frame of the particle and rotated into global Cartesian coordinates, reproducing the angle–displacement covariance in Eq. (4). When a transport step exceeds the configured scattering sub-segment limit (e.g., the $0.1\text{ mm}$ segment limit for CT minibeam charged secondaries), the step is subdivided into uniform sub-segments and $\mathcal{T}$ is evaluated at the midpoint kinetic energy of each segment.
 
 The effective linear scattering power $\mathcal{T}$ combines a Rossi–Greisen Gaussian core with an effective second-moment contribution from large-angle Rutherford single-scattering tails:
 
 $$
 \mathcal{T}(E) = \left(\frac{E_s Z}{\beta p c}\right)^2 \frac{1}{X_0(\rho)} + \lambda_{\mathrm{tail}}(\rho)\,\left(\frac{E_{\mathrm{tail}} Z}{\beta p c}\right)^2,
-\tag{4b}
+\tag{5}
 $$
 
 where $p$ is the relativistic momentum, $X_0(\rho)$ is the local radiation length derived from the Schneider tissue composition and voxel density, and $\lambda_{\mathrm{tail}}(\rho) = \lambda_{\mathrm{tail}, \mathrm{water}} \, [X_{0,\mathrm{water}} / X_0(\rho)]$ scales the nominal tail rate by inverse radiation length. For light ions ($^1\mathrm{H}$, $^2\mathrm{H}$, $^3\mathrm{H}$, and $^4\mathrm{He}$), the effective core energy parameter $E_s(E/A)$ and tail parameters are obtained by piecewise-linear interpolation of homogeneous water fits calibrated against Geant4 at $50$, $150$, and $300\text{ MeV/u}$ (clamped to endpoint values outside this interval). For $^{12}\mathrm{C}$ and heavier fragments assigned to the same calibration group, the engine adopts calibrated constants $E_s = 9.9\text{ MeV}$, $\lambda_{\mathrm{tail},\mathrm{water}} = 0.0025\text{ mm}^{-1}$, and $E_{\mathrm{tail}} = 2.4\text{ MeV}$. Strong-interaction nuclear elastic scattering is modeled independently as a discrete stochastic process (Section II.A.3).
 
-A data-driven adaptation of the Urban model (`G4UrbanMscModel`) [8] uses offline-tabulated species- and material-dependent transport mean free paths $\lambda_{\mathrm{tr},1}(E)$, radiation lengths $X_0$, and angular distribution shape parameters across 52 charged ion species in water, all 25 Schneider CT tissues, and copper (and for $^1\mathrm{H}$ and $^{12}\mathrm{C}$ in air). Urban transport couples scattering and geometric advancement through a mapping between the true path length $\ell$ and geometric chord length $g$. In the regime of locally constant transport mean free path $\lambda_{\mathrm{tr},1}$, the forward mapping and its exact inverse are given by
+For minibeam primaries, multiple scattering is modeled using a GPU implementation of the Urban model [8,11], with material- and species-dependent transport mean free paths, radiation lengths, and angular parameters tabulated from Geant4. The model samples angular deflection and correlated lateral displacement while accounting for the difference between the true particle path and its geometric advance.
 
-$$
-\begin{aligned}
-g(\ell)
-&= \lambda_{\mathrm{tr},1}\bigl(1-e^{-\ell/\lambda_{\mathrm{tr},1}}\bigr), \\
-\ell(g)
-&= -\lambda_{\mathrm{tr},1}\ln\!\left(1-\frac{g}{\lambda_{\mathrm{tr},1}}\right).
-\end{aligned}
-\tag{5}
-$$
-
-supplemented by the native Geant4 energy-dependent $\lambda_{\mathrm{tr},1}(E)$ branch when stopping substantially alters the mean free path along the step. Whenever a particle approaches a copper–air slit sidewall, collimator exit plane, or CT voxel boundary at Euclidean distance $d_{\mathrm{geom}}$, the geometric advance is first bounded by $g \le d_{\mathrm{geom}}$ and inverted via Eq. (5) to obtain the maximum admissible true path $\ell_{\mathrm{geom}}$. Continuous energy loss and nuclear interaction probabilities are evaluated along the true path $\ell$, coupling boundary advancement and path integration within the same scattering geometry.
-
-At the conclusion of the true step (after accounting for any step shortening due to discrete nuclear collisions), the polar deflection cosine $\cos\theta$ is sampled from the composite Urban distribution, which blends a Gaussian small-angle core with a power-law single-scattering tail parameterized by the step thickness $\ell / \lambda_{\mathrm{tr},1}$, radiation length $X_0$, and pre-/post-step kinetic energy mean. Correlated lateral displacement is applied in the local particle frame, constrained by the geometric safety radius, and rotated into global coordinates. Boundary-crossing flags and range-step conditioning states are preserved across steps and kernel handoffs.
+Near CT interfaces and copper–air boundaries, the geometric step is limited by the distance to the boundary, while energy loss and nuclear interaction probabilities are evaluated along the corresponding true path. This coupling maintains a consistent description of scattering and geometric transport across tissue interfaces and the multislit collimator. Copper-born charged fragments also use species-resolved Urban transport within copper, as described in Section II.B.2.
 
 ### II.A.3. Nuclear Interaction
 
@@ -455,3 +443,4 @@ Stage-level kernel execution timers decompose GPU compute time across primary tr
 8. Agostinelli S, Allison J, Amako K, et al. Geant4—a simulation toolkit. *Nucl Instrum Methods Phys Res A.* 2003;506(3):250–303. [doi:10.1016/S0168-9002(03)01368-8](https://doi.org/10.1016/S0168-9002(03)01368-8).
 9. Eyges L. Multiple scattering with energy loss. *Phys Rev.* 1948;74(10):1534–1535. [doi:10.1103/PhysRev.74.1534](https://doi.org/10.1103/PhysRev.74.1534).
 10. Low DA, Harms WB, Mutic S, Purdy JA. A technique for the quantitative evaluation of dose distributions. *Med Phys.* 1998;25(5):656–661. [doi:10.1118/1.598248](https://doi.org/10.1118/1.598248).
+11. Urbán L. A model for multiple scattering in GEANT4. CERN; 2006. [CERN report](https://cds.cern.ch/record/1004190).
