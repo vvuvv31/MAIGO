@@ -126,7 +126,14 @@ if (!f_in_copper) {
     if (f_draw.loss >= f_energy - energy_cutoff_MeV) { f_energy = 0; break; }
     f_energy -= f_draw.loss;
     f_direction = f_scattering.direction;
-    if (!f_collision && f_tau_active) f_tau -= f_rate * f_path;
+    if (!f_collision && f_tau_active) {
+        const auto remaining_tau = f_tau - f_rate * f_path;
+        // Division decided that the collision is still ahead. A rounded
+        // rate*path can nevertheless equal tau; preserve that positive
+        // distance instead of proposing a zero-length next Urban step.
+        f_tau = remaining_tau > 0.0F || !(f_rate > 0.0F)
+            ? remaining_tau : (f_tau / f_rate - f_path) * f_rate;
+    }
     if (f_collision) {
         f_tau_active = false;
         const auto e = f_energy / static_cast<float>(f_a);
