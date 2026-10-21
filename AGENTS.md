@@ -39,8 +39,10 @@
   minibeams also enable copper-collimator nuclear elastic scattering.
 - All four minibeams use fixed compact scheduling, with no scheduler selector
   configuration key. Dedicated proton/carbon CT minibeams use Urban for
-  patient primaries and shared segmented FE for patient-medium charged
-  secondaries, including upstream products after patient entry. Preserve the
+  patient primaries and shared segmented Gaussian FE for patient-medium charged
+  secondaries, including upstream products after patient entry. Like broadbeams,
+  this FE path folds the calibrated tail second moment into Gaussian scattering
+  power instead of sampling separate tail kicks. Preserve the
   0.5 mm outer cap and configured FE segment limit (release default 0.1 mm).
   Copper/air workers keep their existing scattering models; water and generic
   minibeam medium workers retain Urban. This is a release default, not an

@@ -70,7 +70,7 @@ $$
 
 算法在粒子瞬时局部坐标系下通过 Cholesky 分解对两个正交横向轴的 $(\theta_x, x)$ 与 $(\theta_y, y)$ 进行联合抽样，再旋转回全局笛卡尔坐标系，由此实现式（4）给出的角度—位移协方差。当单个输运步超过设定的散射分段上限（如 CT 微束患者内次级碎片的 $0.1\text{ mm}$ 分段上限）时，自动将该步细分为多个均匀散射子段，并利用已接受的步能损估算各子段中点动能以求取 $\mathcal{T}$。
 
-有效线性散射功率 $\mathcal{T}$ 由 Rossi–Greisen 高斯核心项与标定大角单次散射尾部的等效二阶矩叠加而成：
+对于宽束输运及 CT 微束患者内带电次级粒子，有效线性散射功率 $\mathcal{T}$ 将 Rossi–Greisen 高斯核心与标定尾部分量的二阶矩贡献相加。该贡献直接计入高斯协方差，不单独抽样尾部事件：
 
 $$
 \mathcal{T}(E) = \left(\frac{E_s Z}{\beta p c}\right)^2 \frac{1}{X_0(\rho)} + \lambda_{\mathrm{tail}}(\rho)\,\left(\frac{E_{\mathrm{tail}} Z}{\beta p c}\right)^2,

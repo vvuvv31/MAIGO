@@ -1349,7 +1349,10 @@
                                             2026, frag.rng_stream,
                                             static_cast<std::uint64_t>(sec_steps),
                                             100U,
-                                            static_cast<float>(nucleon_rest_mass_MeV), fe_gaussian_only);
+                                            // Dedicated CT minibeams share broadbeam's
+                                            // Gaussian core+tail second-moment treatment.
+                                            static_cast<float>(nucleon_rest_mass_MeV),
+                                            fe_gaussian_only || kMinibeamSecondaryFe);
 
                                     sec_x += correlated.displacement_mm.x;
                                     sec_y += correlated.displacement_mm.y;

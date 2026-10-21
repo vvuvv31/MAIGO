@@ -70,7 +70,7 @@ $$
 
 Correlated pairs $(\theta_x, x)$ and $(\theta_y, y)$ are sampled via Cholesky decomposition in the instantaneous local frame of the particle and rotated into global Cartesian coordinates, reproducing the angle–displacement covariance in Eq. (4). When a transport step exceeds the configured scattering sub-segment limit (e.g., the $0.1\text{ mm}$ segment limit for CT minibeam charged secondaries), the step is subdivided into uniform sub-segments and $\mathcal{T}$ is evaluated at the midpoint kinetic energy of each segment.
 
-The effective linear scattering power $\mathcal{T}$ combines a Rossi–Greisen Gaussian core with an effective second-moment contribution from large-angle Rutherford single-scattering tails:
+For broadbeam transport and patient charged secondaries in CT minibeams, the effective linear scattering power $\mathcal{T}$ combines a Rossi–Greisen Gaussian core with a calibrated tail second-moment contribution. This contribution is incorporated into the Gaussian covariance without sampling separate tail events:
 
 $$
 \mathcal{T}(E) = \left(\frac{E_s Z}{\beta p c}\right)^2 \frac{1}{X_0(\rho)} + \lambda_{\mathrm{tail}}(\rho)\,\left(\frac{E_{\mathrm{tail}} Z}{\beta p c}\right)^2,
