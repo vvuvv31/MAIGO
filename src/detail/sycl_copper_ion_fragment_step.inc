@@ -117,8 +117,7 @@ if (!f_in_copper) {
     auto f_mean = f_context.dedx(f_energy) * f_path;
     if (f_mean > 0.02F * f_energy) f_mean = f_energy - f_context.energy(f_range - f_path);
     std::uint64_t f_draw_index = 0;
-    auto f_uniform = [&]() { return (rng::random_u32(
-        f_seed, f_stream, (std::uint64_t(f_step) << 32) | f_draw_index++, 124) >> 8) * 0x1p-24f; };
+    auto f_uniform = [&]() { return (rng::copper_loss_u32(f_seed,f_stream,f_step,f_draw_index++) >> 8) * 0x1p-24f; };
     const auto f_draw=sample_beamline_fluctuation(f_energy,f_mass,f_charge,f_a,f_mean,f_path,
         f_context.beamline_point,minibeam_copper_fragment_enable_energy_straggling,f_uniform);
     f_count(f_draw.valid ? copper_proton_fragment_loss_slot : copper_proton_loss_failure_slot);

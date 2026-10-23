@@ -47,7 +47,11 @@
   Copper/air workers keep their existing scattering models; water and generic
   minibeam medium workers retain Urban. This is a release default, not an
   experimental CMake/YAML switch. Carbon water retains its TPS CSV
-  source, emittance and generic Urban water medium kernel. Preserve physical/
+  source, emittance and generic Urban water medium kernel. Its optional
+  `urban_water_condensed_response_file` supplies joint angle/displacement/path
+  responses for covered C12 Water_75eV states; preserve pre-draw full-support
+  geometry/shared-nuclear-clock guards and ordinary Urban fallback. It is not
+  used in CT or secondary transport. Preserve physical/
   source behavior in refactors. Generic charged fragment species are required.
 - Continuous batches reuse one GPU context/packages. Allocate plan weights
   across the whole campaign using largest remainder, preserve per-spot seeds,

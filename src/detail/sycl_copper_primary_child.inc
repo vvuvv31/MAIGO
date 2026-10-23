@@ -181,8 +181,7 @@ while (child_energy > energy_cutoff_MeV &&
         const auto response=beamline_em.at(0,beamline_em.projectile(product.z,product.a));
         const auto mean_child_loss=response.mean_loss(child_energy,child_transport_path);
         std::uint64_t draw_index=0;
-        auto uniform=[&](){return (rng::random_u32(spot_seed,child_rng_stream,
-            (std::uint64_t(child_step)<<32)|draw_index++,124)>>8)*0x1p-24f;};
+        auto uniform=[&](){return (rng::copper_loss_u32(spot_seed,child_rng_stream,child_step,draw_index++)>>8)*0x1p-24f;};
         const auto draw=sample_beamline_fluctuation(child_energy,product.rest_mass,product.z,product.a,
             mean_child_loss,child_transport_path,response,minibeam_copper_fragment_enable_energy_straggling,uniform);
         sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,

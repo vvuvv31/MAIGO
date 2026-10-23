@@ -192,6 +192,7 @@
 
     if (context && retain_physics_device) {
         if (!uses_urban_package) context->impl_->resident_urban.reset();
+        if (config.urban_water_condensed_response_file.empty()) context->impl_->resident_condensed.reset();
         if (BroadBeam || !config.enable_minibeam) context->impl_->resident_air.reset();
         if (BroadBeam || !config.enable_minibeam || !config.minibeam_copper_fragment_native_transport)
             context->impl_->resident_copper_ions.reset();
@@ -243,6 +244,33 @@
                  <<"global all transported charged ions"
                  <<"; materials="<<package.materials.size()
                  <<" species="<<package.species.size()<<"\n";
+    }
+    CondensedView condensed_device{};
+    if (!config.urban_water_condensed_response_file.empty()) {
+        const auto& response = inputs.get<UrbanCondensedResponsePackage>(
+            input_cache_key(config.urban_water_condensed_response_file), [&] {
+                return UrbanCondensedResponsePackage::load(config.urban_water_condensed_response_file);
+            });
+        bool same_mass = false;
+        for (const auto& ion : urban_species_host)
+            if (ion.z == response.header.z && ion.a == response.header.a)
+                same_mass = ion.mass_mev == response.header.mass;
+        if (!same_mass || float(config.water_density_g_per_cm3) != response.header.density)
+            throw std::runtime_error("Condensed response/Urban water identity or mass mismatch");
+        auto resident = retain_physics_device ? resident_tables(context->impl_->resident_condensed,
+            input_cache_key(config.urban_water_condensed_response_file), "urban-water-condensed") : nullptr;
+        auto upload = [&]<class T>(const char* name, const std::vector<T>& values) {
+            if (resident) return resident->upload(name, values, mem_tracker);
+            auto* ptr = mem_tracker.allocate<T>(values.size());
+            if (!ptr) throw std::bad_alloc();
+            queue.copy(values.data(), ptr, values.size()).wait_and_throw();
+            return ptr;
+        };
+        condensed_device = {response.header, upload("energies", response.energies),
+            upload("lengths", response.lengths), upload("data", response.data),
+            upload("probability_energies", response.probability_energies),
+            upload("no_subdivision", response.no_subdivision), upload("nodes", response.nodes),
+            upload("branches", response.branches)};
     }
     UrbanMcsView copper_fragment_urban_device{};
     std::vector<UrbanMcsSpecies> copper_fragment_species_host;
@@ -731,6 +759,32 @@
         const auto& loaded_cascade = inputs.get<LoadedCinel03>(input_cache_key(config.minibeam_copper_inclxx_file),
             [&] { return take_cinel03(config.minibeam_copper_inclxx_file); });
         const auto& tables = *loaded_cascade.tables;
+        if (config.minibeam_copper_enable_nuclear_attenuation) {
+            // A rate table alone is insufficient: every source energy needs
+            // a conditional final state. Never absorb an out-of-bank primary
+            // as a beamline energy sink and silently lose its charged products.
+            float channel_max = -1.0F;
+            for (const auto& node : tables.energy_nodes)
+                if (node.projectile_z == config.primary_atomic_number &&
+                    node.projectile_a == config.primary_mass_number && node.target_element_z == 29)
+                    channel_max = std::max(channel_max, node.collision_energy_MeV_per_u);
+            double source_max = config.initial_energy_MeVu;
+            if (!config.primary_spot_batch.empty()) {
+                source_max = 0.0;
+                for (const auto& spot : config.primary_spot_batch)
+                    source_max = std::max(source_max, double(spot.initial_energy_MeV()) /
+                                                    config.primary_mass_number);
+            }
+            // Stored collision endpoints can sit a few FP32 ulps below
+            // their nominal source energy. Actual queries remain strict
+            // and any out-of-domain collision still rejects the dose.
+            const double endpoint_roundoff = 8.0 * std::numeric_limits<float>::epsilon() *
+                                             std::max(1.0, double(channel_max));
+            if (source_max > double(channel_max) + endpoint_roundoff)
+                throw std::runtime_error("Cu primary final-state package does not cover source energy: requested " +
+                    std::to_string(source_max) + " MeV/u, channel maximum " + std::to_string(channel_max) +
+                    " MeV/u; extend the native final-state data before transport");
+        }
         upload_float_pair(copper_xs.energies(), copper_xs.values(),
                           minibeam_copper_xs_energies_device,
                           minibeam_copper_xs_values_device);

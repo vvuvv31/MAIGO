@@ -24,9 +24,10 @@
     struct IntelPrimaryContext {
         SchneiderCtDeviceContext nuclear;
         UnifiedEmDevice em;
+        CondensedView condensed;
     };
     static_assert(std::is_trivially_copyable_v<IntelPrimaryContext>);
-    const IntelPrimaryContext host_primary_context{schneider_ct_device_ctx, unified_device};
+    const IntelPrimaryContext host_primary_context{schneider_ct_device_ctx, unified_device, condensed_device};
     auto *intel_primary_context = mem_tracker.allocate<IntelPrimaryContext>(1);
     if (intel_primary_context == nullptr)
         throw std::bad_alloc();
@@ -294,6 +295,7 @@
 #ifdef CARBON_INTEL_GPU_AOT
                 const auto& schneider_ct_device_ctx = intel_primary_context->nuclear;
                 const auto& unified_device = intel_primary_context->em;
+                const auto& condensed_device = intel_primary_context->condensed;
 #endif
                 auto global_history = hist_offset + lane;
                 if constexpr (kPrimaryStage == primary_stage::beamline) {
@@ -598,6 +600,8 @@
                     }
 
                     UrbanGlobalProposal global_urban_proposal{};
+                    UrbanPlaneProposal condensed_plane{};
+                    bool condensed_prepared=false;
                     CorrelatedScatteringStep global_urban_scattering{};
                     int global_urban_material=-1;
                     if((kUniformWaterPrimaryPath || global_urban)) {
@@ -683,6 +687,23 @@
                                     u_nuc = rng::uniform01(
                                         spot_seed, rng_history, nuclear_tau_rng_step++, 8);
                                 }
+                                if constexpr(!BroadBeam) if(condensed_device.nodes) {
+                                    // Preview exactly the existing clock initialization;
+                                    // the shared consumer below owns and updates it.
+                                    const float tau=nuclear_tau_active?nuclear_tau_remaining:
+                                        -std::log(std::max(u_nuc,1.0e-12F));
+                                    condensed_plane=condensed_plane_prepare(condensed_device,
+                                        global_urban_proposal,spot_seed,rng_history,steps,
+                                        macro_tot,tau);
+                                    condensed_prepared=true;
+                                    if(!global_urban_proposal.valid) {
+                                        record_unified_em_failure(unified_failure_count,unified_failure_records,70,
+                                            -1,primary_atomic_number,primary_mass_number,energy_MeV,
+                                            local_density_g_per_cm3,accepted_loss_path_mm);
+                                        unified_count(0);break;
+                                    }
+                                    accepted_loss_path_mm=global_urban_proposal.true_path;
+                                }
                                 const bool collision = consume_schneider_optical_depth_segment(
                                     nuclear_tau_remaining, nuclear_tau_active,
                                     accepted_loss_path_mm, macro_tot, u_nuc);
@@ -716,9 +737,26 @@
                         }
                     }
 
-                    if((kUniformWaterPrimaryPath || global_urban)) {
-                        global_urban_scattering=urban_global_finalize(global_urban_proposal,accepted_loss_path_mm,
+                    if constexpr(!BroadBeam) if(condensed_device.nodes && !condensed_prepared) {
+                        condensed_plane=condensed_plane_prepare(condensed_device,global_urban_proposal,
                             spot_seed,rng_history,steps);
+                        if(!global_urban_proposal.valid) {
+                            record_unified_em_failure(unified_failure_count,unified_failure_records,70,
+                                -1,primary_atomic_number,primary_mass_number,energy_MeV,
+                                local_density_g_per_cm3,accepted_loss_path_mm);
+                            unified_count(0);break;
+                        }
+                        accepted_loss_path_mm=global_urban_proposal.true_path;
+                    }
+                    if((kUniformWaterPrimaryPath || global_urban)) {
+                        global_urban_scattering=condensed_plane_finalize(global_urban_proposal,condensed_plane,accepted_loss_path_mm,
+                            spot_seed,rng_history,steps);
+                        if (condensed_plane.failed) {
+                            record_unified_em_failure(unified_failure_count, unified_failure_records, 71,
+                                -1, primary_atomic_number, primary_mass_number, energy_MeV,
+                                local_density_g_per_cm3, accepted_loss_path_mm);
+                            unified_count(0);break;
+                        }
                         const int reason=urban_step_field_reason(global_urban_scattering);
                         if(reason) {
                             record_unified_em_failure(unified_failure_count,unified_failure_records,80+reason,
@@ -884,6 +922,9 @@
                         const auto p=urban_voxel_snap_endpoint(global_urban_proposal.cell,step_mm,
                             {position_x_mm,position_y_mm,position_z_mm});
                         position_x_mm=p.x;position_y_mm=p.y;position_z_mm=p.z;
+                        if(condensed_plane.used){position_x_mm=condensed_plane.endpoint.x;
+                            position_y_mm=condensed_plane.endpoint.y;position_z_mm=condensed_plane.endpoint.z;}
+
                     }
 
                     if (!(kUniformWaterPrimaryPath || global_urban) && ((!kUniformWaterPrimaryPath && enable_ct_grid)) && in_ct && ct_clamp_res.hit_face && !inelastic_this_step && !ct_elastic_this_step) {
@@ -1937,8 +1978,8 @@
                             const auto response=beamline_em.at(0,ion);
                             const auto mean_loss=response.mean_loss(energy,path);
                             std::uint64_t draw_index=0;
-                            auto uniform=[&](){return (rng::random_u32(random_seed,cascade.rng_stream,
-                                (std::uint64_t(step)<<32)|draw_index++,124)>>8)*0x1p-24f;};
+                            auto uniform=[&](){return (rng::copper_loss_u32(random_seed,cascade.rng_stream,
+                                step,draw_index++)>>8)*0x1p-24f;};
                             const auto draw=sample_beamline_fluctuation(energy,
                                 ion>=0?beamline_em.species[ion].mass_MeV:0.f,cascade.z,cascade.a,
                                 mean_loss,path,response,minibeam_copper_fragment_enable_energy_straggling,uniform);

@@ -89,6 +89,18 @@ inline std::uint32_t random_u32(std::uint64_t seed,
     return generated[random_dimension % 4U];
 }
 
+// Copper loss draws have a per-step draw counter. Its upper 32 bits
+// must not alias source, medium-loss or nuclear dimensions in random_u32.
+// A separate Philox key keeps this sequence independent of those decisions;
+// the existing air-transport key and all other streams stay unchanged.
+inline std::uint32_t copper_loss_u32(std::uint64_t seed,
+                                     std::uint64_t history_id,
+                                     std::uint64_t step,
+                                     std::uint64_t draw) noexcept {
+    constexpr std::uint64_t domain_key = 0xC05F9D7A6B3E2149ULL;
+    return random_u32(seed ^ domain_key, history_id, (step << 32U) | draw, 124U);
+}
+
 inline float uniform01(std::uint64_t seed,
                        std::uint64_t history_id,
                        std::uint64_t interaction_index,

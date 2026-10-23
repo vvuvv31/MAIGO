@@ -230,6 +230,9 @@ struct TransportConfig {
     std::string multiple_scattering_model{"urban_v2"};
     // Global Urban v2: exact material/cut couples, every transported charged ion.
     std::filesystem::path urban_mcs_package_file{};
+    // Optional joint Urban response for C12 in water. Unsupported step states
+    // retain ordinary Urban; this package never applies to CT or secondaries.
+    std::filesystem::path urban_water_condensed_response_file{};
     // Research-only same-composition density scaling; not a CT dose validation.
     bool urban_ct_density_scaling{false};
     // Physical water box outside the scored ROI (required in global water mode).

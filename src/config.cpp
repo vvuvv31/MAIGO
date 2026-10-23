@@ -572,6 +572,10 @@ void TransportConfig::validate() const {
             "multiple_scattering_model must be fermi_eyges or urban_v2");
     }
 
+    if (!urban_water_condensed_response_file.empty() &&
+        (enable_ct_grid || !enable_minibeam || multiple_scattering_model != "urban_v2" ||
+         !unified_water_nuclear_transport || primary_atomic_number != 6 || primary_mass_number != 12))
+        throw std::invalid_argument("urban_water_condensed_response_file requires C12 water minibeam Urban transport");
     if(urban_ct_density_scaling && (run_mode!=RunMode::research ||
        !enable_ct_grid || multiple_scattering_model!="urban_v2"))
         throw std::invalid_argument("urban_ct_density_scaling requires research Schneider CT with global Urban");
@@ -1111,6 +1115,8 @@ TransportConfig load_config(const std::filesystem::path& path) {
     }
     if(const auto it=values.find("urban_mcs_package_file");it!=values.end())
         config.urban_mcs_package_file=it->second;
+    config.urban_water_condensed_response_file = parse_path(values,
+        "urban_water_condensed_response_file", config.urban_water_condensed_response_file);
     config.urban_water_half_width_mm=parse_number(values,"urban_water_half_width_mm",config.urban_water_half_width_mm);
     config.urban_ct_density_scaling=parse_bool(values,"urban_ct_density_scaling",config.urban_ct_density_scaling);
     config.fermi_eyges_max_segment_mm = parse_number(

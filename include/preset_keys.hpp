@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <array>
 namespace carbon {
-inline constexpr std::array<std::string_view,137> preset_keys{
+inline constexpr std::array<std::string_view,138> preset_keys{
     "LET",
     "letd_output_prefix",
     "letd_recoil_electronic_stopping_file",
@@ -132,6 +132,7 @@ inline constexpr std::array<std::string_view,137> preset_keys{
     "unified_water_nuclear_transport",
     "urban_ct_density_scaling",
     "urban_mcs_package_file",
+    "urban_water_condensed_response_file",
     "urban_water_half_width_mm",
     "voxel_bins_x",
     "voxel_bins_y",

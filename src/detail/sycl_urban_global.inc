@@ -5,14 +5,14 @@ inline bool urban_global_outside_water(Direction3F p,Direction3F d,float h,float
         (p.y== -h && d.y<0) || (p.y==h && d.y>=0);
 }
 // TOPAS water includes a physical replica ROI inside a larger water box.
-// Exterior tracks remain in water and may re-enter the ROI; no artificial
-// replica faces are introduced outside the scored daughter volume.
+// Full-water IDD depth planes also bound steps outside the lateral ROI.
+// Preserve these planes while allowing escape and re-entry through its sides.
 inline UrbanVoxelCell urban_global_water_cell(Direction3F p,Direction3F d,
     Direction3F lo,Direction3F hi,Direction3F pitch,int nx,int ny,int nz,float half_width) {
     auto cell=urban_voxel_cell(p,d,lo,hi,pitch,nx,ny,nz);
     if(cell.valid)return cell;
     cell=urban_voxel_cell(p,d,{-half_width,-half_width,lo.z},
-        {half_width,half_width,hi.z},{2*half_width,2*half_width,hi.z-lo.z},1,1,1);
+        {half_width,half_width,hi.z},{2*half_width,2*half_width,pitch.z},1,1,nz);
     if(!cell.valid)return cell;
     auto& safety=cell.safety;safety.kind=2;
     safety.inner_x0=lo.x;safety.inner_x1=hi.x;safety.inner_y0=lo.y;safety.inner_y1=hi.y;

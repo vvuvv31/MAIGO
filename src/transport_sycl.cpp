@@ -7,6 +7,7 @@
 #include "runtime_timing.hpp"
 #include "unified_em_view.hpp"
 #include "urban_ct_loss.hpp"
+#include "urban_condensed_response.hpp"
 #include <fstream>
 #include <charconv>
 #include <sstream>
@@ -102,7 +103,8 @@ enum : std::size_t {
 };
 }
 
-constexpr std::size_t minibeam_event_counter_count = 170;
+constexpr std::size_t minibeam_event_counter_count = 171;
+constexpr std::size_t copper_primary_lookup_failure_slot = 170;
 constexpr std::size_t copper_fragment_post_loss_null_slot = 169;
 constexpr std::size_t copper_ion_first_failure_slot = 161; // claim + reason/ZA/energy/step/path/tau
 constexpr std::size_t copper_fragment_urban_slot = 160;
@@ -438,6 +440,8 @@ inline constexpr unsigned kUnifiedEmAuditShards = CARBON_EM_AUDIT_SHARDS;
 inline constexpr unsigned kUnifiedEmAuditCounters = 4;
 #include "detail/sycl_device_math.inc"
 #include "detail/sycl_urban_global.inc"
+#include "detail/sycl_condensed_response.inc"
+#include "detail/sycl_condensed_plane.inc"
 
 // Urban accepted-step contract checks (device-side).
 // Reason codes (0 = accept): 1 invalid proposal (includes the RNG

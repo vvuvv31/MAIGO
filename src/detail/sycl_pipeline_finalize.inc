@@ -86,6 +86,8 @@
                    minibeam_event_counts_host.data(),
                    minibeam_event_counts_host.size());
         queue.wait_and_throw();
+        if (minibeam_event_counts_host[copper_primary_lookup_failure_slot])
+            throw std::runtime_error("Cu primary final-state lookup/coverage failure; reject partial dose");
         {
             std::cout << (primary_atomic_number == 1 && primary_mass_number == 1
                              ? "COPPER_PROTON_LOSS_QUALITY failures=" : "COPPER_ION_LOSS_QUALITY failures=")

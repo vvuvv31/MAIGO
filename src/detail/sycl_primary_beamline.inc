@@ -498,8 +498,7 @@
                         const auto mean_loss=response.mean_loss_with_range(
                             energy_MeV,true_loss_path_mm,range);
                         std::uint64_t draw_index=0;
-                        auto uniform=[&](){return (rng::random_u32(spot_seed,rng_history,
-                            (std::uint64_t(beamline_step)<<32)|draw_index++,124)>>8)*0x1p-24f;};
+                        auto uniform=[&](){return (rng::copper_loss_u32(spot_seed,rng_history,beamline_step,draw_index++)>>8)*0x1p-24f;};
                         const auto draw=sample_beamline_fluctuation<
                             std::is_same_v<Pipeline,pipelines::ProtonMinibeam>>(
                             energy_MeV,primary_rest_mass_MeV,primary_atomic_number,primary_mass_number,
@@ -596,6 +595,11 @@
                                                        beamline_step, 63),
                                         rng::uniform01(spot_seed, rng_history,
                                                        beamline_step, 64));
+                                    if (lookup.status != Cinel03LookupStatus::Hit) {
+                                        sycl::atomic_ref<std::uint64_t, sycl::memory_order::relaxed,
+                                            sycl::memory_scope::device, sycl::access::address_space::global_space>(
+                                            minibeam_event_counts_device[copper_primary_lookup_failure_slot]).fetch_add(1U);
+                                    }
                                     float queued_energy = 0.0F;
                                     if (lookup.status == Cinel03LookupStatus::Hit) {
                                         const auto& event = minibeam_copper_interactions_device[

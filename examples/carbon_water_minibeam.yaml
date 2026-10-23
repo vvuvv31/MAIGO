@@ -96,6 +96,7 @@ minibeam_air_slit_max_step_mm: 0.05
 ct_schneider_primary_cinel03_file: data/nuclear/schneider/carbon/final_states.bin
 multiple_scattering_model: urban_v2
 urban_mcs_package_file: data/scattering/urban/ct_copper.bin
+urban_water_condensed_response_file: data/scattering/urban/water_carbon_condensed.bin
 urban_water_half_width_mm: 2000
 minibeam_copper_fragment_elastic_file: data/elastic/copper/carbon/fragments.csv
 minibeam_copper_fragment_urban_package_file: data/scattering/urban/copper_fragments.bin

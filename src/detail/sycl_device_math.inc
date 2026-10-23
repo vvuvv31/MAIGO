@@ -212,9 +212,9 @@ struct UrbanV2AngularSample {
 // Gate (double precision):
 //   r2 = |raw|^2; if r2 <= minDisplacement2 -> no position change;
 //   else dispR = sqrt(r2),
-//        postSafety = 0.99*min(isotropicSafety(endpoint), dispR) — the
-//        navigator caps ComputeSafety at maxLength=dispR (fix B2), so the
-//        far-field accept is really a 0.99 reduction, not a full accept;
+//        postSafety = 0.99*isotropicSafety(endpoint). The native parallel-
+//        geometry safety helper returns the full safety, rather than clipping
+//        it to dispR, so safe interior proposals are accepted in full;
 //   if postSafety > 0 && dispR <= postSafety -> full accept;
 //   else if postSafety > geomMin -> reduce by postSafety/dispR;
 //   else -> cancel.
@@ -253,16 +253,11 @@ inline float copper_urban_v2_accept_displacement(
         return 0.0F;
     }
     const double disp_r = sycl::sqrt(r2);
-    // G4SafetyHelper::ComputeSafety(fNewPosition, dispR) caps the reported
-    // safety at dispR (navigator maxLength; fix B2). Without the cap the
-    // far-field branch wrongly fully accepts (reference scales EVERY
-    // accepted displacement by 0.99); with it, branch 2 is reachable only
-    // through the uncapped corner paths, exactly as in AlongStepDoIt.
-    const double capped_safety =
-        (safety_mm > 0.0F) ? sycl::fmin(static_cast<double>(safety_mm),
-                                         disp_r)
-                            : 0.0;
-    const double post = 0.99 * capped_safety;
+    // The caller supplies geometric safety. With parallel scoring worlds,
+    // G4SafetyHelper evaluates the full safety even when passed dispR as a
+    // search bound. Preserve it: safe interior displacements are accepted
+    // in full; only boundary-adjacent displacements are reduced by 0.99*safety.
+    const double post = safety_mm > 0.0F ? 0.99 * static_cast<double>(safety_mm) : 0.0;
     if (post > 0.0 && disp_r <= post) {
         accepted_x = raw_x;
         accepted_y = raw_y;
@@ -1055,9 +1050,9 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
     if (t_final_mm >= range_mm) {
         return result;
     }
-    // Internal energy prediction (:784-790). Restricted DEDX from the loss
-    // table (GetDEDX with the production couple), NOT the caller's
-    // condensed-loss stopping and NOT post-straggling Epost (ordering kept).
+    // Internal energy prediction follows the active loss context and its
+    // consistent range/inverse. Water/CT use unrestricted stopping. This is
+    // the pre-fluctuation mean prediction, not the sampled post-loss energy.
     float kin_energy = epre_mev;
     if (t_final_mm > range_mm * kUrbanV2Dtrl) {
         kin_energy = mat.loss_context.energy(range_mm - t_final_mm);
@@ -1220,7 +1215,7 @@ CorrelatedScatteringStep copper_urban_v2_sample_full(
                     // carried: unconditional double cost 3-4x wall time on
                     // sm_75 for zero reachable effect.
                     // Kept exact and cheap: strict draws (B1), float 0.999
-                    // gate, omcth-based |cth| protection below, dispR-capped
+                    // gate, omcth-based |cth| protection below, geometric
                     // postSafety in the acceptance helper.
                     const auto x_mean1 =
                         1.0F - (1.0F - (1.0F + xsi) * ea) * x / eaa;

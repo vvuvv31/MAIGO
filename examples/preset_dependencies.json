@@ -146,7 +146,8 @@
         "urban_mcs_package_file": "data/scattering/urban/ct_copper.bin",
         "minibeam_copper_fragment_elastic_file": "data/elastic/copper/carbon/fragments.csv",
         "minibeam_copper_fragment_urban_package_file": "data/scattering/urban/copper_fragments.bin",
-        "minibeam_em_package_file": "data/stopping/beamline/unrestricted.bin"
+        "minibeam_em_package_file": "data/stopping/beamline/unrestricted.bin",
+        "urban_water_condensed_response_file": "data/scattering/urban/water_carbon_condensed.bin"
       },
       "files": [
         "data/elastic/copper/carbon/fragments.csv",
@@ -166,6 +167,7 @@
         "data/scattering/urban/air.bin",
         "data/scattering/urban/copper_fragments.bin",
         "data/scattering/urban/ct_copper.bin",
+        "data/scattering/urban/water_carbon_condensed.bin",
         "data/stopping/beamline/unrestricted.bin",
         "data/stopping/water/carbon.csv",
         "inputs/water_minibeam/carbon/spots.csv"
@@ -450,7 +452,10 @@
     },
     "data/nuclear/copper/proton/primary_rate.csv": {
       "bytes": 95386
+    },
+    "data/scattering/urban/water_carbon_condensed.bin": {
+      "bytes": 89725968
     }
   },
-  "total_unique_bytes": 4796721583
+  "total_unique_bytes": 4886447551
 }
