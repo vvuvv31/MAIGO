@@ -129,11 +129,11 @@ echo 10000000 | sudo tee "$ARC_ENGINE/preempt_timeout_us"
 ### 3. Download physics assets
 
 Download and extract the physics assets from the
-[v2026.10.20 Release](https://github.com/vvuvv31/MAIGO/releases/tag/v2026.10.20):
+[latest Release](https://github.com/vvuvv31/MAIGO/releases/latest):
 
 ```bash
 export ASSET_DIR="$(dirname "$MAIGO_ROOT")/maigo_assets"
-export RELEASE_URL=https://github.com/vvuvv31/MAIGO/releases/download/v2026.10.20
+export RELEASE_URL=https://github.com/vvuvv31/MAIGO/releases/latest/download
 mkdir -p "$ASSET_DIR"
 curl --fail --location --retry 3 "$RELEASE_URL/maigo_four_ct_assets.tar.gz" \
   --output "$ASSET_DIR/maigo_four_ct_assets.tar.gz"
@@ -223,9 +223,12 @@ scattering and nuclear elastic transport for charged fragments in copper.
 Maximum ion steps are **1.0 mm for broadbeams**, **0.5 mm for minibeams** and
 **0.05 mm in copper**. These caps override YAML step-cap values. Dose to medium
 is scored, with optional dose-averaged electronic LET.
+For LET scoring, set `letd_output_prefix` and
+`letd_recoil_electronic_stopping_file: data/let/schneider/recoil_electronic_stopping.bin`
+in the run YAML.
 
 Physics assets are organized under `data/` by module: `materials/`, `em/`,
-`nuclear/`, `elastic/`, `stopping/`, `scattering/` and `ionization/`.
+`nuclear/`, `elastic/`, `stopping/`, `scattering/` and `let/`.
 Required files are listed in [preset dependencies](examples/preset_dependencies.json).
 Model details are in [Materials and Methods](mm.md) ([中文](mm_zh.md)); offline
 TOPAS/Geant4 data extraction is described in [extensions/](extensions/README.md).

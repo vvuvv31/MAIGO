@@ -1,6 +1,6 @@
 {
   "schema": 4,
-  "scope": "Eight preset inputs and runtime physics packages. No verification JSON sidecars.",
+  "scope": "Eight preset inputs, runtime physics packages and optional electronic LET. Informational inventory only; no verification sidecars.",
   "presets": {
     "carbon_ct_broadbeam": {
       "config": "examples/carbon_ct_broadbeam.yaml",
@@ -341,6 +341,16 @@
       ]
     }
   },
+  "optional_features": {
+    "electronic_let": {
+      "inputs": {
+        "letd_recoil_electronic_stopping_file": "data/let/schneider/recoil_electronic_stopping.bin"
+      },
+      "files": [
+        "data/let/schneider/recoil_electronic_stopping.bin"
+      ]
+    }
+  },
   "files": {
     "data/elastic/schneider/carbon/all_ion.bin": {
       "bytes": 200299108
@@ -382,16 +392,16 @@
       "bytes": 22150
     },
     "data/elastic/copper/carbon/fragments.csv": {
-      "bytes": 293693941
+      "bytes": 306400343
     },
     "data/elastic/copper/carbon/primary.csv": {
       "bytes": 103169208
     },
     "data/nuclear/copper/carbon/cascade.cinpkg": {
-      "bytes": 967410412
+      "bytes": 1164852564
     },
     "data/nuclear/copper/carbon/primary_rate.csv": {
-      "bytes": 6303
+      "bytes": 146613
     },
     "data/nuclear/copper/ion_cross_sections.csv": {
       "bytes": 367159
@@ -400,13 +410,13 @@
       "bytes": 1071856
     },
     "data/scattering/urban/copper_fragments.bin": {
-      "bytes": 46229672
+      "bytes": 48227248
     },
     "data/scattering/urban/ct_copper.bin": {
       "bytes": 752387952
     },
     "data/stopping/beamline/unrestricted.bin": {
-      "bytes": 85458416
+      "bytes": 89150424
     },
     "inputs/lung_minibeam/ct.bin": {
       "bytes": 152964248
@@ -455,7 +465,10 @@
     },
     "data/scattering/urban/water_carbon_condensed.bin": {
       "bytes": 89725968
+    },
+    "data/let/schneider/recoil_electronic_stopping.bin": {
+      "bytes": 528040
     }
   },
-  "total_unique_bytes": 4886447551
+  "total_unique_bytes": 5102954039
 }
