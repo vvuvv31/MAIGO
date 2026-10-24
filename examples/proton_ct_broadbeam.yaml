@@ -55,7 +55,6 @@ primary_mass_number: 1
 ct_grid_file: inputs/rt07575_head/proton/ct.bin
 enable_ct_material_mcs: true
 ct_skip_homogeneous_face_clamp: true
-fermi_eyges_gaussian_only: true
 tpsSource: true
 enable_tps_coordinate_system: true
 tps_angle_convention: dicom_lps

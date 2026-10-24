@@ -60,7 +60,6 @@ history_chunk_size: 524288
 multiple_scattering_model: fermi_eyges
 fermi_eyges_max_segment_mm: 1.0
 transport_profile: broadbeam_fast
-fermi_eyges_gaussian_only: true
 secondary_species_grouping: true
 secondary_step_chunking: true
 broadbeam_maximum_mean_loss_fraction: 0.05

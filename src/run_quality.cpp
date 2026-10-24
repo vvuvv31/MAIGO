@@ -127,9 +127,6 @@ RunQualityReport evaluate_run_quality(const TransportConfig& config,
             "Copper primary transport uses the configured source ZA, elastic bank and nuclear event package; charged nuclear products use full native species electronic response in Copper and Highland secondary MCS. Nuclear neutrals remain an explicit beamline energy sink; dose acceptance pending",1.,0.});
     }
 
-    if(config.fermi_eyges_gaussian_only)
-        report.approximations.push_back({"gaussian_fermi_eyges_candidate",
-            "Gaussian FE matches local angular/displacement second moments of the existing FE core+tail model; non-Gaussian tails and heterogeneous patient dose require independent validation",1.,0.});
     if(config.broadbeam_maximum_mean_loss_fraction != 0.01)
         report.approximations.push_back({"broadbeam_extended_mean_loss",
             "Research FE mean-loss cap relaxed; geometry faces, nuclear competition and sampled loss remain active; patient gamma requires validation",

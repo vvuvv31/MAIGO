@@ -175,8 +175,10 @@
                     const auto mean=response.mean_loss_with_range(energy_MeV,
                         step.final_true_path_mm,step.current_range_mm);
                     std::uint64_t draw_index=0;
-                    auto uniform=[&](){return (rng::random_u32(spot_seed ^ 0xA17B09D5C628E341ULL,
-                        rng_history,(air_urban_step<<32)|draw_index++,124)>>8)*0x1p-24f;};
+                    // Step-keyed stream (same Philox key as the legacy air draws).
+                    const auto air_loss_key=rng::fluctuation_step_key(
+                        spot_seed ^ 0xA17B09D5C628E341ULL,rng_history,air_urban_step);
+                    auto uniform=[&](){return rng::splitmix_unit24(air_loss_key,draw_index++);};
                     const auto draw=sample_beamline_fluctuation(energy_MeV,primary_rest_mass_MeV,
                         primary_atomic_number,primary_mass_number,mean,step.final_true_path_mm,
                         response,minibeam_copper_enable_energy_straggling,uniform);
@@ -498,7 +500,10 @@
                         const auto mean_loss=response.mean_loss_with_range(
                             energy_MeV,true_loss_path_mm,range);
                         std::uint64_t draw_index=0;
-                        auto uniform=[&](){return (rng::copper_loss_u32(spot_seed,rng_history,beamline_step,draw_index++)>>8)*0x1p-24f;};
+                        // Step-keyed stream (same Philox key as copper_loss_u32).
+                        const auto copper_loss_key=rng::fluctuation_step_key(
+                            spot_seed ^ 0xC05F9D7A6B3E2149ULL,rng_history,beamline_step);
+                        auto uniform=[&](){return rng::splitmix_unit24(copper_loss_key,draw_index++);};
                         const auto draw=sample_beamline_fluctuation<
                             std::is_same_v<Pipeline,pipelines::ProtonMinibeam>>(
                             energy_MeV,primary_rest_mass_MeV,primary_atomic_number,primary_mass_number,

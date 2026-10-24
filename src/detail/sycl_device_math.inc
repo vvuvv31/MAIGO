@@ -1746,8 +1746,7 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
     const float radiation_length_g_per_cm2, const std::uint64_t seed,
     const std::uint64_t history_id, const std::uint64_t step_index,
     const std::uint32_t random_dimension,
-    const float mass_per_u = static_cast<float>(nucleon_rest_mass_MeV),
-    const bool gaussian_only = false) noexcept {
+    const float mass_per_u = static_cast<float>(nucleon_rest_mass_MeV)) noexcept {
     CorrelatedScatteringStep result{direction, Direction3F{0.0F, 0.0F, 0.0F}};
     if (kinetic_energy_MeV <= 0.0F || atomic_number <= 0 || mass_number <= 0 ||
         path_length_mm <= 0.0F ||
@@ -1785,12 +1784,9 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
         static_cast<float>(atomic_number) / (beta * momentum);
     const auto core_ratio =
         parameters.core_scattering_energy_MeV * charge_over_beta_momentum;
-    // Match the full local second moment, including Poisson tail variance.
-    // FE covariance per transverse axis: A0=T*L, A1=T*L^2/2, A2=T*L^3/3.
-    const auto tail_sigma_for_moments =
-        parameters.tail_scattering_energy_MeV * charge_over_beta_momentum;
-    const auto core_power = core_ratio * core_ratio / radiation_length_mm +
-        (gaussian_only ? tail_rate_per_mm * tail_sigma_for_moments * tail_sigma_for_moments : 0.0F);
+    // Gaussian-core FE covariance per axis: A0=T*L, A1=T*L^2/2,
+    // A2=T*L^3/3. Keep rare tails separate to preserve the core width.
+    const auto core_power = core_ratio * core_ratio / radiation_length_mm;
     const auto core_theta_sigma = sycl::sqrt(core_power * path_length_mm);
 
     const auto normal_pair = [&](const std::uint32_t dimension) {
@@ -1823,7 +1819,7 @@ CorrelatedScatteringStep water_ion_fermi_eyges_tail_step(
     const auto poisson_limit = sycl::exp(-tail_mean);
     auto poisson_product = 1.0F;
     std::uint32_t tail_count = 0U;
-    while (!gaussian_only) {
+    while (true) {
         poisson_product *= sycl::fmax(
             rng::uniform01(seed, history_id, step_index,
                            random_dimension + 4U + tail_count),
@@ -1895,8 +1891,7 @@ CorrelatedScatteringStep ion_fermi_eyges_transport_step(
     const float radiation_length_g_per_cm2, const std::uint64_t seed,
     const std::uint64_t history_id, const std::uint64_t transport_step_index,
     const std::uint32_t random_dimension,
-    const float mass_per_u = static_cast<float>(nucleon_rest_mass_MeV),
-    const bool gaussian_only = false) noexcept {
+    const float mass_per_u = static_cast<float>(nucleon_rest_mass_MeV)) noexcept {
     CorrelatedScatteringStep result{
         direction, Direction3F{0.0F, 0.0F, 0.0F}};
     if (!(path_length_mm > 0.0F && max_segment_mm > 0.0F)) return result;
@@ -1919,7 +1914,7 @@ CorrelatedScatteringStep ion_fermi_eyges_transport_step(
             density_g_per_cm3, radiation_length_g_per_cm2, seed, history_id,
             transport_step_index * 1024U + segment_index,
             random_dimension,
-            mass_per_u, gaussian_only);
+            mass_per_u);
         total_offset.x += segment_direction.x * segment_mm +
                           segment.displacement_mm.x;
         total_offset.y += segment_direction.y * segment_mm +

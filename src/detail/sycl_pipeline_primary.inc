@@ -201,6 +201,60 @@
     std::vector<sycl::event> beamline_extra_events, beamline_order_events;
     std::cout << "[beamline-continuation] enabled=" << use_beamline_continuation
               << " bytes=" << sizeof(BeamlineContinuation) << " segment=64\n";
+    // Kernel closures stay in device memory: work-items read captured views
+    // through one uniform pointer instead of a per-work-item stack copy. The
+    // in-order queue orders each closure upload before its launch; host
+    // staging copies stay alive until the pipeline has drained.
+#ifndef CARBON_INTEL_GPU_AOT
+    struct ResidentClosureStorage {
+        sycl::queue& queue;
+        std::vector<std::vector<std::byte>> copies;
+
+        ~ResidentClosureStorage() noexcept {
+            // Drain uploads before member buffers are destroyed, including
+            // when a later allocation or kernel submission throws. Normal
+            // execution reports asynchronous errors at its explicit waits.
+            try { queue.wait(); } catch (...) {}
+        }
+    } resident_closure_host{queue, {}};
+    std::byte* resident_closure_block = nullptr;
+    std::size_t resident_closure_used = 0, resident_closure_cap = 0;
+#endif
+    const auto resident_launch = [&](auto name_tag, auto range, const auto& body) {
+        using Name = typename decltype(name_tag)::type;
+        using Body = std::decay_t<decltype(body)>;
+        static_assert(std::is_trivially_copyable_v<Body>);
+#ifdef CARBON_INTEL_GPU_AOT
+        // Intel already passes immutable views through intel_primary_context;
+        // keep its direct launches unchanged.
+        if constexpr (std::is_void_v<Name>) return queue.parallel_for(range, body);
+        else return queue.parallel_for<Name>(range, body);
+#else
+        constexpr std::size_t kAlign = 256, kBlock = std::size_t{4} << 20;
+        const std::size_t bytes = (sizeof(Body) + kAlign - 1) / kAlign * kAlign;
+        if (resident_closure_block == nullptr || resident_closure_used + bytes > resident_closure_cap) {
+            resident_closure_cap = std::max(kBlock, bytes);
+            resident_closure_block = mem_tracker.allocate<std::byte>(resident_closure_cap);
+            if (resident_closure_block == nullptr) throw std::bad_alloc();
+            resident_closure_used = 0;
+        }
+        auto* device_body = reinterpret_cast<Body*>(resident_closure_block + resident_closure_used);
+        resident_closure_used += bytes;
+        auto& staged = resident_closure_host.copies.emplace_back(sizeof(Body));
+        std::memcpy(staged.data(), static_cast<const void*>(&body), sizeof(Body));
+        queue.memcpy(device_body, staged.data(), sizeof(Body));
+        const Body* resident_body = device_body;
+        if constexpr (std::is_void_v<Name>) {
+            if constexpr (std::is_same_v<decltype(range), sycl::nd_range<1>>)
+                return queue.parallel_for(range, [resident_body](sycl::nd_item<1> item) { (*resident_body)(item); });
+            else
+                return queue.parallel_for(range, [resident_body](sycl::id<1> item) { (*resident_body)(item); });
+        } else if constexpr (std::is_same_v<decltype(range), sycl::nd_range<1>>)
+            return queue.parallel_for<Name>(range, [resident_body](sycl::nd_item<1> item) { (*resident_body)(item); });
+        else
+            return queue.parallel_for<Name>(range, [resident_body](sycl::id<1> item) { (*resident_body)(item); });
+#endif
+    };
     std::vector<sycl::event> primary_events;
     primary_events.reserve((compact_minibeam_primary ? 2 : 1) *
                            ((number_of_histories + history_chunk - 1) / history_chunk));
@@ -261,8 +315,8 @@
             const auto ct_runtime_primary_mass_number = primary_mass_number;
             const auto ct_runtime_inverse_mass_number = inverse_mass_number;
 
-            return queue.parallel_for<PrimaryTransportKernel<
-                Pipeline, kUniformWaterPrimaryPath, kKernelStage, BroadBeam>>(
+            return resident_launch(std::type_identity<PrimaryTransportKernel<
+                Pipeline, kUniformWaterPrimaryPath, kKernelStage, BroadBeam>>{},
             sycl::nd_range<1>{
                 sycl::range<1>{
                     kKernelStage == primary_stage::beamline_queued_children && use_beamline_continuation
@@ -342,12 +396,10 @@
                 // history instead of one single-address FP64 atomic per step.
                 double grid_in_pending_MeV = 0.0, grid_out_pending_MeV = 0.0;
                 auto grid_split = [&](bool in_grid, float value_MeV) {
-                    if constexpr (BroadBeam) {
-                        if (sycl::isfinite(value_MeV) && value_MeV > 0.0F) {
+                    if (sycl::isfinite(value_MeV) && value_MeV > 0.0F) {
                             if (in_grid) grid_in_pending_MeV += value_MeV;
                             else grid_out_pending_MeV += value_MeV;
                         }
-                    } else grid_deposit_split_device(grid_deposited_in_device, grid_deposited_out_device, in_grid, value_MeV);
                 };
                 std::uint64_t local_schneider_rate_queries = 0;
                 std::uint32_t steps = 0;
@@ -364,6 +416,15 @@
                 int pending_primary_bin = 0;
                 double pending_primary_voxel_MeV = 0.0;
                 std::size_t pending_primary_voxel = number_of_voxels;
+                double pending_primary_in_fov_MeV = 0.0;
+                auto flush_primary_in_fov=[&]() {
+                    if (pending_primary_in_fov_MeV != 0.0 && in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
+                        pending_primary_bin < static_cast<int>(number_of_bins))
+                        sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed, sycl::memory_scope::device,
+                            sycl::access::address_space::global_space>(in_fov_dose_device[pending_primary_bin])
+                            .fetch_add(static_cast<DepthAtomicT>(pending_primary_in_fov_MeV));
+                    pending_primary_in_fov_MeV = 0.0;
+                };
 
                 float nuclear_tau_remaining = 0.0F;
                 HadronicRateCache primary_hadronic_cache;
@@ -405,6 +466,13 @@
                     // after its launch ends; rebind before any resumed query.
                     if(unified_primary_state.tables)unified_primary_state.tables=&unified_device;
                 }
+                std::uint64_t em_audit_steps_pending=0, em_audit_loss_pending=0;
+                auto flush_em_audit=[&]() {
+                    using AuditRef=sycl::atomic_ref<std::uint64_t,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>;
+                    if(em_audit_steps_pending)AuditRef(unified_audit[1*kUnifiedEmAuditShards+lane%kUnifiedEmAuditShards]).fetch_add(em_audit_steps_pending);
+                    if(em_audit_loss_pending)AuditRef(unified_audit[3*kUnifiedEmAuditShards+lane%kUnifiedEmAuditShards]).fetch_add(em_audit_loss_pending);
+                    em_audit_steps_pending=0;em_audit_loss_pending=0;
+                };
                 unsigned segment_iterations=0;
                 const std::uint32_t max_primary_steps = maximum_primary_steps;
                 while (energy_MeV > energy_cutoff_MeV && steps < max_primary_steps) {
@@ -434,6 +502,7 @@
                             saved.unified_primary_counter=unified_primary_counter;
                             saved.interaction_section=interaction_section;
                             saved.interaction_density=interaction_density;
+                            flush_primary_in_fov();flush_em_audit();
                             const auto rank=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,
                                 sycl::memory_scope::device,sycl::access::address_space::global_space>(*continuation_count).fetch_add(1);
                             // The host rejects an oversized count before the
@@ -543,7 +612,12 @@
                     float step_mm = 0.0F;
                     UnifiedEmPointStep unified_primary_pre;
                     UnifiedEmPoint unified_primary_point;
-                    auto unified_uniform=[&](){return (rng::random_u32(spot_seed,rng_history,unified_primary_counter++,120)>>8)*0x1p-24f;};
+                    // Step-keyed fluctuation stream: draw j of this step is SplitMix64
+                    // output j+1 from a Philox key of (history, step-start counter).
+                    // The counter still advances once per draw, so keys never repeat.
+                    std::uint64_t unified_step_counter=0, unified_loss_key=0;
+                    auto unified_uniform=[&](){return rng::splitmix_unit24(unified_loss_key,
+                        unified_primary_counter++ - unified_step_counter);};
                     auto unified_count=[&](int index,std::uint64_t count=1){
                         if(count==0)return; // zero-increment diagnostics must not touch globals
                         {
@@ -773,6 +847,8 @@
                     float deposited_MeV = 0.0F;
                     if (urban_range_limited) deposited_MeV = energy_MeV;
                     if(!urban_range_limited){
+                        unified_step_counter=unified_primary_counter;
+                        unified_loss_key=rng::fluctuation_step_key(spot_seed,rng_history,unified_step_counter);
                         auto draw=[&](){
                             if constexpr(kSpecializedCtPath)return unified_em_loss<kLocalProtonCtPath,true,kSpecializedCtPath>(
                                 unified_primary_state,energy_MeV,accepted_loss_path_mm,enable_energy_straggling,
@@ -792,8 +868,8 @@
                                 accepted_loss_path_mm, draw.mean,
                                 draw.variance, draw.tmax);
                             unified_count(0);break;}
-                        deposited_MeV=draw.loss;unified_count(1);
-                        unified_count(3,static_cast<std::uint64_t>(draw.loss*1e6f));
+                        deposited_MeV=draw.loss;++em_audit_steps_pending;
+                        em_audit_loss_pending+=static_cast<std::uint64_t>(draw.loss*1e6f);
                     }
                     if (enable_minibeam) {
                         deposited_MeV = sycl::fmin(
@@ -826,6 +902,7 @@
                             pending_primary_depth_MeV = 0.0;
                         }
 
+                        flush_primary_in_fov();
                         pending_primary_bin = bin;
                     }
                     if ((enable_voxel_scoring) && primary_scoring_voxel != pending_primary_voxel) {
@@ -849,12 +926,7 @@
 
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
                             pending_primary_bin < static_cast<int>(number_of_bins)) {
-                            sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
-                                             sycl::memory_scope::device,
-                                             sycl::access::address_space::global_space>
-                                atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
-                            atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(
-                                deposited_MeV));
+                            pending_primary_in_fov_MeV += deposited_MeV;
                         }
                     }
                     history_deposited_MeV += deposited_MeV;
@@ -901,7 +973,7 @@
                                     radiation_length_g_per_cm2, spot_seed,
                                     rng_history,
                                     static_cast<std::uint64_t>(steps), 40U,
-                                    primary_fe_mass_per_u, fe_gaussian_only);
+                                    primary_fe_mass_per_u);
 
                             direction_x = correlated.direction.x;
                             direction_y = correlated.direction.y;
@@ -1055,8 +1127,7 @@
                                 history_deposited_MeV += scat.recoil_ke_MeV;
                                 sycl::atomic_ref<float,sycl::memory_order::relaxed,sycl::memory_scope::device,sycl::access::address_space::global_space>(elastic_energy[0]).fetch_add(scat.recoil_ke_MeV);
                                 pending_primary_depth_MeV += scat.recoil_ke_MeV;
-                                grid_deposit_split_device(grid_deposited_in_device,grid_deposited_out_device,
-                                    enable_voxel_scoring && primary_score_cell_valid,scat.recoil_ke_MeV);
+                                grid_split(enable_voxel_scoring && primary_score_cell_valid,scat.recoil_ke_MeV);
                             }
                         }
                     }
@@ -1153,9 +1224,7 @@
                             pending_primary_voxel_MeV += local_deposit;
                         }
                         history_deposited_MeV += local_deposit;
-                        grid_deposit_split_device(
-                            grid_deposited_in_device, grid_deposited_out_device,
-                            enable_voxel_scoring && primary_score_cell_valid, local_deposit);
+                        grid_split(enable_voxel_scoring && primary_score_cell_valid, local_deposit);
 
                         float charged_accounted_MeV = 0.0F;
                         float neutral_accounted_MeV = 0.0F;
@@ -1286,10 +1355,7 @@
                                 }
 
                                 history_deposited_MeV += product.kinetic_energy_MeV;
-                                grid_deposit_split_device(
-                                    grid_deposited_in_device,
-                                    grid_deposited_out_device,
-                                    enable_voxel_scoring && primary_score_cell_valid,
+                                grid_split(enable_voxel_scoring && primary_score_cell_valid,
                                     product.kinetic_energy_MeV);
                                 charged_accounted_MeV += product.kinetic_energy_MeV;
                                 schneider_diag_increment_device(
@@ -1373,17 +1439,11 @@
                         pending_primary_voxel_MeV += cutoff_energy_MeV;
                         if (in_fov_dose_device != nullptr && pending_primary_bin >= 0 &&
                             pending_primary_bin < static_cast<int>(number_of_bins)) {
-                            sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
-                                             sycl::memory_scope::device,
-                                             sycl::access::address_space::global_space>
-                                atomic_in_fov(in_fov_dose_device[pending_primary_bin]);
-                            atomic_in_fov.fetch_add(static_cast<DepthAtomicT>(cutoff_energy_MeV));
+                            pending_primary_in_fov_MeV += cutoff_energy_MeV;
                         }
                     }
                     history_deposited_MeV += cutoff_energy_MeV;
-                    grid_deposit_split_device(
-                        grid_deposited_in_device, grid_deposited_out_device,
-                        (enable_voxel_scoring) && pending_primary_voxel <
+                    grid_split((enable_voxel_scoring) && pending_primary_voxel <
                                 static_cast<std::size_t>(number_of_voxels),
                         cutoff_energy_MeV);
                     if (cutoff_stopped_energy_device != nullptr) {
@@ -1425,6 +1485,7 @@
                     }
                 }
 
+                flush_primary_in_fov();flush_em_audit();
                 if (pending_primary_depth_MeV > 0.0) {
                     sycl::atomic_ref<DepthAtomicT, sycl::memory_order::relaxed,
                                      sycl::memory_scope::device,
@@ -1448,7 +1509,7 @@
                 schneider_diag_add_device(schneider_diag_device,
                                               SchneiderDiagSlot::PrimaryRateQueries,
                                               local_schneider_rate_queries);
-                if constexpr (BroadBeam) {
+                {
                     if (grid_in_pending_MeV != 0.0 && grid_deposited_in_device != nullptr)
                         sycl::atomic_ref<double, sycl::memory_order::relaxed, sycl::memory_scope::device,
                             sycl::access::address_space::global_space>(*grid_deposited_in_device).fetch_add(grid_in_pending_MeV);
@@ -1751,7 +1812,7 @@
             auto launch_children=[&](auto continuation_tag,bool child_resuming,unsigned child_segment_steps,std::uint32_t child_lanes) {
                 constexpr bool kChildContinuation=decltype(continuation_tag)::value;
                 const auto lanes=std::min<std::size_t>(child_lanes,17408);
-                auto event=queue.parallel_for(sycl::nd_range<1>{sycl::range<1>{((lanes+127)/128)*128},sycl::range<1>{128}},
+                auto event=resident_launch(std::type_identity<void>{},sycl::nd_range<1>{sycl::range<1>{((lanes+127)/128)*128},sycl::range<1>{128}},
                     [=](sycl::nd_item<1>) {
                         for(;;) {
                             const auto index=sycl::atomic_ref<std::uint32_t,sycl::memory_order::relaxed,
@@ -1840,7 +1901,7 @@
         while (copper_generation_begin < copper_generation_end) {
             const auto generation_begin = copper_generation_begin;
             const auto generation_size = copper_generation_end - generation_begin;
-            queue.parallel_for(sycl::range<1>(generation_size),
+            resident_launch(std::type_identity<void>{}, sycl::range<1>(generation_size),
                 [=](sycl::id<1> item) {
                     const auto cascade =
                         minibeam_copper_cascade_queue_device[

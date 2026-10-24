@@ -116,7 +116,6 @@
                 constexpr bool kCachedElasticTotals = kCarbonCtPointReuse ||
                     (std::is_same_v<Pipeline,pipelines::CarbonMinibeam>);
                 constexpr unsigned kSliceSegmentSteps = Pipeline::secondary_segment_steps;
-                return queue.submit([&](sycl::handler& cgh) {
                 const auto secondary_kernel =
                     [=]
                     (sycl::id<1> item_id) {
@@ -1348,10 +1347,8 @@
                                             2026, frag.rng_stream,
                                             static_cast<std::uint64_t>(sec_steps),
                                             100U,
-                                            // Dedicated CT minibeams share broadbeam's
-                                            // Gaussian core+tail second-moment treatment.
-                                            static_cast<float>(nucleon_rest_mass_MeV),
-                                            fe_gaussian_only || kMinibeamSecondaryFe);
+                                            // Share broadbeam's Gaussian core and independent tails.
+                                            static_cast<float>(nucleon_rest_mass_MeV));
 
                                     sec_x += correlated.displacement_mm.x;
                                     sec_y += correlated.displacement_mm.y;
@@ -1665,11 +1662,10 @@
 
                         }
                                         };
-                cgh.parallel_for<SecondaryTransportKernel<
+                return resident_launch(std::type_identity<SecondaryTransportKernel<
                                                                  Pipeline, kProductionSecondaryPath,
-                                                                 BroadBeam>>(
+                                                                 BroadBeam>>{},
                     sycl::range<1>(active_size), secondary_kernel);
-            });
                 };
                 auto round_event = [&]() {
                     if constexpr(BroadBeam &&

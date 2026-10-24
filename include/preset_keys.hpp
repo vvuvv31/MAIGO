@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <array>
 namespace carbon {
-inline constexpr std::array<std::string_view,138> preset_keys{
+inline constexpr std::array<std::string_view,136> preset_keys{
     "LET",
     "letd_output_prefix",
     "letd_recoil_electronic_stopping_file",
@@ -45,7 +45,6 @@ inline constexpr std::array<std::string_view,138> preset_keys{
     "enable_tps_coordinate_system",
     "enable_voxel_scoring",
     "energy_cutoff_MeV",
-    "fermi_eyges_gaussian_only",
     "fermi_eyges_max_segment_mm",
     "flat_source_half_width_x_mm",
     "flat_source_half_width_y_mm",

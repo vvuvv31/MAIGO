@@ -46,21 +46,23 @@ $$
 
 where $r_e$ is the classical electron radius, $N_{\mathrm{el}}$ is the local electron number density, and $Z_h$ is the projectile charge number in units of the elementary charge. Equation (3) gives the unrestricted baseline dispersion; the low-energy Ion model additionally uses the native effective-charge and charge-fluctuation corrections.
 
-Protons and higher-velocity ions use the Universal fluctuation model. Thin-absorber losses combine stochastic atomic-excitation and ionization contributions; thick-absorber losses use truncated Gaussian or moment-matched Gamma sampling according to the mean-to-standard-deviation ratio. Lower-energy heavy ions use the Ion fluctuation model, including the finite-step deceleration correction and its Gaussian, Gamma, or uniform sampling regimes. Each primary step receives one full-loss draw based on the mean loss and unrestricted dispersion. Charged secondary fragments use the finite-step mean loss while retaining stochastic multiple scattering and nuclear interactions.
+Proton primaries use the Universal fluctuation model throughout transport. Carbon primaries use the Ion fluctuation model when their total kinetic energy satisfies $E \le E_{\mathrm{crit}}=(10\text{ MeV})Z_h M/m_p$, where $m_p$ is the proton rest mass; above this threshold, the sampler uses the Universal model. For $^{12}\mathrm{C}$, this corresponds to approximately $59.6\text{ MeV/u}$. Model selection and sampling use the pre-step particle energy, mass, charge, and local material response.
 
-The sampled loss is bounded by the available kinetic energy; range-terminating steps deposit the residual kinetic energy. The full ionization loss is deposited locally in the current water or patient CT voxel. This treatment retains primary range straggling and Bragg-peak broadening within condensed-history ion transport.
+In the Universal model, thin-absorber losses combine stochastic atomic-excitation and ionization contributions, with explicit Poisson sampling for low expected collision counts and a continuous approximation for numerous small transfers. When the mean step loss satisfies $\overline{\Delta E}\ge10T_{\max}$, the thick-absorber branch uses a Gaussian truncated to $[0,2\overline{\Delta E}]$ for $r=\overline{\Delta E}/\sigma_E\ge2$, and a moment-matched Gamma distribution otherwise. The Ion model uses the unrestricted dispersion with native effective-charge and charge-fluctuation corrections. A finite-step deceleration correction is applied when $\overline{\Delta E}>0.2E$. Using the corrected standard deviation, the Ion sampler selects a truncated Gaussian for $r\ge2$, a moment-matched Gamma distribution for $0.1<r<2$, or a uniform distribution on $[0,2\overline{\Delta E}]$ for $r\le0.1$.
+
+Each non-terminating primary step samples one full electronic energy loss using the continuous-slowing-down mean described above and the applicable fluctuation model. The sampled value replaces the mean step loss and is bounded by the available kinetic energy; range-terminating steps deposit the residual kinetic energy. Charged secondary particles use the finite-step mean energy loss without energy-loss straggling, while retaining stochastic multiple scattering and nuclear interactions. Electronic energy loss in water or patient CT is deposited locally. This treatment retains primary range straggling and Bragg-peak broadening within condensed-history ion transport.
 
 ### II.A.2. Multiple Coulomb Scattering
 
-In broadbeam configurations—and for charged secondary fragments inside the patient volume in CT minibeams—multiple Coulomb scattering is modeled using the correlated Gaussian Fermi–Eyges theory [9]. Within a homogeneous sub-step of length $L$ characterized by linear scattering power $\mathcal{T}$, the projected angular deflection $\theta$ and lateral spatial displacement $y$ along each of two orthogonal transverse axes follow a bivariate normal distribution with covariance matrix
+In broadbeam configurations—and for charged secondary fragments inside the patient volume in CT minibeams—multiple Coulomb scattering combines a Gaussian Fermi–Eyges core [9] with independently sampled rare tails. Within a homogeneous sub-step of length $L$ with core scattering power $\mathcal{T}_{\mathrm{core}}$, the core angular deflection $\theta$ and lateral displacement $y$ along each of two orthogonal transverse axes follow a bivariate normal distribution with covariance matrix
 
 $$
-\boldsymbol{\Sigma}_{\mathrm{FE}} =
+\boldsymbol{\Sigma}_{\mathrm{core}} =
 \begin{pmatrix}
 \langle \theta^2 \rangle & \langle \theta y \rangle \\
 \langle \theta y \rangle & \langle y^2 \rangle
 \end{pmatrix}
-= \mathcal{T}
+= \mathcal{T}_{\mathrm{core}}
 \begin{pmatrix}
 L & L^2/2 \\
 L^2/2 & L^3/3
@@ -68,16 +70,20 @@ L^2/2 & L^3/3
 \tag{4}
 $$
 
-Correlated pairs $(\theta_x, x)$ and $(\theta_y, y)$ are sampled via Cholesky decomposition in the instantaneous local frame of the particle and rotated into global Cartesian coordinates, reproducing the angle–displacement covariance in Eq. (4). When a transport step exceeds the configured scattering sub-segment limit (e.g., the $0.1\text{ mm}$ segment limit for CT minibeam charged secondaries), the step is subdivided into uniform sub-segments and $\mathcal{T}$ is evaluated at the midpoint kinetic energy of each segment.
+Correlated pairs $(\theta_x, x)$ and $(\theta_y, y)$ are sampled via Cholesky decomposition in the instantaneous local frame of the particle and rotated into global Cartesian coordinates, reproducing the angle–displacement covariance in Eq. (4). When a transport step exceeds the configured scattering sub-segment limit (e.g., the $0.1\text{ mm}$ segment limit for CT minibeam charged secondaries), the step is subdivided into uniform sub-segments and $\mathcal{T}_{\mathrm{core}}$ is evaluated at the midpoint kinetic energy of each segment.
 
-For broadbeam transport and patient charged secondaries in CT minibeams, the effective linear scattering power $\mathcal{T}$ combines a Rossi–Greisen Gaussian core with a calibrated tail second-moment contribution. This contribution is incorporated into the Gaussian covariance without sampling separate tail events:
+The Gaussian core uses Rossi–Greisen scattering power, while the number of rare tail events in each sub-step follows a Poisson distribution:
 
 $$
-\mathcal{T}(E) = \left(\frac{E_s Z}{\beta p c}\right)^2 \frac{1}{X_0(\rho)} + \lambda_{\mathrm{tail}}(\rho)\,\left(\frac{E_{\mathrm{tail}} Z}{\beta p c}\right)^2,
+\begin{aligned}
+\mathcal{T}_{\mathrm{core}}(E) &= \left(\frac{E_s Z}{\beta p c}\right)^2 \frac{1}{X_0(\rho)}, \\
+N_{\mathrm{tail}} &\sim \operatorname{Poisson}\!\left[\lambda_{\mathrm{tail}}(\rho)L\right], \qquad
+\sigma_{\mathrm{tail}}(E) = \frac{E_{\mathrm{tail}}Z}{\beta p c}.
+\end{aligned}
 \tag{5}
 $$
 
-where $p$ is the relativistic momentum, $X_0(\rho)$ is the local radiation length derived from the Schneider tissue composition and voxel density, and $\lambda_{\mathrm{tail}}(\rho) = \lambda_{\mathrm{tail}, \mathrm{water}} \, [X_{0,\mathrm{water}} / X_0(\rho)]$ scales the nominal tail rate by inverse radiation length. For light ions ($^1\mathrm{H}$, $^2\mathrm{H}$, $^3\mathrm{H}$, and $^4\mathrm{He}$), the effective core energy parameter $E_s(E/A)$ and tail parameters are obtained by piecewise-linear interpolation of homogeneous water fits calibrated against Geant4 at $50$, $150$, and $300\text{ MeV/u}$ (clamped to endpoint values outside this interval). For $^{12}\mathrm{C}$ and heavier fragments assigned to the same calibration group, the engine adopts calibrated constants $E_s = 9.9\text{ MeV}$, $\lambda_{\mathrm{tail},\mathrm{water}} = 0.0025\text{ mm}^{-1}$, and $E_{\mathrm{tail}} = 2.4\text{ MeV}$. Strong-interaction nuclear elastic scattering is modeled independently as a discrete stochastic process (Section II.A.3).
+where $p$ is the relativistic momentum, $X_0(\rho)$ is the local radiation length derived from the Schneider tissue composition and voxel density, and $\lambda_{\mathrm{tail}}(\rho) = \lambda_{\mathrm{tail}, \mathrm{water}} \, [X_{0,\mathrm{water}} / X_0(\rho)]$ scales the nominal tail rate by inverse radiation length. Each tail event is placed uniformly along the sub-step. Independent Gaussian angular kicks with standard deviation $\sigma_{\mathrm{tail}}$ are sampled in the two transverse projections, and a kick at path coordinate $u$ contributes a correlated endpoint displacement $(L-u)\Delta\theta$. These contributions are added to the sampled core angle and displacement. For light ions ($^1\mathrm{H}$, $^2\mathrm{H}$, $^3\mathrm{H}$, and $^4\mathrm{He}$), the effective core energy parameter $E_s(E/A)$ and tail parameters are obtained by piecewise-linear interpolation of homogeneous water fits calibrated against Geant4 at $50$, $150$, and $300\text{ MeV/u}$ (clamped to endpoint values outside this interval). For $^{12}\mathrm{C}$ and heavier fragments assigned to the same calibration group, the engine adopts calibrated constants $E_s = 9.9\text{ MeV}$, $\lambda_{\mathrm{tail},\mathrm{water}} = 0.0025\text{ mm}^{-1}$, and $E_{\mathrm{tail}} = 2.4\text{ MeV}$. Strong-interaction nuclear elastic scattering is modeled independently as a discrete stochastic process (Section II.A.3).
 
 For minibeam primaries, multiple scattering is modeled using a GPU implementation of the Urban model [8,11], with material- and species-dependent transport mean free paths, radiation lengths, and angular parameters tabulated from Geant4. The model samples angular deflection and correlated lateral displacement while accounting for the difference between the true particle path and its geometric advance.
 
@@ -124,7 +130,7 @@ The electromagnetic proposal $\ell_{\mathrm{EM}}$ competes with the region-speci
 
 | Transport Region | Maximum Ion Step $\ell_{\max}$ | Principal Multiple Scattering Model |
 |---|---:|---|
-| Water / CT broadbeam | $1.0\text{ mm}$ | Correlated Gaussian Fermi–Eyges |
+| Water / CT broadbeam | $1.0\text{ mm}$ | Fermi–Eyges Gaussian core with independent rare tails |
 | CT minibeam (patient volume) | $0.5\text{ mm}$ | Data-driven Urban (primaries); segmented Fermi–Eyges (charged secondaries, $0.1\text{ mm}$ segment cap) |
 | Water minibeam (phantom volume) | $0.5\text{ mm}$ | Data-driven Urban (primaries and charged secondaries) |
 | Minibeam copper collimator | $0.05\text{ mm}$ | Copper-specific Urban MCS + discrete nuclear elastic scattering |
@@ -243,7 +249,7 @@ Device queues are preallocated before kernel launch, with hardware atomic counte
 
 ### II.D.2. Random Number Generation and Batch Execution
 
-Device-side random numbers use the counter-based Philox-4x32-10 generator. Draws are keyed by batch seed, spot index, primary history index, descendant track identity, and a monotonically increasing counter, making each track’s random stream independent of thread scheduling and queue reordering. Consecutive batches reuse the GPU context and resident material and physics tables, amortizing initialization and physics-table upload costs across the campaign.
+Device-side random numbers use counter-based Philox-4x32-10 streams. For primary energy-loss fluctuations in the scoring medium, copper, and air, Philox generates a domain-separated 64-bit key for each step; step-local uniform draws use the leading 24 bits of successive SplitMix64 outputs. Random streams are determined by the batch and spot seeds, particle history and descendant identity, and transport or draw counters, independently of thread scheduling and queue reordering. Consecutive batches reuse the GPU context and resident material and physics tables, amortizing initialization and physics-table upload costs across the campaign.
 
 Multi-GPU campaigns partition histories in proportion to measured steady-state throughput to balance device completion times. The campaign-wide integer spot allocation in Eq. (8a) is preserved across devices and batches; independent history streams are combined using the dose and LET moment normalization of Section II.C.
 

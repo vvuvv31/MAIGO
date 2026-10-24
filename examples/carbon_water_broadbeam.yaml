@@ -49,5 +49,4 @@ history_chunk_size: 10000
 secondary_species_grouping: true
 secondary_step_chunking: true
 transport_profile: broadbeam_fast
-fermi_eyges_gaussian_only: true
 ct_schneider_primary_cinel03_file: data/nuclear/schneider/carbon/final_states.bin

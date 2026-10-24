@@ -456,7 +456,7 @@ void write_energy_ledger_json(const std::filesystem::path& path,
                << "  \"unified_water_material_id_note\": \"255 is a diagnostic sentinel, not a Schneider section; rate uses a separate water row\",\n";
     }
     output << "  \"transport_profile\": \"" << config.transport_profile << "\",\n"
-           << "  \"fermi_eyges_gaussian_only\": " << (config.fermi_eyges_gaussian_only ? "true" : "false") << ",\n";
+           << "  \"fermi_eyges_sampling\": \"gaussian_core_poisson_tails\",\n";
 
     write_schneider_physics_provenance(output, config);
     write_validation_scope(output, config);

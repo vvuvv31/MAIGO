@@ -1219,12 +1219,11 @@
     // select shared FE independently in the secondary phase.
     const bool primary_fermi_eyges =
         BroadBeam || config.multiple_scattering_model == "fermi_eyges";
-    const bool fe_gaussian_only=config.fermi_eyges_gaussian_only;
 
     const auto c12_fermi_eyges_max_segment_mm =
         static_cast<float>(config.fermi_eyges_max_segment_mm);
     if (primary_fermi_eyges) {
-        std::cout << "[ion-mcs] model=fermi_eyges gaussian_only=" << fe_gaussian_only
+        std::cout << "[ion-mcs] model=fermi_eyges sampling=gaussian_core_poisson_tails"
                   << " species=all_charged parameters=species_water max_segment_mm="
                   << c12_fermi_eyges_max_segment_mm << '\n';
     }

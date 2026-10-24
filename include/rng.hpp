@@ -170,4 +170,35 @@ inline float msc_unit_strict(std::uint64_t seed,
     return v < 1.0f ? v : one_minus_ulp;
 }
 
+// Step-keyed fluctuation stream. One Philox block per transport step yields
+// a 64-bit key; draw j of that step is SplitMix64 output j+1 from state key.
+// Every value is fixed by (key seed, history, step, j): no cached state, no
+// lane-dependent refresh. Counter word 3 carries bit 28; the legacy copper and
+// air loss counters use word 3 = step ^ 31 with step < 2^17, so the sets are
+// disjoint under each existing Philox key.
+inline constexpr std::uint32_t step_key_domain_tag = 0x10000000U;
+
+inline std::uint64_t fluctuation_step_key(std::uint64_t key_seed,
+                                          std::uint64_t history_id,
+                                          std::uint64_t step) noexcept {
+    const PhiloxBlock counter{
+        static_cast<std::uint32_t>(history_id),
+        static_cast<std::uint32_t>(history_id >> 32U),
+        static_cast<std::uint32_t>(step),
+        (static_cast<std::uint32_t>(step >> 32U) & 0x0FFFFFFFU) ^ step_key_domain_tag,
+    };
+    const auto block = philox4x32_10(counter, static_cast<std::uint32_t>(key_seed),
+                                     static_cast<std::uint32_t>(key_seed >> 32U));
+    return static_cast<std::uint64_t>(block[0]) | (static_cast<std::uint64_t>(block[1]) << 32U);
+}
+
+// Leading 24 bits of SplitMix64 output (index+1) from state key, as in uniform01.
+inline float splitmix_unit24(std::uint64_t key, std::uint64_t index) noexcept {
+    std::uint64_t z = key + (index + 1ULL) * 0x9E3779B97F4A7C15ULL;
+    z = (z ^ (z >> 30U)) * 0xBF58476D1CE4E5B9ULL;
+    z = (z ^ (z >> 27U)) * 0x94D049BB133111EBULL;
+    z ^= z >> 31U;
+    return static_cast<float>(static_cast<std::uint32_t>(z >> 40U)) * 0x1p-24f;
+}
+
 }  // namespace carbon::rng

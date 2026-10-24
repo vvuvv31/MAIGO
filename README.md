@@ -212,8 +212,9 @@ range inversion.
 Charged nuclear fragments are transported; nuclear neutrals are recorded as
 untracked energy. The water reference is Water_75eV (I = 75 eV).
 
-Broadbeams use Gaussian Fermi–Eyges scattering. CT minibeams use Urban scattering for
-patient primaries and segmented Gaussian Fermi–Eyges for patient charged secondaries;
+Broadbeams use Fermi–Eyges scattering with a Gaussian core and independently
+sampled rare tails. CT minibeams use Urban scattering for patient primaries
+and the same segmented Fermi–Eyges model for patient charged secondaries;
 water minibeams use Urban. The carbon water preset loads a joint Urban response
 (`urban_water_condensed_response_file`) for covered C12 steps; other states retain
 ordinary Urban. Minibeams explicitly model the copper collimator

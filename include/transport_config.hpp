@@ -226,7 +226,6 @@ struct TransportConfig {
     std::string transport_profile{"reference"};
     // Implementation selection only; custom configs default to the shared generic pipeline.
     std::string transport_pipeline{"generic"};
-    bool fermi_eyges_gaussian_only{false};
     std::string multiple_scattering_model{"urban_v2"};
     // Global Urban v2: exact material/cut couples, every transported charged ion.
     std::filesystem::path urban_mcs_package_file{};

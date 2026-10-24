@@ -34,15 +34,23 @@
   are forced to 1.0 mm broadbeam and 0.5 mm minibeam in water and CT.
   Minibeam copper is forced to 0.05 mm; these override YAML step-cap values.
   GPU dose atomics stay FP32.
+- Primary medium/Cu/air energy-loss fluctuations use a domain-separated
+  Philox step key and successive SplitMix64 high-24-bit uniforms. Preserve
+  per-track draw counters across continuations and keep other RNG domains
+  unchanged. CUDA resident kernel closures must retain host upload buffers
+  until the queue drains, including exception unwinding; Intel launches stay
+  direct and compile in a mutually exclusive branch.
 - All eight release presets enable medium nuclear elastic transport with
   projectile-specific all-ion elastic and recoil stopping packages. All four
   minibeams also enable copper-collimator nuclear elastic scattering.
 - All four minibeams use fixed compact scheduling, with no scheduler selector
   configuration key. Dedicated proton/carbon CT minibeams use Urban for
-  patient primaries and shared segmented Gaussian FE for patient-medium charged
-  secondaries, including upstream products after patient entry. Like broadbeams,
-  this FE path folds the calibrated tail second moment into Gaussian scattering
-  power instead of sampling separate tail kicks. Preserve the
+  patient primaries and shared segmented FE for patient-medium charged
+  secondaries, including upstream products after patient entry. All FE paths
+  use the calibrated Gaussian core plus independently sampled rare Poisson
+  tails, including water/CT broadbeam primaries and charged secondaries.
+  Do not fold tail variance into the Gaussian core or restore a Gaussian-only
+  selector. Preserve the
   0.5 mm outer cap and configured FE segment limit (release default 0.1 mm).
   Copper/air workers keep their existing scattering models; water and generic
   minibeam medium workers retain Urban. This is a release default, not an

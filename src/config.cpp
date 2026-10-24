@@ -561,11 +561,6 @@ void TransportConfig::validate() const {
            (enable_ct_grid && !enable_ct_material_mcs))
             throw std::invalid_argument("broadbeam_fast requires research unified EM, FE for all charged species, CT material MCS, no beamline transport");
     }
-    if (transport_profile == "broadbeam_fast" && !fermi_eyges_gaussian_only)
-        throw std::invalid_argument("broadbeam_fast requires fermi_eyges_gaussian_only: true");
-    if(fermi_eyges_gaussian_only && (multiple_scattering_model!="fermi_eyges" ||
-                                   run_mode!=RunMode::research))
-        throw std::invalid_argument("fermi_eyges_gaussian_only requires research SYCL fermi_eyges MCS");
     if (multiple_scattering_model != "fermi_eyges" &&
         multiple_scattering_model != "urban_v2") {
         throw std::invalid_argument(
@@ -886,7 +881,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
     if(profile=="broadbeam_fast") {
         if(parse_bool(values,"minibeam",false))
             throw std::invalid_argument("broadbeam_fast requires minibeam: false");
-        values.try_emplace("fermi_eyges_gaussian_only", "true");
         values.erase("urban_mcs_package_file");
         for(const auto& setting:std::initializer_list<std::pair<const char*,const char*>>{
             {"multiple_scattering_model","fermi_eyges"},{"enable_multiple_scattering","true"},
@@ -909,7 +903,6 @@ TransportConfig load_config(const std::filesystem::path& path) {
         values.try_emplace("secondary_species_grouping", "true");
         values.try_emplace("secondary_step_chunking", "true");
     }
-    config.fermi_eyges_gaussian_only=parse_bool(values,"fermi_eyges_gaussian_only",false);
 
     if (const auto mode = values.find("run_mode"); mode != values.end()) {
         auto name = mode->second;
